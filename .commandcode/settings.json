@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(python3 smoke_store.py 2 >& 1)",
+      "Shell(python3 -m skillsmgr --help 2 >& 1)",
+      "Shell(python3 -m py_compile skillsmgr/gui.py skillsmgr/cli.py skillsmgr/store.py)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

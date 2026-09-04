@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skills-manager"
+version = "1.0.0"
+description = "Local control plane for AI coding-agent skills: manage SKILL.md across agents from one CLI + web UI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "skills-manager contributors" }]
+keywords = ["ai-agents", "agent-skills", "skill-management", "cli", "claude-code", "cursor", "opencode"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/udayvarmora07/skills-manager"
+Repository = "https://github.com/udayvarmora07/skills-manager"
+Issues = "https://github.com/udayvarmora07/skills-manager/issues"
+Documentation = "https://github.com/udayvarmora07/skills-manager#readme"
+Changelog = "https://github.com/udayvarmora07/skills-manager/blob/main/CHANGELOG.md"
+
+[project.scripts]
+skills-mgr = "skillsmgr.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["skillsmgr*"]
+
+[tool.setuptools.package-data]
+skillsmgr = ["webui/*", "webui/static/vendor/*"]
