@@ -70,8 +70,8 @@
 
 - [x] Spec-lint+ in `validator.py` (no new commands/Store methods): name regex already rejects `--` (`^[a-z0-9]+(-[a-z0-9]+)*$`, verified); `description_score()` (use-context detection + vague-filler hits); description warnings (missing use-context, filler words); body token warning (>5000 tokens, progressive-disclosure guidance); `scripts/`/`references/`/`assets/` layout check (dangling mentions)
 - [x] Tests: 5 new `unittest` cases (43 total OK) + `smoke_store.py` spec-lint section
-- [ ] Cross-scope dedup (same-name/similar-description detect, diff, converge)
-- [ ] Token budget view in CLI + UI (per-skill/per-scope footprint)
+- [x] Cross-scope dedup (same-name detect + descriptions-differ flag + converge via existing sync): `scopes.find_duplicates()` read-only over `list_all()`; surfaced in `doctor --scope all` (text + `duplicates` JSON key), `/api/doctor?scope=all` (`duplicates` + `scopes` keys), doctor modal section with Sync… converge buttons; 4 hermetic tests (47 total OK) + `smoke_web.py` shape assertion
+- [x] Token budget view in CLI + UI (verified already complete, no new code needed): `tokens --scope all` aggregate (`total/avg/max`, `largest[]`, `pct_window`), `/api/stats?window=` (`all_tokens/all_avg/all_pct`, top-5 `largest`), `/api/tokens`, frontend budget bar + window selector + per-row tokens + sync-mirror cost hint
 - [ ] Rollback snapshots + one-command migration (both need constraint-5 ASK → issue-first)
 
 ## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)

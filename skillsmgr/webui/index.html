@@ -478,6 +478,18 @@
             <dt>Trash count</dt><dd>{{ modals.doctor.report.trash_count }}</dd>
             <dt>Templates count</dt><dd>{{ modals.doctor.report.templates_count }}</dd>
           </dl>
+          <div v-if="modals.doctor.report.duplicates && modals.doctor.report.duplicates.length" style="margin-top:16px;">
+            <h3 style="margin:0 0 8px;">Same name in multiple scopes ({{ modals.doctor.report.duplicates.length }})</h3>
+            <p class="muted" style="margin:0 0 8px;">Converge copies with Sync — pick the canonical copy as source.</p>
+            <ul class="dupe-list">
+              <li v-for="d in modals.doctor.report.duplicates" :key="d.name">
+                <strong>{{ d.name }}</strong>
+                <span class="muted">{{ d.scopes.join(', ') }}</span>
+                <span v-if="d.descriptions_differ" class="pill pill-warn">descriptions differ</span>
+                <button class="btn btn-secondary btn-sm" @click="syncDupe(d.name, d.scopes[0])">Sync…</button>
+              </li>
+            </ul>
+          </div>
         </template>
       </div>
       <div class="modal-foot"><button class="btn btn-secondary" @click="closeModal('doctor')">Close</button></div>

@@ -4,6 +4,16 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-05 — Dedup + token-budget closeout (Milestone 7, v1.1 items 3–4 done)
+
+- **Cross-scope dedup (code, no constraint-5 impact)**: `scopes.find_duplicates()` — read-only grouping over `list_all()`, same-name groups with `scopes`/`count`/`descriptions_differ`/`records`, converge via existing `sync_skill()`. Surfaced in `doctor --scope all` (text lines + `duplicates` JSON key), `/api/doctor?scope=all` (`duplicates` + `scopes` keys), doctor modal section with per-name Sync… buttons (jump into existing sync modal via `syncDupe()`). No new commands/flags/Store methods.
+- **Smoke gotcha**: `smoke_web.py` is NOT HOME-hermetic — real `~/.agents/skills` leaks into `/api/doctor?scope=all`, so the new smoke section asserts shape (`isinstance list`), not emptiness. Unit tests stay hermetic (HOME+DATA redirected).
+- **Frontend**: `openDoctor()` appends `?scope=all` when `activeScope === "all"`; new `.btn-sm`/`.pill-warn`/`.dupe-list` styles.
+- **Token budget (verified complete, no new code)**: `tokens --scope all` aggregate + `largest`, `/api/stats?window=` (`all_tokens/all_avg/all_pct`, top-5 `largest`), `/api/tokens`, frontend budget bar + window selector + per-row tokens + sync cost hint.
+- **Verified**: compile OK, **47 unittest OK** (4 new dedup tests), both smokes PASS, `node --check` OK, `--help` OK, live `doctor --scope all` shows dupes in text + JSON.
+- **Docs**: task.md M7 dedup+budget [x], TODO.md v1.1 items 3–4 [x], ROADMAP v1.1 dedup+budget [x], CHANGELOG Unreleased entries, 03-cli-surface doctor line, 08-web-ui doctor row, 02-modules scopes line.
+- **Remaining**: PyPI upload needs token; rollback/migration need issue-first ASK (constraint 5).
+
 ## 2026-09-05 — Publish + v1.1 spec-lint+ (Milestone 7 in progress)
 
 - **Published**: `gh repo create skills-manager --public` → `udayvarmora07/skills-manager`; `main` + `v1.0.0` pushed; CI green (run 33914953774, 20s). Placeholders replaced (YOUR-USER→udayvarmora07; security@example.com→private advisories link). PyPI name `skills-manager` free; `dist/` built (sdist+wheel 1.0.0); upload blocked pending PyPI API token.

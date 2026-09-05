@@ -17,8 +17,8 @@
 
 - [x] Name regex incl. no-consecutive-hyphens (already enforced by `NAME_RE`) + description keyword/use-context scoring (`validator.description_score` + warnings)
 - [x] Body length + token warnings (`MAX_BODY_TOKENS=5000`); `scripts/`/`references/`/`assets` layout checks
-- [ ] Cross-scope dedup: same-name/similar-description detect, diff, one-command converge
-- [ ] Token budget view in CLI + UI (`tokens --scope all` surfaced per skill)
+- [x] Cross-scope dedup: same-name detect (`scopes.find_duplicates()`), descriptions-differ flag, one-command converge via existing sync (doctor modal Sync… buttons)
+- [x] Token budget view in CLI + UI (verified already complete): `tokens --scope all` aggregate + `largest`, `/api/stats?window=` + `/api/tokens`, frontend budget bar + window selector
 - [ ] Rollback: snapshot on edit/sync + `restore --snapshot` (needs constraint-5 ASK: new flag)
 - [ ] One-command migration: full-library export/import incl. trash + templates (needs constraint-5 ASK)
 

@@ -69,7 +69,7 @@ All endpoints return JSON unless noted. Errors: `{"error": "message"}` with stat
 |---|---|---|
 | GET | `/api/search?q=term[&scope=SCOPE]` | search over name/description/body (scope-aware) |
 | GET | `/api/stats` | Store.stats |
-| GET | `/api/doctor[?scope=SCOPE]` | Store.doctor (global) or scope health |
+| GET | `/api/doctor[?scope=all]` | Store.doctor (global); `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`) |
 | GET | `/api/history?name=&limit=` | Store.history (name optional) |
 | POST | `/api/validate` | body `{name}` → `{valid, issues: [{level, key, message}]}` |
 | POST | `/api/rebuild` | Store.db_rebuild |

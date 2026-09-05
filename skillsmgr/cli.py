@@ -449,7 +449,15 @@ def cmd_restore(args, store: Store) -> int:
 
 def cmd_doctor(args, store: Store) -> int:
     report = store.doctor()
+    scope = getattr(args, "scope", None)
     if args.json:
+        if scope == "all":
+            try:
+                from .scopes import find_duplicates as _dupes_json
+
+                report["duplicates"] = _dupes_json()
+            except Exception:
+                pass
         _print_json(report)
         return EXIT_OK
     if report.get("ok"):
@@ -463,13 +471,19 @@ def cmd_doctor(args, store: Store) -> int:
     if report.get("db_integrity") and report["db_integrity"] != "ok":
         print(f"  database integrity check failed: {report['db_integrity']}")
     # Also show scope summary when --scope all.
-    scope = getattr(args, "scope", None)
     if scope == "all":
         try:
+            from .scopes import find_duplicates as _dupes
             from .scopes import list_scopes as _list_scopes
 
             for s in _list_scopes():
                 print(f"  {s['label']} ({s['id']}): {s['count']} skills at {s['path']}")
+            dupes = _dupes()
+            if dupes:
+                print(f"  {len(dupes)} skill name(s) present in multiple scopes:")
+                for d in dupes:
+                    flag = " (descriptions differ)" if d["descriptions_differ"] else ""
+                    print(f"    {d['name']}: {', '.join(d['scopes'])}{flag}")
         except Exception:
             pass
     return EXIT_OK if report.get("ok") else EXIT_ERROR

@@ -30,7 +30,7 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `scopes.py`
 
-Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()`, `scan_scope()`, `list_all()` (merged), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()`, `search_all()`. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to `Store()`.
+Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()`, `scan_scope()`, `list_all()` (merged), `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()`, `search_all()`. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to `Store()`.
 
 ## `loader.py`
 

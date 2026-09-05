@@ -81,7 +81,7 @@ Alias of `export` (identical behavior).
 Restore a skill from the trash.
 
 ### `doctor [--json] [--scope SCOPE]`
-Health check: data dir, DB, skill files, consistency between FS and index. With a scope, checks that scope's dir.
+Health check: data dir, DB, skill files, consistency between FS and index. With a scope, checks that scope's dir. With `--scope all`, also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.
 
 ### `stats [--json] [--scope SCOPE]`
 Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts.

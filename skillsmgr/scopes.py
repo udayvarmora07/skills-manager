@@ -175,6 +175,45 @@ def list_all(*, include_missing: bool = False) -> list[dict]:
     return merged
 
 
+def find_duplicates() -> list[dict]:
+    """Same-name skills present in more than one scope.
+
+    Read-only grouping over list_all(): each entry is
+    {"name", "scopes", "count", "descriptions_differ", "records"} where
+    records carry scope/scope_label/description/disabled/tokens. Converge
+    with the existing sync_skill() — no new mutation paths.
+    """
+    groups: dict[str, list[dict]] = {}
+    for rec in list_all():
+        groups.setdefault(rec["name"], []).append(rec)
+    dupes: list[dict] = []
+    for name in sorted(groups):
+        recs = groups[name]
+        scopes_seen = sorted({r["scope"] for r in recs})
+        if len(scopes_seen) < 2:
+            continue
+        descs = {(r.get("description") or "").strip() for r in recs}
+        dupes.append(
+            {
+                "name": name,
+                "scopes": scopes_seen,
+                "count": len(scopes_seen),
+                "descriptions_differ": len(descs) > 1,
+                "records": [
+                    {
+                        "scope": r["scope"],
+                        "scope_label": r.get("scope_label", r["scope"]),
+                        "description": r.get("description", ""),
+                        "disabled": bool(r.get("disabled")),
+                        "tokens": r.get("tokens", 0),
+                    }
+                    for r in sorted(recs, key=lambda x: x["scope"])
+                ],
+            }
+        )
+    return dupes
+
+
 def get_skill(scope_id: str, name: str) -> dict:
     """Full record for one skill in one scope (includes body, path)."""
     if scope_id == "global":

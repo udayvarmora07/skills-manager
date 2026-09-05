@@ -475,7 +475,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(agg)
             return
         elif parts == ["api", "doctor"]:
-            self._send_json(self.store.doctor())
+            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+            report = self.store.doctor()
+            if scope == "all":
+                try:
+                    from .scopes import find_duplicates as _dupes
+                    from .scopes import list_scopes as _lscopes
+
+                    report["scopes"] = _lscopes()
+                    report["duplicates"] = _dupes()
+                except Exception:
+                    pass
+            self._send_json(report)
         elif parts == ["api", "export"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             if scope != "global":

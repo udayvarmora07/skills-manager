@@ -819,10 +819,17 @@ createApp({
 
     openDoctor() {
       this.modals.doctor = { loading: true, report: null };
-      api("/api/doctor")
+      api("/api/doctor" + (this.activeScope === "all" ? "?scope=all" : ""))
         .then((report) => { if (this.modals.doctor) this.modals.doctor.report = report; })
         .catch((e) => { this.closeModal("doctor"); this.toast(e.message, "err"); })
         .finally(() => { if (this.modals.doctor) this.modals.doctor.loading = false; });
+    },
+
+    syncDupe(name, fromScope) {
+      this.selectedName = name;
+      this.selected = { name, scope: fromScope };
+      this.closeModal("doctor");
+      this.openSync();
     },
 
     openStats() {

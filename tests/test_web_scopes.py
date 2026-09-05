@@ -158,5 +158,33 @@ class TestSyncAndSearch(ScopedHomeTestCase):
         )
 
 
+class TestFindDuplicates(ScopedHomeTestCase):
+    def test_no_duplicates_empty(self):
+        scopes._global_store().create("solo", "Solo skill")
+        self.assertEqual(scopes.find_duplicates(), [])
+
+    def test_same_name_global_and_agent(self):
+        scopes._global_store().create("shared", "Shared skill")
+        scopes.create_skill("agents", "shared", "Shared skill")
+        dupes = scopes.find_duplicates()
+        self.assertEqual(len(dupes), 1)
+        self.assertEqual(dupes[0]["name"], "shared")
+        self.assertEqual(dupes[0]["scopes"], ["agents", "global"])
+        self.assertFalse(dupes[0]["descriptions_differ"])
+
+    def test_descriptions_differ_flag(self):
+        scopes._global_store().create("shared", "Global wording")
+        scopes.create_skill("agents", "shared", "Agent wording")
+        dupes = scopes.find_duplicates()
+        self.assertEqual(len(dupes), 1)
+        self.assertTrue(dupes[0]["descriptions_differ"])
+
+    def test_single_scope_same_name_dir_not_duplicate(self):
+        # Same store listed twice is impossible; a dir existing in only one
+        # scope must not report.
+        scopes.create_skill("agents", "lone", "Lone skill")
+        self.assertEqual(scopes.find_duplicates(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

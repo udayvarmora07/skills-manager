@@ -105,6 +105,10 @@ try:
     assert stats["total"] == 1 and stats["active"] == 1
     status, doc = req("GET", "/api/doctor")
     assert doc["ok"] is True
+    status, doc_all = req("GET", "/api/doctor?scope=all")
+    assert status == 200 and "duplicates" in doc_all and "scopes" in doc_all
+    assert isinstance(doc_all["duplicates"], list)  # env may have real agent dirs
+    print("misc ok")
     status, hist = req("GET", "/api/history?limit=20")
     assert len(hist) >= 3  # create, edit, disable/enable...
     print("misc ok")
