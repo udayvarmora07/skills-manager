@@ -4,7 +4,7 @@ Public direction for `skills-manager`. Items move from Proposed → Accepted →
 
 ## Next (v1.1)
 
-- [ ] **Spec-lint+**: name regex incl. no-consecutive-hyphens, description keyword/use-context scoring, body length + token warnings, `scripts/`/`references/` layout checks — mapped to the official [best practices](https://agentskills.io/skill-creation/best-practices).
+- [x] **Spec-lint+** (shipped 2026-09-05): name regex rejects `--`; `description_score()` use-context/filler scoring + warnings; body line + token (>5000) warnings; `scripts/`/`references/`/`assets/` layout checks — mapped to the official [best practices](https://agentskills.io/skill-creation/best-practices).
 - [ ] **Cross-scope dedup**: detect same-name/similar-description skills across agents, diff, one-command converge.
 - [ ] **Token budget view**: per-skill/per-scope startup footprint in CLI + UI.
 - [ ] **Rollback**: snapshot on edit/sync (`history` exists) + `restore --snapshot`.

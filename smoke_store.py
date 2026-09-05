@@ -127,6 +127,23 @@ try:
     print({k: v for k, v in doc.items() if k != "dirs"})
     assert doc["ok"] is True
 
+    print("== spec-lint warnings (v1.1) ==")
+    from skillsmgr.validator import description_score, validate_text
+    vague = validate_text(
+        "---\nname: vague\ndescription: Handles various stuff\n---\nBody.\n"
+    )
+    msgs = [i.message for i in vague.warnings]
+    print("vague warnings:", msgs)
+    assert any("use-context" in m for m in msgs), msgs
+    assert any("filler" in m for m in msgs), msgs
+    big = validate_text(
+        "---\nname: big\ndescription: Use when testing big bodies.\n---\n"
+        + "word " * 6000
+    )
+    assert any("tokens" in i.message for i in big.warnings)
+    score = description_score("Use this skill when reviewing pull requests.")
+    assert score["has_use_context"] and not score["filler_hits"]
+
     print("== resync / db_rebuild ==")
     rr = store.resync()
     print("resync:", rr)

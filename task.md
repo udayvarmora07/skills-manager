@@ -64,7 +64,15 @@
 - [x] CI: `.github/workflows/ci.yml` (3.10/3.11/3.12, py_compile + unittest + both smokes + node --check), bug/feature templates, PR template
 - [x] Fixes in this pass: test `_skill_body` helper (dump_frontmatter takes dict only, body appended separately); real `Store.restore()` prefix-collision bug (now `_strip_trash_suffix(p.name) == name`); README cursor path (`~/.cursor/skills-cursor`); pytest→unittest everywhere (offline env)
 - [x] Verified: compile OK, 38 unittest OK, both smokes pass, `node --check` OK, `--help` OK, `--scope agents` OK (empty — no ~/.agents on this box)
-- [ ] BEFORE PUBLISH: replace `YOUR-USER` (README.md ×3, pyproject.toml ×5, CONTRIBUTING.md ×1) + `security@example.com` (SECURITY.md); then `git init`, first commit, `git tag v1.0.0`, `pipx build`/`twine` to PyPI
+- [x] Published: `udayvarmora07/skills-manager` created via `gh`, `main` + `v1.0.0` pushed, CI green (run 33914953774); PyPI name `skills-manager` confirmed free, `dist/` built (sdist+wheel) — upload blocked pending PyPI API token (`/tmp/buildenv/bin/python -m twine upload dist/*`)
+
+## Milestone 7 — v1.1 spec-lint+ (in progress, 2026-09-05)
+
+- [x] Spec-lint+ in `validator.py` (no new commands/Store methods): name regex already rejects `--` (`^[a-z0-9]+(-[a-z0-9]+)*$`, verified); `description_score()` (use-context detection + vague-filler hits); description warnings (missing use-context, filler words); body token warning (>5000 tokens, progressive-disclosure guidance); `scripts/`/`references/`/`assets/` layout check (dangling mentions)
+- [x] Tests: 5 new `unittest` cases (43 total OK) + `smoke_store.py` spec-lint section
+- [ ] Cross-scope dedup (same-name/similar-description detect, diff, converge)
+- [ ] Token budget view in CLI + UI (per-skill/per-scope footprint)
+- [ ] Rollback snapshots + one-command migration (both need constraint-5 ASK → issue-first)
 
 ## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
 

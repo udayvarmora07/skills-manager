@@ -15,7 +15,7 @@ from skillsmgr.loader import load_skill
 from skillsmgr.scopes import known_scopes
 from skillsmgr.search import rank_results
 from skillsmgr.store import SkillNotFound, Store, StoreError
-from skillsmgr.validator import validate_skill
+from skillsmgr.validator import description_score, validate_skill, validate_text
 
 
 def _skill_body(name="demo", description="Demo skill"):
@@ -209,6 +209,67 @@ class TestValidatorLoaderScopes(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertTrue(validate_skill("demo", p).valid)
+
+    def test_validator_warns_on_missing_use_context(self):
+        result = validate_text(_skill_body(description="Does stuff"))
+        self.assertTrue(
+            any("use-context" in i.message for i in result.warnings),
+            [i.message for i in result.issues],
+        )
+        ok = validate_text(
+            _skill_body(description="Use when deploying to staging.")
+        )
+        self.assertFalse(
+            any("use-context" in i.message for i in ok.issues),
+            [i.message for i in ok.issues],
+        )
+
+    def test_validator_warns_on_vague_filler(self):
+        result = validate_text(_skill_body(description="Handles various stuff"))
+        self.assertTrue(
+            any("filler" in i.message for i in result.warnings),
+            [i.message for i in result.issues],
+        )
+
+    def test_validator_warns_on_missing_layout_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            from pathlib import Path
+
+            p = Path(d) / "demo"
+            p.mkdir()
+            (p / "SKILL.md").write_text(
+                _skill_body(description="Use when testing refs.")
+                + "\nRead references/api.md when the API errors.\n",
+                encoding="utf-8",
+            )
+            result = validate_skill("demo", p)
+            self.assertTrue(
+                any("references/api.md" in i.message for i in result.warnings),
+                [i.message for i in result.issues],
+            )
+            (p / "references").mkdir()
+            (p / "references" / "api.md").write_text("# API\n", encoding="utf-8")
+            result = validate_skill("demo", p)
+            self.assertFalse(
+                any("references/api.md" in i.message for i in result.issues),
+                [i.message for i in result.issues],
+            )
+
+    def test_validator_warns_on_oversize_body_tokens(self):
+        big = "word " * 6000  # heuristic ~9000 tokens, over the 5000 cap
+        result = validate_text(_skill_body() + "\n" + big)
+        self.assertTrue(
+            any("tokens" in i.message for i in result.warnings),
+            [i.message for i in result.issues],
+        )
+
+    def test_description_score(self):
+        good = description_score("Use this skill when reviewing pull requests.")
+        self.assertTrue(good["has_use_context"])
+        self.assertEqual(good["filler_hits"], [])
+        bad = description_score("Handles various things appropriately.")
+        self.assertFalse(bad["has_use_context"])
+        self.assertIn("various", bad["filler_hits"])
 
     def test_loader_flags_malformed_frontmatter(self):
         with tempfile.TemporaryDirectory() as d:

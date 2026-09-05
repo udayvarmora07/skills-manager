@@ -13,10 +13,15 @@ Hard rules implemented (from the spec):
 
 * ``name`` (required): 1-64 chars, ``^[a-z0-9]+(-[a-z0-9]+)*$``, and it
   must match the directory that holds the skill.
-* ``description`` (required): non-empty, at most 1024 chars.
+* ``description`` (required): non-empty, at most 1024 chars; warnings when
+  it lacks use-context ("Use ... when ...") or contains vague filler.
 * ``compatibility`` (optional): at most 500 chars.
 * ``metadata`` (optional): a mapping of string to string.
 * ``allowed-tools`` (optional): space-separated tool names.
+
+Body warnings cover: empty body, >500 lines, >5000 tokens (progressive
+disclosure), missing ``scripts/``/``references/``/``assets/`` files the
+body mentions, and relative links that escape or miss.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import frontmatter
+from .tokens import count_tokens
 
 __all__ = [
     "Issue",
@@ -35,6 +41,8 @@ __all__ = [
     "MAX_DESCRIPTION",
     "MAX_COMPATIBILITY",
     "MAX_BODY_LINES",
+    "MAX_BODY_TOKENS",
+    "description_score",
     "validate_text",
     "validate_skill",
 ]
@@ -44,9 +52,19 @@ MAX_NAME = 64
 MAX_DESCRIPTION = 1024
 MAX_COMPATIBILITY = 500
 MAX_BODY_LINES = 500
+MAX_BODY_TOKENS = 5000
 
 _LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 _HEADING_RE = re.compile(r"^#{1,6}\s")
+_LAYOUT_DIRS = ("scripts", "references", "assets")
+_MENTION_RE = re.compile(r"(?:scripts|references|assets)/[^\s)`\"']*")
+_USE_CONTEXT_RE = re.compile(
+    r"(?i)\buse\b.{0,80}\bwhen\b|\bwhen you\b|^\s*use\b|^\s*when\b"
+)
+_FILLER_RE = re.compile(
+    r"(?i)\b(various|miscellaneous|etc\.|stuff|things|"
+    r"best practices|appropriately|generally)\b"
+)
 
 
 @dataclass
@@ -163,6 +181,22 @@ def validate_text(
             "description is very short; expand it to a full sentence",
             "description",
         )
+    if isinstance(description, str) and description.strip():
+        score = description_score(description)
+        if not score["has_use_context"]:
+            result.add(
+                "warning",
+                "description has no use-context "
+                "('Use ... when ...'); agents may not trigger this skill",
+                "description",
+            )
+        for hit in score["filler_hits"]:
+            result.add(
+                "warning",
+                f"description contains vague filler {hit!r}; "
+                "name the concrete tool, format, or condition instead",
+                "description",
+            )
 
     if not body.strip():
         result.add("warning", "skill body is empty (no instructions)", "body")
@@ -172,18 +206,71 @@ def validate_text(
             f"body exceeds {MAX_BODY_LINES} lines; consider splitting the skill",
             "body",
         )
+    if body.strip():
+        body_tokens, _method = count_tokens(body)
+        if body_tokens > MAX_BODY_TOKENS:
+            result.add(
+                "warning",
+                f"body is ~{body_tokens} tokens (over {MAX_BODY_TOKENS}); "
+                "move reference material to references/ with "
+                "when-to-load guidance (progressive disclosure)",
+                "body",
+            )
 
     if body and _heading_re(body) is False and len(body.splitlines()) < 5:
         pass  # short body with prose is fine
 
     if skill_dir is not None:
         _check_links(result, body, skill_dir)
+        _check_layout(result, body, skill_dir)
 
     return result
 
 
 def _heading_re(body: str) -> bool:
     return any(_HEADING_RE.match(ln) for ln in body.splitlines())
+
+
+def description_score(description: str) -> dict:
+    """Score a skill description for trigger quality (agentskills.io guide).
+
+    Returns ``{"has_use_context": bool, "filler_hits": [...],
+    "word_count": int}``. ``has_use_context`` is True when the text names
+    when the agent should reach for the skill ("Use ... when ...").
+    """
+    text = description or ""
+    return {
+        "has_use_context": bool(_USE_CONTEXT_RE.search(text)),
+        "filler_hits": sorted(set(_FILLER_RE.findall(text))),
+        "word_count": len(text.split()),
+    }
+
+
+def _check_layout(result: ValidationResult, body: str, skill_dir: Path) -> None:
+    """Warn when the body mentions scripts/references/assets files that miss.
+
+    Progressive disclosure only works if the referenced file exists;
+    dangling mentions waste a load attempt or confuse the agent.
+    """
+    try:
+        root = skill_dir.resolve()
+    except OSError:
+        return
+    for mention in sorted(set(_MENTION_RE.findall(body))):
+        if mention.split("/", 1)[0] not in _LAYOUT_DIRS:
+            continue
+        try:
+            inside = (root / mention).resolve().is_relative_to(root)
+        except AttributeError:
+            inside = str((root / mention).resolve()).startswith(str(root) + "/")
+        if not inside:
+            continue  # _check_links already flags escapes
+        if not (root / mention).exists():
+            result.add(
+                "warning",
+                f"body mentions {mention!r} but it does not exist",
+                "body",
+            )
 
 
 def _check_scalar(

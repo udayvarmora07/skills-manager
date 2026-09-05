@@ -4,6 +4,14 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-05 — Publish + v1.1 spec-lint+ (Milestone 7 in progress)
+
+- **Published**: `gh repo create skills-manager --public` → `udayvarmora07/skills-manager`; `main` + `v1.0.0` pushed; CI green (run 33914953774, 20s). Placeholders replaced (YOUR-USER→udayvarmora07; security@example.com→private advisories link). PyPI name `skills-manager` free; `dist/` built (sdist+wheel 1.0.0); upload blocked pending PyPI API token.
+- **Spec-lint+ (v1.1, no constraint-5 impact)**: `NAME_RE` already rejects `--` (verified empirically); new `description_score()` (use-context regex + filler-word set); description warnings (missing use-context, vague filler); body token warning (`MAX_BODY_TOKENS=5000` via `tokens.count_tokens`, progressive-disclosure guidance); `scripts/`/`references/`/`assets/` layout check (dangling mentions). Sourced from agentskills.io best-practices + optimizing-descriptions guides.
+- **Tests**: 5 new unittest cases → **43 OK**; `smoke_store.py` gains a spec-lint section (vague + oversize + score asserts). Both smokes PASS, `node --check` OK.
+- **Docs**: task.md Milestone 7, TODO.md v1.1 items 1–2 [x], ROADMAP spec-lint [x], CHANGELOG Unreleased entry, 02-modules validator line.
+- **Remaining**: PyPI upload needs token; cross-scope dedup + token budget view next (code, no ASK); rollback/migration need issue-first ASK.
+
 ## 2026-09-05 — OSS launch kit completion (Milestone 6)
 
 - **Packaging/docs verified present**: pyproject.toml, .gitignore, LICENSE (MIT), README.md, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, ROADMAP.md, both security reports, tests/test_store.py + test_webapp.py, CI + issue/PR templates. Recreated missing `tests/test_web_scopes.py` (13 hermetic scope tests). Deleted `__pycache__/` dirs.

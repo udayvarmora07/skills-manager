@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Spec-lint+ (`validator.py`): `description_score()` (use-context + filler detection), description warnings (missing "Use … when …", vague filler), body token warning (`MAX_BODY_TOKENS=5000`, progressive-disclosure guidance), `scripts/`/`references/`/`assets/` layout check for dangling mentions.
 - Open-source launch kit: `README.md`, `LICENSE` (MIT), `pyproject.toml`, CI workflow, issue/PR templates, `SECURITY.md`, `ROADMAP.md`.
 
 ## [1.0.0] — 2026-09-04

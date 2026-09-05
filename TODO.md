@@ -15,8 +15,8 @@
 
 ## 1. v1.1 — Spec-lint+ (ROADMAP.md "Next")
 
-- [ ] Name regex incl. no-consecutive-hyphens + description keyword/use-context scoring (`validator.py` + `smoke_store.py` cases)
-- [ ] Body length + token warnings; `scripts/`/`references/` layout checks
+- [x] Name regex incl. no-consecutive-hyphens (already enforced by `NAME_RE`) + description keyword/use-context scoring (`validator.description_score` + warnings)
+- [x] Body length + token warnings (`MAX_BODY_TOKENS=5000`); `scripts/`/`references/`/`assets` layout checks
 - [ ] Cross-scope dedup: same-name/similar-description detect, diff, one-command converge
 - [ ] Token budget view in CLI + UI (`tokens --scope all` surfaced per skill)
 - [ ] Rollback: snapshot on edit/sync + `restore --snapshot` (needs constraint-5 ASK: new flag)
