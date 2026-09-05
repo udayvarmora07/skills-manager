@@ -5,13 +5,13 @@
 
 ## 0. Pre-publish blockers (must do before `git push`)
 
-- [ ] Replace `YOUR-USER` in `README.md` (3×), `pyproject.toml` (5×), `CONTRIBUTING.md` (1×) with your GitHub username
-- [ ] Replace `security@example.com` in `SECURITY.md` with a real contact
-- [ ] Re-run verification: `python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py && python3 -m unittest discover -s tests && python3 smoke_store.py && python3 smoke_web.py`
-- [ ] `git init && git add -A && git commit -m "feat: OSS launch v1.0.0" && git tag v1.0.0`
-- [ ] Create GitHub repo, `git remote add origin <url>`, `git push -u origin main --tags`
-- [ ] Publish to PyPI: `python3 -m build && twine upload dist/*` (or `pipx install` path)
-- [ ] Confirm CI badge green on first push; fix `ci.yml` if red
+- [x] Replace `YOUR-USER` in `README.md` (3×), `pyproject.toml` (5×), `CONTRIBUTING.md` (1×) with your GitHub username → `udayvarmora07`
+- [x] Replace `security@example.com` in `SECURITY.md` with a real contact → private advisories link
+- [x] Re-run verification: `python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py && python3 -m unittest discover -s tests && python3 smoke_store.py && python3 smoke_web.py` → 43 OK, both PASS
+- [x] `git init && git add -A && git commit -m "feat: OSS launch v1.0.0" && git tag v1.0.0`
+- [x] Create GitHub repo, `git remote add origin <url>`, `git push -u origin main --tags` → `udayvarmora07/skills-manager`, CI green
+- [ ] Publish to PyPI: `python3 -m build && twine upload dist/*` (BLOCKED: needs PyPI API token; `dist/` built, name `skills-manager` confirmed free)
+- [x] Confirm CI badge green on first push; fix `ci.yml` if red → green (run 33914953774)
 
 ## 1. v1.1 — Spec-lint+ (ROADMAP.md "Next")
 
