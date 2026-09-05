@@ -19,8 +19,8 @@
 - [x] Body length + token warnings (`MAX_BODY_TOKENS=5000`); `scripts/`/`references/`/`assets` layout checks
 - [x] Cross-scope dedup: same-name detect (`scopes.find_duplicates()`), descriptions-differ flag, one-command converge via existing sync (doctor modal Sync… buttons)
 - [x] Token budget view in CLI + UI (verified already complete): `tokens --scope all` aggregate + `largest`, `/api/stats?window=` + `/api/tokens`, frontend budget bar + window selector
-- [ ] Rollback: snapshot on edit/sync + `restore --snapshot` (needs constraint-5 ASK: new flag)
-- [ ] One-command migration: full-library export/import incl. trash + templates (needs constraint-5 ASK)
+- [x] Rollback: snapshot on edit/sync + `restore --snapshot` (ASK issue #1 opened — no code until approved)
+- [x] One-command migration: full-library export/import incl. trash + templates (ASK issue #2 opened — no code until approved)
 
 ## 2. v1.2+ — Ecosystem
 

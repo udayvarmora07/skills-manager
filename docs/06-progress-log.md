@@ -12,7 +12,8 @@
 - **Token budget (verified complete, no new code)**: `tokens --scope all` aggregate + `largest`, `/api/stats?window=` (`all_tokens/all_avg/all_pct`, top-5 `largest`), `/api/tokens`, frontend budget bar + window selector + per-row tokens + sync cost hint.
 - **Verified**: compile OK, **47 unittest OK** (4 new dedup tests), both smokes PASS, `node --check` OK, `--help` OK, live `doctor --scope all` shows dupes in text + JSON.
 - **Docs**: task.md M7 dedup+budget [x], TODO.md v1.1 items 3–4 [x], ROADMAP v1.1 dedup+budget [x], CHANGELOG Unreleased entries, 03-cli-surface doctor line, 08-web-ui doctor row, 02-modules scopes line.
-- **Remaining**: PyPI upload needs token; rollback/migration need issue-first ASK (constraint 5).
+- **Remaining**: PyPI upload needs token; rollback/migration ASK issues opened (#1 snapshots, #2 full-migration) — no code until approved.
+- **Pushed**: commit `0eeb0ac` (v1.1 dedup + budget), CI green (run 33946982582, 21s); issues #1 + #2 opened via `gh`.
 
 ## 2026-09-05 — Publish + v1.1 spec-lint+ (Milestone 7 in progress)
 
