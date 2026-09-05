@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Skills Manager
+Comment=Manage AI coding-agent skills (local web UI)
+Exec=python3 -m skillsmgr webui
+Icon=accessories-text-editor
+Terminal=false
+Categories=Development;Utility;
+StartupWMClass=skills-manager
+Keywords=skills;agents;AI;CLI;

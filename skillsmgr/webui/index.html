@@ -67,6 +67,8 @@
           <button role="menuitem" @click="menuDo('resync')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Resync index</button>
           <hr>
           <button role="menuitem" @click="menuDo('refresh')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Refresh</button>
+          <hr>
+          <button role="menuitem" @click="menuDo('shortcuts')">Keyboard shortcuts <span class="menu-kbd">?</span></button>
         </div>
       </div>
     </div>
@@ -365,8 +367,13 @@
           </div>
           <div class="form-field full">
             <label for="f-body">Body (SKILL.md content)</label>
-            <textarea id="f-body" v-model="modals.skill.form.body" rows="10" spellcheck="false"></textarea>
-            <span class="hint">Markdown instructions for the skill.</span>
+            <div class="edittabs" role="tablist" aria-label="Body editor mode">
+              <button type="button" role="tab" :class="{ active: !modals.skill.preview }" :aria-selected="!modals.skill.preview" @click="modals.skill.preview = false">Write</button>
+              <button type="button" role="tab" :class="{ active: !!modals.skill.preview }" :aria-selected="!!modals.skill.preview" @click="modals.skill.preview = true">Preview</button>
+            </div>
+            <textarea v-show="!modals.skill.preview" id="f-body" v-model="modals.skill.form.body" rows="10" spellcheck="false"></textarea>
+            <div v-show="modals.skill.preview" class="body bodypreview" v-html="renderMarkdown(modals.skill.form.body)"></div>
+            <span class="hint">Markdown instructions for the skill. Preview renders safely (no raw HTML).</span>
           </div>
         </div>
       </div>
@@ -710,6 +717,21 @@
         <button class="btn btn-secondary" :disabled="busy || !install.source.trim()" @click="runInstall(false)">Preview</button>
         <button class="btn btn-primary" :disabled="busy || !install.source.trim()" @click="runInstall(true)">Run</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts -->
+  <div v-if="modals.shortcuts" class="overlay" @mousedown.self="closeModal('shortcuts')">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="modal-head"><h2>Keyboard shortcuts</h2><button class="modal-close" aria-label="Close" @click="closeModal('shortcuts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <dl class="kv">
+          <dt><kbd>/</kbd></dt><dd>Focus search</dd>
+          <dt><kbd>?</kbd></dt><dd>This cheatsheet</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Close menu, then topmost dialog</dd>
+        </dl>
+      </div>
+      <div class="modal-foot"><button class="btn btn-secondary" @click="closeModal('shortcuts')">Close</button></div>
     </div>
   </div>
 

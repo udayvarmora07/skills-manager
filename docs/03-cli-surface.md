@@ -69,7 +69,7 @@ Validate skills by name, all (`--all`), or a directory (`--path`). Prints issues
 Search with scoring (see @docs/02-modules.md); `--limit` caps results. `--scope all` searches every scope.
 
 ### `import ARCHIVE [--force] [--json]`
-Import a `.tar.gz`/`.tgz`/`.tar` archive of skills into the global store (tar-only; `tarfile.open(archive, "r:*")` — `.zip` is NOT supported). `--force` overwrites existing names.
+Import a `.tar.gz`/`.tgz`/`.tar` or `.zip` archive of skills into the global store (zip detected by magic bytes; tar via `tarfile.open(archive, "r:*")`; manifest-less archives scan a bare `skills/` tree, e.g. GitHub "Download ZIP"). `--force` overwrites existing names.
 
 ### `export [--dest PATH] [--json]`
 Export all skills (global scope only) to an archive (default `backups/`). Alias: `backup`.

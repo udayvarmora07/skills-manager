@@ -186,6 +186,35 @@ try:
     assert any(r["name"] == "skill-folder" for r in rows)
     print("upload ok")
 
+    print("== zip import (M5) ==")
+    import zipfile
+
+    ztmp = tempfile.mkdtemp(prefix="skillsmgr-zip-")
+    (Path(ztmp) / "skills" / "zip-skill").mkdir(parents=True)
+    (Path(ztmp) / "skills" / "zip-skill" / "SKILL.md").write_text(
+        "---\nname: zip-skill\ndescription: Zip smoke skill\n---\n# Zip\n",
+        encoding="utf-8",
+    )
+    zpath = Path(ztmp) / "pack.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr(
+            "skills/zip-skill/SKILL.md",
+            (Path(ztmp) / "skills" / "zip-skill" / "SKILL.md").read_text(),
+        )
+        zf.writestr(
+            "manifest.json",
+            '{"name": "pack", "version": 1, "skills": [{"name": "zip-skill"}]}',
+        )
+    status, zin = req(
+        "PUT",
+        "/api/import?filename=pack.zip",
+        zpath.read_bytes(),
+        ctype="application/zip",
+    )
+    assert status == 200 and zin["imported"] == ["zip-skill"], zin
+    shutil.rmtree(ztmp, ignore_errors=True)
+    print("zip import ok")
+
     print("== error paths ==")
     from urllib.error import HTTPError
 

@@ -63,6 +63,13 @@ skills-mgr sync my-workflow
 skills-mgr webui
 ```
 
+Desktop entry (Linux app menu, no wrapper/toolchain needed):
+
+```bash
+cp assets/skills-manager.desktop ~/.local/share/applications/
+update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+```
+
 More:
 
 ```bash

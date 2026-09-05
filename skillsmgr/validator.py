@@ -325,7 +325,7 @@ def _check_links(result: ValidationResult, body: str, skill_dir: Path) -> None:
             inside = str(target_path).startswith(str(skill_dir.resolve()) + "/")
         if not inside:
             result.add(
-                "warning",
+                "error",
                 f"link target {target!r} escapes the skill directory",
                 "body",
             )

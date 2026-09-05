@@ -15,6 +15,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,6 +85,101 @@ def _strip_trash_suffix(name: str) -> str:
     if match:
         return name[: match.start()]
     return name
+
+
+def _is_zip_archive(path: Path) -> bool:
+    """Return True when *path* is a zip (by content, not suffix).
+
+    Uses :func:`zipfile.is_zipfile` rather than a ``PK\\x03\\x04`` magic
+    check so empty zips (``PK\\x05\\x06`` end-of-central-directory) are
+    also routed to the zip extractor, which reports them cleanly.
+    """
+    try:
+        return zipfile.is_zipfile(path)
+    except OSError:
+        return False
+
+
+def _safe_join(root: Path, *parts: str) -> Path | None:
+    """Join *parts* onto *root*, returning None if the result escapes."""
+    candidate = (root.joinpath(*parts)).resolve() if parts else root.resolve()
+    try:
+        inside = candidate.is_relative_to(root.resolve())
+    except AttributeError:  # Python < 3.9 fallback
+        inside = str(candidate).startswith(str(root.resolve()) + "/") or candidate == root.resolve()
+    return candidate if inside else None
+
+
+def _extract_tar_guarded(tar: tarfile.TarFile, dest: Path) -> None:
+    """Extract *tar* into *dest* without the blanket ``filter="data"`` API.
+
+    Used on Python < 3.12 where ``filter=`` is unavailable: each member is
+    validated (no absolute paths, no ``..``, no escaping links) before
+    extraction, so the fallback is as safe as the filtered path.
+    """
+    root = dest.resolve()
+    for member in tar.getmembers():
+        if member.name.startswith(("/", "\\")) or ".." in Path(member.name).parts:
+            raise StoreError(f"unsafe archive member: {member.name!r}")
+        target = _safe_join(dest, member.name)
+        if target is None:
+            raise StoreError(f"unsafe archive member: {member.name!r}")
+        if member.issym() or member.islnk():
+            link_target = (target.parent / (member.linkname or "")).resolve()
+            try:
+                inside = link_target.is_relative_to(root)
+            except AttributeError:
+                inside = str(link_target).startswith(str(root) + "/")
+            if not inside:
+                raise StoreError(f"unsafe archive link: {member.name!r}")
+        tar.extract(member, path=str(dest))
+
+
+def _extract_zip_guarded(archive: Path, dest: Path) -> None:
+    """Extract a zip archive into *dest* with traversal/link guards."""
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            bad = zf.testzip()
+            if bad is not None:
+                raise StoreError(f"invalid archive: corrupt member {bad!r}")
+            for info in zf.infolist():
+                name = info.filename
+                if not name or name.startswith(("/", "\\")) or ".." in Path(name).parts:
+                    raise StoreError(f"unsafe archive member: {name!r}")
+                target = _safe_join(dest, *Path(name).parts)
+                if target is None:
+                    raise StoreError(f"unsafe archive member: {name!r}")
+                if name.endswith("/"):
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as src, open(target, "wb") as out:
+                    shutil.copyfileobj(src, out)
+    except zipfile.BadZipFile as exc:
+        raise StoreError(f"invalid archive: {exc}") from exc
+    manifest_path = dest / "manifest.json"
+    if manifest_path.is_file():
+        return
+    # Tolerate GitHub-style zips: hoist a single top-level dir or a bare
+    # ``skills/`` tree so the manifest/skills layout below still applies.
+    entries = [p for p in dest.iterdir()]
+    candidates = [p for p in entries if p.is_dir()]
+    for cand in candidates:
+        if (cand / "manifest.json").is_file():
+            for child in cand.iterdir():
+                target = dest / child.name
+                if target.exists():
+                    continue
+                shutil.move(str(child), str(target))
+            shutil.rmtree(cand, ignore_errors=True)
+            return
+    for cand in candidates:
+        if (cand / "skills").is_dir():
+            src = cand / "skills"
+            dst = dest / "skills"
+            if not dst.exists():
+                shutil.move(str(src), str(dst))
+            return
 
 
 class Store:
@@ -792,7 +888,13 @@ class Store:
         return self.export(dest=dest)
 
     def import_(self, archive: str | Path, force: bool = False) -> dict:
-        """Install skills from a skills-mgr archive into the tree."""
+        """Install skills from a skills-mgr archive into the tree.
+
+        Accepts ``.tar.gz``/``.tgz``/``.tar`` (as produced by
+        :meth:`Store.export`) and ``.zip`` (e.g. a GitHub "Download ZIP"
+        of a skills repo whose top level holds ``skills/<name>/`` or
+        ``<name>/SKILL.md`` trees).
+        """
         archive = Path(archive).expanduser()
         if not archive.is_file():
             raise StoreError(f"archive not found: {archive}")
@@ -801,21 +903,29 @@ class Store:
         imported: list[str] = []
         skipped: list[str] = []
         try:
-            try:
-                with tarfile.open(archive, "r:*") as tar:
-                    names = tar.getnames()
-                    if "manifest.json" not in names:
-                        raise StoreError(
-                            "not a skills-mgr archive (missing manifest.json)"
-                        )
-                    try:
-                        tar.extractall(tmp, filter="data")
-                    except TypeError:
-                        tar.extractall(tmp)
-            except tarfile.TarError as exc:
-                raise StoreError(f"invalid archive: {exc}") from exc
+            if _is_zip_archive(archive):
+                _extract_zip_guarded(archive, tmp)
+            else:
+                try:
+                    with tarfile.open(archive, "r:*") as tar:
+                        names = tar.getnames()
+                        if "manifest.json" not in names:
+                            raise StoreError(
+                                "not a skills-mgr archive (missing manifest.json)"
+                            )
+                        try:
+                            tar.extractall(tmp, filter="data")
+                        except TypeError:
+                            _extract_tar_guarded(tar, tmp)
+                except tarfile.TarError as exc:
+                    raise StoreError(f"invalid archive: {exc}") from exc
             manifest_path = tmp / "manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                # Manifest-less archives (e.g. GitHub zips): fall through to
+                # the bare ``skills/`` scan below.
+                manifest = {}
             skills = manifest.get("skills") or []
             for entry in skills:
                 name = entry.get("name") if isinstance(entry, dict) else entry

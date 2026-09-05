@@ -948,8 +948,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_scope_arg(p)
     p.set_defaults(func=cmd_search)
 
-    p = sub.add_parser("import", help="install skills from an archive")
-    p.add_argument("archive")
+    p = sub.add_parser("import", help="install skills from an archive (.tar.gz/.tgz/.tar/.zip)")
+    p.add_argument("archive", help="path to a .tar.gz/.tgz/.tar/.zip archive")
     p.add_argument("--force", action="store_true", help="overwrite existing skills")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_import)

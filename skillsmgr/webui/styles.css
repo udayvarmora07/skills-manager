@@ -713,6 +713,24 @@ input, select, textarea { font-family: inherit; font-size: 15px; color: var(--te
 .form-field .field-error { font-size: 12.5px; color: var(--err); }
 .form-field.has-error input, .form-field.has-error textarea { border-color: var(--err); }
 
+/* Write/Preview tabs in the skill editor + shared preview pane. */
+.edittabs { display: inline-flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px; margin-bottom: 6px; align-self: flex-start; }
+.edittabs button { border: none; background: none; color: var(--text-muted); font-size: 12.5px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer; }
+.edittabs button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.bodypreview { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface-2); min-height: 96px; max-height: 320px; overflow-y: auto; }
+
+/* Cheatsheet kbd chips + menu hint. */
+.kv kbd, .menu-kbd {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+.menu-kbd { margin-left: auto; color: var(--text-muted); }
+
 /* -------------------------------------------------------------- trash view */
 
 .trash-table { width: 100%; border-collapse: collapse; font-size: 14px; }

@@ -200,6 +200,7 @@ createApp({
         import: null,
         sync: null,
         install: null,
+        shortcuts: null,
       },
     };
   },
@@ -501,8 +502,12 @@ createApp({
       if (e.key === "/" && !typing) {
         e.preventDefault();
         this.$refs.searchInput && this.$refs.searchInput.focus();
+      } else if (e.key === "?" && !typing) {
+        e.preventDefault();
+        this.modals.shortcuts = true;
       } else if (e.key === "Escape") {
         if (this.menuOpen) this.menuOpen = false;
+        else if (this.modals.shortcuts) this.closeModal("shortcuts");
         else if (this.modals.remove) this.closeModal("remove");
         else if (this.modals.purge) this.closeModal("purge");
         else if (this.modals.skill) this.closeModal("skill");
@@ -545,6 +550,7 @@ createApp({
         rebuild: this.rebuildIndex,
         resync: this.resyncIndex,
         refresh: () => { this.loadScopes(); this.loadSkills(); this.loadTrash(); this.loadStatsTokens(); },
+        shortcuts: () => { this.modals.shortcuts = true; },
       };
       const fn = actions[action];
       if (fn) fn.call(this);
@@ -560,6 +566,7 @@ createApp({
       const defScope = (this.activeScope && this.activeScope !== "all") ? this.activeScope : "global";
       this.modals.skill = {
         mode: "create",
+        preview: false,
         form: { name: "", description: "", category: "", version: "", license: "", compatibility: "", allowed_tools: "", body: "", scope: defScope },
         errors: {},
       };
@@ -570,6 +577,7 @@ createApp({
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
       this.modals.skill = {
         mode: this.selectedName,
+        preview: false,
         form: {
           name: this.selectedName,
           description: this.selected.description || "",

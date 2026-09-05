@@ -26,13 +26,13 @@
 
 - [ ] Registry bridge: browse `skills.sh` → install into chosen scope (needs ASK: new command)
 - [ ] Eval harness: per-skill before/after prompt tests
-- [ ] Zip-import support (needs ASK: CLI-surface change)
-- [ ] Tar-fallback refusal on Python < 3.12 (threat-model R-1, needs ASK: behavior change)
-- [ ] Out-of-root link warning → error (threat-model R-4, needs ASK)
+- [x] Zip-import support (shipped 2026-09-05, M5)
+- [x] Tar-fallback hardening via allowlist (shipped 2026-09-05, M5; refusal superseded)
+- [x] Out-of-root link escapes → error (shipped 2026-09-05, M5; missing-file stays warning)
 
 ## 3. Ambitious (exploring — issue-first, no code until approved)
 
 - [ ] VS Code extension over existing REST API
-- [ ] `pywebview` desktop wrapper
-- [ ] Live markdown preview editor + shortcut cheatsheet modal
+- [x] Desktop entry (shipped 2026-09-05, M5: `assets/skills-manager.desktop`; `pywebview` wrapper superseded)
+- [x] Live markdown preview editor + shortcut cheatsheet modal (shipped 2026-09-05, M5)
 - [ ] Team sharing: signed bundles, draft → review → publish

@@ -74,13 +74,13 @@
 - [x] Token budget view in CLI + UI (verified already complete, no new code needed): `tokens --scope all` aggregate (`total/avg/max`, `largest[]`, `pct_window`), `/api/stats?window=` (`all_tokens/all_avg/all_pct`, top-5 `largest`), `/api/tokens`, frontend budget bar + window selector + per-row tokens + sync-mirror cost hint
 - [x] Rollback snapshots + one-command migration (constraint-5 ASK → issues #1 + #2 opened via `gh`, no code until approved)
 
-## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
+## Milestone 5 — Proposed ideas (approved via plan; implemented 2026-09-05)
 
-- [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK
-- [ ] Skill-body editor with live markdown preview — needs UX approval
-- [ ] Keyboard-shortcut cheatsheet modal (`?` key) — needs UX approval
-- [ ] Real pytest suite in `tests/` (currently empty; smokes are the only coverage) — needs test-tooling ASK
-- [ ] CI workflow (compile + smokes on push) — needs ASK (new automation)
-- [ ] Zip-import support (`import` is tar-only today) — needs CLI-surface ASK
-- [ ] Tar-fallback refusal on Python < 3.12 (threat-model R-1) — needs ASK (behavior change)
-- [ ] Out-of-root link warning → validation error (threat-model R-4) — needs ASK (behavior change)
+- [x] Native window wrapper → DEFERRED; shipped zero-dep `assets/skills-manager.desktop` launcher instead (browser-first is the accepted local pattern; wrapper would violate constraint 4)
+- [x] Skill-body editor with live markdown preview (Write/Preview tabs, XSS-safe `renderMarkdown`)
+- [x] Keyboard-shortcut cheatsheet modal (`?` key; `/` + `Esc` documented)
+- [x] Real pytest suite → DONE differently: 51 stdlib `unittest` + CI (offline env forbids pip/pytest)
+- [x] CI workflow → DONE: `.github/workflows/ci.yml` green on 3.10/3.11/3.12
+- [x] Zip-import support (stdlib `zipfile`, magic-byte detection, traversal guards; manifest-less archives scan bare `skills/`)
+- [x] Tar-fallback allowlist on Python < 3.12 (threat-model R-1: per-member guards, NOT refusal — refusal would break supported 3.10/3.11)
+- [x] Out-of-root link escapes → validation error (threat-model R-4; missing-file stays a warning)

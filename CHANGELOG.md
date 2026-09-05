@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Milestone 5 (user-problem picks): live markdown preview (Write/Preview tabs in the skill modal, XSS-safe render), `?` keyboard-shortcut cheatsheet modal, zip-import support (magic-byte detection, traversal guards, manifest-less `skills/` scan for GitHub-style zips), tar-fallback member allowlist (closes threat-model R-1 without breaking 3.10/3.11), link-escape validation errors (threat-model R-4; missing-file stays a warning), zero-dep `assets/skills-manager.desktop` launcher.
+
 - Spec-lint+ (`validator.py`): `description_score()` (use-context + filler detection), description warnings (missing "Use … when …", vague filler), body token warning (`MAX_BODY_TOKENS=5000`, progressive-disclosure guidance), `scripts/`/`references/`/`assets/` layout check for dangling mentions.
 - Cross-scope dedup: `scopes.find_duplicates()` (same-name + descriptions-differ flag), surfaced in `doctor --scope all`, `/api/doctor?scope=all`, and the doctor modal with Sync… converge buttons.
 - Token budget view (verified complete): `tokens --scope all` aggregate + `largest`, `/api/stats?window=` + `/api/tokens`, frontend budget bar with window selector.

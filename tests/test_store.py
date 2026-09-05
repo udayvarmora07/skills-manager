@@ -180,6 +180,7 @@ class TestValidatorLoaderScopes(unittest.TestCase):
             self.assertFalse(validate_skill("Bad Name!", p).valid)
 
     def test_validator_warns_on_link_escape(self):
+        # M5: out-of-root link escapes are errors, not warnings.
         with tempfile.TemporaryDirectory() as d:
             from pathlib import Path
 
@@ -194,9 +195,11 @@ class TestValidatorLoaderScopes(unittest.TestCase):
             self.assertTrue(
                 any(
                     "outside" in i.message.lower() or "escape" in i.message.lower()
-                    for i in result.issues
-                )
+                    for i in result.errors
+                ),
+                [i.message for i in result.issues],
             )
+            self.assertFalse(result.valid)
 
     def test_validator_reads_disabled_file(self):
         with tempfile.TemporaryDirectory() as d:
@@ -312,6 +315,180 @@ class TestFrontmatterSearchUnits(unittest.TestCase):
         ]
         ranked = rank_results(recs, "deploy")
         self.assertEqual(ranked[0][0]["name"], "deploy")
+
+
+class TestMilestone5ImportAndLinks(IsolatedStoreTestCase):
+    """M5: zip import, tar-fallback allowlist, link-escape errors."""
+
+    def test_zip_import_with_skills_tree(self):
+        import zipfile
+
+        src = self._tmp.name + "/zipsrc"
+        from pathlib import Path
+
+        skill = Path(src) / "skills" / "zskill"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            _skill_body("zskill", "Zip skill"), encoding="utf-8"
+        )
+        archive = Path(self._tmp.name) / "pack.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("skills/zskill/SKILL.md", (skill / "SKILL.md").read_text())
+            zf.writestr(
+                "manifest.json",
+                '{"name": "pack", "version": 1, '
+                '"skills": [{"name": "zskill"}]}',
+            )
+        result = self.store.import_(archive)
+        self.assertIn("zskill", result["imported"])
+        self.assertEqual(self.store.get("zskill")["description"], "Zip skill")
+
+    def test_zip_import_rejects_traversal(self):
+        import zipfile
+        from pathlib import Path
+
+        archive = Path(self._tmp.name) / "evil.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("skills/ok/SKILL.md", _skill_body("ok"))
+            zf.writestr("../escape.txt", "evil")
+            zf.writestr(
+                "manifest.json",
+                '{"name": "evil", "version": 1, "skills": [{"name": "ok"}]}',
+            )
+        with self.assertRaises(StoreError):
+            self.store.import_(archive)
+
+    def test_tar_fallback_guard_rejects_traversal(self):
+        import tarfile
+        from io import BytesIO
+
+        from skillsmgr.store import _extract_tar_guarded
+        from pathlib import Path
+
+        archive = Path(self._tmp.name) / "evil.tar"
+        with tarfile.open(archive, "w") as tar:
+            info = tarfile.TarInfo("../evil.txt")
+            payload = b"evil"
+            info.size = len(payload)
+            tar.addfile(info, BytesIO(payload))
+        dest = Path(self._tmp.name) / "out"
+        dest.mkdir()
+        with tarfile.open(archive, "r") as tar:
+            with self.assertRaises(StoreError):
+                _extract_tar_guarded(tar, dest)
+
+    def test_tar_fallback_guard_rejects_escaping_links(self):
+        import tarfile
+
+        from skillsmgr.store import _extract_tar_guarded
+        from pathlib import Path
+
+        archive = Path(self._tmp.name) / "links.tar"
+        with tarfile.open(archive, "w") as tar:
+            sym = tarfile.TarInfo("link")
+            sym.type = tarfile.SYMTYPE
+            sym.linkname = "/etc/passwd"
+            tar.addfile(sym)
+            hard = tarfile.TarInfo("hard")
+            hard.type = tarfile.LNKTYPE
+            hard.linkname = "/etc/passwd"
+            tar.addfile(hard)
+        dest = Path(self._tmp.name) / "out-links"
+        dest.mkdir()
+        with tarfile.open(archive, "r") as tar:
+            with self.assertRaises(StoreError):
+                _extract_tar_guarded(tar, dest)
+
+    def test_tar_fallback_guard_allows_valid_symlink(self):
+        import tarfile
+        from io import BytesIO
+
+        from skillsmgr.store import _extract_tar_guarded
+        from pathlib import Path
+
+        archive = Path(self._tmp.name) / "good.tar"
+        with tarfile.open(archive, "w") as tar:
+            payload = b"hello"
+            info = tarfile.TarInfo("real.txt")
+            info.size = len(payload)
+            tar.addfile(info, BytesIO(payload))
+            link = tarfile.TarInfo("link.txt")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "real.txt"
+            tar.addfile(link)
+        dest = Path(self._tmp.name) / "out-good"
+        dest.mkdir()
+        with tarfile.open(archive, "r") as tar:
+            _extract_tar_guarded(tar, dest)
+        self.assertEqual((dest / "link.txt").read_text(), "hello")
+
+    def test_zip_magic_bytes_not_suffix(self):
+        # Empty zips carry PK\x05\x06 (not PK\x03\x04) yet must route to
+        # the zip extractor; tar-named zip bytes must follow magic too.
+        import zipfile
+        from pathlib import Path
+
+        from skillsmgr.store import _is_zip_archive
+
+        empty = Path(self._tmp.name) / "empty.zip"
+        with zipfile.ZipFile(empty, "w"):
+            pass
+        self.assertTrue(_is_zip_archive(empty))
+        renamed = Path(self._tmp.name) / "pack.tar.gz"
+        with zipfile.ZipFile(renamed, "w") as zf:
+            zf.writestr("x.txt", "y")
+        self.assertTrue(_is_zip_archive(renamed))
+        plain = Path(self._tmp.name) / "plain.zip"
+        plain.write_bytes(b"not a zip at all")
+        self.assertFalse(_is_zip_archive(plain))
+
+    def test_link_escape_is_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            from pathlib import Path
+
+            p = Path(d) / "esc"
+            p.mkdir()
+            (p / "SKILL.md").write_text(
+                _skill_body() + "\nSee [x](../../outside.md).\n",
+                encoding="utf-8",
+            )
+            result = validate_skill("esc", p)
+            self.assertTrue(
+                any("escapes" in i.message for i in result.errors),
+                [i.message for i in result.issues],
+            )
+            self.assertFalse(result.valid)
+
+    def test_link_matrix_sibling_escapes_missing_warns_schemes_skip(self):
+        with tempfile.TemporaryDirectory() as d:
+            from pathlib import Path
+
+            p = Path(d) / "m"
+            p.mkdir()
+            (p / "SKILL.md").write_text(
+                _skill_body()
+                + "\n[Sib](../sib.md) [Miss](nope.md) "
+                "[Web](https://example.com/a) [Mail](mailto:a@b.c) "
+                "[Frag](#top) [Ftp](ftp://h/a.md).\n",
+                encoding="utf-8",
+            )
+            result = validate_skill("m", p)
+            self.assertTrue(
+                any("escapes" in i.message for i in result.errors),
+                [i.message for i in result.issues],
+            )
+            self.assertTrue(
+                any("does not exist" in i.message for i in result.warnings),
+                [i.message for i in result.issues],
+            )
+            self.assertFalse(
+                any(
+                    "example.com" in i.message or "mailto" in i.message
+                    for i in result.issues
+                ),
+                [i.message for i in result.issues],
+            )
+            self.assertFalse(result.valid)
 
 
 if __name__ == "__main__":

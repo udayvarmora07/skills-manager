@@ -4,6 +4,21 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-05 — Milestone 5 exhaustive testing (all green)
+
+- **Matrices**: baseline (55 unittest OK, both smokes PASS, node --check, --help) · store import 18/18 + zip extras · validator links 15/15 · REST edges 13/13 (400/413 paths, force variants, multipart) · CLI (tar/zip import, validate exit 1) · frontend (static 200s, XSS-OK, handlers/styles) · launcher + docs grep · **live browser pass** (headless Chrome + raw CDP: preview tabs render escaped HTML + table, Esc/`?` modals, zero page errors).
+- **Bugs found by testing, both fixed**: empty-zip `PK\x05\x06` fell to tar path → `_is_zip_archive` now `zipfile.is_zipfile` (3 new permanent tests); `import --help` omitted zip → positional help added; ROADMAP stale zip checkbox → [x].
+- **Report**: session `files/m5-test-report.md`. Scratch `/tmp/m5*` removed; servers stopped. Final sweep: COMPILE_OK, 55 OK, both smokes PASS, JS_OK, HELP_OK.
+
+## 2026-09-05 — Milestone 5 implementation (research-backed user-problem picks)
+
+- **Research** (instructions-md Phase 0 + web): `agentskills.io` best-practices (concise + progressive disclosure → preview editor), Claude Code docs (no built-in editor/manager → preview + cheatsheet fill a real gap), `skills.sh`/vercel-labs (GitHub "Download ZIP" is the default artifact → zip import), Jan/LM-Studio pattern (browser-first local UI → `.desktop` launcher, not a wrapper), threat model R-1/R-4 (tar fallback + link escapes).
+- **Verdicts**: DO preview editor + `?` cheatsheet (frontend-only); DO zip import (stdlib `zipfile`, backward compatible); DO tar-fallback allowlist NOT refusal (refusal breaks supported 3.10/3.11); DO link escapes→error (missing-file stays warning); DEFER wrapper → zero-dep `.desktop` launcher (constraint 4); pytest/CI already done (51 stdlib unittest + `ci.yml`).
+- **Code**: `store.py` `import_` accepts zip (magic bytes) + `_is_zip_archive`/`_safe_join`/`_extract_tar_guarded`/`_extract_zip_guarded` (GitHub-style single-top-dir or `skills/` hoist, manifest-less scan); `webapp.py` PUT `/api/import` accepts `.zip`; `validator.py` escapes are errors; `skills-manager.desktop` asset; frontend Write/Preview tabs + shortcuts modal + `.edittabs`/`.bodypreview`/kbd styles + `?`/Esc wiring.
+- **Tests**: 4 new unittest (zip round-trip, zip traversal reject, tar-guard reject, escape is error) + updated old escape assertion → **51 OK**; `smoke_web.py` gains zip-import section; both smokes PASS; `node --check` OK; CLI spot-checks (zip import, escape error exit=1) green.
+- **Docs**: task.md M5 all [x], TODO.md v1.2/amibitious [x]s, ROADMAP shipped notes, CHANGELOG Unreleased entry, 03-cli-surface import row, README desktop-install note.
+- **Not shipped**: full native wrapper (needs fresh ASK if revisited); rollback/migration still issue-first.
+
 ## 2026-09-05 — Dedup + token-budget closeout (Milestone 7, v1.1 items 3–4 done)
 
 - **Cross-scope dedup (code, no constraint-5 impact)**: `scopes.find_duplicates()` — read-only grouping over `list_all()`, same-name groups with `scopes`/`count`/`descriptions_differ`/`records`, converge via existing `sync_skill()`. Surfaced in `doctor --scope all` (text lines + `duplicates` JSON key), `/api/doctor?scope=all` (`duplicates` + `scopes` keys), doctor modal section with per-name Sync… buttons (jump into existing sync modal via `syncDupe()`). No new commands/flags/Store methods.

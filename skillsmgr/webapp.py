@@ -721,8 +721,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             filename = os.path.basename(
                 qs.get("filename", ["skills-import.tar.gz"])[0] or "skills-import.tar.gz"
             )
-            if not filename.endswith((".tar.gz", ".tgz", ".tar")):
-                self._send_error(400, "unsupported archive type (use .tar.gz/.tgz/.tar)")
+            if not filename.endswith((".tar.gz", ".tgz", ".tar", ".zip")):
+                self._send_error(400, "unsupported archive type (use .tar.gz/.tgz/.tar/.zip)")
                 return
             force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
             try:
