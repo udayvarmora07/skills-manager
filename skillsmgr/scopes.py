@@ -8,6 +8,7 @@ paths at runtime; missing dirs show count 0.
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +16,14 @@ from pathlib import Path
 from . import paths
 from .frontmatter import dump_frontmatter, parse_frontmatter
 from .loader import load_skill, scan_dir
-from .store import SkillNotFound, Store, StoreError
+from . import root_discovery as _root_discovery
+from .store import (
+    SkillNotFound,
+    Store,
+    StoreError,
+    _atomic_write_text,
+    _mutation_lock,
+)
 from .validator import validate_skill_name
 
 # Injectable override for the global Store (lets the web UI + tests share one
@@ -36,7 +44,16 @@ def _global_store() -> Store:
 def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
     """Return a validated skill path contained by an agent scope root."""
     try:
-        return paths.safe_skill_path(scope.base, name)
+        direct = paths.safe_skill_path(scope.base, name)
+        if not scope.recursive or direct.is_dir():
+            return direct
+        # Recursive consumers may discover a skill below a project/category
+        # directory. Preserve the existing name-based public API by resolving
+        # the first deterministic observed instance when the flat path is absent.
+        for record in scan_dir(scope.base, recursive=True):
+            if record.get("name") == name and record.get("path"):
+                return paths.contained_path(scope.base, Path(record["path"]).relative_to(scope.base))
+        return direct
     except ValueError as exc:
         raise StoreError(str(exc)) from exc
 
@@ -48,6 +65,25 @@ class Scope:
     base: Path
     kind: str
     writable: bool
+    recursive: bool = False
+    supported: bool = True
+    consumer: str | None = None
+
+
+def _resolved_scope_root(scope: Scope) -> Path:
+    return _root_discovery.resolved_root(scope)
+
+
+def _unique_physical_scopes(scopes: list[Scope]) -> list[Scope]:
+    return _root_discovery.unique_physical_scopes(scopes)
+
+
+def _availability(scope: Scope) -> str:
+    return _root_discovery.availability(scope)
+
+
+def _annotate_instance_states(records: list[dict]) -> list[dict]:
+    return _root_discovery.annotate_instance_states(records)
 
 
 def _cwd() -> Path:
@@ -62,27 +98,23 @@ def known_scopes() -> list[Scope]:
     home = Path.home()
     cwd = _cwd()
     scopes: list[Scope] = [
-        Scope("global", "Global", paths.skills_dir(), "global", True),
-        Scope("claude-code", "Claude Code", home / ".claude/skills", "agent", True),
-        Scope("codex", "Codex", home / ".codex/skills", "agent", True),
-        Scope("cursor", "Cursor", home / ".cursor/skills-cursor", "agent", True),
-        Scope("opencode", "Opencode", home / ".config/opencode/skills", "agent", True),
-        Scope("gemini", "Gemini", home / ".gemini/skills", "agent", True),
-        Scope("commandcode", "Command Code", home / ".commandcode/skills", "agent", True),
-        Scope("agents", "Agents", home / ".agents/skills", "agent", True),
+        Scope("global", "Global", paths.skills_dir(), "global", True, consumer="skills-manager"),
+        Scope("claude-code", "Claude Code", home / ".claude/skills", "agent", True, consumer="claude-code"),
+        Scope("codex", "Codex", home / ".codex/skills", "agent", True, consumer="codex"),
+        Scope("cursor", "Cursor", home / ".cursor/skills", "agent", True, recursive=True, consumer="cursor"),
+        Scope("opencode", "Opencode", home / ".config/opencode/skills", "agent", True, recursive=True, consumer="opencode"),
+        Scope("gemini", "Gemini", home / ".gemini/skills", "agent", True, consumer="gemini"),
+        Scope("commandcode", "Command Code", home / ".commandcode/skills", "agent", True, consumer="commandcode"),
+        Scope("agents", "Agents", home / ".agents/skills", "agent", True, recursive=True, consumer="shared-agent-skills"),
     ]
     # Project-local scopes if present (shown last, only when they exist).
-    for label, rel in (
-        ("Project .agents", ".agents/skills"),
-        ("Project .claude", ".claude/skills"),
-        ("Project skills", "skills"),
-    ):
+    for label, rel, recursive, consumer in _root_discovery.project_scope_specs():
         cand = cwd / rel
         # Avoid duplicate when CWD scope equals a home scope path.
         if cand.is_dir() and all(cand.resolve() != s.base.resolve() for s in scopes if s.base.exists()):
             # Use a stable id derived from label.
             sid = label.lower().replace(" ", "-").replace(".", "")
-            scopes.append(Scope(sid, label, cand, "project", True))
+            scopes.append(Scope(sid, label, cand, "project", True, recursive, True, consumer))
     return scopes
 
 
@@ -98,11 +130,12 @@ def list_scopes(*, include_missing: bool = False) -> list[dict]:
     from .tokens import aggregate as _agg
 
     out: list[dict] = []
-    for s in known_scopes():
+    for s in _unique_physical_scopes(known_scopes()):
         exists = s.base.is_dir()
+        availability = _availability(s)
         if not exists and not include_missing and s.id != "global":
             continue
-        entries = scan_dir(s.base) if exists else []
+        entries = scan_dir(s.base, recursive=s.recursive) if exists else []
         count = len(entries)
         agg = _agg(entries)
         out.append(
@@ -112,6 +145,10 @@ def list_scopes(*, include_missing: bool = False) -> list[dict]:
                 "path": str(s.base),
                 "kind": s.kind,
                 "writable": s.writable,
+                "availability": availability,
+                "recursive": s.recursive,
+                "supported": s.supported,
+                "consumer": s.consumer,
                 "exists": exists,
                 "count": count,
                 "tokens": agg["total_tokens"],
@@ -153,22 +190,31 @@ def scan_scope(scope_id: str) -> list[dict]:
                     r.setdefault("tokens_method", "heuristic")
             r.setdefault("tokens_pct", 0)
             r.setdefault("chars", 0)
-        return rows
+            r["root_availability"] = "writable"
+            r["discovery_recursive"] = False
+            r["consumer"] = "skills-manager"
+        return _annotate_instance_states(rows)
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    entries = scan_dir(scope.base)
+    entries = scan_dir(scope.base, recursive=scope.recursive)
     for e in entries:
         e["scope"] = scope.id
         e["scope_label"] = scope.label
         try:
-            e["path"] = str(paths.contained_path(scope.base, e["name"]))
+            e["path"] = e.get("path") or str(paths.contained_path(scope.base, e["name"]))
         except ValueError:
             continue
         e["status"] = "disabled" if e.get("disabled") else "active"
         e.setdefault("tokens_pct", 0)
         e.setdefault("chars", 0)
-    return sorted(entries, key=lambda r: r["name"])
+        e["root_availability"] = _availability(scope)
+        e["discovery_recursive"] = scope.recursive
+        e["consumer"] = scope.consumer
+        if isinstance(e.get("provenance"), dict):
+            e["provenance"]["scope"] = scope.id
+            e["provenance"]["consumer"] = scope.consumer
+    return _annotate_instance_states(sorted(entries, key=lambda r: (r["name"].lower(), r.get("path", ""))))
 
 
 def list_all(*, include_missing: bool = False) -> list[dict]:
@@ -184,7 +230,7 @@ def list_all(*, include_missing: bool = False) -> list[dict]:
             seen.add(key)
             merged.append(rec)
     merged.sort(key=lambda r: (r["name"].lower(), r["scope"]))
-    return merged
+    return _annotate_instance_states(merged)
 
 
 def find_duplicates() -> list[dict]:
@@ -218,6 +264,9 @@ def find_duplicates() -> list[dict]:
                         "description": r.get("description", ""),
                         "disabled": bool(r.get("disabled")),
                         "tokens": r.get("tokens", 0),
+                        "instance_state": r.get("instance_state", "unresolved"),
+                        "instance_states": r.get("instance_states", ["unresolved"]),
+                        "effective_state": r.get("effective_state", "unresolved"),
                     }
                     for r in sorted(recs, key=lambda x: x["scope"])
                 ],
@@ -268,6 +317,9 @@ def get_skill(scope_id: str, name: str) -> dict:
     entry["scope_label"] = scope.label
     entry["path"] = str(skill_dir)
     entry["status"] = "disabled" if entry.get("disabled") else "active"
+    if isinstance(entry.get("provenance"), dict):
+        entry["provenance"]["scope"] = scope.id
+        entry["provenance"]["consumer"] = scope.consumer
     # Try to enrich from raw frontmatter (compatibility, allowed-tools).
     try:
         raw = (skill_dir / "SKILL.md").read_text(encoding="utf-8") if (skill_dir / "SKILL.md").is_file() else (skill_dir / "SKILL.md.disabled").read_text(encoding="utf-8")
@@ -349,26 +401,31 @@ def create_skill(
     if compatibility and len(compatibility) > MAX_COMPATIBILITY:
         raise StoreError(f"compatibility exceeds {MAX_COMPATIBILITY} characters")
     skill_dir = _safe_scope_skill_path(scope, name)
-    if skill_dir.exists():
-        raise StoreError(f"skill '{name}' already exists in scope '{scope_id}'")
-    data: dict = {"name": name, "description": description}
-    if license:
-        data["license"] = license
-    if compatibility:
-        data["compatibility"] = compatibility
-    if version:
-        data["version"] = version
-    if allowed_tools:
-        data["allowed-tools"] = allowed_tools.strip() if isinstance(allowed_tools, str) else allowed_tools
-    if category:
-        data["metadata"] = {"category": category}
-    if body is None:
-        body = f"# {name}\n"
-    if not body.endswith("\n"):
-        body += "\n"
-    content = dump_frontmatter(data, key_order=list(data.keys())) + body
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+    with _mutation_lock(skill_dir / "SKILL.md"):
+        if skill_dir.exists():
+            raise StoreError(f"skill '{name}' already exists in scope '{scope_id}'")
+        data: dict = {"name": name, "description": description}
+        if license:
+            data["license"] = license
+        if compatibility:
+            data["compatibility"] = compatibility
+        if version:
+            data["version"] = version
+        if allowed_tools:
+            data["allowed-tools"] = allowed_tools.strip() if isinstance(allowed_tools, str) else allowed_tools
+        if category:
+            data["metadata"] = {"category": category}
+        if body is None:
+            body = f"# {name}\n"
+        if not body.endswith("\n"):
+            body += "\n"
+        content = dump_frontmatter(data, key_order=list(data.keys())) + body
+        try:
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(skill_dir / "SKILL.md", content)
+        except OSError as exc:
+            shutil.rmtree(skill_dir, ignore_errors=True)
+            raise StoreError(f"could not create skill '{name}' safely: {exc}") from exc
     return {"name": name, "path": str(skill_dir), "scope": scope_id}
 
 
@@ -447,9 +504,13 @@ def edit_skill(
     if changed:
         from .store import write_snapshot as _write_snapshot
 
-        _write_snapshot(_global_store().data_dir, scope_id, name, text)
-        order = orig_keys + [k for k in data if k not in orig_keys]
-        md.write_text(dump_frontmatter(data, key_order=order) + orig_body, encoding="utf-8")
+        with _mutation_lock(md):
+            _write_snapshot(_global_store().data_dir, scope_id, name, text)
+            order = orig_keys + [k for k in data if k not in orig_keys]
+            try:
+                _atomic_write_text(md, dump_frontmatter(data, key_order=order) + orig_body)
+            except OSError as exc:
+                raise StoreError(f"could not edit skill '{name}' safely: {exc}") from exc
     return {"name": name, "changed": changed, "scope": scope_id}
 
 
@@ -530,6 +591,7 @@ def sync_skill(
     from .store import write_snapshot as _write_snapshot
 
     snapshot_data_dir = _global_store().data_dir
+    target_roots: set[Path] = set()
     for sid in to_scopes:
         if sid == from_scope:
             skipped.append({"scope": sid, "reason": "same as source"})
@@ -538,6 +600,11 @@ def sync_skill(
         if scope is None:
             skipped.append({"scope": sid, "reason": "unknown scope"})
             continue
+        root_key = _resolved_scope_root(scope)
+        if root_key in target_roots:
+            skipped.append({"scope": sid, "reason": "same physical root as another target"})
+            continue
+        target_roots.add(root_key)
         previous_content = None
         dest = _safe_scope_skill_path(scope, name)
         if force and dest.exists():
@@ -601,8 +668,13 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
         if (skill_dir / "SKILL.md.disabled").is_file():
             raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
         raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
-    _write_snapshot(_global_store().data_dir, scope_id, name, md.read_text(encoding="utf-8"))
-    md.write_text(content, encoding="utf-8")
+    with _mutation_lock(md):
+        current = md.read_text(encoding="utf-8")
+        _write_snapshot(_global_store().data_dir, scope_id, name, current)
+        try:
+            _atomic_write_text(md, content)
+        except OSError as exc:
+            raise StoreError(f"could not restore skill '{name}' safely: {exc}") from exc
     return {"name": name, "snapshot": snapshot, "scope": scope_id}
 
 

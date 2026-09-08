@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .store import _atomic_write_text, _mutation_lock
+
 __all__ = [
     "TEMPLATE_NAME_RE",
     "DEFAULT_TEMPLATE",
@@ -63,9 +65,10 @@ def create_template(
 ) -> Path:
     """Create template *name* with default content and return its path."""
     path = template_path(templates_dir, name)
-    if path.exists():
-        raise FileExistsError(f"template '{name}' already exists")
-    templates_dir.mkdir(parents=True, exist_ok=True)
-    content = body if body is not None else DEFAULT_TEMPLATE.format(name=name)
-    path.write_text(content, encoding="utf-8")
+    with _mutation_lock(path):
+        if path.exists():
+            raise FileExistsError(f"template '{name}' already exists")
+        templates_dir.mkdir(parents=True, exist_ok=True)
+        content = body if body is not None else DEFAULT_TEMPLATE.format(name=name)
+        _atomic_write_text(path, content)
     return path

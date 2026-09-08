@@ -1,8 +1,8 @@
 # Store API — Skills Manager
 
-**Version 0.1.0**
+**Version 0.2.0**
 
-**AI manifest**: The `Store` class is the single gateway between the CLI/GUI and skill data (filesystem + SQLite index). Facts verified against `store.py` on 2026-08-13. The GUI MUST use only this API — never touch files or the DB directly. Run `python3 smoke_store.py` after any change to `store.py`.
+**AI manifest**: The `Store` class is the single gateway between the CLI/web UI and global skill data (filesystem + SQLite index). Facts verified against `store.py` on September 8, 2026. The UI MUST use public Store/scopes behavior — never hand-edit files or the DB. Run `python3 smoke_store.py` after any change to `store.py`.
 
 ## Invariants
 
@@ -33,7 +33,9 @@
 - `create(self, name, description, *, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — name must match `NAME_RE`, ≤ `MAX_NAME` (64); description required, non-empty, ≤ `MAX_DESCRIPTION` (1024); compatibility ≤ `MAX_COMPATIBILITY` (500). Duplicate name or existing dir → `StoreError`. Returns skill dict.
 - `edit(self, name, description=None, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — partial update; unknown frontmatter keys are preserved. `SkillNotFound` if not installed or no SKILL.md; `StoreError` if disabled. Returns updated skill dict.
 - `list(self, include_disabled=False) -> list[dict]`
-- `get(self, name) -> dict` — raises `SkillNotFound` if absent.
+- `get(self, name) -> dict` — raises `SkillNotFound` if absent. Returned records
+  include derived, non-persisted observations: portable/extension frontmatter
+  partitions, content and metadata hashes, observed timestamp, and provenance.
 - `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`.
 - `add(self, path, name=None) -> dict` — import an existing SKILL.md file.
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
@@ -46,6 +48,7 @@
   malformed, symlinked, and prefix-collision directories are ignored.
 - `stats(self) -> dict` — counts and summary.
 - `export(self, dest=None, full=False) -> Path` / `backup(self, dest=None, full=False) -> Path` — slim skills-only archive by default; `full=True` adds validated trash and templates.
+- Export manifests include a SHA-256 content hash for each skill tree; imports verify hashes in staging and after commit when present. Hashes are verification metadata, not SQLite state.
 - `import_(self, archive, force=False) -> dict` — tar-only; ZIP content is
   rejected before tar parsing. Resource-budget violations, unsafe members,
   unsupported manifest versions/names/paths, and invalid extracted documents
@@ -58,7 +61,7 @@
 - Snapshot helpers `write_snapshot`, `list_snapshots`, and `read_snapshot` are
   module-level guarded helpers; snapshots are not SQLite data and are retained
   newest-five per scope/name.
-- `doctor(self) -> dict` — health check; lists FS/DB inconsistencies.
+- `doctor(self) -> dict` — health check; lists FS/DB inconsistencies, content drift, incomplete transaction artifacts, temporary files, stale snapshots, and repair guidance via `db resync`.
 - `db_rebuild(self)` / `db_resync(self)` — rebuild: drop + re-create index from FS; resync: sync without dropping. FS untouched.
 
 ## SQLite schema (index only)

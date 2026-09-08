@@ -179,3 +179,37 @@
   compatibility, and REST snapshot regression coverage.
 - [x] Verify focused recovery tests PASS; final full-suite/smoke/frontend/help
   evidence is recorded after the final verification run.
+
+## Milestone 14 — Atomic recovery and documentation truth (2026-09-08)
+
+- [x] Add atomic sibling-temp text writes with flush/fsync/replace and a documented durability policy.
+- [x] Preserve original skill content across replacement, serialization, index, and history failures.
+- [x] Serialize same-process per-skill mutations; document cross-process recovery through atomic replacement plus doctor/resync.
+- [x] Add failure-injection, concurrent-edit, doctor-drift, and content-hash backup regressions.
+- [x] Extend doctor diagnostics for transaction artifacts, temporary files, stale snapshots, and filesystem/index drift.
+- [x] Reconcile architecture, module, Store API, CLI, README, settings, and session-context documentation with current source.
+- [x] Add `check_docs.py` and a CI documentation/source consistency gate without adding a product CLI command.
+
+## Milestone 15 — Root and consumer discovery baseline (2026-09-08)
+
+- [x] Record the approval-gated `SkillRoot`/`Consumer`/binding/instance/effective-state model in `docs/ADR-002-root-consumer-effective-state.md`.
+- [x] Inventory official discovery roots, precedence, recursion, reload, and client metadata in `docs/12-agent-root-discovery-2026-09-08.md`; unresolved Codex/Command Code behavior is marked `[?]`.
+- [x] Correct Cursor's user root to `~/.cursor/skills` and document shared compatibility roots.
+- [x] Deduplicate resolved physical roots before aggregate scope counts/listing and sync target expansion.
+- [x] Document global, user, project, and nested-project semantics without introducing approval-gated runtime entities or schema changes.
+
+## Milestone 16 — Root capability and observed instance states (2026-09-08)
+
+- [x] Enable recursive discovery only for consumer roots whose official inventory supports it; flat roots remain one-level scans.
+- [x] Expose root availability as `writable`, `read-only`, `missing`, or `unsupported` in scope descriptors.
+- [!] Keep true consumer/project effective resolution approval-gated; compatibility output explicitly reports `effective_state: unresolved`.
+- [!] Add observed instance states (`active`, `disabled`, `invalid`, `duplicated`, `divergent`, `unmanaged`); `shadowed` remains blocked on precedence-aware effective resolution.
+- [x] Preserve the unique physical-root sync guarantee and add recursive/state regression coverage.
+
+## Milestone 17 — Observations and internal hotspot extraction (2026-09-08)
+
+- [x] Preserve unknown/client frontmatter and partition portable fields from extensions without losing round-trip data.
+- [x] Add non-persisted content/metadata hashes, observed timestamps, and provenance to loaded/public records.
+- [x] Extract archive inspection/extraction/staged-commit policy into `skillsmgr/archive.py` with Store compatibility adapters.
+- [x] Extract atomic writes/locks/tree hashing into `skillsmgr/atomic_io.py` and root discovery/state policy into `skillsmgr/root_discovery.py`.
+- [x] Keep public CLI/Store signatures, SQLite schema, and filesystem source-of-truth behavior unchanged.

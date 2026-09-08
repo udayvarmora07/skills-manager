@@ -10,6 +10,7 @@ skills via :meth:`Store.resync` / :meth:`Store.db_rebuild`.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -21,6 +22,8 @@ from pathlib import Path
 
 from . import paths
 from . import __version__
+from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
+from . import archive as _archive
 from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
 from .validator import (
     MAX_COMPATIBILITY,
@@ -64,13 +67,24 @@ SNAPSHOT_KEEP = 5
 _SNAPSHOT_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z?(?:-\d+)?$")
 _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
-MAX_ARCHIVE_COMPRESSED_BYTES = 25 * 1024 * 1024
-MAX_ARCHIVE_EXPANDED_BYTES = 16 * 1024 * 1024
-MAX_ARCHIVE_MEMBER_BYTES = 8 * 1024 * 1024
-MAX_ARCHIVE_MEMBERS = 200
-MAX_ARCHIVE_PATH_LENGTH = 512
-MAX_ARCHIVE_NESTING = 16
-MAX_ARCHIVE_COMPRESSION_RATIO = 1000
+def _mutation_lock(path: Path):
+    return mutation_lock(path)
+
+
+def _atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+    return atomic_write_text(path, text, encoding=encoding, replace=os.replace)
+
+
+def _tree_content_hash(root: Path) -> str:
+    return tree_content_hash(root)
+
+MAX_ARCHIVE_COMPRESSED_BYTES = _archive.MAX_ARCHIVE_COMPRESSED_BYTES
+MAX_ARCHIVE_EXPANDED_BYTES = _archive.MAX_ARCHIVE_EXPANDED_BYTES
+MAX_ARCHIVE_MEMBER_BYTES = _archive.MAX_ARCHIVE_MEMBER_BYTES
+MAX_ARCHIVE_MEMBERS = _archive.MAX_ARCHIVE_MEMBERS
+MAX_ARCHIVE_PATH_LENGTH = _archive.MAX_ARCHIVE_PATH_LENGTH
+MAX_ARCHIVE_NESTING = _archive.MAX_ARCHIVE_NESTING
+MAX_ARCHIVE_COMPRESSION_RATIO = _archive.MAX_ARCHIVE_COMPRESSION_RATIO
 
 
 class StoreError(Exception):
@@ -104,16 +118,18 @@ def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
     _check_snapshot_target(scope, name)
     snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
     snap_dir.mkdir(parents=True, exist_ok=True)
-    base = _trash_timestamp()
-    snap_id = base
-    counter = 1
-    while (snap_dir / f"{snap_id}.md").exists():
-        snap_id = f"{base}-{counter}"
-        counter += 1
-    (snap_dir / f"{snap_id}.md").write_text(text, encoding="utf-8")
-    files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
-    while len(files) > SNAPSHOT_KEEP:
-        files.pop(0).unlink()
+    with _mutation_lock(snap_dir):
+        base = _trash_timestamp()
+        snap_id = base
+        counter = 1
+        while (snap_dir / f"{snap_id}.md").exists():
+            snap_id = f"{base}-{counter}"
+            counter += 1
+        snapshot_path = snap_dir / f"{snap_id}.md"
+        _atomic_write_text(snapshot_path, text)
+        files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
+        while len(files) > SNAPSHOT_KEEP:
+            files.pop(0).unlink()
     return snap_id
 
 
@@ -163,120 +179,29 @@ def _trash_entry_name(path: Path) -> str | None:
 
 
 def _normalize_archive_member_name(name: str) -> str:
-    """Validate and normalize a tar member name without touching the FS."""
-    if not isinstance(name, str) or not name or "\x00" in name:
-        raise StoreError(f"unsafe archive member: {name!r}")
-    if name.startswith(("/", "\\")) or "\\" in name:
-        raise StoreError(f"unsafe archive member: {name!r}")
-    normalized = name.rstrip("/")
-    parts = normalized.split("/") if normalized else []
-    if not parts or any(part in ("", ".", "..") for part in parts):
-        raise StoreError(f"unsafe archive member: {name!r}")
-    return "/".join(parts)
+    try:
+        return _archive.normalize_member_name(name)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _validate_archive_members(
     tar: tarfile.TarFile,
     compressed_size: int,
 ) -> list[tuple[tarfile.TarInfo, str]]:
-    """Preflight tar paths, types, duplicates, and resource budgets."""
-    if compressed_size > MAX_ARCHIVE_COMPRESSED_BYTES:
-        raise StoreError(
-            f"archive compressed size exceeds {MAX_ARCHIVE_COMPRESSED_BYTES} bytes"
-        )
-    members: list[tuple[tarfile.TarInfo, str]] = []
-    seen: set[str] = set()
-    manifest_count = 0
-    expanded_size = 0
-    for member in tar.getmembers():
-        if len(member.name) > MAX_ARCHIVE_PATH_LENGTH:
-            raise StoreError(f"archive member path is too long: {member.name!r}")
-        normalized = _normalize_archive_member_name(member.name)
-        if len(normalized.split("/")) > MAX_ARCHIVE_NESTING:
-            raise StoreError(f"archive member path is nested too deeply: {member.name!r}")
-        if normalized in seen:
-            raise StoreError(f"duplicate archive member: {normalized!r}")
-        seen.add(normalized)
-
-        if len(seen) > MAX_ARCHIVE_MEMBERS:
-            raise StoreError(f"archive has too many members (max {MAX_ARCHIVE_MEMBERS})")
-
-        if normalized == "manifest.json":
-            manifest_count += 1
-            if not member.isreg():
-                raise StoreError("manifest.json must be a regular file")
-        else:
-            parts = normalized.split("/")
-            if parts[0] == "skills" and len(parts) >= 2:
-                if len(parts) == 2 and not member.isdir():
-                    raise StoreError(f"skill archive entry must be a directory: {member.name!r}")
-            elif parts[0] == "trash" and len(parts) >= 2:
-                if len(parts) == 2 and not member.isdir():
-                    raise StoreError(f"trash archive entry must be a directory: {member.name!r}")
-            elif parts[0] == "templates" and len(parts) == 2 and parts[1].endswith(".md"):
-                if not member.isreg():
-                    raise StoreError(f"template archive entry must be a regular file: {member.name!r}")
-            else:
-                raise StoreError(f"unexpected archive layout: {member.name!r}")
-
-        if not (member.isdir() or member.isreg()):
-            raise StoreError(f"unsupported archive member type: {member.name!r}")
-        if member.isreg():
-            if member.size > MAX_ARCHIVE_MEMBER_BYTES:
-                raise StoreError(
-                    f"archive member exceeds {MAX_ARCHIVE_MEMBER_BYTES} bytes: {normalized!r}"
-                )
-            expanded_size += member.size
-            if expanded_size > MAX_ARCHIVE_EXPANDED_BYTES:
-                raise StoreError(
-                    f"archive expanded size exceeds {MAX_ARCHIVE_EXPANDED_BYTES} bytes"
-                )
-        members.append((member, normalized))
-
-    if manifest_count != 1:
-        raise StoreError("archive must contain exactly one manifest.json")
-    if expanded_size > max(compressed_size, 1) * MAX_ARCHIVE_COMPRESSION_RATIO:
-        raise StoreError(
-            f"archive compression ratio exceeds {MAX_ARCHIVE_COMPRESSION_RATIO}:1"
-        )
-    return members
+    """Compatibility adapter for the extracted archive inspector."""
+    try:
+        return _archive.validate_members(tar, compressed_size)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _validate_archive_manifest(manifest: object) -> list[dict]:
-    """Validate the supported skills-manager manifest contract."""
-    if not isinstance(manifest, dict):
-        raise StoreError("invalid archive manifest: expected an object")
-    if manifest.get("app") != "skills-mgr":
-        raise StoreError("invalid archive manifest: unsupported app")
-    version = manifest.get("version")
-    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        raise StoreError("invalid archive manifest: version must be semantic")
-    if version.split(".", 1)[0] != __version__.split(".", 1)[0]:
-        raise StoreError(f"unsupported archive manifest major version: {version}")
-    created = manifest.get("created")
-    if not isinstance(created, str):
-        raise StoreError("invalid archive manifest: created timestamp is required")
+    """Compatibility adapter for the extracted manifest validator."""
     try:
-        datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ")
-    except ValueError as exc:
-        raise StoreError("invalid archive manifest: created timestamp") from exc
-    skills = manifest.get("skills")
-    if not isinstance(skills, list):
-        raise StoreError("invalid archive manifest: skills must be a list")
-    validated: list[dict] = []
-    names: set[str] = set()
-    for entry in skills:
-        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
-            raise StoreError("invalid archive manifest: each skill needs a name")
-        try:
-            name = validate_skill_name(entry["name"])
-        except ValueError as exc:
-            raise StoreError(f"invalid archive manifest skill name: {entry['name']!r}") from exc
-        if name in names:
-            raise StoreError(f"duplicate skill in archive manifest: {name!r}")
-        names.add(name)
-        validated.append(dict(entry, name=name))
-    return validated
+        return _archive.validate_manifest(manifest)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _extract_archive_members(
@@ -284,56 +209,25 @@ def _extract_archive_members(
     dest: Path,
     members: list[tuple[tarfile.TarInfo, str]],
 ) -> None:
-    """Extract preflighted members with an explicit safe-filter fallback."""
-    tar_members = [member for member, _ in members]
-    data_filter = getattr(tarfile, "data_filter", None)
-    if callable(data_filter):
-        try:
-            tar.extractall(dest, members=tar_members, filter=data_filter)
-        except (OSError, tarfile.TarError, ValueError) as exc:
-            raise StoreError(f"invalid archive extraction: {exc}") from exc
-        return
-
-    # Python versions without data_filter use a guarded manual extractor. Never
-    # silently fall back to TarFile.extractall(), which may materialize links or
-    # special files supplied by an archive.
-    for member, normalized in members:
-        target = paths.contained_path(dest, *normalized.split("/"))
-        if member.isdir():
-            target.mkdir(parents=True, exist_ok=True)
-            continue
-        source = tar.extractfile(member)
-        if source is None:
-            raise StoreError(f"archive member has no readable payload: {normalized!r}")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with source, target.open("wb") as output:
-                shutil.copyfileobj(source, output)
-        except OSError as exc:
-            raise StoreError(f"invalid archive extraction: {exc}") from exc
+    """Compatibility adapter for the extracted safe extractor."""
+    try:
+        return _archive.extract_members(tar, dest, members)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _has_skill_document(source: Path) -> bool:
-    """Return whether an extracted directory contains one skill document."""
-    enabled = (source / "SKILL.md").is_file()
-    disabled = (source / "SKILL.md.disabled").is_file()
-    if enabled and disabled:
-        raise StoreError(f"skill directory contains both enabled and disabled documents: {source.name!r}")
-    return enabled or disabled
+    try:
+        return _archive.has_skill_document(source)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _validate_imported_skill(source: Path, name: str) -> None:
-    """Validate an extracted skill document against its manifest name."""
-    document = source / ("SKILL.md" if (source / "SKILL.md").is_file() else "SKILL.md.disabled")
     try:
-        data, _ = parse_frontmatter(document.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, FrontmatterError) as exc:
-        raise StoreError(f"invalid skill document for {name!r}: {exc}") from exc
-    frontmatter_name = data.get("name")
-    if frontmatter_name is not None and frontmatter_name != name:
-        raise StoreError(
-            f"skill document name {frontmatter_name!r} does not match manifest name {name!r}"
-        )
+        return _archive.validate_imported_skill(source, name)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _safe_skill_path(root: Path, name: str) -> Path:
@@ -565,7 +459,29 @@ class Store:
                 "disabled, added_at, updated_at FROM skills "
                 "WHERE status = 'active' ORDER BY name"
             ).fetchall()
-            return [dict(r) for r in rows]
+            result = [dict(r) for r in rows]
+            from .loader import load_skill
+
+            for record in result:
+                skill_dir = _safe_skill_path(self.skills_dir, record["name"])
+                try:
+                    observed = load_skill(skill_dir)
+                except (OSError, SkillNotFound):
+                    continue
+                for key in (
+                    "content_hash",
+                    "metadata_hash",
+                    "observed_at",
+                    "provenance",
+                    "portable_frontmatter",
+                    "frontmatter_extensions",
+                ):
+                    if key in observed:
+                        record[key] = observed[key]
+                if isinstance(record.get("provenance"), dict):
+                    record["provenance"]["scope"] = "global"
+                    record["provenance"]["consumer"] = "skills-manager"
+            return result
         finally:
             conn.close()
 
@@ -583,6 +499,21 @@ class Store:
             result = dict(row)
             skill_dir = _safe_skill_path(self.skills_dir, name)
             result["path"] = str(skill_dir) if skill_dir.is_dir() else None
+            if skill_dir.is_dir():
+                observed = self._load_skill(skill_dir)
+                for key in (
+                    "content_hash",
+                    "metadata_hash",
+                    "observed_at",
+                    "provenance",
+                    "portable_frontmatter",
+                    "frontmatter_extensions",
+                ):
+                    if key in observed:
+                        result[key] = observed[key]
+                if isinstance(result.get("provenance"), dict):
+                    result["provenance"]["scope"] = "global"
+                    result["provenance"]["consumer"] = "skills-manager"
             return result
         finally:
             conn.close()
@@ -610,6 +541,37 @@ class Store:
             conn.close()
 
     def create(
+        self,
+        name: str,
+        description: str,
+        *,
+        license: str | None = None,
+        category: str | None = None,
+        compatibility: str | None = None,
+        version: str | None = None,
+        allowed_tools: str | None = None,
+        metadata_extra: dict | None = None,
+        body: str | None = None,
+    ) -> dict:
+        try:
+            canonical_name = validate_skill_name(name.strip())
+        except ValueError as exc:
+            raise StoreError(str(exc)) from exc
+        skill_dir = _safe_skill_path(self.skills_dir, canonical_name)
+        with _mutation_lock(skill_dir / "SKILL.md"):
+            return self._create_unlocked(
+                canonical_name,
+                description,
+                license=license,
+                category=category,
+                compatibility=compatibility,
+                version=version,
+                allowed_tools=allowed_tools,
+                metadata_extra=metadata_extra,
+                body=body,
+            )
+
+    def _create_unlocked(
         self,
         name: str,
         description: str,
@@ -669,15 +631,29 @@ class Store:
             body += "\n"
         content = dump_frontmatter(data, key_order=list(data.keys())) + body
 
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
-        self._upsert_entry(name)
-        conn = self._connect()
         try:
-            self._history(conn, name, "create")
-            conn.commit()
-        finally:
-            conn.close()
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(skill_dir / "SKILL.md", content)
+            self._upsert_entry(name)
+            conn = self._connect()
+            try:
+                self._history(conn, name, "create")
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            try:
+                conn = self._connect()
+                try:
+                    conn.execute("DELETE FROM history WHERE name = ? AND action = 'create'", (name,))
+                    conn.execute("DELETE FROM skills WHERE name = ?", (name,))
+                    conn.commit()
+                finally:
+                    conn.close()
+            except Exception:
+                pass
+            shutil.rmtree(skill_dir, ignore_errors=True)
+            raise
         return {"name": name, "path": str(skill_dir)}
 
     def add(self, src: str | Path, name: str | None = None) -> dict:
@@ -719,6 +695,32 @@ class Store:
         return {"name": chosen, "path": str(skill_dir)}
 
     def edit(
+        self,
+        name: str,
+        description: str | None = None,
+        license: str | None = None,
+        category: str | None = None,
+        compatibility: str | None = None,
+        version: str | None = None,
+        allowed_tools: str | None = None,
+        metadata_extra: dict | None = None,
+        body: str | None = None,
+    ) -> dict:
+        skill_dir = _safe_skill_path(self.skills_dir, name)
+        with _mutation_lock(skill_dir / "SKILL.md"):
+            return self._edit_unlocked(
+                name,
+                description=description,
+                license=license,
+                category=category,
+                compatibility=compatibility,
+                version=version,
+                allowed_tools=allowed_tools,
+                metadata_extra=metadata_extra,
+                body=body,
+            )
+
+    def _edit_unlocked(
         self,
         name: str,
         description: str | None = None,
@@ -796,15 +798,34 @@ class Store:
         if changed:
             key_order = original_keys + [k for k in data if k not in original_keys]
             content = dump_frontmatter(data, key_order=key_order) + original_body
-            write_snapshot(self.data_dir, "global", name, text)
-            md_file.write_text(content, encoding="utf-8")
-            self._upsert_entry(name)
-            conn = self._connect()
+            replaced = False
             try:
-                self._history(conn, name, "edit")
-                conn.commit()
-            finally:
-                conn.close()
+                write_snapshot(self.data_dir, "global", name, text)
+                _atomic_write_text(md_file, content)
+                replaced = True
+                self._upsert_entry(name)
+                conn = self._connect()
+                try:
+                    self._history(conn, name, "edit")
+                    conn.commit()
+                finally:
+                    conn.close()
+            except OSError as exc:
+                if replaced:
+                    try:
+                        _atomic_write_text(md_file, text)
+                        self._upsert_entry(name)
+                    except Exception:
+                        pass
+                raise StoreError(f"could not replace skill '{name}' safely: {exc}") from exc
+            except Exception:
+                if replaced:
+                    try:
+                        _atomic_write_text(md_file, text)
+                        self._upsert_entry(name)
+                    except Exception:
+                        pass
+                raise
         return {"name": name, "changed": changed}
 
     def remove(self, name: str, purge: bool = False) -> dict:
@@ -859,16 +880,25 @@ class Store:
                 if (skill_dir / "SKILL.md.disabled").is_file():
                     raise StoreError(f"skill '{name}' is disabled; enable it first")
                 raise SkillNotFound(f"skill '{name}' has no SKILL.md")
-            current = md_file.read_text(encoding="utf-8")
-            write_snapshot(self.data_dir, "global", name, current)
-            md_file.write_text(content, encoding="utf-8")
-            self._upsert_entry(name)
-            conn = self._connect()
-            try:
-                self._history(conn, name, f"restore --snapshot {snapshot}")
-                conn.commit()
-            finally:
-                conn.close()
+            with _mutation_lock(md_file):
+                current = md_file.read_text(encoding="utf-8")
+                write_snapshot(self.data_dir, "global", name, current)
+                try:
+                    _atomic_write_text(md_file, content)
+                    self._upsert_entry(name)
+                    conn = self._connect()
+                    try:
+                        self._history(conn, name, f"restore --snapshot {snapshot}")
+                        conn.commit()
+                    finally:
+                        conn.close()
+                except Exception:
+                    try:
+                        _atomic_write_text(md_file, current)
+                        self._upsert_entry(name)
+                    except Exception:
+                        pass
+                    raise
             return {"name": name, "snapshot": snapshot}
         candidates = sorted(
             (
@@ -1053,6 +1083,9 @@ class Store:
                     "license": e["license"],
                     "version": e["version"],
                     "category": e["category"],
+                    "content_hash": _tree_content_hash(
+                        _safe_skill_path(self.skills_dir, e["name"])
+                    ),
                 }
                 for e in entries
             ],
@@ -1119,7 +1152,7 @@ class Store:
             skills = _validate_archive_manifest(manifest)
             if full and not manifest.get("full"):
                 raise StoreError("archive is not a full export; re-export with --full")
-            planned: list[tuple[str, Path]] = []
+            planned: list[tuple[str, Path, dict]] = []
             planned_names: set[str] = set()
             for entry in skills:
                 name = entry["name"]
@@ -1133,7 +1166,7 @@ class Store:
                     raise StoreError(f"archive manifest skill has no SKILL.md: {name!r}")
                 _validate_imported_skill(source, name)
                 _safe_skill_path(self.skills_dir, name)
-                planned.append((name, source))
+                planned.append((name, source, entry))
 
             if not skills and (tmp / "skills").is_dir():
                 for source in sorted((tmp / "skills").iterdir()):
@@ -1152,7 +1185,8 @@ class Store:
                         continue
                     _validate_imported_skill(source, name)
                     _safe_skill_path(self.skills_dir, name)
-                    planned.append((name, source))
+                    planned.append((name, source, {"name": name})
+                    )
 
             if skills and (tmp / "skills").is_dir():
                 unexpected = sorted(
@@ -1167,7 +1201,7 @@ class Store:
             # All archive and content validation is complete before this first
             # destination deletion/copy, so force cannot partially apply an
             # archive that fails later preflight checks.
-            for name, source in planned:
+            for name, source, entry in planned:
                 dest = _safe_skill_path(self.skills_dir, name)
                 if dest.exists():
                     if not force:
@@ -1175,29 +1209,20 @@ class Store:
                         continue
                 stage_root = tmp / "commit-staging"
                 stage_root.mkdir(parents=True, exist_ok=True)
-                staged = stage_root / name
-                backup = stage_root / f"{name}.backup"
-                moved_original = False
                 try:
-                    shutil.copytree(source, staged)
-                    if dest.exists():
-                        shutil.move(str(dest), str(backup))
-                        moved_original = True
-                    shutil.move(str(staged), str(dest))
-                    self._upsert_entry(name)
+                    committed, reason = _archive.commit_staged_skill(
+                        source,
+                        dest,
+                        stage_root,
+                        entry.get("content_hash"),
+                        upsert=self._upsert_entry,
+                    )
+                except Exception as exc:
+                    committed, reason = False, str(exc)
+                if committed:
                     imported.append(name)
-                    if backup.exists():
-                        shutil.rmtree(backup)
-                except (OSError, StoreError) as exc:
-                    if dest.exists() and (moved_original or not backup.exists()):
-                        shutil.rmtree(dest, ignore_errors=True)
-                    if moved_original and backup.exists() and not dest.exists():
-                        shutil.move(str(backup), str(dest))
-                    elif not moved_original and not backup.exists():
-                        # The old destination was never moved; preserve it.
-                        shutil.rmtree(staged, ignore_errors=True)
-                    skipped.append(f"{name}: {exc}")
-                    shutil.rmtree(staged, ignore_errors=True)
+                else:
+                    skipped.append(f"{name}: {reason}")
             conn = self._connect()
             try:
                 for name in imported:
@@ -1283,12 +1308,14 @@ class Store:
         conn = self._connect()
         try:
             db_rows = conn.execute("SELECT COUNT(*) AS c FROM skills").fetchone()["c"]
-            active_names = {
-                r["name"]
+            active_rows = {
+                r["name"]: dict(r)
                 for r in conn.execute(
-                    "SELECT name FROM skills WHERE status = 'active'"
+                    "SELECT name, description, body, category, license, version, disabled "
+                    "FROM skills WHERE status = 'active'"
                 ).fetchall()
             }
+            active_names = set(active_rows)
             trashed_names = {
                 r["name"]
                 for r in conn.execute(
@@ -1300,6 +1327,41 @@ class Store:
             conn.close()
         orphan_dirs = sorted(set(scanned) - active_names)
         stale_rows = sorted(active_names - set(scanned))
+        filesystem_index_drift = sorted(
+            name
+            for name in set(scanned) & active_names
+            if any(
+                scanned[name].get(key) != active_rows[name].get(key)
+                for key in ("description", "body", "category", "license", "version", "disabled")
+            )
+        )
+        transaction_artifacts = sorted(
+            str(path.relative_to(self.data_dir))
+            for path in self.data_dir.rglob("*")
+            if path.name.endswith((".skillsmgr-stage", ".skillsmgr-backup"))
+            or ".skillsmgr-stage." in path.name
+            or ".skillsmgr-backup." in path.name
+        )
+        temporary_files = sorted(
+            str(path.relative_to(self.data_dir))
+            for path in self.data_dir.rglob("*")
+            if ".skillsmgr-tmp" in path.name
+            or path.name.endswith((".tmp", ".temp"))
+            or path.name in {".skillsmgr-stage", ".skillsmgr-backup"}
+            or ".skillsmgr-stage" in path.name
+            or ".skillsmgr-backup" in path.name
+        )
+        snapshots_root = self.data_dir / "snapshots"
+        stale_snapshots = sorted(
+            str(path.relative_to(self.data_dir))
+            for path in snapshots_root.rglob("*")
+            if path.is_file()
+            and (
+                path.suffix != ".md"
+                or not _SNAPSHOT_ID_RE.fullmatch(path.stem)
+                or len(path.relative_to(snapshots_root).parts) != 3
+            )
+        ) if snapshots_root.is_dir() else []
         trash_count = (
             len([p for p in self.trash_dir.iterdir() if _trash_entry_name(p)])
             if self.trash_dir.is_dir()
@@ -1314,6 +1376,10 @@ class Store:
             integrity == "ok"
             and not orphan_dirs
             and not stale_rows
+            and not filesystem_index_drift
+            and not transaction_artifacts
+            and not temporary_files
+            and not stale_snapshots
             and not (
                 trashed_names
                 - {
@@ -1337,6 +1403,11 @@ class Store:
             "db_rows": db_rows,
             "orphan_dirs": orphan_dirs,
             "stale_rows": stale_rows,
+            "filesystem_index_drift": filesystem_index_drift,
+            "transaction_artifacts": transaction_artifacts,
+            "temporary_files": temporary_files,
+            "incomplete_transactions": transaction_artifacts,
+            "stale_snapshots": stale_snapshots,
             "trash_count": trash_count,
             "templates_count": templates_count,
             "ok": ok,

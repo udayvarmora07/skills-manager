@@ -4,7 +4,7 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
-## What exists today (2026-08-16)
+## What exists today (2026-09-08)
 
 - **CLI**: `python3 -m skillsmgr` — 26 top-level commands + 7 subcommands + 3 aliases (`ls`, `rm`, `gui`) = 40 invocable names, exit codes 0/1/2/130. Works.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. See @docs/03-cli-surface.md.
@@ -15,7 +15,7 @@
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default).
   - Frontend: `skillsmgr/webui/` (Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
-- **Tests**: `python3 smoke_store.py` (store API), `python3 smoke_web.py` (REST API). Both green.
+ - **Tests**: 101 stdlib `unittest` tests plus `python3 smoke_store.py` (store API), `python3 smoke_web.py` (REST API), and `python3 check_docs.py` (docs/source gate).
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
 
 ## Common tasks (router)
@@ -78,7 +78,7 @@ skillsmgr/
     app.js             # Vue app: state, actions, markdown renderer, toasts
     static/vendor/vue.global.prod.js   # Vue 3.5.13 (vendored)
   cli.py               # cmd_gui → webapp.run; webui/gui parser
-  store.py             # unchanged by this build (read only)
+  store.py             # FS/index/recovery/archive policy
 smoke_store.py         # store smoke (green)
 smoke_web.py           # REST smoke (green)
 docs/08-web-ui.md      # authoritative web UI doc

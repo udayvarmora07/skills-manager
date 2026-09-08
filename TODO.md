@@ -225,18 +225,18 @@ the presence of crashes, concurrent requests, and partial I/O.
   issue #2: existing export/import flags, versioned manifest, skills + trash +
   templates, skip by default, and `--force` overwrite.
 - [x] Resolve overlap between migration code and the selected archive pipeline.
-- [ ] Add atomic text writes using a sibling temporary file, flush/replace, and
+- [x] Add atomic text writes using a sibling temporary file, flush/replace, and
   a documented durability policy.
-- [ ] Preserve original content if validation, serialization, or replacement
+- [x] Preserve original content if validation, serialization, or replacement
   fails.
 - [x] Stage sync/overwrite operations and snapshot the destination before force
   for the integrated edit/sync/import recovery paths.
-- [ ] Define concurrency behavior for two CLI processes or UI requests touching
+- [x] Define concurrency behavior for two CLI processes or UI requests touching
   the same skill.
-- [ ] Add failure-injection tests between filesystem and SQLite operations.
-- [ ] Make `doctor` report incomplete transactions, temporary files, stale
+- [x] Add failure-injection tests between filesystem and SQLite operations.
+- [x] Make `doctor` report incomplete transactions, temporary files, stale
   snapshots, and index/filesystem drift.
-- [ ] Verify backup restore using content hashes, not only row counts.
+- [x] Verify backup restore using content hashes, not only row counts.
 
 **Acceptance gate:** approved recovery behavior is present on `main`, interrupted
 operations are recoverable or explicitly reported, and all baseline plus failure
@@ -247,22 +247,25 @@ injection tests pass.
 **Goal:** stop conflating physical directories with the agents that consume
 them.
 
-- [ ] Write an ADR for `SkillRoot`, `Consumer`, `ConsumerRootBinding`,
+- [x] Write an ADR for `SkillRoot`, `Consumer`, `ConsumerRootBinding`,
   `SkillInstance`, and `EffectiveSkill`.
-- [ ] Inventory official discovery roots, precedence, recursion, reload, and
+- [x] Inventory official discovery roots, precedence, recursion, reload, and
   client-specific metadata for supported agents.
-- [ ] Correct the stale Cursor path and shared-root assumptions.
-- [ ] Deduplicate roots by resolved physical path before counting or syncing.
-- [ ] Model global, user, project, and nested project roots explicitly.
-- [ ] Support recursive discovery only where the consumer actually does so.
-- [ ] Represent read-only, writable, missing, and unsupported roots distinctly.
-- [ ] Calculate effective resolution for a selected consumer and project.
-- [ ] Show active, shadowed, divergent, unmanaged, invalid, disabled, and
-  duplicated instances.
-- [ ] Make sync operate on unique physical roots exactly once.
-- [ ] Preserve unknown/client-specific frontmatter while separating portable
+- [x] Correct the stale Cursor path and shared-root assumptions.
+- [x] Deduplicate roots by resolved physical path before counting or syncing.
+- [x] Model global, user, project, and nested project roots explicitly in the
+  approval-gated ADR and discovery inventory; runtime entities remain deferred.
+- [x] Support recursive discovery only where the consumer actually does so.
+- [x] Represent read-only, writable, missing, and unsupported roots distinctly.
+- [!] Calculate effective resolution for a selected consumer and project; blocked
+  until the approval-gated runtime ConsumerRootBinding model is introduced.
+- [!] Show active, shadowed, divergent, unmanaged, invalid, disabled, and
+  duplicated instances; observed states are implemented, but shadowing requires
+  the approval-gated effective resolver.
+- [x] Make sync operate on unique physical roots exactly once.
+- [x] Preserve unknown/client-specific frontmatter while separating portable
   standard fields from consumer extensions.
-- [ ] Add content hashes, metadata hashes, provenance, and observed timestamps
+- [x] Add content hashes, metadata hashes, provenance, and observed timestamps
   without changing SQLite schema until explicitly approved.
 
 **Acceptance gate:** CLI and UI can explain physical state and effective
@@ -273,9 +276,9 @@ consumer state; shared roots are not double-counted or overwritten twice.
 **Goal:** reduce change risk in hotspot modules while keeping public behavior
 stable.
 
-- [ ] Extract archive inspection/extraction/commit logic from `store.py`.
-- [ ] Extract atomic document I/O and root-containment primitives.
-- [ ] Extract root discovery and consumer binding from `scopes.py`.
+- [x] Extract archive inspection/extraction/commit logic from `store.py`.
+- [x] Extract atomic document I/O and root-containment primitives.
+- [x] Extract root discovery and consumer binding from `scopes.py`.
 - [ ] Split `webapp.py` route dispatch, request security, serialization, and
   upload handling into cohesive internal modules or tables.
 - [ ] Split `cli.py` parser construction, output rendering, and command handlers.
@@ -383,16 +386,16 @@ installation verification passes.
 ## Milestone 10 — Documentation truth and project hygiene
 
 - [ ] Reconcile `AGENTS.md` with the final architecture and constraints.
-- [ ] Correct stale GTK and legacy database-path claims in `docs/01-architecture.md`.
-- [ ] Mark `docs/05-gui-plan.md` as historical only or remove it through an
+- [x] Correct stale GTK and legacy database-path claims in `docs/01-architecture.md`.
+- [x] Mark `docs/05-gui-plan.md` as historical only or remove it through an
   explicit documentation decision.
-- [ ] Correct scope paths, shared-root semantics, test inventory, and current
+- [x] Correct scope paths, shared-root semantics, test inventory, and current
   CLI/API signatures in owning docs.
-- [ ] Update `.commandcode/settings.json`, which references deleted
+- [x] Update `.commandcode/settings.json`, which references deleted
   `skillsmgr/gui.py`, through a separate hygiene change.
 - [ ] Reconcile `task.md`, `TODO.md`, `PLAN.md`, `ROADMAP.md`, `CHANGELOG.md`,
   and `docs/06-progress-log.md` without marking worktree-only code as shipped.
-- [ ] Add a machine-checkable docs/source consistency command.
+- [x] Add a machine-checkable docs/source consistency command.
 - [ ] Keep historical entries append-only while moving current truth into
   owning documents.
 

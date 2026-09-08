@@ -14,7 +14,7 @@ Entry point for `python3 -m skillsmgr`; delegates to `cli.main()`.
 
 ## `cli.py`
 
-argparse-based CLI, `prog="skills-mgr"`, 26 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 40 invocable names (see @docs/03-cli-surface.md). Key helpers: `_print_json(data)` (indent=2), `_err(msg)`, `_truncate(text, n)`, `_render_table(rows, headers)`. Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. `--json` on data commands. `--scope` (per-command flag) on `list`/`view`/`search`/`doctor`/`stats`, plus scope-aware `sync`/`scopes`/`tokens`/`install`. `cmd_gui` launches the web UI via `webapp.run(...)`.
+argparse-based CLI, `prog="skills-mgr"`, 26 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 40 invocable names (see @docs/03-cli-surface.md). Key helpers: `_print_json(data)` (indent=2), `_err(msg)`, `_truncate(text, n)`, `_render_table(rows, headers)`. Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. `--json` on data commands. `--scope` (per-command flag) on `list`/`view`/`search`/`doctor`/`stats`, plus scope-aware `sync`/`scopes`/`tokens`/`install`. `cmd_gui` launches the local web UI via `webapp.run(...)`.
 
 ## `webapp.py`
 
@@ -26,15 +26,29 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `store.py`
 
-`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Trash operations use exact canonical timestamped entries. Archive imports preflight tar members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, reject ZIP content, and use `tarfile.data_filter` when available with a guarded fallback otherwise. Per-skill commits are staged and failures are reported in `skipped`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Text mutations use private atomic sibling-temp writes, fsync, replacement, and same-process per-document locks; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, reject ZIP content, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. Per-skill commits are staged and failures are reported in `skipped`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
 
 ## `scopes.py`
 
-Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()`, `scan_scope()`, `list_all()` (merged), `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()`, `search_all()`. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to `Store()`.
+Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable, recursive, supported, consumer). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()` exposes root availability and discovery metadata; `list_all()` deduplicates resolved physical roots for aggregate views; direct ids remain addressable. Scope records expose observed instance states; precedence-based `shadowed`/effective resolution remains approval-gated. `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()` (skips duplicate physical target roots), and `search_all()`. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to `Store()`.
 
 ## `loader.py`
 
-Shared SKILL.md loader + directory scanner (`load_skill`, `scan_dir`) used by both Store and scopes — keeps FS parsing consistent (frontmatter parse, token estimate, disabled detection).
+Shared SKILL.md loader + directory scanner (`load_skill`, `scan_dir`) used by both Store and scopes — keeps FS parsing consistent (frontmatter parse, token estimate, disabled detection, derived observations, and recursive discovery).
+
+## `observations.py`
+
+Pure, non-persisted document observations: portable versus client-extension
+frontmatter partitions, content/metadata SHA-256 hashes, observed timestamp, and
+scope/consumer provenance.
+
+## `atomic_io.py`, `archive.py`, `path_safety.py`, `root_discovery.py`
+
+Internal policy modules extracted from the former Store/scopes hotspots. They
+own atomic text writes and tree hashes, archive preflight/extraction/staged
+commit behavior, resolved root-containment, and physical-root/capability/
+instance-state observations. `paths.py` remains a compatibility adapter for the
+existing containment function names.
 
 ## `tokens.py`
 

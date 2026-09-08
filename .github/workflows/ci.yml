@@ -21,6 +21,8 @@ jobs:
         run: python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py
       - name: Unit tests (stdlib only, no deps)
         run: python3 -m unittest discover -s tests
+      - name: Documentation/source consistency
+        run: python3 check_docs.py
       - name: Store smoke
         run: python3 smoke_store.py
       - name: Web smoke

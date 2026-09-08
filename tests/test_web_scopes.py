@@ -74,6 +74,57 @@ class TestListScopes(ScopedHomeTestCase):
         self.assertIn("global", ids)
         self.assertNotIn("agents", ids)
 
+    def test_cursor_uses_current_agent_skills_root(self):
+        cursor = next(scope for scope in scopes.known_scopes() if scope.id == "cursor")
+        self.assertEqual(cursor.base, Path(self._tmp.name) / ".cursor" / "skills")
+
+    def test_aliased_physical_roots_are_counted_once(self):
+        agents_root = Path(self._tmp.name) / ".agents" / "skills"
+        agents_root.mkdir(parents=True)
+        cursor_root = Path(self._tmp.name) / ".cursor" / "skills"
+        cursor_root.parent.mkdir(parents=True)
+        cursor_root.symlink_to(agents_root, target_is_directory=True)
+        descriptors = scopes.list_scopes(include_missing=True)
+        physical = [Path(item["path"]).resolve() for item in descriptors]
+        self.assertEqual(len(physical), len(set(physical)))
+
+    def test_sync_skips_duplicate_physical_target_root(self):
+        scopes._global_store().create("shared", "Shared skill")
+        agents_root = Path(self._tmp.name) / ".agents" / "skills"
+        agents_root.mkdir(parents=True)
+        cursor_root = Path(self._tmp.name) / ".cursor" / "skills"
+        cursor_root.parent.mkdir(parents=True)
+        cursor_root.symlink_to(agents_root, target_is_directory=True)
+
+        result = scopes.sync_skill("shared", "global", ["agents", "cursor"])
+
+        self.assertEqual(result["synced"], ["agents"])
+        self.assertEqual(result["skipped"], [{"scope": "cursor", "reason": "same physical root as another target"}])
+
+    def test_recursive_consumer_scope_discovers_nested_skill(self):
+        nested = Path(self._tmp.name) / ".cursor" / "skills" / "nested" / "demo"
+        nested.mkdir(parents=True)
+        (nested / "SKILL.md").write_text(
+            "---\nname: demo\ndescription: Nested demo\n---\nbody\n",
+            encoding="utf-8",
+        )
+
+        rows = scopes.scan_scope("cursor")
+
+        self.assertEqual([row["name"] for row in rows], ["demo"])
+        self.assertTrue(rows[0]["discovery_recursive"])
+        self.assertEqual(rows[0]["root_availability"], "writable")
+        self.assertEqual(scopes.get_skill("cursor", "demo")["description"], "Nested demo")
+
+    def test_missing_and_read_only_root_states_are_distinct(self):
+        missing = scopes.Scope("missing-test", "Missing", Path(self._tmp.name) / "missing", "agent", True)
+        readonly = scopes.Scope("readonly-test", "Readonly", Path(self._tmp.name) / "readonly", "agent", False)
+        readonly.base.mkdir()
+        with mock.patch("skillsmgr.scopes.known_scopes", return_value=[missing, readonly]):
+            descriptors = {item["id"]: item for item in scopes.list_scopes(include_missing=True)}
+        self.assertEqual(descriptors["missing-test"]["availability"], "missing")
+        self.assertEqual(descriptors["readonly-test"]["availability"], "read-only")
+
 
 class TestAgentScopeCrud(ScopedHomeTestCase):
     def test_create_scan_get(self):
@@ -208,6 +259,20 @@ class TestFindDuplicates(ScopedHomeTestCase):
         dupes = scopes.find_duplicates()
         self.assertEqual(len(dupes), 1)
         self.assertTrue(dupes[0]["descriptions_differ"])
+        self.assertIn("divergent", dupes[0]["records"][0]["instance_states"])
+        self.assertEqual(dupes[0]["records"][0]["effective_state"], "unresolved")
+
+    def test_disabled_and_malformed_instances_are_classified(self):
+        scopes.create_skill("agents", "disabled-one", "Disabled")
+        scopes.toggle_skill("agents", "disabled-one", enable=False)
+        malformed = Path(self._tmp.name) / ".agents" / "skills" / "broken"
+        malformed.mkdir(parents=True)
+        (malformed / "SKILL.md").write_text("---\nname: [broken\n---\nbody\n", encoding="utf-8")
+
+        rows = {row["name"]: row for row in scopes.scan_scope("agents")}
+
+        self.assertIn("disabled", rows["disabled-one"]["instance_states"])
+        self.assertIn("invalid", rows["broken"]["instance_states"])
 
     def test_single_scope_same_name_dir_not_duplicate(self):
         # Same store listed twice is impossible; a dir existing in only one

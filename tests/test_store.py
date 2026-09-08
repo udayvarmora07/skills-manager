@@ -6,9 +6,14 @@ Filesystem is the source of truth; the DB is only an index.
 Run:  python3 -m unittest discover -s tests -v
 """
 
+import hashlib
 import os
+import sqlite3
 import tempfile
+import threading
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from skillsmgr.frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
 from skillsmgr.loader import load_skill
@@ -81,6 +86,20 @@ class TestEditToggle(IsolatedStoreTestCase):
         self.assertTrue(out["changed"])
         self.assertEqual(self.store.get("demo")["description"], "New desc")
 
+    def test_edit_preserves_unknown_client_frontmatter(self):
+        source = self.make_skill_dir(
+            "custom",
+            "---\nname: custom\ndescription: Original\nclient-x:\n  mode: strict\n  flags: [a, b]\n---\nbody\n",
+        )
+        self.store.add(source)
+
+        self.store.edit("custom", description="Updated")
+
+        text = (self.store.skills_dir / "custom" / "SKILL.md").read_text(encoding="utf-8")
+        data, _ = parse_frontmatter(text)
+        self.assertEqual(data["description"], "Updated")
+        self.assertEqual(data["client-x"], {"mode": "strict", "flags": ["a", "b"]})
+
     def test_disable_enable_cycle(self):
         self.store.create("demo", "Demo skill")
         self.store.disable("demo")
@@ -91,6 +110,58 @@ class TestEditToggle(IsolatedStoreTestCase):
         rows = self.store.list()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["disabled"], 0)
+
+    def test_edit_preserves_original_when_atomic_replacement_fails(self):
+        self.store.create("demo", "Demo skill", body="Original body")
+        original = (self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8")
+
+        with mock.patch("skillsmgr.store.os.replace", side_effect=OSError("replace failed")):
+            with self.assertRaises(StoreError):
+                self.store.edit("demo", description="Changed")
+
+        self.assertEqual(
+            (self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"),
+            original,
+        )
+        self.assertEqual(self.store.get("demo")["description"], "Demo skill")
+
+    def test_edit_rolls_back_when_index_update_fails(self):
+        self.store.create("demo", "Demo skill", body="Original body")
+        original = (self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8")
+
+        with mock.patch.object(self.store, "_upsert_entry", side_effect=StoreError("db failed")):
+            with self.assertRaises(StoreError):
+                self.store.edit("demo", description="Changed")
+
+        self.assertEqual(
+            (self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"),
+            original,
+        )
+
+    def test_concurrent_edits_leave_one_complete_document(self):
+        self.store.create("demo", "Demo skill", body="Original body")
+        errors = []
+
+        def edit(description):
+            try:
+                Store(data_dir=self.store.data_dir).edit("demo", description=description)
+            except Exception as exc:  # pragma: no cover - assertion below reports the error
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=edit, args=(f"Description {index}",))
+            for index in range(8)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+        self.assertEqual(errors, [])
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        loaded = self.store.get("demo")
+        self.assertIn(loaded["description"], {f"Description {index}" for index in range(8)})
+        self.assertTrue((self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8").endswith("\n"))
 
 
 class TestTrash(IsolatedStoreTestCase):
@@ -200,6 +271,84 @@ class TestExportImport(IsolatedStoreTestCase):
         self.assertIn("keep", result["imported"])
         self.assertNotIn("restored_trash", result)
         self.assertEqual(self.store.trash_list(), [])
+
+    def test_create_rolls_back_when_index_update_fails(self):
+        with mock.patch.object(self.store, "_upsert_entry", side_effect=StoreError("db failed")):
+            with self.assertRaises(StoreError):
+                self.store.create("demo", "Demo skill")
+
+        self.assertFalse((self.store.skills_dir / "demo").exists())
+
+    def test_create_rolls_back_when_history_write_fails(self):
+        with mock.patch.object(self.store, "_history", side_effect=sqlite3.Error("history failed")):
+            with self.assertRaises(sqlite3.Error):
+                self.store.create("demo", "Demo skill")
+
+        self.assertFalse((self.store.skills_dir / "demo").exists())
+        self.assertEqual(self.store.list(), [])
+
+    def test_doctor_reports_transaction_artifacts_snapshot_issues_and_drift(self):
+        self.store.create("demo", "Demo skill", body="Original body")
+        skill_file = self.store.skills_dir / "demo" / "SKILL.md"
+        skill_file.write_text(skill_file.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
+        (self.store.skills_dir / ".demo.skillsmgr-stage").mkdir()
+        snapshot_dir = self.store.data_dir / "snapshots" / "global" / "demo"
+        snapshot_dir.mkdir(parents=True)
+        (snapshot_dir / "not-a-snapshot.md").write_text("stale", encoding="utf-8")
+
+        report = self.store.doctor()
+
+        self.assertFalse(report["ok"])
+        self.assertIn("demo", report["filesystem_index_drift"])
+        self.assertTrue(report["transaction_artifacts"])
+        self.assertTrue(report["temporary_files"])
+        self.assertTrue(report["stale_snapshots"])
+
+    def test_backup_restore_is_verified_by_content_hashes(self):
+        source = self.store
+        source.create("demo", "Demo skill", body="Hash me")
+        source.create("second", "Second skill", body="And me")
+
+        def tree_hash(root):
+            digest = hashlib.sha256()
+            for path in sorted(root.rglob("*")):
+                if path.is_file():
+                    digest.update(str(path.relative_to(root)).encode("utf-8"))
+                    digest.update(path.read_bytes())
+            return digest.hexdigest()
+
+        archive = source.backup(self.store.data_dir / "backup.tar.gz")
+        restored_dir = Path(self._tmp.name) / "restored"
+        restored = Store(data_dir=restored_dir)
+        restored.import_(archive)
+
+        self.assertEqual(tree_hash(source.skills_dir), tree_hash(restored.skills_dir))
+
+    def test_import_rejects_tampered_content_hash(self):
+        import io
+        import json
+        import tarfile
+
+        self.store.create("demo", "Demo skill", body="Original")
+        archive = self.store.export(self.store.data_dir / "hash.tar.gz")
+        tampered = self.store.data_dir / "tampered.tar.gz"
+        with tarfile.open(archive, "r:gz") as source, tarfile.open(tampered, "w:gz") as target:
+            for member in source.getmembers():
+                if member.name == "manifest.json":
+                    payload = json.loads(source.extractfile(member).read().decode("utf-8"))
+                    payload["skills"][0]["content_hash"] = "0" * 64
+                    encoded = json.dumps(payload).encode("utf-8")
+                    replacement = tarfile.TarInfo(member.name)
+                    replacement.size = len(encoded)
+                    target.addfile(replacement, io.BytesIO(encoded))
+                else:
+                    target.addfile(member, source.extractfile(member) if member.isfile() else None)
+
+        restored = Store(data_dir=Path(self._tmp.name) / "hash-target")
+        result = restored.import_(tampered)
+        self.assertEqual(result["imported"], [])
+        self.assertTrue(any("hash mismatch" in item for item in result["skipped"]))
+        self.assertFalse((restored.skills_dir / "demo").exists())
 
 
 class TestSnapshots(IsolatedStoreTestCase):
@@ -347,6 +496,23 @@ class TestValidatorLoaderScopes(unittest.TestCase):
                 "---\nname: [unclosed\n---\nbody\n", encoding="utf-8"
             )
             self.assertTrue(load_skill(p).get("malformed"))
+
+    def test_loader_exposes_observations_and_frontmatter_extensions(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "observed"
+            p.mkdir()
+            (p / "SKILL.md").write_text(
+                "---\nname: observed\ndescription: Observed\nclient-x:\n  mode: strict\n---\nbody\n",
+                encoding="utf-8",
+            )
+
+            record = load_skill(p)
+
+            self.assertEqual(record["frontmatter_extensions"], {"client-x": {"mode": "strict"}})
+            self.assertEqual(len(record["content_hash"]), 64)
+            self.assertEqual(len(record["metadata_hash"]), 64)
+            self.assertEqual(record["provenance"]["path"], str(p))
+            self.assertTrue(record["observed_at"].endswith("Z"))
 
     def test_known_scopes_include_all_agents(self):
         ids = {s.id for s in known_scopes()}

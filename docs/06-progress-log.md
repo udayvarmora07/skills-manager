@@ -4,6 +4,55 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-08 — Atomic recovery, hash verification, and documentation truth
+
+- Completed ten executable backlog tasks: atomic sibling-temp writes with flush/fsync/replace, rollback preservation across filesystem/index failures, same-process per-skill mutation serialization, failure-injection coverage, richer doctor diagnostics, and content-hash backup verification.
+- Scope and template writers now use the same atomic document policy; snapshots are also written atomically. Cross-process behavior is explicitly documented as atomic-file replacement plus `doctor`/`db resync` recovery, without adding lock files or public API surface.
+- Export manifests now carry optional SHA-256 skill-tree hashes; imports verify hashes during staged and committed copies while preserving the existing per-skill `imported`/`skipped` contract.
+- Reconciled current architecture/scope/API/CLI documentation, removed the deleted GUI path from Command Code settings, and added `check_docs.py` as a machine-checkable docs/source gate wired into CI.
+- Verification evidence for this slice is recorded after the final full-suite, smoke, frontend, help, docs-gate, and diff checks.
+
+## 2026-09-08 — Root/consumer discovery baseline
+
+- Completed the next five executable Milestone 4 tasks without introducing a new
+  public data model, CLI command, Store method, or SQLite field.
+- Added ADR-002 for `SkillRoot`, `Consumer`, `ConsumerRootBinding`,
+  `SkillInstance`, and `EffectiveSkill`; runtime expansion remains approval-gated.
+- Added the official discovery inventory for Claude Code, Cursor, Gemini CLI, and
+  OpenCode. Codex and Command Code precedence/reload behavior remain `[?]` until
+  primary documentation is available.
+- Corrected Cursor's user root to `~/.cursor/skills`. Aggregate scope listings and
+  sync target planning now deduplicate resolved physical roots while direct scope
+  ids remain compatible.
+- Primary-source verification narrowed the Claude Code inventory: discovery and
+  live change detection are confirmed, while exact same-name precedence remains
+  `[?]` instead of being guessed.
+
+## 2026-09-08 — Root capability and observed instance states
+
+- Completed the next five scope/effective-state tasks as far as the locked
+  compatibility boundary permits.
+- Recursive scanning is now opt-in per consumer root: Cursor, OpenCode, shared
+  agent, and matching project roots recurse; flat roots remain one-level scans.
+- Scope descriptors now expose `writable`, `read-only`, `missing`, and
+  `unsupported` availability, plus consumer and recursive-discovery metadata.
+- Scope records expose observed `active`, `disabled`, `invalid`, `duplicated`,
+  `divergent`, and `unmanaged` states. Effective resolution is explicitly
+  reported as `unresolved`; `shadowed` classification remains approval-gated
+  until ConsumerRootBinding precedence is a runtime model.
+- Sync continues to target each resolved physical root once. Added recursive,
+  capability, disabled/malformed, divergent, and unresolved-state regressions.
+
+## 2026-09-08 — Observation and hotspot extraction slice
+
+- Preserved unknown/client-specific frontmatter through edits and exposed a
+  non-persisted portable/extension partition in loaded records.
+- Added non-persisted content hash, metadata hash, observed timestamp, and
+  provenance observations without changing SQLite or public Store signatures.
+- Extracted atomic I/O, archive policy, and root-discovery helpers into internal
+  modules, plus the root-containment primitives into `path_safety.py`, while
+  keeping Store/scopes/paths compatibility adapters and existing error contracts.
+
 ## 2026-09-08 — Recovery snapshots, migration, and localhost policy slice
 
 - Completed the next five executable backlog tasks after archive hardening.

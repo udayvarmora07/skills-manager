@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Atomic sibling-temp skill/snapshot/template writes with flush/fsync/replace,
+  same-process per-document mutation serialization, rollback on index/history
+  failures, doctor diagnostics for transaction artifacts and filesystem/index
+  drift, SHA-256 archive content-hash verification, and a CI-backed
+  `check_docs.py` documentation/source consistency gate.
+- Root discovery baseline: corrected Cursor's `~/.cursor/skills` path,
+  deduplicated resolved physical scope roots for aggregate counts and sync,
+  and recorded the approval-gated consumer/effective-state model plus official
+  discovery research.
+- Scope observations now support consumer-specific recursive discovery, explicit
+  root availability (`writable`, `read-only`, `missing`, `unsupported`), and
+  observed instance states; precedence-based shadowing remains approval-gated.
+- Preserved unknown frontmatter extensions and added derived document observations
+  (portable fields, extension fields, content/metadata hashes, timestamps, and
+  provenance). Extracted archive, atomic-I/O, and root-discovery policy into
+  internal modules, plus root-containment into `path_safety.py`, with compatibility
+  adapters.
+
 - Archive/trash safety hardening: forced imports cannot turn invalid names into
   destructive paths; tar members are preflighted in a private temporary tree;
   duplicate, traversal, unexpected-layout, symlink, hard-link, FIFO, and other

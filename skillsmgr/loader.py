@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .frontmatter import FrontmatterError, parse_frontmatter
+from .observations import document_observations
 from .paths import contained_path
 from .store import SkillNotFound
 from .tokens import estimate as _estimate_tokens
@@ -46,7 +47,7 @@ def load_skill(skill_dir: Path) -> dict:
         category = metadata["category"] or "uncategorized"
     raw_text = text or ""
     tok = _estimate_tokens(raw_text)
-    return {
+    record = {
         "name": skill_dir.name,
         "disabled": disabled,
         "malformed": malformed,
@@ -60,22 +61,38 @@ def load_skill(skill_dir: Path) -> dict:
         "tokens_pct": tok["pct_window"],
         "chars": tok["chars"],
     }
+    record.update(document_observations(skill_dir, raw_text, data))
+    return record
 
 
-def scan_dir(root: Path) -> list[dict]:
-    """One-level scan of root: each child dir with SKILL.md -> load_skill."""
+def scan_dir(root: Path, *, recursive: bool = False) -> list[dict]:
+    """Scan a skill root, optionally walking nested skill directories.
+
+    Recursive discovery is opt-in because consumers differ: some treat a root
+    as a flat directory while Cursor/OpenCode-style project roots can organize
+    skills below category or nested project directories.
+    """
     entries: list[dict] = []
     if not root.is_dir():
         return entries
-    for child in sorted(root.iterdir()):
-        if not child.is_dir():
+    if recursive:
+        candidates = sorted(
+            {path.parent for path in root.rglob("SKILL.md")}
+            | {path.parent for path in root.rglob("SKILL.md.disabled")}
+        )
+    else:
+        candidates = sorted(path for path in root.iterdir() if path.is_dir())
+    for child in candidates:
+        try:
+            relative = child.relative_to(root)
+            child = contained_path(root, *relative.parts)
+        except (ValueError, OSError):
             continue
         try:
-            child = contained_path(root, child.name)
-        except ValueError:
-            continue
-        try:
-            entries.append(load_skill(child))
+            entry = load_skill(child)
+            if recursive:
+                entry["path"] = str(child)
+            entries.append(entry)
         except SkillNotFound:
             continue
-    return entries
+    return sorted(entries, key=lambda item: (item["name"].lower(), item.get("path", "")))
