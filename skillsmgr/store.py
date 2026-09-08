@@ -85,11 +85,105 @@ def _coerce_str(value) -> str:
     return str(value)
 
 
-def _strip_trash_suffix(name: str) -> str:
-    match = _TRASH_TS_RE.search(name)
-    if match:
-        return name[: match.start()]
-    return name
+def _trash_entry_name(path: Path) -> str | None:
+    """Return a canonical skill name for a valid trash directory name."""
+    if path.is_symlink() or not path.is_dir():
+        return None
+    match = _TRASH_TS_RE.search(path.name)
+    if match is None or match.end() != len(path.name):
+        return None
+    name = path.name[: match.start()]
+    try:
+        return validate_skill_name(name)
+    except ValueError:
+        return None
+
+
+def _normalize_archive_member_name(name: str) -> str:
+    """Validate and normalize a tar member name without touching the FS."""
+    if not isinstance(name, str) or not name or "\x00" in name:
+        raise StoreError(f"unsafe archive member: {name!r}")
+    if name.startswith(("/", "\\")) or "\\" in name:
+        raise StoreError(f"unsafe archive member: {name!r}")
+    normalized = name.rstrip("/")
+    parts = normalized.split("/") if normalized else []
+    if not parts or any(part in ("", ".", "..") for part in parts):
+        raise StoreError(f"unsafe archive member: {name!r}")
+    return "/".join(parts)
+
+
+def _validate_archive_members(tar: tarfile.TarFile) -> list[tuple[tarfile.TarInfo, str]]:
+    """Preflight tar paths, types, layout, and duplicate members."""
+    members: list[tuple[tarfile.TarInfo, str]] = []
+    seen: set[str] = set()
+    manifest_count = 0
+    for member in tar.getmembers():
+        normalized = _normalize_archive_member_name(member.name)
+        if normalized in seen:
+            raise StoreError(f"duplicate archive member: {normalized!r}")
+        seen.add(normalized)
+
+        if normalized == "manifest.json":
+            manifest_count += 1
+            if not member.isreg():
+                raise StoreError("manifest.json must be a regular file")
+        else:
+            parts = normalized.split("/")
+            if parts[0] != "skills" or len(parts) < 2:
+                raise StoreError(f"unexpected archive layout: {member.name!r}")
+            if len(parts) == 2 and not member.isdir():
+                raise StoreError(f"skill archive entry must be a directory: {member.name!r}")
+
+        if not (member.isdir() or member.isreg()):
+            raise StoreError(f"unsupported archive member type: {member.name!r}")
+        members.append((member, normalized))
+
+    if manifest_count != 1:
+        raise StoreError("archive must contain exactly one manifest.json")
+    return members
+
+
+def _extract_archive_members(
+    tar: tarfile.TarFile,
+    dest: Path,
+    members: list[tuple[tarfile.TarInfo, str]],
+) -> None:
+    """Extract preflighted members with an explicit safe-filter fallback."""
+    tar_members = [member for member, _ in members]
+    data_filter = getattr(tarfile, "data_filter", None)
+    if callable(data_filter):
+        try:
+            tar.extractall(dest, members=tar_members, filter=data_filter)
+        except (OSError, tarfile.TarError, ValueError) as exc:
+            raise StoreError(f"invalid archive extraction: {exc}") from exc
+        return
+
+    # Python versions without data_filter use a guarded manual extractor. Never
+    # silently fall back to TarFile.extractall(), which may materialize links or
+    # special files supplied by an archive.
+    for member, normalized in members:
+        target = paths.contained_path(dest, *normalized.split("/"))
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        source = tar.extractfile(member)
+        if source is None:
+            raise StoreError(f"archive member has no readable payload: {normalized!r}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+        except OSError as exc:
+            raise StoreError(f"invalid archive extraction: {exc}") from exc
+
+
+def _has_skill_document(source: Path) -> bool:
+    """Return whether an extracted directory contains one skill document."""
+    enabled = (source / "SKILL.md").is_file()
+    disabled = (source / "SKILL.md.disabled").is_file()
+    if enabled and disabled:
+        raise StoreError(f"skill directory contains both enabled and disabled documents: {source.name!r}")
+    return enabled or disabled
 
 
 def _safe_skill_path(root: Path, name: str) -> Path:
@@ -606,8 +700,7 @@ class Store:
             (
                 p
                 for p in self.trash_dir.iterdir()
-                if p.is_dir()
-                and _strip_trash_suffix(p.name) == name
+                if _trash_entry_name(p) == name
             ),
             key=lambda p: p.stat().st_mtime,
         ) if self.trash_dir.is_dir() else []
@@ -682,14 +775,15 @@ class Store:
             return []
         result = []
         for path in sorted(self.trash_dir.iterdir()):
-            if not path.is_dir():
+            name = _trash_entry_name(path)
+            if name is None:
                 continue
             size = sum(
                 f.stat().st_size for f in path.rglob("*") if f.is_file()
             )
             result.append(
                 {
-                    "name": _strip_trash_suffix(path.name),
+                    "name": name,
                     "trash_path": str(path),
                     "size_bytes": size,
                     "modified": datetime.fromtimestamp(
@@ -706,11 +800,9 @@ class Store:
             conn = self._connect()
             try:
                 for path in sorted(self.trash_dir.iterdir()):
-                    if not path.is_dir():
+                    name = _trash_entry_name(path)
+                    if name is None:
                         continue
-                    if _TRASH_TS_RE.search(path.name) is None:
-                        continue
-                    name = _strip_trash_suffix(path.name)
                     shutil.rmtree(path)
                     conn.execute(
                         "DELETE FROM skills WHERE name = ? AND status = 'trashed'",
@@ -819,46 +911,41 @@ class Store:
         try:
             try:
                 with tarfile.open(archive, "r:*") as tar:
-                    names = tar.getnames()
-                    if "manifest.json" not in names:
-                        raise StoreError(
-                            "not a skills-mgr archive (missing manifest.json)"
-                        )
-                    try:
-                        tar.extractall(tmp, filter="data")
-                    except TypeError:
-                        tar.extractall(tmp)
+                    members = _validate_archive_members(tar)
+                    _extract_archive_members(tar, tmp, members)
             except tarfile.TarError as exc:
                 raise StoreError(f"invalid archive: {exc}") from exc
             manifest_path = tmp / "manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise StoreError(f"invalid archive manifest: {exc}") from exc
+            if not isinstance(manifest, dict):
+                raise StoreError("invalid archive manifest: expected an object")
             skills = manifest.get("skills") or []
+            if not isinstance(skills, list):
+                raise StoreError("invalid archive manifest: skills must be a list")
+            planned: list[tuple[str, Path]] = []
+            planned_names: set[str] = set()
             for entry in skills:
                 name = entry.get("name") if isinstance(entry, dict) else entry
                 try:
                     name = validate_skill_name(str(name))
                 except ValueError:
                     continue
+                if name in planned_names:
+                    raise StoreError(f"duplicate skill in archive manifest: {name!r}")
+                planned_names.add(name)
                 source = tmp / "skills" / name
                 if not source.is_dir():
                     skipped.append(str(name))
                     continue
-                dest = _safe_skill_path(self.skills_dir, name)
-                if dest.exists():
-                    if not force:
-                        skipped.append(str(name))
-                        continue
-                    shutil.rmtree(dest)
-                shutil.copytree(source, dest)
-                self._upsert_entry(str(name))
-                imported.append(str(name))
-            conn = self._connect()
-            try:
-                for name in imported:
-                    self._history(conn, name, "import")
-                conn.commit()
-            finally:
-                conn.close()
+                if not _has_skill_document(source):
+                    skipped.append(str(name))
+                    continue
+                _safe_skill_path(self.skills_dir, name)
+                planned.append((name, source))
+
             if not skills and (tmp / "skills").is_dir():
                 for source in sorted((tmp / "skills").iterdir()):
                     if not source.is_dir():
@@ -868,22 +955,35 @@ class Store:
                     except ValueError:
                         skipped.append(source.name)
                         continue
-                    dest = _safe_skill_path(self.skills_dir, name)
-                    if dest.exists() and not force:
+                    if name in planned_names:
+                        raise StoreError(f"duplicate skill in archive: {name!r}")
+                    planned_names.add(name)
+                    if not _has_skill_document(source):
                         skipped.append(source.name)
                         continue
-                    if dest.exists():
-                        shutil.rmtree(dest)
-                    shutil.copytree(source, dest)
-                    self._upsert_entry(name)
-                    imported.append(name)
-                conn = self._connect()
-                try:
-                    for name in imported:
-                        self._history(conn, name, "import")
-                    conn.commit()
-                finally:
-                    conn.close()
+                    _safe_skill_path(self.skills_dir, name)
+                    planned.append((name, source))
+
+            # All archive and content validation is complete before this first
+            # destination deletion/copy, so force cannot partially apply an
+            # archive that fails later preflight checks.
+            for name, source in planned:
+                dest = _safe_skill_path(self.skills_dir, name)
+                if dest.exists():
+                    if not force:
+                        skipped.append(name)
+                        continue
+                    shutil.rmtree(dest)
+                shutil.copytree(source, dest)
+                self._upsert_entry(name)
+                imported.append(name)
+            conn = self._connect()
+            try:
+                for name in imported:
+                    self._history(conn, name, "import")
+                conn.commit()
+            finally:
+                conn.close()
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         return {
@@ -940,7 +1040,7 @@ class Store:
         orphan_dirs = sorted(set(scanned) - active_names)
         stale_rows = sorted(active_names - set(scanned))
         trash_count = (
-            len([p for p in self.trash_dir.iterdir() if p.is_dir()])
+            len([p for p in self.trash_dir.iterdir() if _trash_entry_name(p)])
             if self.trash_dir.is_dir()
             else 0
         )
@@ -953,7 +1053,14 @@ class Store:
             integrity == "ok"
             and not orphan_dirs
             and not stale_rows
-            and not (trashed_names - set(_strip_trash_suffix(p.name) for p in (self.trash_dir.iterdir() if self.trash_dir.is_dir() else ())))
+            and not (
+                trashed_names
+                - {
+                    name
+                    for p in (self.trash_dir.iterdir() if self.trash_dir.is_dir() else ())
+                    if (name := _trash_entry_name(p)) is not None
+                }
+            )
         )
         return {
             "data_dir": str(self.data_dir),
