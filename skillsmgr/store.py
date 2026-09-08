@@ -21,7 +21,13 @@ from pathlib import Path
 from . import paths
 from . import __version__
 from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
-from .validator import MAX_COMPATIBILITY, MAX_DESCRIPTION, MAX_NAME, NAME_RE
+from .validator import (
+    MAX_COMPATIBILITY,
+    MAX_DESCRIPTION,
+    MAX_NAME,
+    NAME_RE,
+    validate_skill_name,
+)
 
 SCHEMA_VERSION = "1"
 
@@ -86,6 +92,14 @@ def _strip_trash_suffix(name: str) -> str:
     return name
 
 
+def _safe_skill_path(root: Path, name: str) -> Path:
+    """Return a validated, root-contained skill path as ``StoreError``."""
+    try:
+        return paths.safe_skill_path(root, name)
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
+
+
 class Store:
     """Manages the skills directory tree and the SQLite index."""
 
@@ -137,7 +151,7 @@ class Store:
         return _shared_load(skill_dir)
 
     def _upsert_entry(self, name: str) -> dict:
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         if not skill_dir.is_dir():
             raise SkillNotFound(f"skill '{name}' is not installed")
         entry = self._load_skill(skill_dir)
@@ -313,6 +327,7 @@ class Store:
 
     def get(self, name: str) -> dict:
         """Return the full record for a skill, including its body and path."""
+        _safe_skill_path(self.skills_dir, name)
         self._init_db()
         conn = self._connect()
         try:
@@ -322,7 +337,7 @@ class Store:
             if row is None:
                 raise SkillNotFound(f"skill '{name}' is not installed")
             result = dict(row)
-            skill_dir = self.skills_dir / name
+            skill_dir = _safe_skill_path(self.skills_dir, name)
             result["path"] = str(skill_dir) if skill_dir.is_dir() else None
             return result
         finally:
@@ -360,12 +375,10 @@ class Store:
         body: str | None = None,
     ) -> dict:
         """Create a new skill from validated inputs."""
-        name = name.strip()
-        if not NAME_RE.fullmatch(name) or len(name) > MAX_NAME:
-            raise StoreError(
-                f"invalid skill name {name!r}: must match {NAME_RE.pattern} "
-                f"(1-{MAX_NAME} chars)"
-            )
+        try:
+            name = validate_skill_name(name.strip())
+        except ValueError as exc:
+            raise StoreError(str(exc)) from exc
         if not description or not description.strip():
             raise StoreError("description is required")
         description = description.strip()
@@ -377,7 +390,7 @@ class Store:
             raise StoreError(
                 f"compatibility exceeds {MAX_COMPATIBILITY} characters"
             )
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         if skill_dir.exists():
             raise StoreError(f"skill '{name}' already exists")
 
@@ -430,12 +443,10 @@ class Store:
             raise StoreError(
                 f"source must contain SKILL.md (got {source / 'SKILL.md'!s})"
             )
-        chosen = (name or source.name).strip()
-        if not NAME_RE.fullmatch(chosen) or len(chosen) > MAX_NAME:
-            raise StoreError(
-                f"invalid skill name {chosen!r}: must match {NAME_RE.pattern} "
-                f"(1-{MAX_NAME} chars)"
-            )
+        try:
+            chosen = validate_skill_name((name or source.name).strip())
+        except ValueError as exc:
+            raise StoreError(str(exc)) from exc
         try:
             data, _ = parse_frontmatter((source / "SKILL.md").read_text(encoding="utf-8"))
         except FrontmatterError:
@@ -445,7 +456,7 @@ class Store:
                 f"frontmatter name {data['name']!r} does not match target name "
                 f"{chosen!r}; rename the skill first"
             )
-        skill_dir = self.skills_dir / chosen
+        skill_dir = _safe_skill_path(self.skills_dir, chosen)
         if skill_dir.exists():
             raise StoreError(f"skill '{chosen}' already exists")
         self._init_db()
@@ -472,7 +483,7 @@ class Store:
         body: str | None = None,
     ) -> dict:
         """Apply partial updates to a skill, preserving unknown frontmatter keys."""
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         if not skill_dir.is_dir():
             raise SkillNotFound(f"skill '{name}' is not installed")
         md_file = skill_dir / "SKILL.md"
@@ -549,7 +560,7 @@ class Store:
 
     def remove(self, name: str, purge: bool = False) -> dict:
         """Move a skill to the trash, or permanently delete it with ``purge``."""
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         conn = self._connect()
         try:
             row = conn.execute(
@@ -565,10 +576,14 @@ class Store:
                 result = {"name": name, "action": "purged"}
             else:
                 self.trash_dir.mkdir(parents=True, exist_ok=True)
-                target = self.trash_dir / f"{name}-{_trash_timestamp()}"
+                target = paths.contained_path(
+                    self.trash_dir, f"{name}-{_trash_timestamp()}"
+                )
                 counter = 1
                 while target.exists():
-                    target = self.trash_dir / f"{name}-{_trash_timestamp()}-{counter}"
+                    target = paths.contained_path(
+                        self.trash_dir, f"{name}-{_trash_timestamp()}-{counter}"
+                    )
                     counter += 1
                 if skill_dir.is_dir():
                     shutil.move(str(skill_dir), str(target))
@@ -586,6 +601,7 @@ class Store:
 
     def restore(self, name: str) -> dict:
         """Move the newest trashed copy of a skill back into the tree."""
+        _safe_skill_path(self.skills_dir, name)
         candidates = sorted(
             (
                 p
@@ -598,7 +614,7 @@ class Store:
         if not candidates:
             raise StoreError(f"no trashed copy of '{name}' found")
         source = candidates[-1]
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         if skill_dir.exists():
             raise StoreError(
                 f"cannot restore '{name}': a skill with that name already exists"
@@ -620,7 +636,7 @@ class Store:
 
     def disable(self, name: str) -> dict:
         """Rename SKILL.md to SKILL.md.disabled so validators skip the skill."""
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         md_file = skill_dir / "SKILL.md"
         if not md_file.is_file():
             if (skill_dir / "SKILL.md.disabled").is_file():
@@ -641,7 +657,7 @@ class Store:
 
     def enable(self, name: str) -> dict:
         """Rename SKILL.md.disabled back to SKILL.md."""
-        skill_dir = self.skills_dir / name
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         disabled_file = skill_dir / "SKILL.md.disabled"
         if not disabled_file.is_file():
             if (skill_dir / "SKILL.md").is_file():
@@ -775,7 +791,7 @@ class Store:
         }
         with tarfile.open(dest, "w:gz") as tar:
             for entry in entries:
-                source = self.skills_dir / entry["name"]
+                source = _safe_skill_path(self.skills_dir, entry["name"])
                 for file in sorted(source.rglob("*")):
                     if file.is_file():
                         tar.add(file, arcname=f"skills/{entry['name']}/{file.relative_to(source)}")
@@ -819,13 +835,15 @@ class Store:
             skills = manifest.get("skills") or []
             for entry in skills:
                 name = entry.get("name") if isinstance(entry, dict) else entry
-                if not name or not NAME_RE.fullmatch(str(name)):
+                try:
+                    name = validate_skill_name(str(name))
+                except ValueError:
                     continue
-                source = tmp / "skills" / str(name)
+                source = tmp / "skills" / name
                 if not source.is_dir():
                     skipped.append(str(name))
                     continue
-                dest = self.skills_dir / str(name)
+                dest = _safe_skill_path(self.skills_dir, name)
                 if dest.exists():
                     if not force:
                         skipped.append(str(name))
@@ -845,15 +863,20 @@ class Store:
                 for source in sorted((tmp / "skills").iterdir()):
                     if not source.is_dir():
                         continue
-                    dest = self.skills_dir / source.name
+                    try:
+                        name = validate_skill_name(source.name)
+                    except ValueError:
+                        skipped.append(source.name)
+                        continue
+                    dest = _safe_skill_path(self.skills_dir, name)
                     if dest.exists() and not force:
                         skipped.append(source.name)
                         continue
                     if dest.exists():
                         shutil.rmtree(dest)
                     shutil.copytree(source, dest)
-                    self._upsert_entry(source.name)
-                    imported.append(source.name)
+                    self._upsert_entry(name)
+                    imported.append(name)
                 conn = self._connect()
                 try:
                     for name in imported:

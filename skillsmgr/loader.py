@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .frontmatter import FrontmatterError, parse_frontmatter
+from .paths import contained_path
 from .store import SkillNotFound
 from .tokens import estimate as _estimate_tokens
 
@@ -68,6 +69,10 @@ def scan_dir(root: Path) -> list[dict]:
         return entries
     for child in sorted(root.iterdir()):
         if not child.is_dir():
+            continue
+        try:
+            child = contained_path(root, child.name)
+        except ValueError:
             continue
         try:
             entries.append(load_skill(child))

@@ -19,7 +19,7 @@ from . import search as search_mod
 from . import templates as templates_mod
 from .colors import COLORS
 from .store import Store, StoreError
-from .validator import validate_skill
+from .validator import validate_skill, validate_skill_name
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -95,6 +95,41 @@ def _skill_md_path(store: Store, name: str) -> Path:
 
 def _scope_from_args(args) -> str:
     return (getattr(args, "scope", None) or "global").strip() or "global"
+
+
+def _validate_cli_names(args) -> None:
+    """Reject invalid skill names before handlers construct paths or stores."""
+    command = getattr(args, "command", "")
+    names: list[str] = []
+    if command in {
+        "create",
+        "view",
+        "edit",
+        "open",
+        "remove",
+        "rm",
+        "disable",
+        "enable",
+        "restore",
+        "sync",
+    }:
+        names.append(getattr(args, "name", ""))
+    elif command == "add" and getattr(args, "name", None):
+        names.append(args.name)
+    elif command == "history" and getattr(args, "name", None):
+        names.append(args.name)
+    elif command == "tokens" and getattr(args, "name", None):
+        names.append(args.name)
+    elif command == "validate" and not getattr(args, "path", None):
+        names.extend(getattr(args, "names", []) or [])
+    elif command == "trash" and getattr(args, "trash_command", None) == "restore":
+        names.append(getattr(args, "name", ""))
+
+    for raw_name in names:
+        try:
+            validate_skill_name(str(raw_name).strip())
+        except ValueError as exc:
+            raise StoreError(str(exc)) from exc
 
 
 def _make_store(args) -> Store:
@@ -318,7 +353,11 @@ def cmd_validate(args, store: Store) -> int:
         from . import paths as _paths
 
         for name in sorted(p.name for p in _paths.skills_dir().iterdir() if p.is_dir()):
-            targets.append((name, _paths.skills_dir() / name))
+            try:
+                root = _paths.safe_skill_path(_paths.skills_dir(), name)
+            except ValueError:
+                root = None
+            targets.append((name, root))
     else:
         for name in args.names:
             record = store.get(name)
@@ -1074,6 +1113,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return EXIT_USAGE
     try:
+        _validate_cli_names(args)
         store = _make_store(args)
         return args.func(args, store) or EXIT_OK
     except (StoreError, ValueError, OSError) as exc:

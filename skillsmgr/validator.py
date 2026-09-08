@@ -42,6 +42,7 @@ __all__ = [
     "MAX_COMPATIBILITY",
     "MAX_BODY_LINES",
     "MAX_BODY_TOKENS",
+    "validate_skill_name",
     "description_score",
     "validate_text",
     "validate_skill",
@@ -65,6 +66,23 @@ _FILLER_RE = re.compile(
     r"(?i)\b(various|miscellaneous|etc\.|stuff|things|"
     r"best practices|appropriately|generally)\b"
 )
+
+
+def validate_skill_name(name: str) -> str:
+    """Validate and return a canonical skill name.
+
+    Every caller that turns a user-controlled skill name into a filesystem
+    path must use this primitive first.  Keeping the rule beside ``NAME_RE``
+    prevents Store, scope, CLI, and REST entry points from drifting apart.
+    """
+    if not isinstance(name, str):
+        raise ValueError("skill name must be a string")
+    if not NAME_RE.fullmatch(name) or len(name) > MAX_NAME:
+        raise ValueError(
+            f"invalid skill name {name!r}: must match {NAME_RE.pattern} "
+            f"(1-{MAX_NAME} chars)"
+        )
+    return name
 
 
 @dataclass

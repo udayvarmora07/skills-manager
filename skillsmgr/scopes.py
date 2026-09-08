@@ -16,6 +16,7 @@ from . import paths
 from .frontmatter import dump_frontmatter, parse_frontmatter
 from .loader import load_skill, scan_dir
 from .store import SkillNotFound, Store, StoreError
+from .validator import validate_skill_name
 
 # Injectable override for the global Store (lets the web UI + tests share one
 # data_dir instead of each call constructing Store() with default resolution).
@@ -30,6 +31,14 @@ def set_global_store(store: Store | None) -> None:
 
 def _global_store() -> Store:
     return _GLOBAL_STORE if _GLOBAL_STORE is not None else Store()
+
+
+def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
+    """Return a validated skill path contained by an agent scope root."""
+    try:
+        return paths.safe_skill_path(scope.base, name)
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
@@ -122,13 +131,13 @@ def scan_scope(scope_id: str) -> list[dict]:
             r["scope"] = "global"
             r["scope_label"] = "Global"
             if not r.get("path"):
-                r["path"] = str(paths.skills_dir() / r["name"])
+                r["path"] = str(paths.safe_skill_path(paths.skills_dir(), r["name"]))
             # Enrich global rows with tokens if missing (DB rows don't have them).
             if "tokens" not in r or not r.get("tokens"):
                 try:
                     from .tokens import estimate as _est
 
-                    p = Path(r["path"]) if r.get("path") else paths.skills_dir() / r["name"]
+                    p = paths.safe_skill_path(paths.skills_dir(), r["name"])
                     raw = ""
                     for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
                         if cand.is_file():
@@ -152,7 +161,10 @@ def scan_scope(scope_id: str) -> list[dict]:
     for e in entries:
         e["scope"] = scope.id
         e["scope_label"] = scope.label
-        e["path"] = str(scope.base / e["name"])
+        try:
+            e["path"] = str(paths.contained_path(scope.base, e["name"]))
+        except ValueError:
+            continue
         e["status"] = "disabled" if e.get("disabled") else "active"
         e.setdefault("tokens_pct", 0)
         e.setdefault("chars", 0)
@@ -224,7 +236,11 @@ def get_skill(scope_id: str, name: str) -> dict:
         try:
             from .tokens import estimate as _est
 
-            p = Path(rec["path"]) if rec.get("path") else paths.skills_dir() / name
+            p = (
+                Path(rec["path"])
+                if rec.get("path")
+                else paths.safe_skill_path(paths.skills_dir(), name)
+            )
             raw = ""
             for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
                 if cand.is_file():
@@ -244,7 +260,7 @@ def get_skill(scope_id: str, name: str) -> dict:
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = scope.base / name
+    skill_dir = _safe_scope_skill_path(scope, name)
     if not skill_dir.is_dir():
         raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
     entry = load_skill(skill_dir)
@@ -275,12 +291,16 @@ def get_raw(scope_id: str, name: str) -> str:
     if scope_id == "global":
         store = _global_store()
         rec = store.get(name)
-        p = Path(rec["path"]) if rec.get("path") else paths.skills_dir() / name
+        p = (
+            Path(rec["path"])
+            if rec.get("path")
+            else paths.safe_skill_path(paths.skills_dir(), name)
+        )
     else:
         scope = _scope_by_id(scope_id)
         if scope is None:
             raise StoreError(f"unknown scope {scope_id!r}")
-        p = scope.base / name
+        p = _safe_scope_skill_path(scope, name)
     for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
         if cand.is_file():
             return cand.read_text(encoding="utf-8")
@@ -317,9 +337,10 @@ def create_skill(
     # Reuse Store.create logic but write to scope base.
     from .validator import MAX_COMPATIBILITY, MAX_DESCRIPTION, MAX_NAME, NAME_RE
 
-    name = name.strip()
-    if not NAME_RE.fullmatch(name) or len(name) > MAX_NAME:
-        raise StoreError(f"invalid skill name {name!r}")
+    try:
+        name = validate_skill_name(name.strip())
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
     if not description or not description.strip():
         raise StoreError("description is required")
     description = description.strip()
@@ -327,7 +348,7 @@ def create_skill(
         raise StoreError(f"description exceeds {MAX_DESCRIPTION} characters")
     if compatibility and len(compatibility) > MAX_COMPATIBILITY:
         raise StoreError(f"compatibility exceeds {MAX_COMPATIBILITY} characters")
-    skill_dir = scope.base / name
+    skill_dir = _safe_scope_skill_path(scope, name)
     if skill_dir.exists():
         raise StoreError(f"skill '{name}' already exists in scope '{scope_id}'")
     data: dict = {"name": name, "description": description}
@@ -377,7 +398,7 @@ def edit_skill(
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = scope.base / name
+    skill_dir = _safe_scope_skill_path(scope, name)
     if not skill_dir.is_dir():
         raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
     md = skill_dir / "SKILL.md"
@@ -435,7 +456,7 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = scope.base / name
+    skill_dir = _safe_scope_skill_path(scope, name)
     if not skill_dir.is_dir():
         raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
     if purge:
@@ -447,10 +468,10 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
     from datetime import datetime, timezone
 
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%SZ")
-    target = trash / f"{scope_id}__{name}-{ts}"
+    target = paths.contained_path(trash, f"{scope_id}__{name}-{ts}")
     counter = 1
     while target.exists():
-        target = trash / f"{scope_id}__{name}-{ts}-{counter}"
+        target = paths.contained_path(trash, f"{scope_id}__{name}-{ts}-{counter}")
         counter += 1
     shutil.move(str(skill_dir), str(target))
     return {"name": name, "action": "trashed", "scope": scope_id, "trash_path": str(target)}
@@ -463,7 +484,7 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = scope.base / name
+    skill_dir = _safe_scope_skill_path(scope, name)
     src = skill_dir / ("SKILL.md.disabled" if enable else "SKILL.md")
     dst = skill_dir / ("SKILL.md" if enable else "SKILL.md.disabled")
     if not src.is_file():
@@ -486,10 +507,10 @@ def sync_skill(
     Default: when from_scope is global, copy to every other writable
     existing scope. Returns {synced:[scope_id], skipped:[{scope,reason}]}.
     """
-    from .validator import MAX_NAME, NAME_RE
-
-    if not NAME_RE.fullmatch(name) or len(name) > MAX_NAME:
-        raise StoreError(f"invalid skill name {name!r}")
+    try:
+        name = validate_skill_name(name)
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
     src = get_skill(from_scope, name)
     src_dir = Path(src["path"])
     if not src_dir.is_dir():
@@ -511,7 +532,7 @@ def sync_skill(
         if scope is None:
             skipped.append({"scope": sid, "reason": "unknown scope"})
             continue
-        dest = scope.base / name
+        dest = _safe_scope_skill_path(scope, name)
         if dest.exists() and not force:
             skipped.append({"scope": sid, "reason": "already exists (use force)"})
             continue

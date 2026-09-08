@@ -175,8 +175,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_error(500, "internal error")
 
     def _parts(self) -> list[str]:
-        path = unquote(urlparse(self.path).path)
-        return [p for p in path.split("/") if p]
+        path = urlparse(self.path).path
+        # Decode each segment after splitting so an encoded slash remains part
+        # of the user-controlled name and reaches the canonical name guard.
+        return [unquote(p) for p in path.split("/") if p]
 
     # -- static -----------------------------------------------------------
 
@@ -315,7 +317,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 raw = _get_raw(scope, parts[2])
                 self._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
                 return
-            skill_dir = self.store.skills_dir / parts[2]
+            # Resolve through Store.get() first so the decoded path segment is
+            # validated before it can be used for a filesystem read.
+            record = self.store.get(parts[2])
+            skill_dir = Path(record["path"]) if record.get("path") else self.store.skills_dir / parts[2]
             skill_file = skill_dir / "SKILL.md"
             if not skill_file.is_file():
                 skill_file = skill_dir / "SKILL.md.disabled"
