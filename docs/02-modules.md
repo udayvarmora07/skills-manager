@@ -14,11 +14,11 @@ Entry point for `python3 -m skillsmgr`; delegates to `cli.main()`.
 
 ## `cli.py`
 
-argparse-based CLI, `prog="skills-mgr"`, 26 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 40 invocable names (see @docs/03-cli-surface.md). Key helpers: `_print_json(data)` (indent=2), `_err(msg)`, `_truncate(text, n)`, `_render_table(rows, headers)`. Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. `--json` on data commands. `--scope` (per-command flag) on `list`/`view`/`search`/`doctor`/`stats`, plus scope-aware `sync`/`scopes`/`tokens`/`install`. `cmd_gui` launches the local web UI via `webapp.run(...)`.
+argparse-based CLI, `prog="skills-mgr"`, 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (see @docs/03-cli-surface.md). Key helpers: `_print_json(data)` (indent=2), `_err(msg)`, `_truncate(text, n)`, `_render_table(rows, headers)`. Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. `--json` on data commands. `--scope` (per-command flag) on `list`/`view`/`search`/`doctor`/`stats`, plus scope-aware `sync`/`scopes`/`tokens`/`install`. `cmd_gui` launches the local web UI via `webapp.run(...)`. The parser and command handlers remain together for now; focused contract tests protect parser/output compatibility while a larger split remains future work.
 
 ## `webapp.py`
 
-Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static files from `webui/`), `WebAppServer` (ThreadingHTTPServer, 127.0.0.1), `run()` entry (browser open, Ctrl+C handling). Multipart parsing is hand-rolled (`_parse_multipart`) for webkitdirectory folder uploads. Scope-aware endpoints (`?scope=` on skills/search, `/api/scopes`, `/api/sync`, `/api/install`). Full endpoint table: @docs/08-web-ui.md.
+Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static files from `webui/`), `WebAppServer` (ThreadingHTTPServer, 127.0.0.1), `run()` entry (browser open, Ctrl+C handling). Internal policy modules keep request security (`web_security.py`), JSON serialization/body parsing (`web_serialization.py`), and multipart folder upload staging (`web_upload.py`) behind compatibility adapters in `webapp.py`. Scope-aware endpoints (`?scope=` on skills/search, `/api/scopes`, `/api/sync`, `/api/install`). Full endpoint table: @docs/08-web-ui.md.
 
 ## `webui/` (frontend)
 
@@ -30,7 +30,7 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `scopes.py`
 
-Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable, recursive, supported, consumer). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()` exposes root availability and discovery metadata; `list_all()` deduplicates resolved physical roots for aggregate views; direct ids remain addressable. Scope records expose observed instance states; precedence-based `shadowed`/effective resolution remains approval-gated. `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()` (skips duplicate physical target roots), and `search_all()`. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to `Store()`.
+Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable, recursive, supported, consumer). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()` exposes root availability and discovery metadata; `list_all()` deduplicates resolved physical roots for aggregate views; direct ids remain addressable. Scope records expose observed instance states; precedence-based `shadowed`/effective resolution remains approval-gated. `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()` (skips duplicate physical target roots), and `search_all()`. `search_all()` builds global ranking records through the public `Store.list()`/`Store.get()` seams so body matches are retained; callers such as CLI may pass their requested Store, while omitted stores retain the injectable adapter behavior. It converts bounded wildcard `ValueError`s to the scope layer's `StoreError` contract. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to `Store()`.
 
 ## `loader.py`
 
@@ -41,6 +41,18 @@ Shared SKILL.md loader + directory scanner (`load_skill`, `scan_dir`) used by bo
 Pure, non-persisted document observations: portable versus client-extension
 frontmatter partitions, content/metadata SHA-256 hashes, observed timestamp, and
 scope/consumer provenance.
+
+## `web_security.py`, `web_serialization.py`, `web_upload.py`
+
+Private stdlib-only web policy modules. They own loopback mutation validation, JSON body/response helpers, multipart parsing, bounded upload staging, and per-skill upload results. `webapp.py` retains compatibility wrappers and route ownership.
+
+## `diagnostics.py`
+
+Private stderr-only diagnostics for recovery and optional-enrichment failures; it does not change public return values or REST/CLI schemas.
+
+## `check_complexity.py`
+
+Repository-only AST complexity ratchet for the web, CLI, store, and frontmatter hotspots. `complexity-baseline.json` records existing violations and fails on new over-budget functions or metric increases.
 
 ## `atomic_io.py`, `archive.py`, `path_safety.py`, `root_discovery.py`
 

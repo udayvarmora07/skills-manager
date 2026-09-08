@@ -7,7 +7,6 @@ software, never a public service.
 
 from __future__ import annotations
 
-import json
 import ipaddress
 import os
 import re
@@ -17,13 +16,15 @@ import sys
 import tempfile
 import threading
 import webbrowser
-from email.parser import BytesParser
-from email.policy import default as _email_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .store import Store, StoreError, SkillNotFound
+from .diagnostics import diagnose as _diagnose
+from .web_security import RequestError, validate_mutation_request
+from .web_serialization import json_bytes, parse_json_object
+from .web_upload import MAX_UPLOAD_PARTS, parse_multipart, upload_folder
 
 _WEBUI_DIR = Path(__file__).resolve().parent / "webui"
 _STATIC_TYPES = {
@@ -37,53 +38,39 @@ _STATIC_TYPES = {
 
 _SKILL_FIELDS = ("description", "license", "category", "compatibility", "version", "allowed_tools", "body")
 
+
+def _validated_skill_fields(data: dict) -> dict:
+    """Select skill fields while enforcing the Store/scopes string contract."""
+    fields = {}
+    for field in _SKILL_FIELDS:
+        if field not in data:
+            continue
+        value = data[field]
+        if field == "allowed_tools":
+            if not isinstance(value, str):
+                raise StoreError("allowed_tools must be a string")
+        elif not isinstance(value, str):
+            raise StoreError(f"{field} must be a string")
+        if value != "":
+            fields[field] = value
+    return fields
+
+
 MAX_BODY_BYTES = 25 * 1024 * 1024
 MAX_UPLOAD_PARTS = 200
 MAX_QUERY_LEN = 200
 MAX_HISTORY_LIMIT = 200
 
 
-class RequestError(StoreError):
-    def __init__(self, status: int, message: str):
-        super().__init__(message)
-        self.status = status
-
-
+# Compatibility aliases for callers/tests that imported these implementation
+# helpers before the internal extraction.  They are intentionally private and
+# keep the old call shape, including the ignored serialization status argument.
 def _json_bytes(obj, status: int = 200) -> bytes:
-    return json.dumps(obj).encode("utf-8")
+    return json_bytes(obj)
 
 
 def _parse_multipart(raw: bytes, boundary: str) -> list[dict]:
-    """Minimal multipart/form-data parser.
-
-    Returns a list of parts: ``{"name": field_name, "filename": str | None,
-    "content": bytes}``. Supports nested relative paths in the filename
-    (browsers send them for webkitdirectory uploads).
-    """
-    delimiter = b"--" + boundary.encode()
-    parts = []
-    for chunk in raw.split(delimiter):
-        chunk = chunk.strip(b"\r\n")
-        if not chunk or chunk == b"--":
-            continue
-        header_blob, sep, content = chunk.partition(b"\r\n\r\n")
-        if not sep:
-            continue
-        content = content.rstrip(b"\r\n")
-        if header_blob.endswith(b"--"):
-            continue
-        headers = BytesParser(policy=_email_policy).parsebytes(header_blob + b"\r\n")
-        disposition = headers.get("Content-Disposition", "")
-        name_m = re.search(r'name="([^"]*)"', disposition)
-        file_m = re.search(r'filename="([^"]*)"', disposition)
-        parts.append(
-            {
-                "name": name_m.group(1) if name_m else "",
-                "filename": file_m.group(1) if file_m else None,
-                "content": content,
-            }
-        )
-    return parts
+    return parse_multipart(raw, boundary)
 
 
 class WebAppHandler(BaseHTTPRequestHandler):
@@ -140,15 +127,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         raw = self._read_body()
         if not raw:
             return {}
-        if not (self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() == "application/json"):
-            raise RequestError(415, "JSON request body required")
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            raise StoreError("request body is not valid JSON")
-        if not isinstance(data, dict):
-            raise StoreError("request body must be a JSON object")
-        return data
+        return parse_json_object(raw, self.headers.get("Content-Type", ""))
 
     @staticmethod
     def _unquote(name: str) -> str:
@@ -208,28 +187,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
         return f"http://{host}:{self.server.server_port}"  # type: ignore[attr-defined]
 
     def _validate_mutation_request(self) -> None:
-        host_header = self.headers.get("Host", "")
-        allowed_hosts = self.server.allowed_hosts  # type: ignore[attr-defined]
-        if host_header not in allowed_hosts:
-            raise RequestError(403, "invalid Host header")
-
-        fetch_site = (self.headers.get("Sec-Fetch-Site") or "").lower()
-        if fetch_site == "cross-site":
-            raise RequestError(403, "cross-origin request rejected")
-
-        allowed_origins = self.server.allowed_origins  # type: ignore[attr-defined]
-        origin = self.headers.get("Origin")
-        referer = self.headers.get("Referer")
-        for value, label in ((origin, "Origin"), (referer, "Referer")):
-            if not value:
-                continue
-            parsed = urlparse(value)
-            if label == "Referer":
-                actual = f"{parsed.scheme}://{parsed.netloc}"
-            else:
-                actual = value.rstrip("/")
-            if not parsed.scheme or actual.rstrip("/") not in allowed_origins:
-                raise RequestError(403, "cross-origin request rejected")
+        validate_mutation_request(
+            self.headers,
+            self.server.allowed_hosts,  # type: ignore[attr-defined]
+            self.server.allowed_origins,  # type: ignore[attr-defined]
+        )
 
     def _parts(self) -> list[str]:
         path = urlparse(self.path).path
@@ -282,7 +244,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 if q:
                     from .scopes import search_all as _search_all
 
-                    self._send_json(_search_all(q, scope_id="all"))
+                    self._send_json(_search_all(q, scope_id="all", store=self.store))
                 else:
                     from .scopes import list_all as _list_all
 
@@ -296,9 +258,12 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 else:
                     self._send_json(_scan_scope(scope))
                 return
-            # scope == "" or "global": use the injected store (respects SKILLS_MANAGER_DATA in tests), enriched with tokens
+            # scope == "" or "global": use the scope adapter so wildcard
+            # validation and body-aware ranking share one StoreError seam.
             if q:
-                rows = self.store.search(q)
+                from .scopes import search_all as _search_all
+
+                rows = _search_all(q, scope_id="global", store=self.store)
                 for r in rows:
                     r.setdefault("scope", "global")
                     r.setdefault("scope_label", "Global")
@@ -356,11 +321,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 if scope == "all":
                     from .scopes import search_all as _search_all
 
-                    self._send_json(_search_all(q, scope_id="all"))
+                    self._send_json(_search_all(q, scope_id="all", store=self.store))
                 else:
                     self._send_json(self.store.search(q))
             elif scope == "global":
-                self._send_json(self.store.search(q))
+                from .scopes import search_all as _search_all
+
+                self._send_json(_search_all(q, scope_id="global", store=self.store))
             else:
                 from .scopes import search_all as _search_all
 
@@ -586,8 +553,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         if parts == ["api", "sync"]:
             data = self._body_json()
-            name = (data.get("name") or "").strip()
-            from_scope = (data.get("from_scope") or "global").strip() or "global"
+            raw_name = data.get("name")
+            if not isinstance(raw_name, str) or not raw_name.strip():
+                raise StoreError("name must be a string")
+            name = raw_name.strip()
+            raw_from_scope = data.get("from_scope") or "global"
+            if not isinstance(raw_from_scope, str):
+                raise StoreError("from_scope must be a string")
+            from_scope = raw_from_scope.strip() or "global"
             to_scopes = data.get("to_scopes")
             force = bool(data.get("force"))
             if not name:
@@ -598,21 +571,30 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return
         if parts == ["api", "install"]:
             data = self._body_json()
-            source = (data.get("source") or "").strip()
+            raw_source = data.get("source")
+            if not isinstance(raw_source, str):
+                raise StoreError("source must be a string")
+            source = raw_source.strip()
             if not source:
                 raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
             if not re.fullmatch(r"[A-Za-z0-9_@./:+-]+", source) or source.startswith("-"):
                 raise StoreError("invalid source value")
             agents = data.get("agents")
             skills_filter = data.get("skills")
-            scope = (data.get("scope") or "global").strip() or "global"
+            raw_scope = data.get("scope", "global")
+            if not isinstance(raw_scope, str):
+                raise StoreError("scope must be a string")
+            scope = raw_scope.strip() or "global"
             copy_mode = bool(data.get("copy"))
             list_only = bool(data.get("list_only"))
             if agents is not None and not isinstance(agents, list):
                 agents = [agents] if isinstance(agents, str) else None
             if skills_filter is not None and not isinstance(skills_filter, list):
                 skills_filter = [skills_filter] if isinstance(skills_filter, str) else None
-            runner = (data.get("runner") or "npx").strip() or "npx"
+            raw_runner = data.get("runner", "npx")
+            if not isinstance(raw_runner, str):
+                raise StoreError("runner must be a string")
+            runner = raw_runner.strip() or "npx"
             allowed_runners = {"npx", "pnpm", "yarn", "bunx", "bun"}
             if runner == "uvx":
                 raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python tools use pipx/uvx with a PyPI package.")
@@ -674,11 +656,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
             data = self._body_json()
             name = data.pop("name", None)
             description = data.pop("description", None)
-            if not name:
-                raise StoreError("name is required")
-            if not description:
-                raise StoreError("description is required")
-            fields = {k: v for k, v in data.items() if k in _SKILL_FIELDS and v not in (None, "")}
+            if not isinstance(name, str) or not name.strip():
+                raise StoreError("name must be a non-empty string")
+            if not isinstance(description, str) or not description.strip():
+                raise StoreError("description must be a non-empty string")
+            fields = _validated_skill_fields(data)
             if scope != "global":
                 from .scopes import create_skill as _create_skill
 
@@ -716,8 +698,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
         elif parts == ["api", "templates"]:
             data = self._body_json()
             name = data.get("name")
-            if not name:
-                raise StoreError("template name is required")
+            if not isinstance(name, str) or not name.strip():
+                raise StoreError("template name must be a non-empty string")
+            body = data.get("body")
+            if body is not None and not isinstance(body, str):
+                raise StoreError("template body must be a string")
             from .templates import create_template
 
             try:
@@ -731,9 +716,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
             from .validator import validate_skill
 
             data = self._body_json()
-            name = (data.get("name") or "").strip()
-            if not name:
-                raise StoreError("skill name is required")
+            raw_name = data.get("name")
+            if not isinstance(raw_name, str) or not raw_name.strip():
+                raise StoreError("skill name must be a non-empty string")
+            name = raw_name.strip()
             record = self.store.get(name)
             if not record.get("path"):
                 raise StoreError(f"skill '{name}' has no directory on disk")
@@ -762,7 +748,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             data = self._body_json()
-            fields = {k: v for k, v in data.items() if k in _SKILL_FIELDS and v not in (None, "")}
+            fields = _validated_skill_fields(data)
             if scope != "global":
                 from .scopes import edit_skill as _edit_skill
 
@@ -811,6 +797,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._send_error(400, "unsupported archive type (use .tar.gz/.tgz/.tar)")
                 return
             force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
+            full = qs.get("full", ["0"])[0] in ("1", "true", "yes")
             try:
                 raw = self._read_body()
             except StoreError as exc:
@@ -823,7 +810,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             try:
                 target.write_bytes(raw)
                 try:
-                    result = self.store.import_(target, force=force)
+                    result = self.store.import_(target, force=force, full=full)
                 except StoreError as exc:
                     self._send_error(400, str(exc))
                     return
@@ -835,40 +822,12 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def _upload_folder(self, file_parts: list[dict]) -> dict:
         """Install skills from an uploaded skill folder (webkitdirectory)."""
-        if len(file_parts) > MAX_UPLOAD_PARTS:
-            raise StoreError(f"too many upload parts (max {MAX_UPLOAD_PARTS})")
-        if sum(len(p.get("content") or b"") for p in file_parts) > MAX_BODY_BYTES:
-            raise StoreError("upload too large")
-        skill_files = [p for p in file_parts if p["filename"] and p["filename"].endswith("SKILL.md")]
-        if not skill_files:
-            raise StoreError("no SKILL.md files in upload")
-        tmp_root = Path(tempfile.mkdtemp(prefix="skillsmgr-add-"))
-        imported: list[str] = []
-        skipped: list[str] = []
-        try:
-            for p in file_parts:
-                rel = p["filename"]
-                if not rel or rel.startswith("/") or ".." in Path(rel).parts:
-                    continue
-                target = (tmp_root / rel).resolve()
-                try:
-                    inside = target.is_relative_to(tmp_root)
-                except AttributeError:
-                    inside = str(target).startswith(str(tmp_root) + os.sep)
-                if not inside:
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(p["content"])
-            for skill_file in sorted(tmp_root.rglob("SKILL.md")):
-                source_dir = skill_file.parent
-                try:
-                    result = self.store.add(source_dir)
-                    imported.append(result["name"])
-                except StoreError as exc:
-                    skipped.append(f"{source_dir.name}: {exc}")
-            return {"imported": imported, "skipped": skipped}
-        finally:
-            shutil.rmtree(tmp_root, ignore_errors=True)
+        return upload_folder(
+            file_parts,
+            self.store.add,
+            max_parts=MAX_UPLOAD_PARTS,
+            max_bytes=MAX_BODY_BYTES,
+        )
 
 
 class WebAppServer:

@@ -6,25 +6,16 @@ the web UI uses. Run: python3 smoke_web.py
 """
 import json
 import os
-import shutil
 import sys
-import tempfile
-import threading
-from pathlib import Path
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from skillsmgr.store import Store
-from skillsmgr.webapp import WebAppServer
+from smoke_fixtures import cleanup_store, make_store, start_server, stop_server
 
-tmp = tempfile.mkdtemp(prefix="skillsmgr-web-")
+tmp, store = make_store("skillsmgr-web-")
+server, thread = start_server(store)
 try:
-    store = Store(data_dir=tmp)
-    store.init_db()
-    server = WebAppServer(store, "127.0.0.1", 0)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
     base = server.url
 
     def req(method, path, body=None, ctype="application/json"):
@@ -123,23 +114,21 @@ try:
     print("== export/import archive ==")
     status, blob = req("GET", "/api/export")
     assert status == 200 and blob[:2] == b"\x1f\x8b"  # gzip magic
-    tmp2 = tempfile.mkdtemp(prefix="skillsmgr-web2-")
-    store2 = Store(data_dir=tmp2)
-    store2.init_db()
-    server2 = WebAppServer(store2, "127.0.0.1", 0)
-    t2 = threading.Thread(target=server2.serve_forever, daemon=True)
-    t2.start()
-    r = Request(
-        server2.url + "api/import?filename=export.tar.gz",
-        data=blob,
-        method="PUT",
-    )
-    with urlopen(r) as resp:
-        imported = json.loads(resp.read())
-    assert imported["imported"] == ["demo-tool"], imported
-    assert len(store2.list()) == 1
-    server2.shutdown()
-    shutil.rmtree(tmp2, ignore_errors=True)
+    tmp2, store2 = make_store("skillsmgr-web2-")
+    server2, t2 = start_server(store2)
+    try:
+        r = Request(
+            server2.url + "api/import?filename=export.tar.gz",
+            data=blob,
+            method="PUT",
+        )
+        with urlopen(r) as resp:
+            imported = json.loads(resp.read())
+        assert imported["imported"] == ["demo-tool"], imported
+        assert len(store2.list()) == 1
+    finally:
+        stop_server(server2, t2)
+        cleanup_store(tmp2)
     print("export/import ok")
 
     print("== trash / restore / purge ==")
@@ -208,5 +197,5 @@ try:
 
     print("\nALL WEB SMOKE TESTS PASSED")
 finally:
-    server.shutdown()
-    shutil.rmtree(tmp, ignore_errors=True)
+    stop_server(server, thread)
+    cleanup_store(tmp)

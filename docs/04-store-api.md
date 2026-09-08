@@ -36,7 +36,7 @@
 - `get(self, name) -> dict` — raises `SkillNotFound` if absent. Returned records
   include derived, non-persisted observations: portable/extension frontmatter
   partitions, content and metadata hashes, observed timestamp, and provenance.
-- `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`.
+- `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`. Scope adapters use the public `list()`/`get()` seams when they need body-aware ranking. CLI global and merged searches pass their requested Store through that adapter, so `--data-dir` remains authoritative.
 - `add(self, path, name=None) -> dict` — import an existing SKILL.md file.
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
 - `restore(self, name, snapshot=None) -> dict` — from trash, or from a validated

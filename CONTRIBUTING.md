@@ -38,7 +38,10 @@ python3 -m skillsmgr webui --no-browser
 ## Checks (all must pass)
 
 ```bash
-python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py
+python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py check_complexity.py check_docs.py
+python3 check_complexity.py
+python3 check_docs.py
+python3 check_package_data.py   # reports UNAVAILABLE when optional build tooling is absent
 python3 -m unittest discover -s tests
 python3 smoke_store.py
 python3 smoke_web.py

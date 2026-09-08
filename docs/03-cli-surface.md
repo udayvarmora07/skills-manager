@@ -2,9 +2,9 @@
 
 **Version 0.3.0**
 
-**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against `cli.py` on 2026-08-16. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
+**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against `cli.py` on 2026-09-08. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
 
-**[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **26 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 40 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
+**[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
 
 ## Exit codes
 
@@ -29,7 +29,8 @@ or mutating the data directory.
 **[SPEC]**
 
 - `--json` — machine-readable output on all data commands; `_print_json(data)` with indent=2.
-- `--color auto|always|never` — color output; default auto (TTY detect, honors `NO_COLOR`/`FORCE_COLOR`).
+- `--color` — force color output.
+- `--no-color` — disable color output. The default is automatic terminal detection.
 - `--scope SCOPE` — scope selector on `list`, `view`, `search`, `doctor`, `stats`. Values: `global` (default; the Store + DB), `all` (merge every scope), or an agent scope id (`claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`). `agents` is the Command Code skills dir (`~/.agents/skills`).
 
 **[NOTE]** The scope flag is a **per-command flag**, not a global flag — each scope-aware command declares its own `--scope`. `tokens` and `install` also accept `--scope` with their own semantics (see below).
@@ -71,7 +72,7 @@ Toggle enabled state in the global store (renames `SKILL.md` <-> `SKILL.md.disab
 Validate skills by name, all (`--all`), or a directory (`--path`). Prints issues.
 
 ### `search TERM [--limit N] [--json] [--scope SCOPE]`
-Search with scoring (see @docs/02-modules.md); `--limit` caps results. `--scope all` searches every scope.
+Search with scoring (see @docs/02-modules.md); `--limit` caps results. `--scope all` searches every scope. The global portion always uses the Store selected by `--data-dir`; merged search keeps that same requested global store while agent scopes use their filesystem adapters.
 
 ### `import ARCHIVE [--force] [--full] [--json]`
 Import a `.tar.gz`/`.tgz`/`.tar` archive of skills into the global store. ZIP
@@ -105,9 +106,6 @@ Manage the trash: list, restore one, purge all.
 
 ### `templates list [--json] | templates new NAME [--body TEXT] [--json]`
 List templates; create a skill from a template.
-
-### `history [NAME] [--limit N] [--json]`
-Show history (default limit 50). With `NAME`, filtered to that skill.
 
 ### `db rebuild [--json] | db resync [--json]`
 `rebuild` drops and re-creates the index from the filesystem; `resync` syncs the index with FS without dropping. Both leave the filesystem untouched.

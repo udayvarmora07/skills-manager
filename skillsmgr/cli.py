@@ -7,7 +7,6 @@ Exit codes: 0 on success, 1 on operational errors, 2 on usage errors,
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shlex
 import subprocess
@@ -18,6 +17,7 @@ from . import __version__, colors
 from . import search as search_mod
 from . import templates as templates_mod
 from .colors import COLORS
+from .cli_output import err as _output_err, print_json as _output_print_json, render_table as _output_render_table, truncate as _output_truncate
 from .store import Store, StoreError
 from .validator import validate_skill, validate_skill_name
 
@@ -27,38 +27,10 @@ EXIT_USAGE = 2
 EXIT_INTERRUPT = 130
 
 
-def _print_json(obj) -> None:
-    print(json.dumps(obj, indent=2, default=str))
-
-
-def _err(message: str) -> None:
-    print(f"{COLORS.red('error:')} {message}", file=sys.stderr)
-
-
-def _truncate(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    return text[: limit - 3] + "..."
-
-
-def _render_table(rows: list[list[str]]) -> str:
-    widths = [0] * len(rows[0])
-    for row in rows:
-        for i, cell in enumerate(row):
-            widths[i] = max(widths[i], len(cell))
-    lines = []
-    for index, row in enumerate(rows):
-        cells = []
-        for i, cell in enumerate(row):
-            if i < len(row) - 1:
-                cells.append(cell.ljust(widths[i]))
-            else:
-                cells.append(cell)
-        line = "   ".join(cells)
-        if index == 0:
-            line = COLORS.bold(line)
-        lines.append(line)
-    return "\n".join(lines)
+_print_json = _output_print_json
+_err = _output_err
+_truncate = _output_truncate
+_render_table = _output_render_table
 
 
 def _parse_metadata(pairs: list[str] | None) -> dict | None:
@@ -402,23 +374,39 @@ def cmd_validate(args, store: Store) -> int:
     return EXIT_OK if not any_errors else EXIT_ERROR
 
 
+def _search_output_row(match: dict, scope: str) -> dict:
+    """Keep the historical CLI row shape for global and merged results."""
+    if scope == "all":
+        return dict(match)
+    return {key: value for key, value in match.items() if key not in ("scope", "scope_label")}
+
+
+def _search_full_record(match: dict, scope: str, store: Store, get_skill) -> dict:
+    match_scope = match.get("scope", scope)
+    if match_scope == "global":
+        return store.get(match["name"])
+    return get_skill(match_scope, match["name"])
+
+
 def cmd_search(args, store: Store) -> int:
     if args.limit is not None and args.limit < 1:
         raise StoreError("--limit must be a positive integer")
     scope = _scope_from_args(args)
-    if scope == "all":
-        from .scopes import search_all as _search_all
+    from .scopes import get_skill as _get_skill, search_all as _search_all
 
-        pool = _search_all(args.term, scope_id="all")
-        # search_all already ranked; rebuild ranked tuples for display.
-        ranked = search_mod.rank_results(pool, args.term) if pool else []
-    elif scope != "global":
-        from .scopes import search_all as _search_all
-
-        pool = _search_all(args.term, scope_id=scope)
-        ranked = search_mod.rank_results(pool, args.term) if pool else []
-    else:
-        ranked = search_mod.rank_results(store.list(), args.term)
+    matches = _search_all(args.term, scope_id=scope, store=store)
+    # search_all returns the historical scope-facing rows. Rehydrate each
+    # match through the public detail seam so the CLI scorer sees bodies, but
+    # retain the original match row for output compatibility.
+    pool = []
+    output_by_id = {}
+    for match in matches:
+        full = _search_full_record(match, scope, store, _get_skill)
+        full.update({key: value for key, value in match.items() if key != "body"})
+        pool.append(full)
+        output_by_id[id(full)] = _search_output_row(match, scope)
+    ranked_full = search_mod.rank_results(pool, args.term) if pool else []
+    ranked = [(output_by_id[id(record)], score) for record, score in ranked_full]
     if args.limit:
         ranked = ranked[: args.limit]
     if args.json:
@@ -718,8 +706,6 @@ def cmd_scopes(args, store: Store) -> int:
         header = ["ID", "LABEL", "COUNT", "PATH"]
         table = [[s["id"], s["label"], str(s["count"]), s["path"]] for s in scopes]
     print(_render_table([header] + table))
-    if args.name:
-        print(f"snapshots for {args.name}: {', '.join(snapshots) if snapshots else '(none)'}")
     return EXIT_OK
 
 

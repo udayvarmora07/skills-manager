@@ -678,25 +678,56 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
     return {"name": name, "snapshot": snapshot, "scope": scope_id}
 
 
-def search_all(term: str, scope_id: str | None = None) -> list[dict]:
+def _global_search_records(store: Store | None = None) -> list[dict]:
+    """Return global list rows with bodies loaded through Store's public API."""
+    store = store or _global_store()
+    records: list[dict] = []
+    for row in store.list():
+        record = dict(row, scope="global", scope_label="Global")
+        full = store.get(row["name"])
+        record["body"] = full.get("body", "")
+        records.append(record)
+    return records
+
+
+def search_all(
+    term: str, scope_id: str | None = None, *, store: Store | None = None
+) -> list[dict]:
     """Case-insensitive search over name/description/body.
 
-    scope_id == None or 'all' -> all scopes; otherwise one scope.
+    scope_id == None or 'all' -> all scopes; otherwise one scope.  The
+    optional store selects the global records for callers serving a requested
+    data directory; agent scopes continue using their filesystem adapters.
     """
     if len(term) > 200:
         raise StoreError("search query too long")
     if scope_id in (None, "all"):
-        pool = list_all()
+        pool: list[dict] = []
+        for descriptor in list_scopes():
+            if descriptor["id"] == "global":
+                pool.extend(_global_search_records(store))
+            else:
+                pool.extend(scan_scope(descriptor["id"]))
     elif scope_id == "global":
-        pool = [dict(r, scope="global", scope_label="Global") for r in _global_store().search(term)]
-        # Store.search already filtered; return as-is.
-        return sorted(pool, key=lambda r: r["name"].lower())
+        pool = _global_search_records(store)
     else:
         pool = scan_scope(scope_id)
 
-    # Rank via search.py scoring for consistent ordering.
+    # Rank via search.py scoring for consistent ordering.  The matcher raises
+    # ValueError for bounded wildcard violations; scope callers expose the
+    # established StoreError contract instead of leaking that implementation
+    # exception through CLI or REST adapters.
     from .search import rank_results
 
-    ranked = rank_results(pool, term) if term else [(r, 0) for r in pool]
+    try:
+        ranked = rank_results(pool, term) if term else [(r, 0) for r in pool]
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
     ranked.sort(key=lambda p: (-p[1], p[0]["name"].lower()))
-    return [r for r, _ in ranked]
+    results = [r for r, _ in ranked]
+    # Store.search historically omits body from global result rows.  Keep that
+    # output shape while retaining the body in the private ranking pool.
+    for record in results:
+        if record.get("scope") == "global":
+            record.pop("body", None)
+    return results

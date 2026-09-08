@@ -7,7 +7,7 @@
 ## Milestone 1 — Docs layer (2026-08-13)
 
 - [x] Confirm repo layout and module inventory
-- [x] Verify CLI command surface (29 commands + 2 aliases, 31 invocable names) via grep of `skillsmgr/cli.py`
+- [x] Verify CLI command surface (27 top-level + 7 nested + 3 aliases, 37 invocable names) from `skillsmgr/cli.py`
 - [x] Verify Store public API via grep of `skillsmgr/store.py`
 - [x] Verify GUI toolkit availability (GTK4 4.14 selected, GTK3 3.24 fallback)
 - [x] Capture AGENTS.md research takeaways (Red Hat article + context-engineering / agent-legibility skills)
@@ -62,7 +62,7 @@
 - [x] Reports: `security_best_practices_report.md`, `skills-manager-threat-model.md` (T-1…T-10, R-1…R-5)
 - [x] Tests: `tests/test_store.py` (22), `tests/test_webapp.py` (3, serve_forever thread + shutdown/join/close), `tests/test_web_scopes.py` (13, hermetic HOME+DATA override) — 38 total, all OK via `python3 -m unittest discover -s tests`
 - [x] CI: `.github/workflows/ci.yml` (3.10/3.11/3.12, py_compile + unittest + both smokes + node --check), bug/feature templates, PR template
-- [x] Fixes in this pass: test `_skill_body` helper (dump_frontmatter takes dict only, body appended separately); real `Store.restore()` prefix-collision bug (now `_strip_trash_suffix(p.name) == name`); README cursor path (`~/.cursor/skills-cursor`); pytest→unittest everywhere (offline env)
+- [x] Fixes in this pass: test `_skill_body` helper (dump_frontmatter takes dict only, body appended separately); real `Store.restore()` prefix-collision bug (now `_strip_trash_suffix(p.name) == name`); README cursor path (`~/.cursor/skills`); pytest→unittest everywhere (offline env)
 - [x] Verified: compile OK, 38 unittest OK, both smokes pass, `node --check` OK, `--help` OK, `--scope agents` OK (empty — no ~/.agents on this box)
 - [x] Published: `udayvarmora07/skills-manager` created via `gh`, `main` + `v1.0.0` pushed, CI green (run 33914953774); PyPI name `skills-manager` confirmed free, `dist/` built (sdist+wheel) — upload blocked pending PyPI API token (`/tmp/buildenv/bin/python -m twine upload dist/*`)
 
@@ -136,8 +136,8 @@
 - [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK
 - [ ] Skill-body editor with live markdown preview — needs UX approval
 - [ ] Keyboard-shortcut cheatsheet modal (`?` key) — needs UX approval
-- [ ] Real pytest suite in `tests/` (currently empty; smokes are the only coverage) — needs test-tooling ASK
-- [ ] CI workflow (compile + smokes on push) — needs ASK (new automation)
+- [!] Pytest suite is not planned: `tests/` uses the approved stdlib `unittest` suite; adding third-party test tooling would require an explicit tooling decision
+- [x] CI workflow (compile + unittest + smokes on push) is present in `.github/workflows/ci.yml`; future CI expansion remains tracked in the roadmap
 - [ ] Zip-import support (`import` is tar-only today) — needs CLI-surface ASK
 - [ ] Tar-fallback refusal on Python < 3.12 (threat-model R-1) — needs ASK (behavior change)
 - [ ] Out-of-root link warning → validation error (threat-model R-4) — needs ASK (behavior change)
@@ -213,3 +213,57 @@
 - [x] Extract archive inspection/extraction/staged-commit policy into `skillsmgr/archive.py` with Store compatibility adapters.
 - [x] Extract atomic writes/locks/tree hashing into `skillsmgr/atomic_io.py` and root discovery/state policy into `skillsmgr/root_discovery.py`.
 - [x] Keep public CLI/Store signatures, SQLite schema, and filesystem source-of-truth behavior unchanged.
+
+## Milestone 18 — Web/CLI contract hardening and complexity ratchet (2026-09-08)
+
+- [x] Extract web request security, JSON serialization, and multipart upload policy into private modules with compatibility wrappers.
+- [x] Fix text `scopes` output regression and forward REST import `full=1` to full archive restoration.
+- [x] Add CLI, REST, and AST complexity regression tests; add stderr-only rollback diagnostics.
+- [x] Wire `check_complexity.py` into contributor and CI verification.
+- [x] Deep-test REST malformed input, security, upload, archive, CLI, diagnostics, and complexity seams; fix type-validation 500s and integrate CLI output helpers.
+- [x] Add an audit regression test proving extracted web helpers, `RequestError`, and CLI output aliases retain their historical private call shapes.
+
+## 2026-09-08 — REST validation regression closeout (17:20 UTC)
+
+- [x] Reject non-string `/api/install` `source`, `scope`, and `runner` values with JSON HTTP 400 before command construction.
+- [x] Enforce string-only scalar skill metadata at REST create/patch boundaries; preserve ignored `name` patch behavior.
+- [x] Reject unsupported `allowed_tools` lists consistently for global and agent-scope create/patch requests, while preserving accepted strings.
+- [x] Add focused hermetic REST regressions for malformed install/create/patch payloads and global/agent `allowed_tools` behavior.
+- [x] Verification recorded in the progress log: targeted web tests, full unittest (128 tests), both smoke suites, compile, frontend syntax, docs, complexity, and diff checks.
+
+## Milestone 19 — Hermetic smoke fixture refactor (2026-09-08)
+
+- [x] Share only minimal temporary-store and loopback-server lifecycle helpers between `smoke_store.py` and `smoke_web.py`.
+- [x] Preserve executable smoke output and behavior; add focused helper lifecycle tests in `tests/test_smoke_fixtures.py`.
+- [x] Run final full unittest, both smokes, compile, docs, complexity, and diff checks; record exact results in the progress log.
+
+## Milestone 21 — Documentation consistency gate (2026-09-08)
+
+- [x] Check all local `@docs/*.md` pointers, including historical Markdown, without network access.
+- [x] Check documented `Store.method`, module symbols, and explicit `skillsmgr/*.py` paths against AST source facts.
+- [x] Derive current CLI command counts from `cli.py`; check stale current command/UI claims while preserving historical docs semantics.
+- [x] Check package/source/documented version alignment and add focused stdlib tests for each failure class.
+- [x] Wire `check_docs.py` into contributor checks; CI already runs the docs gate.
+
+## Milestone 20 — Distribution package-data verification (2026-09-08)
+
+- [x] Add stdlib-only `check_package_data.py` to build exact wheel/sdist outputs in a temporary directory and inspect `skillsmgr/webui/` plus vendored Vue contents.
+- [x] Add deterministic offline archive assertions for wheel/sdist member sets and missing Vue/package-data rejection.
+- [x] Add optional isolated temporary-venv install probes for both artifacts without network or runtime dependency changes.
+- [!] Build/install coverage reports `UNAVAILABLE` when optional `python -m build` tooling is absent; existing `dist/` artifacts are never treated as fresh evidence. `--require-build` returns exit 2 for release-required jobs.
+
+## 2026-09-08 — CLI data-dir search regression closeout (18:27 UTC)
+
+- [x] Make CLI global search use the Store selected by `--data-dir`, not `scopes._GLOBAL_STORE`.
+- [x] Keep merged search global records on the requested Store while agent records continue through scope adapters.
+- [x] Add hermetic two-data-dir CLI regressions for global and merged search isolation.
+- [x] Preserve global body matches in scope and merged searches by building ranking records through public `Store.list()`/`Store.get()` seams, without changing result schemas or ranking rules.
+- [x] Convert wildcard-complexity `ValueError` to the established `StoreError` contract in `scopes.search_all`, including CLI and REST callers.
+- [x] Update search documentation and retain the focused body/ranking/error regressions in `tests/test_search_contracts.py`.
+- [x] Verification: focused search tests and final full unittest suite (208) passed; smoke, compile, docs, complexity, frontend, and diff checks also passed; package-data build remains environment-unavailable as recorded in the progress log.
+
+## 2026-09-08 — REST two-server search isolation regression closeout
+
+- [x] Pass each REST global and merged search call through the handler's `self.store`; preserve agent-scope adapters, body-aware ranking, output schemas, singleton compatibility, and all locked constraints.
+- [x] Add a hermetic two-`WebAppServer` regression proving each server's `scope=global` search returns only its own global result and `scope=all` returns that global result plus the shared agent result; stop both servers during cleanup.
+- [x] Verification: focused search contracts (11 tests) PASS; final full unittest suite (208 tests) PASS; `smoke_store.py` PASS (`ALL STORE SMOKE TESTS PASSED`); `smoke_web.py` PASS (`ALL WEB SMOKE TESTS PASSED`); Python compile PASS; `node --check skillsmgr/webui/app.js` PASS; `check_docs.py` PASS; `check_complexity.py` PASS (168 functions); `git diff --check` PASS.

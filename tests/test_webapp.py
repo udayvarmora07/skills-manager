@@ -153,6 +153,147 @@ class WebAppTestCase(unittest.TestCase):
             urllib.request.urlopen(request)
         self.assertEqual(ctx.exception.code, 415)
 
+    def test_malformed_create_fields_return_json_400_without_mutation(self):
+        store = self.server.httpd.store
+        initial_names = {row["name"] for row in store.list()}
+        initial_templates = set(store.templates_dir.glob("*.md"))
+        cases = (
+            ("/api/skills", {"name": 123, "description": "bad"}, "name must be a non-empty string"),
+            ("/api/skills", {"name": "bad", "description": 123}, "description must be a non-empty string"),
+            ("/api/skills", {"name": "bad-tools", "description": "bad", "allowed_tools": {}}, "allowed_tools must be a string"),
+            ("/api/templates", {"name": 123}, "template name must be a non-empty string"),
+            ("/api/sync", {"name": 123}, "name must be a string"),
+            ("/api/validate", {"name": 123}, "skill name must be a non-empty string"),
+        )
+        for path, payload, message in cases:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}{path}",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400, (path, payload))
+            self.assertEqual(json.loads(ctx.exception.read()), {"error": message})
+        self.assertEqual({row["name"] for row in store.list()}, initial_names)
+        self.assertEqual(set(store.templates_dir.glob("*.md")), initial_templates)
+
+    def test_install_scalar_types_return_json_400(self):
+        cases = (
+            ({"source": 123}, "source must be a string"),
+            ({"source": "owner/repo", "scope": 123}, "scope must be a string"),
+            ({"source": "owner/repo", "runner": 123}, "runner must be a string"),
+        )
+        for payload, message in cases:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/install",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400, payload)
+            self.assertEqual(json.loads(ctx.exception.read()), {"error": message})
+
+    def test_scalar_metadata_types_return_json_400_without_mutation(self):
+        store = self.server.httpd.store
+        before = (store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"))
+        for method, path, base in (
+            ("POST", "/api/skills", {"name": "bad-meta", "description": "bad"}),
+            ("PATCH", "/api/skills/demo", {}),
+        ):
+            for field in ("category", "license", "version", "compatibility", "body"):
+                payload = {**base, field: 123}
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{self.port}{path}",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method=method,
+                )
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(request)
+                self.assertEqual(ctx.exception.code, 400, (method, field))
+                self.assertEqual(json.loads(ctx.exception.read()), {"error": f"{field} must be a string"})
+        self.assertEqual((store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8")), before)
+        self.assertFalse((store.skills_dir / "bad-meta").exists())
+
+    def test_malformed_patch_fields_return_json_400_without_mutation(self):
+        store = self.server.httpd.store
+        before = (store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"))
+        for field in ("description", "body", "allowed_tools"):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/skills/demo",
+                data=json.dumps({field: 123}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="PATCH",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400)
+            expected = f"{field} must be a string"
+            self.assertEqual(json.loads(ctx.exception.read()), {"error": expected})
+        after = (store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertEqual(after, before)
+
+    def test_allowed_tools_lists_are_rejected_for_global_and_agent_scopes(self):
+        store = self.server.httpd.store
+        for method, path in (("POST", "/api/skills"), ("PATCH", "/api/skills/demo")):
+            payload = {"allowed_tools": ["git"]}
+            if method == "POST":
+                payload.update(name="global-list", description="Global list")
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}{path}",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method=method,
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertEqual(json.loads(ctx.exception.read()), {"error": "allowed_tools must be a string"})
+        self.assertFalse((store.skills_dir / "global-list").exists())
+
+        old_home = os.environ.get("HOME")
+        agent_home = Path(self._tmp.name) / "agent-home"
+        os.environ["HOME"] = str(agent_home)
+        try:
+            (agent_home / ".agents" / "skills").mkdir(parents=True)
+            for method, path, payload in (
+                ("POST", "/api/skills?scope=agents", {"name": "agent-list", "description": "Agent list", "allowed_tools": ["git"]}),
+                ("POST", "/api/skills?scope=agents", {"name": "agent-string", "description": "Agent string", "allowed_tools": "git"}),
+            ):
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{self.port}{path}",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method=method,
+                )
+                if payload["name"] == "agent-list":
+                    with self.assertRaises(urllib.error.HTTPError) as ctx:
+                        urllib.request.urlopen(request)
+                    self.assertEqual(ctx.exception.code, 400)
+                    self.assertEqual(json.loads(ctx.exception.read()), {"error": "allowed_tools must be a string"})
+                else:
+                    with urllib.request.urlopen(request) as response:
+                        self.assertEqual(response.status, 201)
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/skills/agent-string?scope=agents",
+                data=json.dumps({"allowed_tools": ["git"]}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="PATCH",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertEqual(json.loads(ctx.exception.read()), {"error": "allowed_tools must be a string"})
+        finally:
+            if old_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = old_home
+
     def test_security_headers_are_present(self):
         status, _, headers = self._request("GET", "/")
         self.assertEqual(status, 200)
@@ -183,6 +324,35 @@ class WebAppTestCase(unittest.TestCase):
                 self.server.httpd.store.remove("route-demo", purge=True)
             except Exception:
                 pass
+
+    def test_full_import_query_flag_restores_full_archive_payload(self):
+        source = Store(data_dir=Path(self._tmp.name) / "full-source")
+        source.init_db()
+        source.create("full-route", "Full route skill")
+        source.create("full-trash", "Full route trash")
+        source.remove("full-trash")
+        (source.templates_dir / "route-template.md").write_text("# Route\n", encoding="utf-8")
+        archive = source.export(full=True)
+        target = Store(data_dir=Path(self._tmp.name) / "full-target")
+        target.init_db()
+        server = WebAppServer(target, port=0)
+        thread = __import__("threading").Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = urllib.request.Request(
+                server.url + "api/import?filename=full.tar.gz&full=1",
+                data=Path(archive).read_bytes(),
+                method="PUT",
+            )
+            with urllib.request.urlopen(request) as response:
+                payload = json.loads(response.read())
+            self.assertEqual(payload["imported"], ["full-route"])
+            self.assertEqual(len(target.trash_list()), 1)
+            self.assertEqual(payload["restored_templates"], ["route-template.md"])
+            self.assertTrue((target.templates_dir / "route-template.md").is_file())
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
 
     def test_localhost_bind_accepts_localhost_origin(self):
         local_store = Store(data_dir=self._tmp.name)

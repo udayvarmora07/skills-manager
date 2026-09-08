@@ -23,7 +23,7 @@ webapp.py (http.server ThreadingHTTPServer, 127.0.0.1)
 store.py ──> filesystem (source of truth) + SQLite index
 ```
 
-- **Backend**: `skillsmgr/webapp.py`. Stdlib only. Serves the static frontend from `skillsmgr/webui/` and a REST API under `/api/`. Scope-aware endpoints delegate to the `scopes` layer (`skillsmgr/scopes.py`), which reads/writes agent skill dirs directly (no DB).
+- **Backend**: `skillsmgr/webapp.py`. Stdlib only. Serves the static frontend from `skillsmgr/webui/` and a REST API under `/api/`. Request security, JSON serialization/body parsing, and multipart folder-upload staging live in private `web_security.py`, `web_serialization.py`, and `web_upload.py` modules; `webapp.py` keeps the route and compatibility interfaces. Scope-aware endpoints delegate to the `scopes` layer (`skillsmgr/scopes.py`), which reads/writes agent skill dirs directly (no DB).
 - **Frontend**: `skillsmgr/webui/` — `index.html`, `styles.css`, `app.js`, `static/vendor/vue.global.prod.js` (Vue 3.5.13, vendored so the app works offline).
 - **No build step**: Vue global production build, plain CSS, plain JS. No npm, no bundler, no CDN at runtime.
 
@@ -84,7 +84,7 @@ mutate an outside directory.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/search?q=term[&scope=SCOPE]` | search over name/description/body (scope-aware) |
+| GET | `/api/search?q=term[&scope=SCOPE]` | search over name/description/body (scope-aware); bounded wildcard failures return the standard JSON `StoreError` 400 |
 | GET | `/api/stats` | Store.stats |
 | GET | `/api/doctor[?scope=all]` | Store.doctor (global), including filesystem/index drift and transaction-artifact diagnostics; `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`) |
 | GET | `/api/history?name=&limit=` | Store.history (name optional) |

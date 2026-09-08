@@ -6,7 +6,7 @@
 
 ## What exists today (2026-09-08)
 
-- **CLI**: `python3 -m skillsmgr` — 26 top-level commands + 7 subcommands + 3 aliases (`ls`, `rm`, `gui`) = 40 invocable names, exit codes 0/1/2/130. Works.
+- **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names, exit codes 0/1/2/130. Works.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. See @docs/03-cli-surface.md.
 - **Store**: `skillsmgr/store.py` — FS source of truth + SQLite index. Public API in @docs/04-store-api.md. **Signatures that surprise people** (docs used to lie about these, fixed on 2026-08-14):
   - `export()` / `backup()` return a **Path**, not a dict.
@@ -15,7 +15,7 @@
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default).
   - Frontend: `skillsmgr/webui/` (Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
- - **Tests**: 101 stdlib `unittest` tests plus `python3 smoke_store.py` (store API), `python3 smoke_web.py` (REST API), and `python3 check_docs.py` (docs/source gate).
+ - **Tests**: stdlib `unittest` regression/contract suite (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API), and repository gates `python3 check_docs.py`, `python3 check_complexity.py`, and `python3 check_package_data.py` (package check may report `UNAVAILABLE` when optional build tooling is absent).
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
 
 ## Common tasks (router)
@@ -55,11 +55,14 @@
 ## Verification loop (run all, all must pass)
 
 ```bash
-python3 -m py_compile skillsmgr/*.py smoke_*.py
-python3 smoke_store.py          # "ALL STORE SMOKE TESTS PASSED"
-python3 smoke_web.py            # "ALL WEB SMOKE TESTS PASSED"
-python3 -m skillsmgr --help     # webui (gui) listed, no tracebacks
-python3 -m skillsmgr list --scope agents --json   # lists Command Code's skills
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py check_*.py
+PYTHONDONTWRITEBYTECODE=1 python3 check_complexity.py
+PYTHONDONTWRITEBYTECODE=1 python3 check_docs.py
+PYTHONDONTWRITEBYTECODE=1 python3 check_package_data.py  # UNAVAILABLE if optional build tooling is absent
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
+PYTHONDONTWRITEBYTECODE=1 python3 smoke_store.py          # "ALL STORE SMOKE TESTS PASSED"
+PYTHONDONTWRITEBYTECODE=1 python3 smoke_web.py            # "ALL WEB SMOKE TESTS PASSED"
+PYTHONDONTWRITEBYTECODE=1 python3 -m skillsmgr --help   # webui (gui) listed, no tracebacks
 ```
 
 Browser click-through (when UI changed): `python3 -m skillsmgr webui --no-browser` + agent-browser: open → snapshot -i → exercise create/edit/disable/remove+undo/restore/trash-purge/validate/doctor/stats/history/templates/import/export/theme-toggle/400px viewport. Watch `window.__consoleErrors` (attach error listeners first).

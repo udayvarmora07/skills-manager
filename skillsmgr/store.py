@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import paths
 from . import __version__
+from .diagnostics import diagnose as _diagnose
 from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
 from . import archive as _archive
 from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
@@ -650,9 +651,12 @@ class Store:
                     conn.commit()
                 finally:
                     conn.close()
-            except Exception:
-                pass
-            shutil.rmtree(skill_dir, ignore_errors=True)
+            except Exception as cleanup_exc:
+                _diagnose(f"create cleanup failed for {name!r}", cleanup_exc)
+            try:
+                shutil.rmtree(skill_dir)
+            except OSError as cleanup_exc:
+                _diagnose(f"create filesystem cleanup failed for {name!r}", cleanup_exc)
             raise
         return {"name": name, "path": str(skill_dir)}
 
@@ -815,16 +819,16 @@ class Store:
                     try:
                         _atomic_write_text(md_file, text)
                         self._upsert_entry(name)
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        _diagnose(f"edit rollback failed for {name!r}", rollback_exc)
                 raise StoreError(f"could not replace skill '{name}' safely: {exc}") from exc
             except Exception:
                 if replaced:
                     try:
                         _atomic_write_text(md_file, text)
                         self._upsert_entry(name)
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        _diagnose(f"edit rollback failed for {name!r}", rollback_exc)
                 raise
         return {"name": name, "changed": changed}
 
@@ -896,8 +900,8 @@ class Store:
                     try:
                         _atomic_write_text(md_file, current)
                         self._upsert_entry(name)
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        _diagnose(f"snapshot rollback failed for {name!r}", rollback_exc)
                     raise
             return {"name": name, "snapshot": snapshot}
         candidates = sorted(

@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """Smoke test for skillsmgr.store.Store against a temp data dir."""
 import os
-import shutil
 import sys
-import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from skillsmgr.store import Store, StoreError, SkillNotFound
+from skillsmgr.store import StoreError, SkillNotFound
+from smoke_fixtures import cleanup_store, make_store
 
-tmp = tempfile.mkdtemp(prefix="skillsmgr-smoke-")
+tmp, store = make_store("skillsmgr-smoke-")
 try:
-    store = Store(data_dir=tmp)
-    store.init_db()
 
     print("== create ==")
     r = store.create("demo-tool", description="A demo skill for smoke tests",
@@ -86,9 +83,7 @@ try:
     assert arch.exists()
 
     print("== import into second store ==")
-    tmp2 = tempfile.mkdtemp(prefix="skillsmgr-smoke2-")
-    store2 = Store(data_dir=tmp2)
-    store2.init_db()
+    tmp2, store2 = make_store("skillsmgr-smoke2-")
     imp = store2.import_(arch)
     print("import result:", imp)
     assert set(imp["imported"]) == {"demo-tool", "fixture-skill"}, imp
@@ -120,7 +115,8 @@ try:
     hist = store.history("demo-tool")
     actions = [h["action"] for h in hist]
     print("history:", actions)
-    assert actions == ["purge", "trash", "restore", "edit", "create"] or "create" in actions
+    required_actions = {"purge", "trash", "restore", "edit", "create"}
+    assert required_actions.issubset(actions), (required_actions, actions)
 
     print("== doctor ==")
     doc = store.doctor()
@@ -166,6 +162,6 @@ try:
 
     print("\nALL STORE SMOKE TESTS PASSED")
 finally:
-    shutil.rmtree(tmp, ignore_errors=True)
+    cleanup_store(tmp)
     if "tmp2" in dir():
-        shutil.rmtree(tmp2, ignore_errors=True)
+        cleanup_store(tmp2)

@@ -4,6 +4,71 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-08 — REST two-server search isolation regression closeout (18:42 UTC)
+
+- Fixed both REST search routes (`/api/search` and `/api/skills?q=...`) to pass the request handler's `self.store` into global and merged `scopes.search_all()` calls. Agent-scope searches still use filesystem adapters; body-aware ranking, response schemas, and singleton compatibility for non-WebAppServer callers are unchanged.
+- Added a hermetic two-server regression in `tests/test_search_contracts.py`: separate Stores are served concurrently, and each server's `scope=global` response contains only its own global skill while `scope=all` contains its own global skill plus the shared agent skill. Both server lifecycles are cleaned up.
+- No commands, Store methods, schema, dependencies, or `.autogit` contents were changed.
+- Verification: focused search contracts (11 tests) PASS; full unittest suite (208 tests) PASS; `smoke_store.py` PASS (`ALL STORE SMOKE TESTS PASSED`); `smoke_web.py` PASS (`ALL WEB SMOKE TESTS PASSED`); Python compile PASS; `node --check skillsmgr/webui/app.js` PASS; `check_docs.py` PASS; `check_complexity.py` PASS (168 functions); `git diff --check` PASS.
+
+## 2026-09-08 — CLI data-dir search regression closeout (18:27 UTC)
+
+- Fixed `cmd_search()` to pass the Store created for `--data-dir` into the scope search adapter. Global search and the global portion of merged search now read only the requested data directory; agent-scope records still come from scope filesystem adapters.
+- Added a hermetic two-data-dir regression in `tests/test_search_contracts.py` proving global isolation and merged results contain the requested global result plus the agent result, never the other Store's result.
+- Preserved body-aware global/merged ranking, historical output shapes, error contracts, and all locked constraints; no commands, Store methods, schema, dependencies, or `.autogit` contents changed.
+- Verification: focused search/CLI tests PASS (15 tests); full unittest PASS (207 tests); `smoke_store.py` PASS (`ALL STORE SMOKE TESTS PASSED`); `smoke_web.py` PASS (`ALL WEB SMOKE TESTS PASSED`); Python compile PASS; `node --check skillsmgr/webui/app.js` PASS; `check_docs.py` PASS; `check_complexity.py` PASS (168 functions); `git diff --check` PASS.
+
+## 2026-09-08 — Uncommitted-change review and verification
+
+- Reviewed all tracked and untracked changes except `.autogit`; inspected `AGENTS.md`, owning docs, tests, smoke scripts, CI, and production diffs. The review identified a high-impact CLI `--data-dir` search regression; the subsequent closeout above fixed it and added isolation coverage.
+- Applied only permitted surgical changes to tests, docs, smoke scripts, and CI: strengthened smoke history assertions, synchronized fixture server readiness, made concurrency readers prove execution, made secondary smoke cleanup exception-safe, removed brittle package-asset count assumptions, corrected current test/gate guidance and duplicate CLI documentation, and made CI install packaging build tooling before the package-data gate.
+- Local package-data verification remains `UNAVAILABLE` because this environment has no `build` module; no stale `dist/` artifacts were used. CI now installs `build==1.2.2.post1` and requires the fresh-build gate.
+
+**AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
+
+## 2026-09-08 — Search contract defect closeout (17:51 UTC)
+
+- Fixed scope and merged searches dropping global body-only matches: `scopes.search_all()` now obtains global list rows through `Store.list()` and body content through `Store.get()` before applying the existing bounded scorer. CLI and REST global search paths use this same body-aware public seam, preserving ranking and response shapes.
+- Fixed wildcard complexity errors escaping from `scopes.search_all()`: bounded matcher `ValueError`s are translated to `StoreError`, so CLI returns its normal clean exit-1 error and REST returns the standard JSON HTTP 400 error.
+- No commands, Store methods, schema, dependencies, or `.autogit` contents were changed. Existing focused regressions in `tests/test_search_contracts.py` remain authoritative; no fixture assumptions required correction.
+- Verification: `python3 -m unittest tests.test_search_contracts` — 9 tests PASS; the later CLI and REST isolation closeouts raised the final full suite to 208 passing tests. Final smoke, compile, frontend syntax, docs, complexity, and diff checks are recorded in the newest entries.
+
+## 2026-09-08 — Documentation consistency gate
+
+- Extended `check_docs.py` with offline checks for all local `@docs/*.md` links, explicit documented source paths, qualified `Store.method`/module symbols, current CLI command inventory, current web UI claims, and source/package/documented version alignment.
+- Current command counts are derived from `skillsmgr/cli.py` (27 top-level + 7 nested + 3 aliases = 37 invocable names); superseded GTK planning and append-only historical entries remain exempt from current-claim checks.
+- Added five focused stdlib tests covering the clean repository gate, broken pointers, missing Store symbols, version mismatch, and parser-derived command inventory.
+- Verification: `python3 check_docs.py` PASS; focused docs tests PASS (5 tests). Full suite and smoke verification remain delegated to the parent session.
+
+## 2026-09-08 — Distribution package-data verification
+
+- Added stdlib-only `check_package_data.py`, which builds exactly one wheel and one sdist in a fresh temporary directory via `python -m build`, then checks deterministic `skillsmgr/webui/` contents including vendored Vue.
+- Added offline `tests/test_package_data.py` archive fixtures and exact member-set assertions; no network or third-party test dependency is required.
+- Optional `--install` probes install each fresh artifact into an isolated temporary venv with `pip --no-index --no-deps`; runtime dependencies and product APIs are unchanged.
+- Exact limitation: this environment lacks the optional `build` module (`/usr/bin/python3: No module named build`), so the live check reports `UNAVAILABLE` and does not inspect stale `dist/` artifacts. `--require-build` is available for release CI to make unavailable tooling non-zero.
+
+## 2026-09-08 — Hermetic smoke fixture refactor
+
+- Added `smoke_fixtures.py` with only shared temporary Store setup/cleanup and loopback WebAppServer start/stop lifecycle helpers; refactored both executable smokes to use those helpers without changing their assertions or printed checkpoints.
+- Added two stdlib `unittest` regressions covering initialized-store cleanup and ephemeral loopback-server lifecycle.
+- Verification: `python3 smoke_store.py` PASS (`ALL STORE SMOKE TESTS PASSED`); `python3 smoke_web.py` PASS (`ALL WEB SMOKE TESTS PASSED`); focused fixture tests PASS (2 tests); `python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py` PASS; `python3 check_complexity.py` PASS (166 functions); `git diff --check` PASS. An intermediate full unittest run covered 202 tests but reported 3 failures plus 1 error in search-contract tests; it was superseded by the later search closeout at the top of this log. An intermediate `check_docs.py` run also reported stale command-inventory mismatches; those docs were corrected before the later passing gate.
+
+## 2026-09-08 — Helper compatibility audit
+
+- Audited the extracted web policy/serialization/upload modules and CLI output helpers against their pre-extraction interfaces and recent history.
+- Found no concrete compatibility regression: `webapp._json_bytes`, `webapp._parse_multipart`, `webapp.RequestError`, and CLI output aliases preserve their historical call shapes and behavior.
+- Added `tests/test_compatibility.py` to lock those private compatibility seams, including the historically ignored `_json_bytes` status argument and one-argument CLI helper calls.
+- Verification: focused compatibility/web/CLI tests passed (29 tests); compile, docs consistency, and complexity checks passed.
+
+## 2026-09-08 — Web policy extraction, contract regressions, and complexity ratchet
+
+- Extracted request security, JSON serialization/body parsing, and bounded multipart upload staging into private stdlib-only modules while retaining `webapp.py` compatibility wrappers.
+- Fixed text `scopes` output attempting to access unrelated skill snapshot arguments and fixed raw REST archive import to forward `full=1`.
+- Added focused CLI and REST regression tests plus an AST complexity ratchet with a checked-in baseline, contributor instructions, and CI wiring.
+- Added stderr-only diagnostics for rollback cleanup failures so recovery problems are visible without changing public schemas.
+- Deep verification found malformed JSON field types that leaked as HTTP 500 and a CLI color documentation mismatch; added 4xx validation, integrated CLI output helpers, and corrected the CLI docs.
+- Verification: full repository suite passed (128 tests), store/web smoke, docs gate, frontend syntax, compile, CLI color/output probes, and complexity check.
+
 ## 2026-09-08 — Atomic recovery, hash verification, and documentation truth
 
 - Completed ten executable backlog tasks: atomic sibling-temp writes with flush/fsync/replace, rollback preservation across filesystem/index failures, same-process per-skill mutation serialization, failure-injection coverage, richer doctor diagnostics, and content-hash backup verification.

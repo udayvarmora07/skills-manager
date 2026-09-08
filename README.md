@@ -82,7 +82,7 @@ One command surface, per-agent directories underneath:
 | `global` (default) | manager store (`~/.local/share/skills-manager/skills/`) |
 | `claude-code` | `~/.claude/skills` |
 | `codex` | `~/.codex/skills` |
-| `cursor` | `~/.cursor/skills-cursor` |
+| `cursor` | `~/.cursor/skills` |
 | `opencode` | `~/.config/opencode/skills` |
 | `gemini` | `~/.gemini/skills` |
 | `commandcode` | `~/.commandcode/skills` |
@@ -109,7 +109,7 @@ Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works off
 
 ## CLI reference
 
-40 invocable names: 26 top-level commands + `trash`/`templates`/`db` subcommands + `ls`/`rm`/`gui` aliases. Exit codes: `0` ok · `1` error · `2` usage · `130` interrupt. `--json` on data commands.
+37 invocable names: 27 top-level commands + 7 `trash`/`templates`/`db` subcommands + 3 `ls`/`rm`/`gui` aliases. Exit codes: `0` ok · `1` error · `2` usage · `130` interrupt. `--json` on data commands.
 
 Full surface: [`docs/03-cli-surface.md`](docs/03-cli-surface.md).
 
