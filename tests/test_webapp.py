@@ -6,6 +6,8 @@ import tempfile
 import unittest
 import urllib.error
 import urllib.request
+from pathlib import Path
+from urllib.parse import quote
 
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
@@ -57,6 +59,43 @@ class WebAppTestCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self._get("/static/../webapp.py")
         self.assertIn(ctx.exception.code, (400, 404))
+
+    def test_encoded_skill_traversal_is_rejected_before_delete(self):
+        victim = Path(self._tmp.name).parent / "webapp-victim"
+        victim.mkdir()
+        try:
+            encoded_name = quote("../../webapp-victim", safe="")
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/skills/{encoded_name}?purge=1",
+                method="DELETE",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertTrue(victim.is_dir())
+        finally:
+            victim.rmdir()
+
+    def test_encoded_skill_traversal_is_rejected_before_raw_read(self):
+        victim = Path(self._tmp.name).parent / "webapp-raw-victim"
+        victim.mkdir()
+        (victim / "SKILL.md").write_text(
+            "---\nname: leaked\ndescription: must not leak\n---\nsecret\n",
+            encoding="utf-8",
+        )
+        try:
+            encoded_name = quote("../../webapp-raw-victim", safe="")
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/skills/{encoded_name}/raw",
+                method="GET",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertNotIn("secret", ctx.exception.read().decode("utf-8"))
+        finally:
+            (victim / "SKILL.md").unlink()
+            victim.rmdir()
 
 
 if __name__ == "__main__":
