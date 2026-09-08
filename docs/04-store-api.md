@@ -11,6 +11,10 @@
 - The filesystem is the source of truth. SQLite is a rebuildable index only (`SCHEMA_VERSION = "1"`, store.py:26). Never trust the DB over the FS.
 - Never hand-edit the DB; use `db rebuild`/`db resync` to repair drift.
 - All errors are raised as exceptions — callers surface them as clean dialogs/messages, never tracebacks.
+- Every filesystem operation derived from a skill name first uses the canonical
+  `validate_skill_name()` rule and the resolved `contained_path()` guard. A name
+  that is invalid, absolute, parent-traversing, or reaches outside a managed
+  root raises `StoreError` before the filesystem is mutated.
 
 ## Exceptions
 
@@ -80,7 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status);
 
 ## Internal helpers (private)
 
-**[NOTE]** `_init_db()`, `_history(action)`, `_load_skill(path)`, `_upsert_entry(name, ...)`, `_scan_dir()` — used by public methods; not part of the API contract. Approx. line refs: Store 89; init_db 254, resync 258, list 334, get 348, search 365, create 383, add 456, edit 496, remove 584, restore 621, disable 650, enable 671, trash_list 692, purge_trash 715, stats 737, export 779, backup 817, import_ 821, history 896, doctor 916, db_rebuild 975.
+**[NOTE]** `_init_db()`, `_history(action)`, `_load_skill(path)`, `_upsert_entry(name, ...)`, `_scan_dir()`, and the private path-guard adapter are used by public methods; they are not part of the API contract. Approximate line references should be regenerated when source moves.
 
 ## Open questions
 

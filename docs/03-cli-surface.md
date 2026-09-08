@@ -19,6 +19,11 @@
 
 `__main__.py` wraps `cli.main()` in `sys.exit(...)`, so exit codes propagate to the shell.
 
+Before Store construction and command dispatch, skill-name arguments are checked
+against the canonical `NAME_RE` contract. Invalid names, path fragments, and
+encoded traversal-style values therefore fail with exit code 1 without creating
+or mutating the data directory.
+
 ## Global flags
 
 **[SPEC]**

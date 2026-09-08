@@ -13,9 +13,9 @@ skills-manager/
     __main__.py      # entry: python3 -m skillsmgr -> cli.main()
     cli.py           # argparse CLI, prog="skills-mgr"
     store.py         # Store: FS + SQLite index; StoreError, SkillNotFound
-    paths.py         # data_dir(), db_path(), subdirs
+    paths.py         # data_dir(), db_path(), subdirs, resolved containment helpers
     frontmatter.py   # parse/dump SKILL.md YAML-ish frontmatter
-    validator.py     # name/field rules, Issue dataclass
+    validator.py     # canonical name/field rules, Issue dataclass
     search.py        # regex search + scoring
     templates.py     # default template + template list/new
     colors.py        # TTY-aware color helpers
@@ -49,6 +49,12 @@ GUI (gui.py) ──┘            │
 
 - `Store.list/search/stats` may read the index; mutations (`add/remove/enable/...`) always write the filesystem and update the index in the same operation.
 - `resync`/`db_rebuild` re-scan the filesystem and rebuild the index from scratch.
+
+**[SPEC]** Any skill name entering a filesystem operation is validated by the
+canonical name rule before path construction. Resolved paths are checked to
+remain inside their managed root, including existing symlink targets. This
+applies to global Store operations, agent-scope operations, URL-decoded REST
+path parameters, and CLI names.
 
 ## GUI relationship
 

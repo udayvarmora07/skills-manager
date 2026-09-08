@@ -74,6 +74,22 @@
 - [x] Token budget view in CLI + UI (verified already complete, no new code needed): `tokens --scope all` aggregate (`total/avg/max`, `largest[]`, `pct_window`), `/api/stats?window=` (`all_tokens/all_avg/all_pct`, top-5 `largest`), `/api/tokens`, frontend budget bar + window selector + per-row tokens + sync-mirror cost hint
 - [x] Rollback snapshots + one-command migration (constraint-5 ASK → issues #1 + #2 opened via `gh`, no code until approved)
 
+## Milestone 8 — World-class roadmap baseline (2026-09-07 UTC / 2026-09-08 local)
+
+- [x] Capture reproducible baseline command output in `docs/09-baseline-evidence-2026-09-07.md` (compile, 47 unit tests, both smoke suites, frontend syntax, CLI help, package-build result, Git state)
+- [x] Record exact current-`main` behavior for P0-SEC-001 through P0-SEC-005 in `docs/09-baseline-evidence-2026-09-07.md` using isolated temporary data and no product-code changes
+- [x] Compare both unmerged worktrees file-by-file against `main`; record the overlap/conflict map and safe replay order in `docs/10-worktree-integration-comparison-2026-09-08.md`
+
+## Milestone 9 — Selective replay and path safety (2026-09-08)
+
+- [x] Build the selective replay/status map in `docs/11-integration-status-2026-09-08.md`; candidate worktrees remain unmerged and classified.
+- [x] Add `docs/PRE-MERGE-CHECKLIST.md` for provenance, source/artifact integrity, safety, verification, and documentation gates.
+- [x] Decide `dist/` and `skills_manager.egg-info/` are ignored local artifacts, not release inputs.
+- [x] Add canonical `validate_skill_name()` and resolved `contained_path()`/`safe_skill_path()` helpers without changing the public Store API or SQLite schema.
+- [x] Guard Store and agent-scope filesystem operations, URL-decoded REST names, CLI names, trash destinations, and manifestless import fallback names.
+- [x] Add hermetic regression coverage for symlink/absolute/parent escapes, Store/scope mutations, encoded REST reads/deletion, pre-handler CLI rejection, invalid archive fallback names, and victim preservation.
+- [x] Verify: compile PASS, **57 unittest PASS**, `smoke_store.py` PASS, `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, and `git diff --check` PASS.
+
 ## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
 
 - [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK

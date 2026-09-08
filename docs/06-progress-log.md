@@ -4,6 +4,64 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-08 — Close encoded REST raw-read seam
+
+- Added a regression test for an encoded traversal request targeting the global
+  `/api/skills/<name>/raw` endpoint. The test first demonstrated the missing
+  guard by receiving the wrong 404 behavior for an outside path.
+- Fixed the raw-read route to resolve the decoded name through `Store.get()`
+  before constructing the file path, preventing disclosure of an outside
+  `SKILL.md` while preserving the existing clean HTTP error contract.
+- Verified the focused REST safety tests and the full suite: **57 unittest
+  tests PASS**. The broader smoke/compile/help/diff checks remain green.
+
+## 2026-09-08 — Selective replay controls and canonical path safety
+
+- Completed the first ten executable tasks selected from the latest `TODO.md`:
+  selective replay map, status classification, pre-merge checklist, packaging
+  artifact decision, canonical skill-name validation, resolved-root containment,
+  Store/scope enforcement, decoded REST validation, and pre-handler CLI
+  validation.
+- Added `docs/11-integration-status-2026-09-08.md` and
+  `docs/PRE-MERGE-CHECKLIST.md`. Candidate worktrees remain classified as
+  `worktree-only` or `approved-not-integrated`; no wholesale branch merge was
+  performed. `dist/` and `skills_manager.egg-info/` remain ignored local build
+  artifacts, not release inputs.
+- Added `validate_skill_name()` and `contained_path()`/`safe_skill_path()`.
+  Store and agent-scope reads, writes, renames, moves, copies, restores,
+  imports, exports, sync destinations, and deletes now validate names and keep
+  resolved paths inside their managed roots. Existing symlink escapes and
+  absolute path parts are rejected.
+- REST path segments are decoded after splitting, so encoded separators reach
+  the canonical guard. CLI skill names are rejected before Store construction;
+  invalid input does not create a database or touch the filesystem.
+- Added hermetic regressions for path/symlink/absolute escapes, Store and scope
+  mutation paths, encoded REST deletion, pre-handler CLI rejection, and invalid
+  manifestless archive fallback names.
+- Verified: compile PASS, **56 unittest PASS**, `smoke_store.py` PASS,
+  `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, and `git diff
+  --check` PASS.
+- Remaining by design: P0-SEC-002 localhost request-origin security,
+  P0-SEC-004 wildcard exhaustion, P0-SEC-005 parser resource bounds, the full
+  archive preflight/limit policy, recovery/atomicity, UX/accessibility, and
+  release packaging. These remain open in `TODO.md`.
+
+## 2026-09-07 — Milestone 0 baseline and P0 reproduction evidence
+
+- **Completed the first two world-class roadmap tasks** from `TODO.md`.
+- Captured a reproducible baseline in `docs/09-baseline-evidence-2026-09-07.md` at commit `667fabb7ddb41fcd0db6fb9a58128665bba0190c`: compile PASS, **47 unittest PASS**, `smoke_store.py` PASS, `smoke_web.py` PASS, `node --check` PASS, and CLI help PASS.
+- The package-build check was run honestly and returned exit 1 because `/usr/bin/python3: No module named build`; this remains a Milestone 8 release-engineering gap and was not hidden by using existing `dist/` artifacts.
+- Reproduced all five current-`main` P0 behaviors in isolated temporary environments before product-code changes: mutation path traversal deletion, cross-origin localhost trash purge, invalid manifestless archive name import, wildcard matcher timeout, and raw frontmatter `RecursionError`.
+- Updated `TODO.md`, `task.md`, and `docs/README.md` to point to the evidence report. No source code or `.autogit` was modified.
+
+## 2026-09-08 — Milestone 0 worktree integration comparison
+
+- **Completed the third world-class roadmap task** from `TODO.md`.
+- Compared `agents/todo-plan-implementation` (`2bb7280`, 22 changed files, 74 tests) and `agents/milestone5-research-user-needs` (`c5a7161`, 17 changed files, 55 tests) file-by-file against current `main` (`667fabb`). Both candidate worktrees pass their own unit and smoke suites and both diffs pass `git diff --check`.
+- Found **13 overlapping files**, with `skillsmgr/store.py` the highest-risk conflict because both branches independently change archive intake. The comparison report requires manual archive-pipeline design rather than a textual merge.
+- Classified the security/adversarial branch as the primary P0/recovery source and the Milestone 5 branch as a secondary ZIP/UX source. Defined replay order: tests → P0 security → localhost security → recovery → archive policy → UX → docs.
+- Wrote `docs/10-worktree-integration-comparison-2026-09-08.md`. No candidate worktree, product source, test file, or `.autogit` was modified.
+
 ## 2026-09-05 — Dedup + token-budget closeout (Milestone 7, v1.1 items 3–4 done)
 
 - **Cross-scope dedup (code, no constraint-5 impact)**: `scopes.find_duplicates()` — read-only grouping over `list_all()`, same-name groups with `scopes`/`count`/`descriptions_differ`/`records`, converge via existing `sync_skill()`. Surfaced in `doctor --scope all` (text lines + `duplicates` JSON key), `/api/doctor?scope=all` (`duplicates` + `scopes` keys), doctor modal section with per-name Sync… buttons (jump into existing sync modal via `syncDupe()`). No new commands/flags/Store methods.

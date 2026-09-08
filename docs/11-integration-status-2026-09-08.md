@@ -1,0 +1,91 @@
+# Integration Status — Skills Manager
+
+**Version 1.0.0**
+
+**AI manifest:** Current-state record for the first ten executable tasks from
+`TODO.md`. This is a selective replay map for `main`; it does not approve a
+wholesale merge of either unmerged worktree.
+
+## 1. Selective replay map
+
+| Workstream | Source | Status on current `main` | Replay rule |
+|---|---|---|---|
+| Baseline/P0 evidence | `docs/09-baseline-evidence-2026-09-07.md` | `main` | Keep as measured evidence; do not rewrite historical observations. |
+| Worktree comparison | `docs/10-worktree-integration-comparison-2026-09-08.md` | `main` | Use its order, but manually replay tests and fixes. |
+| Adversarial regression tests | `agents/todo-plan-implementation` | `worktree-only` except independently reproduced tests | Port one seam at a time; never cherry-pick the branch wholesale. |
+| Snapshot/full migration | `agents/todo-plan-implementation` | `approved-not-integrated` | Defer until recovery and archive contracts are separately reviewed. |
+| ZIP/archive UX | `agents/milestone5-research-user-needs` | `worktree-only` | Defer until the shared archive safety pipeline and approval gates exist. |
+| Current path-safety slice | current working tree | `main` candidate, locally verified | Canonical name/root guards, CLI validation, decoded REST validation, and regression tests only. |
+| Documentation/checklist controls | current working tree | `main` candidate, locally verified | Record current truth; do not mark later P0, recovery, UX, or release work shipped. |
+
+### Safe replay order
+
+```text
+baseline evidence
+  → adversarial tests
+  → canonical name/root guards
+  → Store and scope enforcement
+  → decoded REST and pre-handler CLI validation
+  → localhost request-security gate
+  → recovery/atomicity
+  → archive policy and limits
+  → UX/accessibility
+  → release/package verification
+```
+
+## 2. First-ten task status
+
+| # | Task | Status | Evidence |
+|---:|---|---|---|
+| 1 | Build the cherry-pick/replay map | `main` | This document and `docs/10-worktree-integration-comparison-2026-09-08.md`. |
+| 2 | Classify work as `main`, `worktree-only`, `approved-not-integrated`, or `speculative` | `main` | Classification table above; candidate branches remain unmerged. |
+| 3 | Add a pre-merge checklist | `main` | `docs/PRE-MERGE-CHECKLIST.md`. |
+| 4 | Decide whether `dist/` and `skills_manager.egg-info/` are artifacts or release inputs | `main` | They are ignored, untracked local artifacts; see section 3. |
+| 5 | Add one authoritative skill-name validation primitive | `main` | `skillsmgr/validator.py:validate_skill_name`; unit coverage in `tests/test_path_safety.py`. |
+| 6 | Add one resolved-path root-containment primitive | `main` | `skillsmgr/paths.py:contained_path` and `safe_skill_path`; symlink, absolute, and parent tests. |
+| 7 | Apply guards before current filesystem reads/writes/moves/copies/restores/deletes | `main` | Store, scope, trash, import, export, and sync paths use shared helpers. Snapshot helpers are not present on current `main`. |
+| 8 | Apply guards to Store and agent-scope equivalents | `main` | Store CRUD/toggle/restore/import/export and scope get/raw/create/edit/remove/toggle/sync paths are covered. |
+| 9 | Validate URL-decoded REST path parameters before path joins | `main` | `webapp.py` decodes segments after splitting; guarded Store/scope reads and mutations return HTTP 400 for encoded traversal and preserve the victim. |
+| 10 | Validate CLI names before command handlers construct paths | `main` | `cli.main()` rejects invalid names before `_make_store`; regression confirms no database is created. |
+
+## 3. Packaging artifact decision
+
+`dist/` and `skills_manager.egg-info/` are **local build/metadata artifacts**,
+not source-controlled release inputs. `.gitignore` excludes both, and neither
+path is tracked by Git in this checkout. Existing files under `dist/` are useful
+for inspection only; a release must build a fresh artifact in a clean tree,
+test that exact artifact, and publish it unchanged. The package-build gap remains
+open because `python3 -m build` is unavailable in the baseline environment.
+
+## 4. Explicit non-goals for this slice
+
+- No new CLI command, CLI flag, Store method, SQLite table, or schema version.
+- No localhost Origin/Host/Fetch-Metadata security implementation.
+- No new archive preflight pipeline, ZIP support, parser limits, or wildcard
+  matcher redesign.
+- No snapshot, migration, UX, browser accessibility, or release automation
+  integration from either candidate worktree.
+- No modification of `.autogit`.
+
+## 5. Acceptance evidence
+
+The path-safety slice was verified on **September 8, 2026** with:
+
+```text
+python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py   PASS
+python3 -m unittest discover -s tests                       PASS (57 tests)
+python3 smoke_store.py                                      PASS
+python3 smoke_web.py                                        PASS
+node --check skillsmgr/webui/app.js                         PASS
+python3 -m skillsmgr --help                                 PASS
+git diff --check                                            PASS
+```
+
+The raw global skill-read route also resolves through `Store.get()` before
+opening a file. This closes the previously uncovered encoded-traversal read
+seam; `tests.test_webapp.WebAppTestCase.test_encoded_skill_traversal_is_rejected_before_raw_read`
+proves an outside `SKILL.md` is not disclosed.
+
+The remaining P0 and release gaps stay open in `TODO.md` until their own
+failing-first tests, implementation, owning documentation, and acceptance
+checks are complete.

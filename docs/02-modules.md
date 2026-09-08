@@ -26,7 +26,7 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `store.py`
 
-`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
 
 ## `scopes.py`
 
@@ -42,7 +42,7 @@ Token/context estimation. `WINDOWS` dict (claude 1M, claude-haiku 200k, gpt-5.6 
 
 ## `paths.py`
 
-`data_dir()`, `db_path()` (see @docs/01-architecture.md). Subdirs resolved relative to data dir: `skills/`, `trash/`, `templates/`, `backups/`.
+`data_dir()`, `db_path()` (see @docs/01-architecture.md). Subdirs resolved relative to data dir: `skills/`, `trash/`, `templates/`, `backups/`. `contained_path()` resolves and rejects paths outside a managed root; `safe_skill_path()` combines it with `validator.validate_skill_name()`.
 
 ## `frontmatter.py`
 
@@ -50,7 +50,7 @@ SKILL.md frontmatter (YAML-ish, delimited by `_DOC_MARKER`): `parse_frontmatter(
 
 ## `validator.py`
 
-Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing hyphens); limits: `MAX_NAME=64`, `MAX_DESCRIPTION=1024`, `MAX_COMPATIBILITY=500`, `MAX_BODY_LINES=500`, `MAX_BODY_TOKENS=5000`. `Issue` dataclass (level, message, key). `validate_skill(name, skill_dir)` -> `ValidationResult` (`.valid`, `.errors`, `.warnings`, `.issues`). `description_score(text)` -> `{has_use_context, filler_hits, word_count}`. Validators cover: name format, frontmatter name vs directory name, description length + use-context/filler warnings, compatibility length, body line count + token warning, `scripts/`/`references/`/`assets/` layout mentions, relative link targets.
+Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing hyphens); limits: `MAX_NAME=64`, `MAX_DESCRIPTION=1024`, `MAX_COMPATIBILITY=500`, `MAX_BODY_LINES=500`, `MAX_BODY_TOKENS=5000`. `validate_skill_name(name)` is the authoritative fail-closed primitive used by Store, scopes, CLI, and REST-adjacent path handling. `Issue` dataclass (level, message, key). `validate_skill(name, skill_dir)` -> `ValidationResult` (`.valid`, `.errors`, `.warnings`, `.issues`). `description_score(text)` -> `{has_use_context, filler_hits, word_count}`. Validators cover: name format, frontmatter name vs directory name, description length + use-context/filler warnings, compatibility length, body line count + token warning, `scripts/`/`references/`/`assets/` layout mentions, relative link targets.
 
 ## `search.py`
 

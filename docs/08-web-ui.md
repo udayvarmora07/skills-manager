@@ -50,6 +50,11 @@ python3 -m skillsmgr webui --port 9000
 
 All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError), 404 (SkillNotFound / unknown), 500 (internal).
 
+Skill path parameters are URL-decoded by segment and then validated by the
+canonical skill-name/root-containment guards before any Store or scope path is
+constructed. Encoded traversal attempts therefore receive HTTP 400 and do not
+mutate an outside directory.
+
 ### Skills
 
 | Method | Path | Body | Returns |

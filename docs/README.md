@@ -13,6 +13,10 @@
 | @docs/03-cli-surface.md | Every command, alias, flag, exit code | Web UI work (must mirror CLI) or CLI QA |
 | @docs/04-store-api.md | `Store` public API + SQLite schema | Any UI/store integration |
 | @docs/08-web-ui.md | Web UI architecture, REST API, frontend map | Any web UI build or testing |
+| @docs/09-baseline-evidence-2026-09-07.md | Dated baseline checks and P0 reproductions | Before P0 hardening or branch integration |
+| @docs/10-worktree-integration-comparison-2026-09-08.md | File-by-file comparison of unmerged worktrees and replay order | Before integrating candidate branches |
+| @docs/11-integration-status-2026-09-08.md | Selective replay map, first-ten task status, artifact decision, and acceptance evidence | Before merging roadmap work |
+| @docs/PRE-MERGE-CHECKLIST.md | Source, provenance, security, verification, and documentation gates | Before committing or merging changes |
 | @docs/06-progress-log.md | Dated log of changes, decisions, bugs | Before/after any session; keep updated |
 | @docs/07-context-strategy.md | Hot/warm/cold loading model, compaction anchors | Long sessions, context management |
 | @docs/SESSION-CONTEXT.md | Fast re-anchor cache: current state, common tasks, gotchas | Start of any session (preferred over re-reading source) |
