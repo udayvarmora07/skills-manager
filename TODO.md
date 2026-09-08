@@ -43,16 +43,16 @@
 - [x] **P0-SEC-001: mutation path traversal fixed 2026-09-08.** Canonical skill
   names and resolved-root containment now guard Store, scope, REST, and CLI
   lookup/mutation paths; regression tests prove an outside victim survives.
-- [ ] **P0-SEC-002: cross-origin localhost mutation.** A request with an
+- [x] **P0-SEC-002: cross-origin localhost mutation fixed 2026-09-08.** A request with an
   attacker `Origin` successfully called `POST /api/trash/purge` and permanently
   emptied trash. Loopback binding does not by itself prevent browser-to-localhost
   cross-origin requests.
 - [x] **P0-SEC-003: invalid manifestless archive names fixed 2026-09-08.** The
   manifestless fallback now applies the canonical name rule and skips invalid
   directories without creating a destination.
-- [ ] **P0-SEC-004: wildcard search exhaustion.** A crafted alternating wildcard
+- [x] **P0-SEC-004: wildcard search exhaustion fixed 2026-09-08.** A crafted alternating wildcard
   pattern caused `rank_results` to run beyond an eight-second probe timeout.
-- [ ] **P0-SEC-005: parser recursion failure.** Deep block and flow frontmatter
+- [x] **P0-SEC-005: parser recursion failure fixed 2026-09-08.** Deep block and flow frontmatter
   caused raw `RecursionError` instead of a bounded, user-facing
   `FrontmatterError`.
 
@@ -143,8 +143,7 @@ fail closed.
 
 - [x] Create an archive preflight pipeline separate from mutation: identify
   format, inspect members, validate names/types/paths, extract into a private
-  temporary directory, validate contents, then commit. Resource limits remain
-  a separate open task.
+  temporary directory, validate contents and resource budgets, then commit.
 - [x] Reject absolute paths, `..` components, duplicate members, device files,
   FIFOs, hard links, symlinks, unsupported member types, and unexpected layouts
   unless explicitly supported.
@@ -152,33 +151,33 @@ fail closed.
   unfiltered extraction. Older interpreters use the guarded manual extractor.
 - [x] Keep independent member validation even when the interpreter provides a
   safe extraction filter.
-- [ ] Enforce compressed-size, expanded-size, member-count, individual-member,
+- [x] Enforce compressed-size, expanded-size, member-count, individual-member,
   path-length, nesting-depth, and compression-ratio limits.
-- [ ] Validate manifest schema, version, names, paths, and duplicate entries.
-- [ ] Validate manifestless fallback names with the canonical name rule.
-- [ ] Decide and document ZIP support; if accepted, use the same security
-  pipeline and content sniffing rather than suffix checks alone.
-- [ ] Make imports all-or-nothing per skill or clearly report partial commits;
+- [x] Validate manifest schema, version, names, paths, and duplicate entries.
+- [x] Validate manifestless fallback names with the canonical name rule.
+- [x] Decide and document ZIP support: ZIP remains intentionally unsupported;
+  archive content is sniffed and rejected before tar parsing.
+- [x] Make imports all-or-nothing per skill or clearly report partial commits;
   never leave an unexplained half-imported tree.
 
 ### 1C. Parser and resource bounds
 
-- [ ] Add document-size, key-count, collection-size, scalar-length, and
+- [x] Add document-size, key-count, collection-size, scalar-length, and
   nesting-depth limits to the frontmatter parser.
-- [ ] Convert recursion-limit failures and malformed flow structures into
+- [x] Convert recursion-limit failures and malformed flow structures into
   `FrontmatterError`.
-- [ ] Preserve valid Agent Skills and client-extension frontmatter fixtures.
-- [ ] Add a deterministic malformed-input corpus.
+- [x] Preserve valid Agent Skills and client-extension frontmatter fixtures.
+- [x] Add a deterministic malformed-input corpus.
 
 ### 1D. Search resource bounds
 
-- [ ] Replace unbounded wildcard-to-regex expansion with a bounded matcher or a
+- [x] Replace unbounded wildcard-to-regex expansion with a bounded matcher or a
   rigorously constrained translation.
-- [ ] Collapse repeated `*`, cap pattern length and wildcard complexity, and
+- [x] Collapse repeated `*`, cap pattern length and wildcard complexity, and
   define a clean CLI/REST/UI error.
-- [ ] Use the same search implementation for global, agent, merged, CLI, and
+- [x] Use the same search implementation for global, agent, merged, CLI, and
   REST search paths.
-- [ ] Add timing-bounded tests for adversarial patterns.
+- [x] Add timing-bounded tests for adversarial patterns.
 
 **Acceptance gate:** P0-SEC-001, P0-SEC-003, P0-SEC-004, and P0-SEC-005
 reproductions fail safely; valid names, imports, patterns, and frontmatter
@@ -189,24 +188,25 @@ remain compatible; no security fallback is silent.
 **Goal:** retain the local-first model while preventing hostile browser pages
 from invoking destructive operations.
 
-- [ ] Centralize request-origin validation for every state-changing method.
-- [ ] Validate `Host` against the configured loopback host and bound port.
-- [ ] Reject `Sec-Fetch-Site: cross-site` mutation requests.
-- [ ] Validate `Origin` when present and use strict `Referer` origin validation
+- [x] Centralize request-origin validation for every state-changing method.
+- [x] Validate `Host` against the configured loopback host and bound port.
+- [x] Reject `Sec-Fetch-Site: cross-site` mutation requests.
+- [x] Validate `Origin` when present and use strict `Referer` origin validation
   as a documented fallback.
-- [ ] Define behavior for non-browser local clients so tests and integrations do
+- [x] Define behavior for non-browser local clients so tests and integrations do
   not rely on accidental browser behavior.
-- [ ] Require JSON for JSON mutation endpoints and reject unnecessary browser
+- [x] Require JSON for JSON mutation endpoints and reject unnecessary browser
   form posts.
-- [ ] Decide whether a per-process mutation token is warranted; record the
-  decision in an ADR instead of adding an undocumented secret.
-- [ ] Reject non-loopback `--host` values by default, or require an explicit
+- [x] Decide whether a per-process mutation token is warranted; ADR-001 records
+  the decision not to add one because the tool has no sessions/cookies and local
+  non-browser clients are a supported contract.
+- [x] Reject non-loopback `--host` values by default, or require an explicit
   unsafe override with a separate documented threat model.
-- [ ] Add CSP, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, a
+- [x] Add CSP, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, a
   restrictive Referrer Policy, and an appropriate cross-origin resource policy.
-- [ ] Add tests for hostile `Origin`, `Referer`, `Sec-Fetch-Site`, `Host`,
+- [x] Add tests for hostile `Origin`, `Referer`, `Sec-Fetch-Site`, `Host`,
   content type, and method combinations.
-- [ ] Update `SECURITY.md` and `skills-manager-threat-model.md` after testing.
+- [x] Update `SECURITY.md` and `skills-manager-threat-model.md` after testing.
 
 **Acceptance gate:** the reproduced cross-origin purge is rejected, same-origin
 UI calls continue to work, loopback defaults remain intact, and every unsafe
@@ -217,19 +217,20 @@ HTTP method is covered by tests.
 **Goal:** make edits, sync, imports, overwrites, trash, and index repair safe in
 the presence of crashes, concurrent requests, and partial I/O.
 
-- [ ] Selectively integrate the approved snapshot design from issue #1:
+- [x] Selectively integrate the approved snapshot design from issue #1:
   `<data>/snapshots/<scope>/<name>/`, newest-five retention, global and agent
   destinations, and CLI/UI restore integration.
-- [ ] Rebase snapshot code onto the P0 name/root guards before accepting it.
-- [ ] Selectively integrate the approved full-library migration design from
+- [x] Rebase snapshot code onto the P0 name/root guards before accepting it.
+- [x] Selectively integrate the approved full-library migration design from
   issue #2: existing export/import flags, versioned manifest, skills + trash +
   templates, skip by default, and `--force` overwrite.
-- [ ] Resolve overlap between migration code and the selected archive pipeline.
+- [x] Resolve overlap between migration code and the selected archive pipeline.
 - [ ] Add atomic text writes using a sibling temporary file, flush/replace, and
   a documented durability policy.
 - [ ] Preserve original content if validation, serialization, or replacement
   fails.
-- [ ] Stage sync/overwrite operations and snapshot the destination before force.
+- [x] Stage sync/overwrite operations and snapshot the destination before force
+  for the integrated edit/sync/import recovery paths.
 - [ ] Define concurrency behavior for two CLI processes or UI requests touching
   the same skill.
 - [ ] Add failure-injection tests between filesystem and SQLite operations.

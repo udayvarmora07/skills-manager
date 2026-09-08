@@ -110,6 +110,27 @@
 - [x] Verify: compile PASS, **65 unittest PASS**, `smoke_store.py` PASS,
   `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, and `git diff --check`.
 
+## Milestone 11 — Parser, search, and localhost request safety (2026-09-08)
+
+- [x] Add frontmatter document/key/collection/scalar/nesting resource limits and
+  convert deep parser failures into clean `FrontmatterError` responses.
+- [x] Preserve valid frontmatter round trips and add deterministic malformed/deep
+  input regressions.
+- [x] Bound wildcard search length and star complexity, collapse repeated stars,
+  and return clean errors instead of allowing regex exhaustion.
+- [x] Route Store, global, agent, merged, CLI, and REST searches through the same
+  bounded matcher; preserve body matching.
+- [x] Centralize mutation request checks for Host, Origin, Referer, and
+  `Sec-Fetch-Site`; define header-absent local-client behavior explicitly.
+- [x] Require JSON for JSON mutation bodies, reject non-loopback server binds,
+  and add defensive CSP/cross-origin/MIME/framing response headers.
+- [x] Add hermetic regressions for hostile origins, referers, fetch metadata,
+  hosts, content types, every mutating HTTP method, wildcard exhaustion, body
+  matching, and frontmatter limits.
+- [x] Verify: compile PASS, **76 unittest PASS**, `smoke_store.py` PASS,
+  `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, focused REST probes
+  PASS, and `git diff --check` PASS.
+
 ## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
 
 - [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK
@@ -120,3 +141,41 @@
 - [ ] Zip-import support (`import` is tar-only today) — needs CLI-surface ASK
 - [ ] Tar-fallback refusal on Python < 3.12 (threat-model R-1) — needs ASK (behavior change)
 - [ ] Out-of-root link warning → validation error (threat-model R-4) — needs ASK (behavior change)
+
+## Milestone 12 — Archive resource, manifest, and commit safety (2026-09-08)
+
+- [x] Add compressed-size, expanded-size, per-member-size, member-count,
+  path-length, nesting-depth, and compression-ratio limits to tar preflight.
+- [x] Validate the `skills-mgr` manifest app/version/timestamp contract,
+  canonical unique names, manifest-to-path alignment, and extracted
+  frontmatter names before any destination mutation.
+- [x] Preserve canonical manifestless fallback validation and explicitly reject
+  ZIP archives by content; ZIP support remains deferred by policy.
+- [x] Stage each skill commit, restore the prior destination on replacement
+  failure, clean failed new destinations, and report completed/failed skills
+  explicitly in `imported`/`skipped`.
+- [x] Add hermetic regressions for archive budgets, strict manifests, ZIP
+  rejection, frontmatter/name mismatch, forced-destination preservation, and
+  injected per-skill copy failures.
+- [x] Verify: compile PASS, **86 unittest PASS**, both smoke suites PASS,
+  frontend syntax PASS, CLI help PASS, and `git diff --check` PASS.
+
+## Milestone 13 — Recovery snapshots, migration, and localhost policy (2026-09-08)
+
+- [x] Decide the localhost mutation-token question in ADR-001: no token is
+  warranted while the server is loopback-only, sessionless, and supports local
+  non-browser clients.
+- [x] Add validated snapshots under `<data>/snapshots/<scope>/<name>/` with
+  newest-five retention, canonical scope/name/path guards, automatic snapshots
+  before global/agent edits and forced sync overwrite, and global/agent restore.
+- [x] Add `--snapshot` restore/history visibility to the existing CLI and REST
+  surfaces, plus web UI snapshot listing and rollback controls.
+- [x] Add `--full` to existing export/backup/import surfaces without adding a
+  command: full exports include skills, validated trash, and templates; full
+  imports remain skip-by-default and require an explicit full archive.
+- [x] Route full migration through the hardened tar/resource/manifest pipeline;
+  agent scopes and snapshots stay excluded from migration archives.
+- [x] Add rollback, five-retention, agent-scope, full migration, slim/full
+  compatibility, and REST snapshot regression coverage.
+- [x] Verify focused recovery tests PASS; final full-suite/smoke/frontend/help
+  evidence is recorded after the final verification run.

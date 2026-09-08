@@ -23,7 +23,7 @@ CLI (argparse, stdlib-only) ─────────────────�
 
 ## 3. Trust boundaries
 
-- **B-1 Loopback HTTP** (`127.0.0.1:8765`): any local process or user can call the API. There is no auth boundary inside the machine — by design.
+- **B-1 Loopback HTTP** (`127.0.0.1:8765`): any local process or user can call the API. There is no auth boundary inside the machine — by design. Browser state-changing requests additionally pass Host, Fetch Metadata, Origin, and Referer checks.
 - **B-2 Archive/folder intake** (`PUT /api/import`, multipart upload, `Store.import_`, `Store.add`): untrusted bytes → filesystem writes. Highest-risk boundary; mitigated by basename/type checks, size/part caps, tar `filter="data"`.
 - **B-3 Skill-body rendering** (SKILL.md → `renderMarkdown` → DOM): untrusted markdown → browser. Mitigated by escape-first renderer, `https?`-only links, no raw HTML.
 - **B-4 Ecosystem install** (`/api/install`, `install` command): remote repo name → local `npx skills add` execution. Mitigated by allowlists, list-form exec, default dry-run, UI confirm.
@@ -44,8 +44,8 @@ Out of scope: TLS/HSTS/`Secure` cookies (localhost tool), CSRF tokens (no sessio
 
 | Path | Mitigation | Residual |
 |---|---|---|
-| T-1 Archive path traversal (`../../evil`, absolute members) | `filter="data"` on Python ≥ 3.12 (`store.py:814`); import basename + tar-type check (`webapp.py:709-743`) | T-1R: unfiltered fallback on old Pythons (`store.py:816`) — set min Python or refuse |
-| T-2 Oversized archive/body exhausting memory/disk | 25 MB body cap + `Content-Length` validation (`webapp.py:39, 108-118`); 200 upload parts (`webapp.py:40-41`) | None known; disk-fill by many imports is accepted local-user behavior |
+| T-1 Archive path traversal (`../../evil`, absolute members) | Independent member validation, resolved containment, `filter="data"` on Python ≥ 3.12, and guarded regular-file/directory fallback | None known in the supported tar path |
+| T-2 Oversized archive/body exhausting memory/disk | 25 MB body cap + `Content-Length` validation; 200 upload parts; tar compressed/expanded/member/path/nesting/ratio budgets | Disk-fill by many separate local imports remains accepted local-user behavior |
 | T-3 Stored XSS via skill body | Escape-first renderer, `https?` links only, `rel="noopener"`, no `v-html` (`app.js:15, 47-110`) | None known |
 | T-4 Command injection via install params | Allowlist regex + no-leading-dash on source/agents/skills; list-form `subprocess.run`; runner closed set (`webapp.py:514-543`) | T-4R: postinstall scripts of the installed repo still run — inherent to the feature; keep confirm gate |
 | T-5 Skill-name traversal (`../../x`) reaching outside skill dirs | `NAME_RE` + `MAX_NAME` enforced on create/add/sync (`validator.py`, `store.py`, `scopes.py:282, 452`) | None known |
@@ -54,21 +54,23 @@ Out of scope: TLS/HSTS/`Secure` cookies (localhost tool), CSRF tokens (no sessio
 | T-8 Symlink escape inside skill dirs | Validator warns on out-of-root link targets (`validator.py:234-238`); `copytree` copies contents by default | Warning-only (does not block); acceptable, could be blocking |
 | T-9 Error-message path disclosure | Generic 500s (`webapp.py:174`); some `StoreError` texts include paths | Accepted on loopback; sanitize if ever bound non-local |
 | T-10 Accidental data loss (purge, remove) | Trash-by-default; purge requires explicit flag; UI undo toast for trash | Purge is irreversible by design; confirm dialogs cover it |
+| T-11 Cross-origin browser mutation | Loopback-only bind plus pre-handler Host, `Sec-Fetch-Site`, Origin, Referer, and content-type checks; security headers | Any local process can still call the API directly; OS trust boundary remains |
+| T-12 Archive manifest/content mismatch or partial replacement | Strict versioned manifest, canonical name/path/frontmatter checks, staged per-skill commit, rollback of replaced destination, explicit imported/skipped report | Filesystem-first resync remains the recovery path after a process failure |
 
 ## 6. Risk register
 
 | ID | Risk | Likelihood | Impact | Priority |
 |---|---|---|---|---|
-| R-1 | Unfiltered tar fallback on old Python (T-1R) | Low (most envs ≥ 3.12) | High (arbitrary write) | **Fix next** |
+| R-1 | Unfiltered tar fallback on old Python (T-1R) | Low (most envs ≥ 3.12) | High (arbitrary write) | Guarded fallback implemented |
 | R-2 | Malicious repo postinstall on `install --run` (T-4R) | Low (needs explicit run) | High (code exec as user) | Keep confirm + docs |
-| R-3 | Port rebound to LAN/forwarded, exposing unauthenticated API | Low | Medium (local data + skill writes) | Document "never expose" |
+| R-3 | Port rebound to LAN/forwarded, exposing unauthenticated API | Low | Medium (local data + skill writes) | Rejected by default; document "never expose" |
 | R-4 | Link-escape warning ignored (T-8) | Low | Low | Consider blocking |
 | R-5 | Path disclosure in errors (T-9) | Low | Low | Fix only if bind changes |
 
 ## 7. Recommendations (ordered)
 
-1. Resolve R-1: require Python ≥ 3.12 for tar import or refuse when `filter=` is unsupported (one `if` in `store.py` import path).
+1. Keep archive budgets and the strict manifest/content contract synchronized with any future full-library migration work.
 2. Keep the install confirm gate and show the exact command (already returned by the API) in the dialog; document that running install trusts the source.
-3. Document "binds loopback only — do not expose/reverse-proxy without adding auth" in `docs/08-web-ui.md` locked rules (one line).
+3. Keep the loopback-only bind and pre-handler browser request checks; never expose/reverse-proxy without adding auth.
 4. Optionally promote the out-of-root link warning to a validation error.
 5. Re-run this model when: a new network listener is added, auth is introduced, or import accepts a new format.

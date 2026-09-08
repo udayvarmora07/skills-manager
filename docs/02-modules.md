@@ -26,7 +26,7 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `store.py`
 
-`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Trash operations use exact canonical timestamped entries. Archive imports preflight tar members into a private temporary directory, reject duplicate/path/special members, validate manifest/skill content, and use `tarfile.data_filter` when available with a guarded regular-file/directory fallback otherwise. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Trash operations use exact canonical timestamped entries. Archive imports preflight tar members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, reject ZIP content, and use `tarfile.data_filter` when available with a guarded fallback otherwise. Per-skill commits are staged and failures are reported in `skipped`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
 
 ## `scopes.py`
 
@@ -54,7 +54,7 @@ Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing 
 
 ## `search.py`
 
-Pattern `*` -> `.*`, `?` -> `.`, case-insensitive. Scoring: 100 exact name, 90 fullmatch, 80 prefix, 70 name regex, 60 name substring, 40 description regex, 30 category regex, 25 description substring, 0 no match. `rank_results(records, term)` returns (record, score) tuples.
+Pattern `*` -> `.*`, `?` -> `.`, case-insensitive; repeated stars collapse, queries are limited to 200 characters and 10 effective stars, and invalid complexity raises `ValueError`. Scoring: 100 exact name, 90 fullmatch, 80 prefix, 70 name regex, 60 name substring, 40 description/body regex, 30 category regex, 25 description/body substring, 0 no match. `rank_results(records, term)` returns (record, score) tuples.
 
 ## `templates.py`
 

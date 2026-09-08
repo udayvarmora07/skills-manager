@@ -30,6 +30,12 @@ __all__ = ["FrontmatterError", "parse_frontmatter", "dump_frontmatter"]
 
 _DOC_MARKER = re.compile(r"^---(?:\s+#.*)?$")
 
+MAX_DOCUMENT_CHARS = 512 * 1024
+MAX_KEYS = 200
+MAX_COLLECTION_ITEMS = 200
+MAX_SCALAR_LENGTH = 16 * 1024
+MAX_NESTING_DEPTH = 64
+
 
 class FrontmatterError(ValueError):
     """Raised when frontmatter text cannot be parsed."""
@@ -53,6 +59,10 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     """
     if text.startswith("\ufeff"):
         text = text[1:]
+    if len(text) > MAX_DOCUMENT_CHARS:
+        raise FrontmatterError(
+            f"frontmatter document is too large (max {MAX_DOCUMENT_CHARS} characters)"
+        )
     lines = text.split("\n")
     if not lines or not _DOC_MARKER.match(lines[0].strip()):
         return {}, text
@@ -66,6 +76,10 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
             "frontmatter block is missing its closing '---' marker"
         )
     yaml_lines = [ln.rstrip("\r") for ln in lines[1:end]]
+    if sum(len(line) + 1 for line in yaml_lines) > MAX_DOCUMENT_CHARS:
+        raise FrontmatterError(
+            f"frontmatter block is too large (max {MAX_DOCUMENT_CHARS} characters)"
+        )
     body = "\n".join(lines[end + 1 :])
     data = _Parser(yaml_lines).parse_document()
     return data, body
@@ -77,6 +91,34 @@ class _Parser:
     def __init__(self, lines: list[str]):
         self.lines = lines
         self.n = len(lines)
+        self.keys_seen = 0
+        self.collection_items = 0
+
+    def _check_depth(self, depth: int) -> None:
+        if depth > MAX_NESTING_DEPTH:
+            raise FrontmatterError(
+                f"frontmatter nesting is too deep (max {MAX_NESTING_DEPTH} levels)"
+            )
+
+    def _check_key(self) -> None:
+        self.keys_seen += 1
+        if self.keys_seen > MAX_KEYS:
+            raise FrontmatterError(f"frontmatter has too many keys (max {MAX_KEYS})")
+
+    def _check_item(self) -> None:
+        self.collection_items += 1
+        if self.collection_items > MAX_COLLECTION_ITEMS:
+            raise FrontmatterError(
+                f"frontmatter has too many collection items (max {MAX_COLLECTION_ITEMS})"
+            )
+
+    @staticmethod
+    def _check_scalar(value: str) -> str:
+        if len(value) > MAX_SCALAR_LENGTH:
+            raise FrontmatterError(
+                f"frontmatter scalar is too long (max {MAX_SCALAR_LENGTH} characters)"
+            )
+        return value
 
     # -- helpers -----------------------------------------------------------
 
@@ -116,12 +158,13 @@ class _Parser:
         if self._is_list_marker(stripped):
             items, _ = self._parse_block_list(idx, self._indent(self.lines[idx]))
             return items
-        data, _ = self._parse_mapping(idx, 0)
+        data, _ = self._parse_mapping(idx, 0, 0)
         return data
 
     # -- mappings ----------------------------------------------------------
 
-    def _parse_mapping(self, idx: int, indent: int) -> tuple[dict, int]:
+    def _parse_mapping(self, idx: int, indent: int, depth: int) -> tuple[dict, int]:
+        self._check_depth(depth)
         data: dict = {}
         while True:
             idx = self._skip_noise(idx)
@@ -146,12 +189,13 @@ class _Parser:
                     f"line {idx + 1}: malformed mapping line (expected 'key: value'): {line!r}"
                 )
             idx += 1
-            value, idx = self._parse_value(idx, indent, rest)
+            self._check_key()
+            value, idx = self._parse_value(idx, indent, rest, depth)
             data[key] = value
         return data, idx
 
     def _parse_inline_mapping(
-        self, idx: int, indent: int, first_rest: str
+        self, idx: int, indent: int, first_rest: str, depth: int
     ) -> tuple[dict, int]:
         """Parse a mapping whose first key sits after ``- `` on one line.
 
@@ -164,7 +208,9 @@ class _Parser:
             raise FrontmatterError(
                 f"line {idx + 1}: malformed list-item mapping: {first_rest!r}"
             )
-        value, idx = self._parse_value(idx, indent, rest)
+        self._check_depth(depth)
+        self._check_key()
+        value, idx = self._parse_value(idx, indent, rest, depth)
         data[key] = value
         while True:
             idx = self._skip_noise(idx)
@@ -189,13 +235,15 @@ class _Parser:
                     f"line {idx + 1}: malformed mapping line: {line!r}"
                 )
             idx += 1
-            value, idx = self._parse_value(idx, indent, rest)
+            self._check_key()
+            value, idx = self._parse_value(idx, indent, rest, depth)
             data[key] = value
         return data, idx
 
     # -- block lists -------------------------------------------------------
 
-    def _parse_block_list(self, idx: int, indent: int) -> tuple[list, int]:
+    def _parse_block_list(self, idx: int, indent: int, depth: int = 0) -> tuple[list, int]:
+        self._check_depth(depth)
         items = []
         while True:
             idx = self._skip_noise(idx)
@@ -214,10 +262,11 @@ class _Parser:
                 break
             rest = stripped[1:].lstrip()
             idx += 1
+            self._check_item()
             if rest == "":
-                item, idx = self._parse_nested(idx, indent)
+                item, idx = self._parse_nested(idx, indent, depth + 1)
             elif self._looks_like_key(rest):
-                item, idx = self._parse_inline_mapping(idx, indent + 2, rest)
+                item, idx = self._parse_inline_mapping(idx, indent + 2, rest, depth + 1)
             else:
                 item = self._parse_inline(rest)
             items.append(item)
@@ -226,12 +275,12 @@ class _Parser:
     # -- values ------------------------------------------------------------
 
     def _parse_value(
-        self, idx: int, parent_indent: int, rest: str
+        self, idx: int, parent_indent: int, rest: str, depth: int
     ) -> tuple[object, int]:
         if rest == "":
             nested = self._skip_noise(idx)
             if nested < self.n and self._indent(self.lines[nested]) > parent_indent:
-                return self._parse_nested(nested, parent_indent)
+                return self._parse_nested(nested, parent_indent, depth + 1)
             return None, idx
         if rest[0] in "|>":
             header = self._strip_inline_comment(rest)
@@ -239,14 +288,15 @@ class _Parser:
             return value, idx
         return self._parse_inline(rest), idx
 
-    def _parse_nested(self, idx: int, parent_indent: int) -> tuple[object, int]:
+    def _parse_nested(self, idx: int, parent_indent: int, depth: int) -> tuple[object, int]:
+        self._check_depth(depth)
         line = self.lines[idx]
         ind = self._indent(line)
         if ind <= parent_indent:
             return None, idx
         if self._is_list_marker(line.strip()):
-            return self._parse_block_list(idx, ind)
-        return self._parse_mapping(idx, ind)
+            return self._parse_block_list(idx, ind, depth)
+        return self._parse_mapping(idx, ind, depth)
 
     # -- block scalars -----------------------------------------------------
 
@@ -308,7 +358,7 @@ class _Parser:
         else:  # keep
             if result and not result.endswith("\n"):
                 result += "\n"
-        return result, i
+        return self._check_scalar(result), i
 
     @staticmethod
     def _fold(parts: list[str]) -> str:
@@ -342,10 +392,27 @@ class _Parser:
         if s[0] == '"':
             return self._parse_double_quoted(s)
         if s[0] == "[":
+            self._check_flow_depth(s)
             return self._parse_flow_list(s)
         if s[0] == "{":
+            self._check_flow_depth(s)
             return self._parse_flow_map(s)
         return self._coerce(s)
+
+    @staticmethod
+    def _check_flow_depth(s: str) -> None:
+        depth = 0
+        maximum = 0
+        for char in s:
+            if char in "[{":
+                depth += 1
+                maximum = max(maximum, depth)
+            elif char in "]}":
+                depth -= 1
+        if maximum > MAX_NESTING_DEPTH:
+            raise FrontmatterError(
+                f"frontmatter nesting is too deep (max {MAX_NESTING_DEPTH} levels)"
+            )
 
     def _coerce(self, s: str) -> object:
         low = s.lower()
@@ -355,7 +422,7 @@ class _Parser:
             return False
         if low in _NULL_WORDS:
             return None
-        return s
+        return self._check_scalar(s)
 
     # -- flow collections --------------------------------------------------
 
@@ -448,6 +515,7 @@ class _Parser:
         for part in self._split_flow(s[1:end]):
             p = part.strip()
             if p:
+                self._check_item()
                 out.append(self._parse_inline(p))
         return out
 
@@ -464,6 +532,7 @@ class _Parser:
             key, rest, ok = self._split_key(p)
             if not ok:
                 raise FrontmatterError(f"malformed flow mapping entry: {p!r}")
+            self._check_key()
             data[key] = self._parse_inline(rest) if rest != "" else None
         return data
 
@@ -485,7 +554,7 @@ class _Parser:
                     raise FrontmatterError(
                         f"unexpected content after quoted string: {s!r}"
                     )
-                return "".join(result)
+                return self._check_scalar("".join(result))
             result.append(c)
             i += 1
         raise FrontmatterError(f"unterminated single-quoted string: {s!r}")
@@ -545,7 +614,7 @@ class _Parser:
                     raise FrontmatterError(
                         f"unexpected content after quoted string: {s!r}"
                     )
-                return "".join(result)
+                return self._check_scalar("".join(result))
             else:
                 result.append(c)
                 i += 1

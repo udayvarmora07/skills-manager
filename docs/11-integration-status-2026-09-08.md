@@ -14,7 +14,7 @@ worktree.
 | Baseline/P0 evidence | `docs/09-baseline-evidence-2026-09-07.md` | `main` | Keep as measured evidence; do not rewrite historical observations. |
 | Worktree comparison | `docs/10-worktree-integration-comparison-2026-09-08.md` | `main` | Use its order, but manually replay tests and fixes. |
 | Adversarial regression tests | `agents/todo-plan-implementation` | `worktree-only` except independently reproduced tests | Port one seam at a time; never cherry-pick the branch wholesale. |
-| Snapshot/full migration | `agents/todo-plan-implementation` | `approved-not-integrated` | Defer until recovery and archive contracts are separately reviewed. |
+| Snapshot/full migration | current working tree | `main` candidate, selectively integrated and locally verified | Current code uses the P0 path guards and the hardened tar/resource/manifest pipeline; candidate worktree remains reference-only. |
 | ZIP/archive UX | `agents/milestone5-research-user-needs` | `worktree-only` | Defer until the shared archive safety pipeline and approval gates exist. |
 | Current path-safety slice | current working tree | `main` candidate, locally verified | Canonical name/root guards, CLI validation, decoded REST validation, and regression tests only. |
 | Documentation/checklist controls | current working tree | `main` candidate, locally verified | Record current truth; do not mark later P0, recovery, UX, or release work shipped. |
@@ -44,7 +44,7 @@ baseline evidence
 | 4 | Decide whether `dist/` and `skills_manager.egg-info/` are artifacts or release inputs | `main` | They are ignored, untracked local artifacts; see section 3. |
 | 5 | Add one authoritative skill-name validation primitive | `main` | `skillsmgr/validator.py:validate_skill_name`; unit coverage in `tests/test_path_safety.py`. |
 | 6 | Add one resolved-path root-containment primitive | `main` | `skillsmgr/paths.py:contained_path` and `safe_skill_path`; symlink, absolute, and parent tests. |
-| 7 | Apply guards before current filesystem reads/writes/moves/copies/restores/deletes | `main` | Store, scope, trash, import, export, and sync paths use shared helpers. Snapshot helpers are not present on current `main`. |
+| 7 | Apply guards before current filesystem reads/writes/moves/copies/restores/deletes | `main` | Store, scope, trash, import, export, sync, and snapshot paths use shared helpers. |
 | 8 | Apply guards to Store and agent-scope equivalents | `main` | Store CRUD/toggle/restore/import/export and scope get/raw/create/edit/remove/toggle/sync paths are covered. |
 | 9 | Validate URL-decoded REST path parameters before path joins | `main` | `webapp.py` decodes segments after splitting; guarded Store/scope reads and mutations return HTTP 400 for encoded traversal and preserve the victim. |
 | 10 | Validate CLI names before command handlers construct paths | `main` | `cli.main()` rejects invalid names before `_make_store`; regression confirms no database is created. |
@@ -58,15 +58,20 @@ for inspection only; a release must build a fresh artifact in a clean tree,
 test that exact artifact, and publish it unchanged. The package-build gap remains
 open because `python3 -m build` is unavailable in the baseline environment.
 
-## 4. Explicit non-goals for this slice
+## 4. Historical non-goals for the initial path-safety slice
 
-- No new CLI command, CLI flag, Store method, SQLite table, or schema version.
+- The initial path-safety slice added no new CLI command, CLI flag, Store method,
+  SQLite table, or schema version. The later recovery slice selectively added
+  the approved `--full`/`--snapshot` flags and module-level snapshot helpers;
+  the SQLite schema remains unchanged.
 - No localhost Origin/Host/Fetch-Metadata security implementation.
 - No archive member count/size/compression-ratio limits, ZIP support, parser
   limits, or wildcard matcher redesign. The archive preflight pipeline is
   included in the next-five slice below.
-- No snapshot, migration, UX, browser accessibility, or release automation
-  integration from either candidate worktree.
+- No candidate-worktree snapshot/migration code was merged wholesale. Snapshot,
+  full migration, UX, browser accessibility, and release work are tracked
+  independently; snapshot/full migration behavior is now selectively integrated
+  on current `main` and verified by current tests/smokes.
 - No modification of `.autogit`.
 
 ## 5. Acceptance evidence

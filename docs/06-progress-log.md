@@ -4,6 +4,69 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-08 — Recovery snapshots, migration, and localhost policy slice
+
+- Completed the next five executable backlog tasks after archive hardening.
+- ADR-001 records the decision **not** to add a per-process mutation token:
+  loopback-only binding, pre-handler browser request checks, no cookies/sessions,
+  and supported local non-browser clients provide the simpler correct boundary.
+- Added guarded snapshots under `<data>/snapshots/<scope>/<name>/` with canonical
+  scope/name/path validation, newest-five retention, automatic pre-edit and
+  force-sync-overwrite capture, and global/agent restore. CLI, REST, and web UI
+  expose retained snapshot IDs and rollback.
+- Added `--full` to existing export/backup/import surfaces. Full archives include
+  skills, validated trash, and templates; snapshots and agent scopes remain
+  excluded. Full migration uses the current hardened tar/resource/manifest
+  pipeline and rejects slim archives when `--full` is requested.
+- Added focused tests for snapshot retention/rollback, agent-scope snapshots,
+  full migration round trips, slim/full compatibility, REST snapshot routes, and
+  staged sync failure preservation.
+- Selective replay status: approved candidate worktree code was not merged
+  wholesale. Current source retains the hardened archive pipeline and adds only
+  the reviewed snapshot/full-migration seams needed by this slice.
+
+## 2026-09-08 — Next-five archive contract and resource-safety slice
+
+- Completed the next five executable archive tasks: resource budgets, strict
+  manifest validation, canonical manifestless fallback handling, explicit ZIP
+  policy, and per-skill staged/rollback import behavior.
+- Tar preflight now enforces compressed-size (25 MiB), expanded-size (16 MiB),
+  individual-member (8 MiB), member-count (200), path-length (512), nesting
+  depth (16), and compression-ratio (1000:1) limits before extraction.
+- Manifests must identify `skills-mgr`, use a supported semantic major version,
+  contain a UTC creation timestamp, and list unique canonical skill names whose
+  extracted directories and frontmatter agree. Invalid names fail closed.
+- ZIP remains intentionally unsupported; content sniffing rejects ZIP bytes even
+  when the filename has a tar extension. Each skill is staged independently,
+  failed replacements restore the previous destination, and results report
+  imported/skipped names.
+- Added hermetic tests for all archive limits, strict schema/path/frontmatter
+  validation, ZIP rejection, malformed fallback names, forced-destination
+  preservation, and injected per-skill copy failure.
+
+## 2026-09-08 — P0 parser, search, and localhost request-safety slice
+
+- Completed ten executable risk-first tasks from the latest `TODO.md` across
+  parser bounds, wildcard search, and localhost web request security.
+- Frontmatter parsing now enforces document, key, collection, scalar, and nesting
+  budgets; deep recursion and malformed bounded structures surface as clean
+  `FrontmatterError` values. Valid round trips remain covered.
+- Wildcard search collapses repeated stars, caps query length and effective star
+  count, preserves body matching, and uses one bounded scorer across Store,
+  global/agent/merged scopes, CLI, and REST paths. Adversarial patterns return a
+  clean 400 through REST instead of exhausting regex backtracking.
+- All state-changing HTTP methods now validate loopback Host/port, reject
+  cross-site Fetch Metadata and mismatched Origin/Referer values before route
+  handlers, require JSON for JSON mutations, reject non-loopback binds, and add
+  CSP/framing/MIME/referrer/cross-origin response headers. Header-absent local
+  clients remain supported.
+- Added hermetic regressions for hostile browser headers and every mutating
+  method, wildcard exhaustion/body matching, parser resource limits, and clean
+  error contracts.
+- Verified on September 8, 2026: compile PASS, **76 unittest PASS**,
+  `smoke_store.py` PASS, `smoke_web.py` PASS, frontend syntax PASS, CLI help
+  PASS, focused REST probes PASS, and `git diff --check` PASS.
+
 ## 2026-09-08 — Next-five archive and trash safety slice
 
 - Completed the next five executable tasks after the first-ten path-safety

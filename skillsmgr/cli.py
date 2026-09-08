@@ -445,7 +445,7 @@ def cmd_search(args, store: Store) -> int:
 
 
 def cmd_import(args, store: Store) -> int:
-    result = store.import_(args.archive, force=args.force)
+    result = store.import_(args.archive, force=args.force, full=args.full)
     if args.json:
         _print_json(result)
     else:
@@ -453,20 +453,22 @@ def cmd_import(args, store: Store) -> int:
             f"imported {result['imported']}, skipped {result['skipped']} "
             f"from {result['source']}"
         )
+        if "restored_trash" in result:
+            print(f"trash restored: {result['restored_trash']}, templates restored: {result['restored_templates']}, skipped: {result['skipped_full']}")
     return EXIT_OK
 
 
 def cmd_export(args, store: Store) -> int:
-    result = store.export(args.dest)
+    result = store.export(args.dest, full=args.full)
     if args.json:
         _print_json({"path": str(result)})
     else:
-        print(f"exported skills to {result}")
+        print(f"{'full export' if args.full else 'exported skills'} to {result}")
     return EXIT_OK
 
 
 def cmd_backup(args, store: Store) -> int:
-    result = store.backup(args.dest)
+    result = store.backup(args.dest, full=args.full)
     if args.json:
         _print_json({"path": str(result)})
     else:
@@ -475,6 +477,17 @@ def cmd_backup(args, store: Store) -> int:
 
 
 def cmd_restore(args, store: Store) -> int:
+    snapshot = getattr(args, "snapshot", None)
+    if snapshot:
+        scope = _scope_from_args(args)
+        from .scopes import restore_snapshot as _restore_snapshot
+
+        result = _restore_snapshot(scope, args.name, snapshot)
+        if args.json:
+            _print_json(result)
+        else:
+            print(f"rolled back {COLORS.green(result['name'])} to snapshot {snapshot} (scope: {result.get('scope', 'global')})")
+        return EXIT_OK
     result = store.restore(args.name)
     if args.json:
         _print_json(result)
@@ -629,17 +642,24 @@ def cmd_history(args, store: Store) -> int:
     if args.limit < 1 or args.limit > 200:
         raise StoreError("--limit must be between 1 and 200")
     rows = store.history(name=args.name, limit=args.limit)
+    snapshots = []
+    if args.name:
+        from .store import list_snapshots as _list_snapshots
+
+        snapshots = _list_snapshots(store.data_dir, "global", args.name)
     if args.json:
-        _print_json(rows)
+        _print_json({"history": rows, "snapshots": snapshots} if args.name else rows)
         return EXIT_OK
     if not rows:
         print("no history recorded")
-        return EXIT_OK
-    header = ["WHEN", "ACTION", "NAME"]
-    table = [
-        [row["at"] or "-", row["action"], row["name"] or "-"] for row in rows
-    ]
-    print(_render_table([header] + table))
+    else:
+        header = ["WHEN", "ACTION", "NAME"]
+        table = [
+            [row["at"] or "-", row["action"], row["name"] or "-"] for row in rows
+        ]
+        print(_render_table([header] + table))
+    if args.name:
+        print(f"snapshots for {args.name}: {', '.join(snapshots) if snapshots else '(none)'}")
     return EXIT_OK
 
 
@@ -698,6 +718,8 @@ def cmd_scopes(args, store: Store) -> int:
         header = ["ID", "LABEL", "COUNT", "PATH"]
         table = [[s["id"], s["label"], str(s["count"]), s["path"]] for s in scopes]
     print(_render_table([header] + table))
+    if args.name:
+        print(f"snapshots for {args.name}: {', '.join(snapshots) if snapshots else '(none)'}")
     return EXIT_OK
 
 
@@ -990,21 +1012,26 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("import", help="install skills from an archive")
     p.add_argument("archive")
     p.add_argument("--force", action="store_true", help="overwrite existing skills")
+    p.add_argument("--full", action="store_true", help="also restore trash and templates from a full export")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_import)
 
     p = sub.add_parser("export", help="package skills into a tar.gz archive")
     p.add_argument("--dest", metavar="PATH")
+    p.add_argument("--full", action="store_true", help="also include trash and templates for full migration")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_export)
 
     p = sub.add_parser("backup", help="alias for export")
     p.add_argument("--dest", metavar="PATH")
+    p.add_argument("--full", action="store_true", help="also include trash and templates for full migration")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_backup)
 
     p = sub.add_parser("restore", help="restore a skill from the trash")
     p.add_argument("name")
+    p.add_argument("--snapshot", metavar="TS", help="roll back to a snapshot id instead of the trash")
+    _add_scope_arg(p)
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_restore)
 
@@ -1025,6 +1052,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_trash_list)
     p = trash_sub.add_parser("restore", help="restore a trashed skill")
     p.add_argument("name")
+    p.add_argument("--snapshot", metavar="TS", help="roll back to a snapshot id instead of the trash")
+    _add_scope_arg(p)
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_restore)
     p = trash_sub.add_parser("purge", help="permanently delete all trashed skills")

@@ -8,6 +8,7 @@ software, never a public service.
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import re
 import shutil
@@ -40,6 +41,12 @@ MAX_BODY_BYTES = 25 * 1024 * 1024
 MAX_UPLOAD_PARTS = 200
 MAX_QUERY_LEN = 200
 MAX_HISTORY_LIMIT = 200
+
+
+class RequestError(StoreError):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
 
 
 def _json_bytes(obj, status: int = 200) -> bytes:
@@ -96,8 +103,20 @@ class WebAppHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._send_security_headers()
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        )
 
     def _send_json(self, obj, status: int = 200) -> None:
         self._send(status, _json_bytes(obj))
@@ -121,6 +140,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         raw = self._read_body()
         if not raw:
             return {}
+        if not (self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() == "application/json"):
+            raise RequestError(415, "JSON request body required")
         try:
             data = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
@@ -143,24 +164,28 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            self._validate_mutation_request()
             self._route_post()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_PATCH(self):
         try:
+            self._validate_mutation_request()
             self._route_patch()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_DELETE(self):
         try:
+            self._validate_mutation_request()
             self._route_delete()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_PUT(self):
         try:
+            self._validate_mutation_request()
             self._route_put()
         except Exception as exc:
             self._handle_exception(exc)
@@ -169,10 +194,42 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if isinstance(exc, SkillNotFound):
             self._send_error(404, str(exc))
         elif isinstance(exc, StoreError):
+            self._send_error(getattr(exc, "status", 400), str(exc))
+        elif isinstance(exc, ValueError):
             self._send_error(400, str(exc))
         else:
             print(f"webui internal error: {exc!r}", file=sys.stderr)
             self._send_error(500, "internal error")
+
+    def _expected_origin(self) -> str:
+        host = self.server.server_address[0]  # type: ignore[attr-defined]
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"http://{host}:{self.server.server_port}"  # type: ignore[attr-defined]
+
+    def _validate_mutation_request(self) -> None:
+        host_header = self.headers.get("Host", "")
+        allowed_hosts = self.server.allowed_hosts  # type: ignore[attr-defined]
+        if host_header not in allowed_hosts:
+            raise RequestError(403, "invalid Host header")
+
+        fetch_site = (self.headers.get("Sec-Fetch-Site") or "").lower()
+        if fetch_site == "cross-site":
+            raise RequestError(403, "cross-origin request rejected")
+
+        allowed_origins = self.server.allowed_origins  # type: ignore[attr-defined]
+        origin = self.headers.get("Origin")
+        referer = self.headers.get("Referer")
+        for value, label in ((origin, "Origin"), (referer, "Referer")):
+            if not value:
+                continue
+            parsed = urlparse(value)
+            if label == "Referer":
+                actual = f"{parsed.scheme}://{parsed.netloc}"
+            else:
+                actual = value.rstrip("/")
+            if not parsed.scheme or actual.rstrip("/") not in allowed_origins:
+                raise RequestError(403, "cross-origin request rejected")
 
     def _parts(self) -> list[str]:
         path = urlparse(self.path).path
@@ -375,6 +432,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
             except ValueError:
                 limit = 50
             limit = max(1, min(limit, MAX_HISTORY_LIMIT))
+            if qs.get("snapshots", ["0"])[0] in ("1", "true", "yes") and name:
+                scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+                if scope == "global":
+                    from .store import list_snapshots as _list_snapshots
+
+                    snapshots = _list_snapshots(self.store.data_dir, "global", name)
+                else:
+                    from .scopes import list_snapshots_for as _list_snapshots_for
+
+                    snapshots = _list_snapshots_for(scope, name)
+                self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
+                return
             self._send_json(self.store.history(name=name, limit=limit))
         elif parts == ["api", "stats"]:
             st = self.store.stats()
@@ -497,12 +566,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if scope != "global":
                 self._send_error(400, "export is only available for the global scope")
                 return
-            archive = self.store.export()
+            archive = self.store.export(full=qs.get("full", ["0"])[0] in ("1", "true", "yes"))
             body = archive.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "application/gzip")
             self.send_header("Content-Disposition", f'attachment; filename="{archive.name}"')
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(body)
         else:
@@ -629,7 +700,17 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if len(parts) == 3 and parts[2] == "purge":
                 self._send_json(self.store.purge_trash())
             elif len(parts) == 3:
-                self._send_json(self.store.restore(parts[2]))
+                snapshot = qs.get("snapshot", [None])[0]
+                if snapshot:
+                    scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+                    if scope == "global":
+                        self._send_json(self.store.restore(parts[2], snapshot=snapshot))
+                    else:
+                        from .scopes import restore_snapshot as _restore_snapshot
+
+                        self._send_json(_restore_snapshot(scope, parts[2], snapshot))
+                else:
+                    self._send_json(self.store.restore(parts[2]))
             else:
                 self._send_error(404, "unknown endpoint")
         elif parts == ["api", "templates"]:
@@ -792,10 +873,29 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
 class WebAppServer:
     def __init__(self, store: Store, host: str = "127.0.0.1", port: int = 0):
+        normalized_host = host.strip().lower()
+        is_localhost_name = normalized_host == "localhost"
+        try:
+            is_loopback = ipaddress.ip_address(normalized_host).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not (is_localhost_name or is_loopback):
+            raise StoreError("web UI host must be loopback (127.0.0.1, ::1, or localhost)")
         self.httpd = ThreadingHTTPServer((host, port), WebAppHandler)
         self.httpd.store = store  # type: ignore[attr-defined]
         self.host = host
         self.port = self.httpd.server_address[1]
+        bound_host = self.httpd.server_address[0]
+        hostnames = {host, bound_host}
+        if normalized_host == "localhost":
+            hostnames.update({"127.0.0.1", "::1"})
+        self.httpd.allowed_hosts = {
+            f"{name}:{self.port}" if ":" not in name else f"[{name}]:{self.port}"
+            for name in hostnames
+        }  # type: ignore[attr-defined]
+        self.httpd.allowed_origins = {
+            f"http://{value}" for value in self.httpd.allowed_hosts
+        }  # type: ignore[attr-defined]
         try:
             from .scopes import set_global_store as _set_global_store
 

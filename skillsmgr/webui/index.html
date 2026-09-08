@@ -55,6 +55,7 @@
           <hr>
           <button role="menuitem" @click="menuDo('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Import archive</button>
           <button role="menuitem" @click="menuDo('export')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 15V3m0 0 4 4m-4-4-4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export archive</button>
+          <button role="menuitem" @click="menuDo('fullExport')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 15V3m0 0 4 4m-4-4-4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M5 21h14"/></svg>Full migration export</button>
           <hr>
           <button role="menuitem" @click="menuDo('templates')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Templates</button>
           <button role="menuitem" @click="menuDo('newtemplate')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New template</button>
@@ -549,6 +550,21 @@
             </tbody>
           </table>
         </div>
+        <div v-if="modals.history.name" style="margin-top:16px;">
+          <h3 style="margin:0 0 8px;">Snapshots</h3>
+          <div v-if="!modals.history.snapshots.length" class="empty"><p style="margin:0;">No snapshots for this skill.</p></div>
+          <div v-else class="tablewrap">
+            <table class="history-table">
+              <thead><tr><th>Snapshot</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr v-for="s in modals.history.snapshots" :key="s">
+                  <td><code>{{ s }}</code></td>
+                  <td><button class="btn btn-secondary" :disabled="busy" @click="rollbackSnapshot(modals.history.name, s)">Rollback</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <div class="modal-foot"><button class="btn btn-secondary" @click="closeModal('history')">Close</button></div>
     </div>
@@ -623,6 +639,10 @@
         <label v-if="modals.import.file" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;cursor:pointer;">
           <input type="checkbox" v-model="modals.import.force" style="accent-color:var(--accent);">
           Overwrite existing skills
+        </label>
+        <label v-if="modals.import.file" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:14px;cursor:pointer;">
+          <input type="checkbox" v-model="modals.import.full" style="accent-color:var(--accent);">
+          Full migration (restore trash and templates)
         </label>
         <input ref="importInput" type="file" accept=".tar.gz,.tgz,.tar,.zip" style="display:none" @change="onImportPicked">
       </div>

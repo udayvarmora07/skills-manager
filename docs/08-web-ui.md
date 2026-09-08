@@ -48,7 +48,19 @@ python3 -m skillsmgr webui --port 9000
 
 ## REST API
 
-All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError), 404 (SkillNotFound / unknown), 500 (internal).
+All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError/invalid bounded input), 403 (host or cross-origin mutation rejection), 404 (SkillNotFound / unknown), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal).
+
+State-changing requests are accepted only on a loopback-bound server with the
+configured loopback `Host` and port. `Sec-Fetch-Site: cross-site`, hostile
+`Origin`, and hostile `Referer` values are rejected before route handlers run.
+JSON mutation endpoints require `Content-Type: application/json`; raw archive and
+multipart import keep their explicitly documented content types. Local CLI/test
+clients may omit browser-only headers, but if `Origin`, `Referer`, or
+`Sec-Fetch-Site` is supplied it must pass the same-origin policy.
+
+Responses, including archive downloads, include `Content-Security-Policy` with `frame-ancestors 'none'`,
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, and `Cross-Origin-Resource-Policy: same-origin`.
 
 Skill path parameters are URL-decoded by segment and then validated by the
 canonical skill-name/root-containment guards before any Store or scope path is
@@ -76,6 +88,7 @@ mutate an outside directory.
 | GET | `/api/stats` | Store.stats |
 | GET | `/api/doctor[?scope=all]` | Store.doctor (global); `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`) |
 | GET | `/api/history?name=&limit=` | Store.history (name optional) |
+| GET | `/api/history?name=NAME&scope=SCOPE&snapshots=1` | retained snapshot IDs for a skill |
 | POST | `/api/validate` | body `{name}` → `{valid, issues: [{level, key, message}]}` |
 | POST | `/api/rebuild` | Store.db_rebuild |
 | POST | `/api/resync` | Store.resync |
@@ -88,7 +101,7 @@ mutate an outside directory.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/trash` | Store.trash_list (global trash only) |
-| POST | `/api/trash/<name>` | restore |
+| POST | `/api/trash/<name>` | restore; `?snapshot=ID&scope=SCOPE` rolls back to a snapshot |
 | POST | `/api/trash/purge` | purge everything |
 
 ### Templates
@@ -102,15 +115,15 @@ mutate an outside directory.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/export` | downloads gzip archive (attachment; global scope only) |
-| PUT | `/api/import?filename=&force=` | raw archive bytes in body → Store.import_; archive members are preflighted and unsafe tar entries are rejected before Store mutation |
+| GET | `/api/export[?full=1]` | downloads slim or full gzip archive (attachment; global scope only) |
+| PUT | `/api/import?filename=&force=&full=` | raw tar archive bytes → Store.import_; `full=1` restores trash/templates from a full archive |
 | PUT | `/api/import` (multipart/form-data) | webkitdirectory folder upload → Store.add per SKILL.md |
 
 ## Frontend map (app.js)
 
 - **State**: `view` (skills|trash), `filter` (all|active|disabled), `query` (live search, 220ms debounce), `skills`, `trashSkills`, `selected`/`selectedName`, `theme` (light|dark, localStorage), `modals.*` (one object per dialog), `toasts`, `scopes` (from `/api/scopes`), `activeScope` (persisted).
 - **Flow helpers**: `api()` fetch wrapper; `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Scope helpers `_scopeParam`/`_scopeQs` append `?scope=` to skill/detail/search calls.
-- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, `saveTemplate`, `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSyncModal`/`runSync` (copy skill between scopes), `openInstall`/`runInstall` (build or run `skills add`).
+- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSyncModal`/`runSync` (copy skill between scopes), `openInstall`/`runInstall` (build or run `skills add`).
 - **Markdown**: hand-rolled `renderMarkdown()` — block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
 - **Keyboard**: `/` focuses search; `Esc` closes menus/modals.
 - **Responsive**: <900px stacks sidebar above detail; <640px compacts the topbar (no brand text, no stat pill, tighter padding).
@@ -131,6 +144,7 @@ mutate an outside directory.
 
 1. Backend uses the **Store public API only** — no direct sqlite3 access. Reading `SKILL.md`/`SKILL.md.disabled` files for the `raw` endpoint and token enrichment is allowed (filesystem is the source of truth); never hand-edit the DB. (Agent scopes go through the `scopes` layer, which is the same rule for those dirs.)
 2. `127.0.0.1` bind by default. Never expose publicly.
+   Non-loopback bind hosts are rejected by the server.
 3. No build step, no new runtime dependencies (stdlib backend; Vue is vendored).
 4. Frontend never renders raw HTML from skill bodies (XSS).
 5. CLI surface: `webui` (primary) + `gui` (alias) — both documented in @docs/03-cli-surface.md.

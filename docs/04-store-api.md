@@ -34,21 +34,30 @@
 - `edit(self, name, description=None, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — partial update; unknown frontmatter keys are preserved. `SkillNotFound` if not installed or no SKILL.md; `StoreError` if disabled. Returns updated skill dict.
 - `list(self, include_disabled=False) -> list[dict]`
 - `get(self, name) -> dict` — raises `SkillNotFound` if absent.
-- `search(self, pattern, limit=None) -> list[(name, description, score)]` — scoring per @docs/02-modules.md.
+- `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`.
 - `add(self, path, name=None) -> dict` — import an existing SKILL.md file.
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
-- `restore(self, name) -> dict` — from trash.
+- `restore(self, name, snapshot=None) -> dict` — from trash, or from a validated
+  snapshot under `<data>/snapshots/global/<name>/`; the current content is saved
+  first when rolling back.
 - `disable(self, name) -> dict` / `enable(self, name) -> dict` — rename `SKILL.md` <-> `SKILL.md.disabled`; trashed skills may be disallowed until restored.
 - `trash_list(self) -> list[dict]` / `purge_trash(self) -> dict` — only exact
   canonical skill names with valid timestamp suffixes are recognized in trash;
   malformed, symlinked, and prefix-collision directories are ignored.
 - `stats(self) -> dict` — counts and summary.
-- `export(self, dest=None) -> dict` / `backup(self, dest=None) -> dict` — archive to `backups/` by default.
-- `import_(self, archive, force=False) -> dict` — `StoreError` if archive is
-  missing, malformed, unsafe, duplicated, or has unsupported member types;
-  `tempfile.mkdtemp(prefix="skillsmgr-import-")` is used for preflight before
-  any destination overwrite; returns `{imported: [...], skipped: [...]}`.
-- `history(self, name=None, limit=50) -> list[dict]`
+- `export(self, dest=None, full=False) -> Path` / `backup(self, dest=None, full=False) -> Path` — slim skills-only archive by default; `full=True` adds validated trash and templates.
+- `import_(self, archive, force=False) -> dict` — tar-only; ZIP content is
+  rejected before tar parsing. Resource-budget violations, unsafe members,
+  unsupported manifest versions/names/paths, and invalid extracted documents
+  raise `StoreError`. Each skill is staged independently before replacement;
+  successful names appear in `imported`, failures/already-present names in
+  `skipped`, and failed replacements restore the previous destination.
+- `history(self, name=None, limit=50) -> list[dict]`; snapshot IDs are exposed
+  through the module-level `list_snapshots(data_dir, scope, name)` helper and
+  the CLI/REST history surfaces.
+- Snapshot helpers `write_snapshot`, `list_snapshots`, and `read_snapshot` are
+  module-level guarded helpers; snapshots are not SQLite data and are retained
+  newest-five per scope/name.
 - `doctor(self) -> dict` — health check; lists FS/DB inconsistencies.
 - `db_rebuild(self)` / `db_resync(self)` — rebuild: drop + re-create index from FS; resync: sync without dropping. FS untouched.
 

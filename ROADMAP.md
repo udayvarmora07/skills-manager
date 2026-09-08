@@ -7,8 +7,8 @@ Public direction for `skills-manager`. Items move from Proposed → Accepted →
 - [x] **Spec-lint+** (shipped 2026-09-05): name regex rejects `--`; `description_score()` use-context/filler scoring + warnings; body line + token (>5000) warnings; `scripts/`/`references/`/`assets/` layout checks — mapped to the official [best practices](https://agentskills.io/skill-creation/best-practices).
 - [x] **Cross-scope dedup**: same-name skills across scopes detected (`doctor --scope all`, doctor modal), diff via descriptions-differ flag, converge with existing `sync`.
 - [x] **Token budget view**: per-skill/per-scope startup footprint in CLI (`tokens --scope all`) + UI (budget bar, `?window=` selector).
-- [ ] **Rollback**: snapshot on edit/sync (`history` exists) + `restore --snapshot`.
-- [ ] **One-command migration**: full-library export/import (skills + trash + templates) for new machines.
+- [x] **Rollback**: snapshot on edit/sync (`history` exists) + `restore --snapshot` (shipped 2026-09-08).
+- [x] **One-command migration**: full-library export/import (skills + trash + templates) for new machines (shipped 2026-09-08).
 
 ## Then (v1.2+)
 

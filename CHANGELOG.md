@@ -12,6 +12,10 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   special members are rejected; tar extraction uses `data_filter` when
   available and a guarded regular-file/directory fallback otherwise; malformed
   trash entries are ignored consistently.
+- Archive intake budgets and migration contract: tar compressed/expanded/member/
+  path/nesting/ratio limits, strict versioned manifests, extracted frontmatter
+  name checks, content-based ZIP rejection, and staged per-skill import rollback
+  with explicit imported/skipped reporting.
 - Spec-lint+ (`validator.py`): `description_score()` (use-context + filler detection), description warnings (missing "Use … when …", vague filler), body token warning (`MAX_BODY_TOKENS=5000`, progressive-disclosure guidance), `scripts/`/`references/`/`assets/` layout check for dangling mentions.
 - Cross-scope dedup: `scopes.find_duplicates()` (same-name + descriptions-differ flag), surfaced in `doctor --scope all`, `/api/doctor?scope=all`, and the doctor modal with Sync… converge buttons.
 - Token budget view (verified complete): `tokens --scope all` aggregate + `largest`, `/api/stats?window=` + `/api/tokens`, frontend budget bar with window selector.

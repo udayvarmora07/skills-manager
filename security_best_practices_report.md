@@ -1,10 +1,10 @@
 # Security Best Practices Report — skills-manager
 
-**Date:** 2026-09-04 · **Scope:** `skillsmgr/` (stdlib Python backend, Vue 3 vendored frontend) · **Method:** code audit against Python/JS web security practices; findings verified in source, not assumed.
+**Date:** 2026-09-08 · **Scope:** `skillsmgr/` (stdlib Python backend, Vue 3 vendored frontend) · **Method:** code audit plus hermetic adversarial tests; findings verified in source and live local requests.
 
 ## Executive summary
 
-The project is a localhost-only tool with a small attack surface and several controls already in place: loopback bind, allowlisted shell construction, body/upload caps, tar `filter="data"`, an XSS-safe markdown renderer, and generic 500s with stderr logging. No critical exploitable vulnerability was found. Remaining items are hardening notes (defense in depth), not emergencies. Two low-severity residual risks deserve attention: unfiltered tar fallback on old Pythons, and supply-chain execution via `/api/install` with `run:true`.
+The project is a localhost-only tool with a small attack surface and several controls already in place: loopback-only bind enforcement, pre-handler mutation-origin checks, JSON content-type enforcement, security response headers, bounded wildcard search, bounded frontmatter parsing, allowlisted shell construction, body/upload caps, bounded tar preflight, strict manifests, staged per-skill import recovery, an XSS-safe markdown renderer, and generic 500s with stderr logging. The previously reproduced cross-origin purge, wildcard exhaustion, parser recursion, and archive-safety gaps are fixed and covered by regressions. Remaining items are hardening notes, including supply-chain execution via `/api/install` with `run:true`.
 
 ## Critical findings
 
@@ -18,10 +18,8 @@ None. No remote code execution, injection, authentication bypass, or data-loss p
 
 ## Medium findings
 
-- **M-1 — Tar extraction falls back to unfiltered `extractall` on old Pythons** (`skillsmgr/store.py:814-816`). `filter="data"` blocks absolute paths and `..` members on Python ≥ 3.12; the `except` fallback re-enables classic slip on older interpreters.
-  - Recommendation: declare a minimum supported Python (≥ 3.12) or refuse tar import when `filter=` is unavailable instead of falling back silently.
-- **M-2 — Archive import accepts any member layout; symlink members only neutralized by `filter="data"`.** Same code region as M-1; on current Python this is handled, but there is no independent member allowlist (e.g. only `<name>/SKILL.md`).
-  - Recommendation: pre-validate tar members (reject absolute paths, `..`, symlinks/hardlinks) before extraction so safety does not depend solely on interpreter version.
+- **M-1 — ZIP import is intentionally unsupported.** Content sniffing rejects ZIP archives before tar parsing. Adding ZIP would require a separate approval decision and the same preflight/commit guarantees.
+- **M-2 — Archive budgets are conservative by policy.** Tar input is bounded to 25 MiB compressed, 16 MiB expanded, 8 MiB per member, 200 members, 512-character paths, 16 nesting levels, and a 1000:1 compression ratio. Separate local imports can still consume disk, which is accepted local-user behavior.
 - **M-3 — Error responses can leak absolute filesystem paths** (e.g. `StoreError` text containing data-dir paths reaches loopback JSON clients). Acceptable for a localhost tool with no remote users, but worth noting.
   - Recommendation: no change required; if the bind default ever changes, sanitize paths from API errors first.
 
@@ -37,9 +35,13 @@ None. No remote code execution, injection, authentication bypass, or data-loss p
 
 | Control | Location |
 |---|---|
-| Loopback bind by default | `skillsmgr/webapp.py:778-779, 816` |
+ | Loopback bind and non-loopback rejection | `skillsmgr/webapp.py:852-875` |
+ | Mutation Host/Origin/Referer/Fetch-Metadata gate | `skillsmgr/webapp.py:162-230` |
+ | Defensive security response headers | `skillsmgr/webapp.py:101-116` |
 | Request body cap + `Content-Length` validation (400/413, oversize → 400 verified live) | `skillsmgr/webapp.py:39, 108-118` |
-| Query length cap (300-char query → 400 verified) | `skillsmgr/webapp.py:41, 293` |
+ | Query length and wildcard complexity caps | `skillsmgr/search.py:15-38`, `skillsmgr/webapp.py:41, 293` |
+ | Frontmatter size/key/collection/scalar/nesting caps | `skillsmgr/frontmatter.py:31-121` |
+ | Tar archive budgets, strict manifest, and staged import recovery | `skillsmgr/store.py:63-218, 981-1100` |
 | History limit clamp (limit=99999 → ≤200 verified) | `skillsmgr/webapp.py:42, 372` |
 | Import filename traversal blocked (`../evil.tar.gz` → 400, empty → 400, zip → 400 verified) | `skillsmgr/webapp.py:709-743` |
 | Multipart folder-upload part/size caps | `skillsmgr/webapp.py:741-743` |
@@ -63,7 +65,10 @@ python3 smoke_web.py                              # ALL WEB SMOKE TESTS PASSED
 ```bash
 # REST edge matrix, all as expected:
 # traversal import→400, empty body→400, zip→400, bad archive→400,
-# oversize Content-Length→400, 300-char query→400, history clamp ok,
+# oversize Content-Length→400, 300-char query→400, wildcard exhaustion→400,
+# archive budget/manifest/name mismatch/ZIP probes fail closed,
+# hostile Origin/Referer/Fetch-Metadata/Host→403, form mutation→415,
+# history clamp ok,
 # PATCH name ignored, disable/enable ok, static ..→404, unknown skill→404
 ```
 

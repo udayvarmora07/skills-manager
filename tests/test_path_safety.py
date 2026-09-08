@@ -6,9 +6,11 @@ import shutil
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 from skillsmgr import cli
 from skillsmgr.loader import scan_dir
@@ -147,7 +149,12 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
                 "---\nname: weird-name\ndescription: invalid directory test\n---\nbody\n"
             ).encode("utf-8")
             with tarfile.open(archive, "w:gz") as tar:
-                manifest = json.dumps({"skills": []}).encode("utf-8")
+                manifest = json.dumps({
+                    "app": "skills-mgr",
+                    "version": "1.0.0",
+                    "created": "2026-09-08T00:00:00Z",
+                    "skills": [],
+                }).encode("utf-8")
                 manifest_info = tarfile.TarInfo("manifest.json")
                 manifest_info.size = len(manifest)
                 tar.addfile(manifest_info, io.BytesIO(manifest))
@@ -169,14 +176,19 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             victim.mkdir()
             (victim / "sentinel").write_text("keep", encoding="utf-8")
             archive = base / "invalid-force.tar.gz"
-            manifest = json.dumps({"skills": [{"name": "../victim"}]}).encode("utf-8")
+            manifest = json.dumps({
+                "app": "skills-mgr",
+                "version": "1.0.0",
+                "created": "2026-09-08T00:00:00Z",
+                "skills": [{"name": "../victim"}],
+            }).encode("utf-8")
             with tarfile.open(archive, "w:gz") as tar:
                 info = tarfile.TarInfo("manifest.json")
                 info.size = len(manifest)
                 tar.addfile(info, io.BytesIO(manifest))
 
-            result = store.import_(archive, force=True)
-            self.assertEqual(result["imported"], [])
+            with self.assertRaises(StoreError):
+                store.import_(archive, force=True)
             self.assertTrue(victim.is_dir())
             self.assertTrue((victim / "sentinel").is_file())
 
@@ -190,7 +202,12 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             archive = base / "traversal.tar.gz"
             payload = b"escape"
             with tarfile.open(archive, "w:gz") as tar:
-                manifest = b'{"skills": []}'
+                manifest = json.dumps({
+                    "app": "skills-mgr",
+                    "version": "1.0.0",
+                    "created": "2026-09-08T00:00:00Z",
+                    "skills": [],
+                }).encode("utf-8")
                 manifest_info = tarfile.TarInfo("manifest.json")
                 manifest_info.size = len(manifest)
                 tar.addfile(manifest_info, io.BytesIO(manifest))
@@ -209,7 +226,12 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             store.init_db()
             store.create("demo", "Original demo", body="original")
             archive = base / "force-traversal.tar.gz"
-            manifest = b'{"skills": [{"name": "demo"}]}'
+            manifest = json.dumps({
+                "app": "skills-mgr",
+                "version": "1.0.0",
+                "created": "2026-09-08T00:00:00Z",
+                "skills": [{"name": "demo"}],
+            }).encode("utf-8")
             with tarfile.open(archive, "w:gz") as tar:
                 manifest_info = tarfile.TarInfo("manifest.json")
                 manifest_info.size = len(manifest)
@@ -228,7 +250,12 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             store = Store(data_dir=Path(tmp) / "manager")
             store.init_db()
             archive = Path(tmp) / "duplicate.tar.gz"
-            manifest = b'{"skills": []}'
+            manifest = json.dumps({
+                "app": "skills-mgr",
+                "version": "1.0.0",
+                "created": "2026-09-08T00:00:00Z",
+                "skills": [],
+            }).encode("utf-8")
             with tarfile.open(archive, "w:gz") as tar:
                 for _ in range(2):
                     info = tarfile.TarInfo("manifest.json")
@@ -243,7 +270,12 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             store = Store(data_dir=Path(tmp) / "manager")
             store.init_db()
             archive = Path(tmp) / "symlink.tar.gz"
-            manifest = b'{"skills": []}'
+            manifest = json.dumps({
+                "app": "skills-mgr",
+                "version": "1.0.0",
+                "created": "2026-09-08T00:00:00Z",
+                "skills": [],
+            }).encode("utf-8")
             with tarfile.open(archive, "w:gz") as tar:
                 manifest_info = tarfile.TarInfo("manifest.json")
                 manifest_info.size = len(manifest)
@@ -305,6 +337,147 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
 
             self.assertEqual(result["imported"], ["demo"])
             self.assertEqual(target.get("demo")["description"], "Demo skill")
+
+    def test_zip_archive_is_rejected_by_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(data_dir=Path(tmp) / "manager")
+            store.init_db()
+            archive = Path(tmp) / "skills.tar.gz"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("manifest.json", '{"app":"skills-mgr","version":"1.0.0","created":"2026-09-08T00:00:00Z","skills":[]}')
+            with self.assertRaises(StoreError) as ctx:
+                store.import_(archive)
+            self.assertIn("tar", str(ctx.exception).lower())
+
+    def test_archive_member_limits_reject_before_destination_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            store = Store(data_dir=base / "manager")
+            store.init_db()
+            store.create("existing", "Keep me", body="original")
+            archive = base / "too-many.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                manifest = json.dumps({
+                    "app": "skills-mgr",
+                    "version": "1.0.0",
+                    "created": "2026-09-08T00:00:00Z",
+                    "skills": [{"name": "existing"}],
+                }).encode()
+                info = tarfile.TarInfo("manifest.json")
+                info.size = len(manifest)
+                tar.addfile(info, io.BytesIO(manifest))
+                for i in range(300):
+                    info = tarfile.TarInfo(f"skills/existing/extra-{i}.txt")
+                    info.size = 1
+                    tar.addfile(info, io.BytesIO(b"x"))
+            with self.assertRaises(StoreError):
+                store.import_(archive, force=True)
+            self.assertEqual(store.get("existing")["body"], "original\n")
+
+    def test_archive_expanded_size_limit_rejects_before_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            store = Store(data_dir=base / "manager")
+            store.init_db()
+            archive = base / "large.tar.gz"
+            payload = b"x" * (17 * 1024 * 1024)
+            manifest = json.dumps({
+                "app": "skills-mgr",
+                "version": "1.0.0",
+                "created": "2026-09-08T00:00:00Z",
+                "skills": [{"name": "large"}],
+            }).encode()
+            with tarfile.open(archive, "w:gz") as tar:
+                info = tarfile.TarInfo("manifest.json")
+                info.size = len(manifest)
+                tar.addfile(info, io.BytesIO(manifest))
+                info = tarfile.TarInfo("skills/large/SKILL.md")
+                info.size = len(payload)
+                tar.addfile(info, io.BytesIO(payload))
+            with self.assertRaises(StoreError) as ctx:
+                store.import_(archive)
+            self.assertTrue(
+                any(word in str(ctx.exception).lower() for word in ("size", "member"))
+            )
+            self.assertFalse((store.skills_dir / "large").exists())
+
+    def test_archive_path_depth_and_compression_ratio_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            store = Store(data_dir=base / "manager")
+            store.init_db()
+            for label, member_name, payload in (
+                ("deep", "skills/demo/" + "/".join(f"d{i}" for i in range(20)) + "/file", b"x"),
+                ("ratio", "skills/demo/payload.txt", b"x" * (8 * 1024 * 1024)),
+            ):
+                archive = base / f"{label}.tar.gz"
+                manifest = json.dumps({
+                    "app": "skills-mgr",
+                    "version": "1.0.0",
+                    "created": "2026-09-08T00:00:00Z",
+                    "skills": [],
+                }).encode()
+                with tarfile.open(archive, "w:gz") as tar:
+                    info = tarfile.TarInfo("manifest.json")
+                    info.size = len(manifest)
+                    tar.addfile(info, io.BytesIO(manifest))
+                    info = tarfile.TarInfo(member_name)
+                    info.size = len(payload)
+                    tar.addfile(info, io.BytesIO(payload))
+                with self.assertRaises(StoreError):
+                    store.import_(archive)
+
+    def test_manifest_schema_and_name_path_mismatch_are_rejected(self):
+        cases = [
+            {"app": "other", "version": "1.0.0", "created": "2026-09-08T00:00:00Z", "skills": []},
+            {"app": "skills-mgr", "version": "", "created": "2026-09-08T00:00:00Z", "skills": []},
+            {"app": "skills-mgr", "version": "1.0.0", "created": "2026-09-08T00:00:00Z", "skills": [{"name": "declared"}]},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for index, manifest_obj in enumerate(cases):
+                store = Store(data_dir=base / f"manager-{index}")
+                store.init_db()
+                archive = base / f"manifest-{index}.tar.gz"
+                with tarfile.open(archive, "w:gz") as tar:
+                    manifest = json.dumps(manifest_obj).encode()
+                    info = tarfile.TarInfo("manifest.json")
+                    info.size = len(manifest)
+                    tar.addfile(info, io.BytesIO(manifest))
+                    if index == 2:
+                        body = b"---\nname: wrong\ndescription: mismatch\n---\nbody\n"
+                        info = tarfile.TarInfo("skills/other/SKILL.md")
+                        info.size = len(body)
+                        tar.addfile(info, io.BytesIO(body))
+                with self.assertRaises(StoreError):
+                    store.import_(archive)
+
+    def test_failed_skill_commit_is_clean_and_reported_without_hiding_completed_skills(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = Store(data_dir=base / "source")
+            source.init_db()
+            source.create("first", "First")
+            source.create("second", "Second")
+            archive = source.export()
+            target = Store(data_dir=base / "target")
+            target.init_db()
+
+            original_copytree = shutil.copytree
+            calls = {"count": 0}
+
+            def fail_second(src, dst, *args, **kwargs):
+                calls["count"] += 1
+                if calls["count"] == 2:
+                    raise OSError("injected copy failure")
+                return original_copytree(src, dst, *args, **kwargs)
+
+            with mock.patch("skillsmgr.store.shutil.copytree", side_effect=fail_second):
+                result = target.import_(archive)
+            self.assertEqual(result["imported"], ["first"])
+            self.assertTrue(any("second" in item for item in result["skipped"]))
+            self.assertTrue((target.skills_dir / "first").is_dir())
+            self.assertFalse((target.skills_dir / "second").exists())
 
     def test_malformed_trash_entries_are_ignored_by_all_trash_operations(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -15,6 +15,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,6 +60,18 @@ CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status);
 
 _TRASH_TS_RE = re.compile(r"-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d+)?Z?$")
 
+SNAPSHOT_KEEP = 5
+_SNAPSHOT_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z?(?:-\d+)?$")
+_SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+MAX_ARCHIVE_COMPRESSED_BYTES = 25 * 1024 * 1024
+MAX_ARCHIVE_EXPANDED_BYTES = 16 * 1024 * 1024
+MAX_ARCHIVE_MEMBER_BYTES = 8 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 200
+MAX_ARCHIVE_PATH_LENGTH = 512
+MAX_ARCHIVE_NESTING = 16
+MAX_ARCHIVE_COMPRESSION_RATIO = 1000
+
 
 class StoreError(Exception):
     """Raised for any store-level failure (validation, I/O, conflicts)."""
@@ -75,6 +88,56 @@ def now_iso() -> str:
 
 def _trash_timestamp() -> str:
     return now_iso().replace(":", "-").replace("T", "_")
+
+
+def _check_snapshot_target(scope: str, name: str) -> None:
+    if not _SCOPE_ID_RE.fullmatch(scope) or scope in (".", ".."):
+        raise StoreError(f"invalid scope {scope!r}")
+    try:
+        validate_skill_name(name)
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
+
+
+def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
+    """Save pre-write skill content and retain only the newest five snapshots."""
+    _check_snapshot_target(scope, name)
+    snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    base = _trash_timestamp()
+    snap_id = base
+    counter = 1
+    while (snap_dir / f"{snap_id}.md").exists():
+        snap_id = f"{base}-{counter}"
+        counter += 1
+    (snap_dir / f"{snap_id}.md").write_text(text, encoding="utf-8")
+    files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
+    while len(files) > SNAPSHOT_KEEP:
+        files.pop(0).unlink()
+    return snap_id
+
+
+def list_snapshots(data_dir: Path, scope: str, name: str) -> list[str]:
+    """Return valid snapshot ids for a skill, newest first."""
+    _check_snapshot_target(scope, name)
+    snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
+    if not snap_dir.is_dir():
+        return []
+    return sorted(
+        (p.stem for p in snap_dir.glob("*.md") if _SNAPSHOT_ID_RE.fullmatch(p.stem)),
+        reverse=True,
+    )
+
+
+def read_snapshot(data_dir: Path, scope: str, name: str, snapshot: str) -> str:
+    """Read a validated snapshot id for a skill."""
+    _check_snapshot_target(scope, name)
+    if not _SNAPSHOT_ID_RE.fullmatch(snapshot):
+        raise StoreError(f"invalid snapshot id {snapshot!r}")
+    path = paths.contained_path(Path(data_dir) / "snapshots", scope, name, f"{snapshot}.md")
+    if not path.is_file():
+        raise StoreError(f"no snapshot {snapshot!r} for '{name}' in scope '{scope}'")
+    return path.read_text(encoding="utf-8")
 
 
 def _coerce_str(value) -> str:
@@ -112,16 +175,31 @@ def _normalize_archive_member_name(name: str) -> str:
     return "/".join(parts)
 
 
-def _validate_archive_members(tar: tarfile.TarFile) -> list[tuple[tarfile.TarInfo, str]]:
-    """Preflight tar paths, types, layout, and duplicate members."""
+def _validate_archive_members(
+    tar: tarfile.TarFile,
+    compressed_size: int,
+) -> list[tuple[tarfile.TarInfo, str]]:
+    """Preflight tar paths, types, duplicates, and resource budgets."""
+    if compressed_size > MAX_ARCHIVE_COMPRESSED_BYTES:
+        raise StoreError(
+            f"archive compressed size exceeds {MAX_ARCHIVE_COMPRESSED_BYTES} bytes"
+        )
     members: list[tuple[tarfile.TarInfo, str]] = []
     seen: set[str] = set()
     manifest_count = 0
+    expanded_size = 0
     for member in tar.getmembers():
+        if len(member.name) > MAX_ARCHIVE_PATH_LENGTH:
+            raise StoreError(f"archive member path is too long: {member.name!r}")
         normalized = _normalize_archive_member_name(member.name)
+        if len(normalized.split("/")) > MAX_ARCHIVE_NESTING:
+            raise StoreError(f"archive member path is nested too deeply: {member.name!r}")
         if normalized in seen:
             raise StoreError(f"duplicate archive member: {normalized!r}")
         seen.add(normalized)
+
+        if len(seen) > MAX_ARCHIVE_MEMBERS:
+            raise StoreError(f"archive has too many members (max {MAX_ARCHIVE_MEMBERS})")
 
         if normalized == "manifest.json":
             manifest_count += 1
@@ -129,18 +207,76 @@ def _validate_archive_members(tar: tarfile.TarFile) -> list[tuple[tarfile.TarInf
                 raise StoreError("manifest.json must be a regular file")
         else:
             parts = normalized.split("/")
-            if parts[0] != "skills" or len(parts) < 2:
+            if parts[0] == "skills" and len(parts) >= 2:
+                if len(parts) == 2 and not member.isdir():
+                    raise StoreError(f"skill archive entry must be a directory: {member.name!r}")
+            elif parts[0] == "trash" and len(parts) >= 2:
+                if len(parts) == 2 and not member.isdir():
+                    raise StoreError(f"trash archive entry must be a directory: {member.name!r}")
+            elif parts[0] == "templates" and len(parts) == 2 and parts[1].endswith(".md"):
+                if not member.isreg():
+                    raise StoreError(f"template archive entry must be a regular file: {member.name!r}")
+            else:
                 raise StoreError(f"unexpected archive layout: {member.name!r}")
-            if len(parts) == 2 and not member.isdir():
-                raise StoreError(f"skill archive entry must be a directory: {member.name!r}")
 
         if not (member.isdir() or member.isreg()):
             raise StoreError(f"unsupported archive member type: {member.name!r}")
+        if member.isreg():
+            if member.size > MAX_ARCHIVE_MEMBER_BYTES:
+                raise StoreError(
+                    f"archive member exceeds {MAX_ARCHIVE_MEMBER_BYTES} bytes: {normalized!r}"
+                )
+            expanded_size += member.size
+            if expanded_size > MAX_ARCHIVE_EXPANDED_BYTES:
+                raise StoreError(
+                    f"archive expanded size exceeds {MAX_ARCHIVE_EXPANDED_BYTES} bytes"
+                )
         members.append((member, normalized))
 
     if manifest_count != 1:
         raise StoreError("archive must contain exactly one manifest.json")
+    if expanded_size > max(compressed_size, 1) * MAX_ARCHIVE_COMPRESSION_RATIO:
+        raise StoreError(
+            f"archive compression ratio exceeds {MAX_ARCHIVE_COMPRESSION_RATIO}:1"
+        )
     return members
+
+
+def _validate_archive_manifest(manifest: object) -> list[dict]:
+    """Validate the supported skills-manager manifest contract."""
+    if not isinstance(manifest, dict):
+        raise StoreError("invalid archive manifest: expected an object")
+    if manifest.get("app") != "skills-mgr":
+        raise StoreError("invalid archive manifest: unsupported app")
+    version = manifest.get("version")
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise StoreError("invalid archive manifest: version must be semantic")
+    if version.split(".", 1)[0] != __version__.split(".", 1)[0]:
+        raise StoreError(f"unsupported archive manifest major version: {version}")
+    created = manifest.get("created")
+    if not isinstance(created, str):
+        raise StoreError("invalid archive manifest: created timestamp is required")
+    try:
+        datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as exc:
+        raise StoreError("invalid archive manifest: created timestamp") from exc
+    skills = manifest.get("skills")
+    if not isinstance(skills, list):
+        raise StoreError("invalid archive manifest: skills must be a list")
+    validated: list[dict] = []
+    names: set[str] = set()
+    for entry in skills:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            raise StoreError("invalid archive manifest: each skill needs a name")
+        try:
+            name = validate_skill_name(entry["name"])
+        except ValueError as exc:
+            raise StoreError(f"invalid archive manifest skill name: {entry['name']!r}") from exc
+        if name in names:
+            raise StoreError(f"duplicate skill in archive manifest: {name!r}")
+        names.add(name)
+        validated.append(dict(entry, name=name))
+    return validated
 
 
 def _extract_archive_members(
@@ -184,6 +320,20 @@ def _has_skill_document(source: Path) -> bool:
     if enabled and disabled:
         raise StoreError(f"skill directory contains both enabled and disabled documents: {source.name!r}")
     return enabled or disabled
+
+
+def _validate_imported_skill(source: Path, name: str) -> None:
+    """Validate an extracted skill document against its manifest name."""
+    document = source / ("SKILL.md" if (source / "SKILL.md").is_file() else "SKILL.md.disabled")
+    try:
+        data, _ = parse_frontmatter(document.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, FrontmatterError) as exc:
+        raise StoreError(f"invalid skill document for {name!r}: {exc}") from exc
+    frontmatter_name = data.get("name")
+    if frontmatter_name is not None and frontmatter_name != name:
+        raise StoreError(
+            f"skill document name {frontmatter_name!r} does not match manifest name {name!r}"
+        )
 
 
 def _safe_skill_path(root: Path, name: str) -> Path:
@@ -439,19 +589,23 @@ class Store:
 
     def search(self, term: str) -> list[dict]:
         """Case-insensitive search over name, description and body."""
+        from .search import rank_results
+
         self._init_db()
-        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{escaped}%"
         conn = self._connect()
         try:
             rows = conn.execute(
                 "SELECT name, description, category, license, version, disabled, "
-                "updated_at FROM skills WHERE status = 'active' AND "
-                "(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' "
-                "OR body LIKE ? ESCAPE '\\') ORDER BY name",
-                (pattern, pattern, pattern),
+                "updated_at, body FROM skills WHERE status = 'active' ORDER BY name",
             ).fetchall()
-            return [dict(r) for r in rows]
+            records = [dict(r) for r in rows]
+            if not term:
+                return [{k: v for k, v in record.items() if k != "body"} for record in records]
+            ranked = rank_results(records, term)
+            return [
+                {k: v for k, v in record.items() if k != "body"}
+                for record, _ in ranked
+            ]
         finally:
             conn.close()
 
@@ -642,6 +796,7 @@ class Store:
         if changed:
             key_order = original_keys + [k for k in data if k not in original_keys]
             content = dump_frontmatter(data, key_order=key_order) + original_body
+            write_snapshot(self.data_dir, "global", name, text)
             md_file.write_text(content, encoding="utf-8")
             self._upsert_entry(name)
             conn = self._connect()
@@ -693,9 +848,28 @@ class Store:
         finally:
             conn.close()
 
-    def restore(self, name: str) -> dict:
-        """Move the newest trashed copy of a skill back into the tree."""
+    def restore(self, name: str, snapshot: str | None = None) -> dict:
+        """Restore from trash, or roll back to a validated snapshot."""
         _safe_skill_path(self.skills_dir, name)
+        if snapshot is not None:
+            content = read_snapshot(self.data_dir, "global", name, snapshot)
+            skill_dir = _safe_skill_path(self.skills_dir, name)
+            md_file = skill_dir / "SKILL.md"
+            if not md_file.is_file():
+                if (skill_dir / "SKILL.md.disabled").is_file():
+                    raise StoreError(f"skill '{name}' is disabled; enable it first")
+                raise SkillNotFound(f"skill '{name}' has no SKILL.md")
+            current = md_file.read_text(encoding="utf-8")
+            write_snapshot(self.data_dir, "global", name, current)
+            md_file.write_text(content, encoding="utf-8")
+            self._upsert_entry(name)
+            conn = self._connect()
+            try:
+                self._history(conn, name, f"restore --snapshot {snapshot}")
+                conn.commit()
+            finally:
+                conn.close()
+            return {"name": name, "snapshot": snapshot}
         candidates = sorted(
             (
                 p
@@ -857,12 +1031,13 @@ class Store:
 
     # ------------------------------------------------------ export/import
 
-    def export(self, dest: str | Path | None = None) -> Path:
-        """Package all installed skills into a gzipped tar archive."""
+    def export(self, dest: str | Path | None = None, full: bool = False) -> Path:
+        """Package skills, optionally including trash and templates."""
         self._init_db()
         self.backups_dir.mkdir(parents=True, exist_ok=True)
         if dest is None:
-            dest = self.backups_dir / f"export-{_trash_timestamp()}.tar.gz"
+            stem = "full-export" if full else "export"
+            dest = self.backups_dir / f"{stem}-{_trash_timestamp()}.tar.gz"
         else:
             dest = Path(dest).expanduser()
         entries = self._scan_dir(self.skills_dir)
@@ -870,6 +1045,7 @@ class Store:
             "app": "skills-mgr",
             "version": __version__,
             "created": now_iso(),
+            "full": bool(full),
             "skills": [
                 {
                     "name": e["name"],
@@ -881,12 +1057,30 @@ class Store:
                 for e in entries
             ],
         }
+        trash_names: list[str] = []
+        template_names: list[str] = []
         with tarfile.open(dest, "w:gz") as tar:
             for entry in entries:
                 source = _safe_skill_path(self.skills_dir, entry["name"])
                 for file in sorted(source.rglob("*")):
                     if file.is_file():
                         tar.add(file, arcname=f"skills/{entry['name']}/{file.relative_to(source)}")
+            if full:
+                if self.trash_dir.is_dir():
+                    for trashed in sorted(self.trash_dir.iterdir()):
+                        if not trashed.is_dir() or _trash_entry_name(trashed) is None:
+                            continue
+                        trash_names.append(trashed.name)
+                        for file in sorted(trashed.rglob("*")):
+                            if file.is_file():
+                                tar.add(file, arcname=f"trash/{trashed.name}/{file.relative_to(trashed)}")
+                if self.templates_dir.is_dir():
+                    for template in sorted(self.templates_dir.glob("*.md")):
+                        if template.is_file():
+                            template_names.append(template.name)
+                            tar.add(template, arcname=f"templates/{template.name}")
+                manifest["trash"] = trash_names
+                manifest["templates"] = template_names
             payload = json.dumps(manifest, indent=2).encode("utf-8")
             import io
 
@@ -895,12 +1089,12 @@ class Store:
             tar.addfile(info, io.BytesIO(payload))
         return dest
 
-    def backup(self, dest: str | Path | None = None) -> Path:
+    def backup(self, dest: str | Path | None = None, full: bool = False) -> Path:
         """Alias of :meth:`export` for backup semantics."""
-        return self.export(dest=dest)
+        return self.export(dest=dest, full=full)
 
-    def import_(self, archive: str | Path, force: bool = False) -> dict:
-        """Install skills from a skills-mgr archive into the tree."""
+    def import_(self, archive: str | Path, force: bool = False, full: bool = False) -> dict:
+        """Install skills and optionally restore full-library data."""
         archive = Path(archive).expanduser()
         if not archive.is_file():
             raise StoreError(f"archive not found: {archive}")
@@ -909,9 +1103,11 @@ class Store:
         imported: list[str] = []
         skipped: list[str] = []
         try:
+            if zipfile.is_zipfile(archive):
+                raise StoreError("ZIP archives are not supported; use a tar archive")
             try:
                 with tarfile.open(archive, "r:*") as tar:
-                    members = _validate_archive_members(tar)
+                    members = _validate_archive_members(tar, archive.stat().st_size)
                     _extract_archive_members(tar, tmp, members)
             except tarfile.TarError as exc:
                 raise StoreError(f"invalid archive: {exc}") from exc
@@ -920,29 +1116,22 @@ class Store:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 raise StoreError(f"invalid archive manifest: {exc}") from exc
-            if not isinstance(manifest, dict):
-                raise StoreError("invalid archive manifest: expected an object")
-            skills = manifest.get("skills") or []
-            if not isinstance(skills, list):
-                raise StoreError("invalid archive manifest: skills must be a list")
+            skills = _validate_archive_manifest(manifest)
+            if full and not manifest.get("full"):
+                raise StoreError("archive is not a full export; re-export with --full")
             planned: list[tuple[str, Path]] = []
             planned_names: set[str] = set()
             for entry in skills:
-                name = entry.get("name") if isinstance(entry, dict) else entry
-                try:
-                    name = validate_skill_name(str(name))
-                except ValueError:
-                    continue
+                name = entry["name"]
                 if name in planned_names:
                     raise StoreError(f"duplicate skill in archive manifest: {name!r}")
                 planned_names.add(name)
                 source = tmp / "skills" / name
                 if not source.is_dir():
-                    skipped.append(str(name))
-                    continue
+                    raise StoreError(f"archive manifest skill path is missing: {name!r}")
                 if not _has_skill_document(source):
-                    skipped.append(str(name))
-                    continue
+                    raise StoreError(f"archive manifest skill has no SKILL.md: {name!r}")
+                _validate_imported_skill(source, name)
                 _safe_skill_path(self.skills_dir, name)
                 planned.append((name, source))
 
@@ -961,8 +1150,19 @@ class Store:
                     if not _has_skill_document(source):
                         skipped.append(source.name)
                         continue
+                    _validate_imported_skill(source, name)
                     _safe_skill_path(self.skills_dir, name)
                     planned.append((name, source))
+
+            if skills and (tmp / "skills").is_dir():
+                unexpected = sorted(
+                    p.name for p in (tmp / "skills").iterdir()
+                    if p.is_dir() and p.name not in planned_names
+                )
+                if unexpected:
+                    raise StoreError(
+                        f"archive contains skills missing from manifest: {unexpected[0]!r}"
+                    )
 
             # All archive and content validation is complete before this first
             # destination deletion/copy, so force cannot partially apply an
@@ -973,10 +1173,31 @@ class Store:
                     if not force:
                         skipped.append(name)
                         continue
-                    shutil.rmtree(dest)
-                shutil.copytree(source, dest)
-                self._upsert_entry(name)
-                imported.append(name)
+                stage_root = tmp / "commit-staging"
+                stage_root.mkdir(parents=True, exist_ok=True)
+                staged = stage_root / name
+                backup = stage_root / f"{name}.backup"
+                moved_original = False
+                try:
+                    shutil.copytree(source, staged)
+                    if dest.exists():
+                        shutil.move(str(dest), str(backup))
+                        moved_original = True
+                    shutil.move(str(staged), str(dest))
+                    self._upsert_entry(name)
+                    imported.append(name)
+                    if backup.exists():
+                        shutil.rmtree(backup)
+                except (OSError, StoreError) as exc:
+                    if dest.exists() and (moved_original or not backup.exists()):
+                        shutil.rmtree(dest, ignore_errors=True)
+                    if moved_original and backup.exists() and not dest.exists():
+                        shutil.move(str(backup), str(dest))
+                    elif not moved_original and not backup.exists():
+                        # The old destination was never moved; preserve it.
+                        shutil.rmtree(staged, ignore_errors=True)
+                    skipped.append(f"{name}: {exc}")
+                    shutil.rmtree(staged, ignore_errors=True)
             conn = self._connect()
             try:
                 for name in imported:
@@ -984,14 +1205,54 @@ class Store:
                 conn.commit()
             finally:
                 conn.close()
+            restored_trash: list[str] = []
+            restored_templates: list[str] = []
+            skipped_full: list[str] = []
+            if full:
+                for trash_name in manifest.get("trash") or []:
+                    if not isinstance(trash_name, str) or Path(trash_name).name != trash_name:
+                        skipped_full.append(f"trash/{trash_name}")
+                        continue
+                    source = tmp / "trash" / trash_name
+                    if not source.is_dir() or _trash_entry_name(source) is None:
+                        skipped_full.append(f"trash/{trash_name}")
+                        continue
+                    dest = paths.contained_path(self.trash_dir, trash_name)
+                    if dest.exists() and not force:
+                        skipped_full.append(f"trash/{trash_name}")
+                        continue
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    shutil.copytree(source, dest)
+                    restored_trash.append(trash_name)
+                for template_name in manifest.get("templates") or []:
+                    if not isinstance(template_name, str) or Path(template_name).name != template_name or not template_name.endswith(".md"):
+                        skipped_full.append(f"templates/{template_name}")
+                        continue
+                    source = paths.contained_path(tmp / "templates", template_name)
+                    if not source.is_file():
+                        skipped_full.append(f"templates/{template_name}")
+                        continue
+                    dest = paths.contained_path(self.templates_dir, template_name)
+                    if dest.exists() and not force:
+                        skipped_full.append(f"templates/{template_name}")
+                        continue
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source, dest)
+                    restored_templates.append(template_name)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        return {
+        result = {
             "imported": imported,
             "skipped": skipped,
             "source": archive.name,
             "created": now_iso(),
         }
+        if full:
+            result["restored_trash"] = restored_trash
+            result["restored_templates"] = restored_templates
+            result["skipped_full"] = skipped_full
+        return result
 
     # -------------------------------------------------------------- misc
 

@@ -9,9 +9,11 @@ Run:  python3 -m unittest tests.test_web_scopes -v
 """
 
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from skillsmgr import scopes
 from skillsmgr.store import StoreError
@@ -135,6 +137,25 @@ class TestSyncAndSearch(ScopedHomeTestCase):
         self.assertEqual(out2["synced"], [])
         self.assertEqual(out2["skipped"][0]["scope"], "agents")
 
+    def test_sync_force_creates_snapshot_and_agent_snapshot_restores(self):
+        scopes._global_store().create("shared", "Global version", body="global")
+        scopes.create_skill("agents", "shared", "Agent version", body="agent")
+        out = scopes.sync_skill("shared", "global", ["agents"], force=True)
+        self.assertEqual(out["synced"], ["agents"])
+        snapshots = scopes.list_snapshots_for("agents", "shared")
+        self.assertEqual(len(snapshots), 1)
+        result = scopes.restore_snapshot("agents", "shared", snapshots[0])
+        self.assertEqual(result["scope"], "agents")
+        self.assertEqual(scopes.get_skill("agents", "shared")["description"], "Agent version")
+
+    def test_sync_force_failure_preserves_existing_destination(self):
+        scopes._global_store().create("shared", "Global version", body="global")
+        scopes.create_skill("agents", "shared", "Agent version", body="agent")
+        with mock.patch("skillsmgr.scopes.shutil.copytree", side_effect=OSError("copy failed")):
+            with self.assertRaises(OSError):
+                scopes.sync_skill("shared", "global", ["agents"], force=True)
+        self.assertEqual(scopes.get_skill("agents", "shared")["description"], "Agent version")
+
     def test_search_all_finds_both_scopes(self):
         scopes._global_store().create("gskill", "Global unique-term skill")
         scopes.create_skill("agents", "askill", "Agent unique-term skill")
@@ -142,6 +163,15 @@ class TestSyncAndSearch(ScopedHomeTestCase):
         self.assertEqual(
             {(h["scope"], h["name"]) for h in hits},
             {("global", "gskill"), ("agents", "askill")},
+        )
+
+    def test_search_all_uses_wildcards_consistently(self):
+        scopes._global_store().create("deploy-global", "Global deployment skill")
+        scopes.create_skill("agents", "deploy-agent", "Agent deployment skill")
+        hits = scopes.search_all("deploy-*", scope_id="all")
+        self.assertEqual(
+            {(h["scope"], h["name"]) for h in hits},
+            {("global", "deploy-global"), ("agents", "deploy-agent")},
         )
 
     def test_search_query_cap(self):

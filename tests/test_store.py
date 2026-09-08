@@ -10,7 +10,7 @@ import os
 import tempfile
 import unittest
 
-from skillsmgr.frontmatter import dump_frontmatter, parse_frontmatter
+from skillsmgr.frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
 from skillsmgr.loader import load_skill
 from skillsmgr.scopes import known_scopes
 from skillsmgr.search import rank_results
@@ -157,6 +157,72 @@ class TestExportImport(IsolatedStoreTestCase):
         result = self.store.import_(str(dest))
         self.assertIn("demo", result["imported"])
         self.assertEqual(len(self.store.list()), 1)
+
+    def test_full_export_import_restores_trash_and_templates(self):
+        from pathlib import Path
+
+        self.store.create("keep", "Keeper skill")
+        self.store.create("goner", "Doomed skill")
+        self.store.remove("goner")
+        (self.store.templates_dir / "tmpl.md").write_text("# T\n", encoding="utf-8")
+        dest = Path(self._tmp.name) / "full.tar.gz"
+        self.store.export(dest=str(dest), full=True)
+        self.store.remove("keep", purge=True)
+        self.store.purge_trash()
+        (self.store.templates_dir / "tmpl.md").unlink()
+        result = self.store.import_(str(dest), full=True)
+        self.assertIn("keep", result["imported"])
+        self.assertEqual(len(result["restored_trash"]), 1)
+        self.assertEqual(result["restored_templates"], ["tmpl.md"])
+        self.assertEqual(len(self.store.trash_list()), 1)
+        self.assertTrue((self.store.templates_dir / "tmpl.md").is_file())
+
+    def test_full_import_rejects_slim_archive(self):
+        from pathlib import Path
+
+        self.store.create("demo", "Demo skill", body="Hello.")
+        dest = Path(self._tmp.name) / "slim.tar.gz"
+        self.store.export(dest=str(dest))
+        with self.assertRaises(StoreError):
+            self.store.import_(str(dest), full=True)
+
+    def test_plain_import_ignores_full_payload(self):
+        from pathlib import Path
+
+        self.store.create("keep", "Keeper skill")
+        self.store.create("goner", "Doomed skill")
+        self.store.remove("goner")
+        dest = Path(self._tmp.name) / "full2.tar.gz"
+        self.store.export(dest=str(dest), full=True)
+        self.store.remove("keep", purge=True)
+        self.store.purge_trash()
+        result = self.store.import_(str(dest))
+        self.assertIn("keep", result["imported"])
+        self.assertNotIn("restored_trash", result)
+        self.assertEqual(self.store.trash_list(), [])
+
+
+class TestSnapshots(IsolatedStoreTestCase):
+    def test_edit_creates_snapshot_and_restore_rolls_back(self):
+        self.store.create("demo", "Original", body="old")
+        self.store.edit("demo", description="Changed", body="new")
+        from skillsmgr.store import list_snapshots
+
+        snapshots = list_snapshots(self.store.data_dir, "global", "demo")
+        self.assertEqual(len(snapshots), 1)
+        result = self.store.restore("demo", snapshot=snapshots[0])
+        self.assertEqual(result["snapshot"], snapshots[0])
+        self.assertEqual(self.store.get("demo")["description"], "Original")
+        self.assertIn("old", self.store.get("demo")["body"])
+
+    def test_snapshot_retention_keeps_newest_five(self):
+        self.store.create("demo", "Original", body="old")
+        for i in range(7):
+            self.store.edit("demo", body=f"body-{i}")
+        from skillsmgr.store import list_snapshots
+
+        snapshots = list_snapshots(self.store.data_dir, "global", "demo")
+        self.assertEqual(len(snapshots), 5)
 
 
 class TestValidatorLoaderScopes(unittest.TestCase):
@@ -312,6 +378,39 @@ class TestFrontmatterSearchUnits(unittest.TestCase):
         ]
         ranked = rank_results(recs, "deploy")
         self.assertEqual(ranked[0][0]["name"], "deploy")
+
+    def test_search_includes_body_matches(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(data_dir=d)
+            store.init_db()
+            store.create("body-only", "Unrelated description", body="contains unique-body-term")
+            self.assertEqual([r["name"] for r in store.search("unique-body-term")], ["body-only"])
+
+    def test_adversarial_wildcards_fail_fast(self):
+        with self.assertRaises(ValueError):
+            rank_results([{"name": "x", "description": "a" * 200}], "*a" * 12)
+        with self.assertRaises(ValueError):
+            rank_results([{"name": "x", "description": "plain"}], "x" * 201)
+
+    def test_repeated_wildcards_are_safe_and_normal_patterns_work(self):
+        ranked = rank_results(
+            [{"name": "deploy-app", "description": "Deploys the app"}],
+            "deploy***",
+        )
+        self.assertEqual(ranked[0][0]["name"], "deploy-app")
+
+    def test_deep_frontmatter_returns_clean_error(self):
+        deep = "---\n" + "".join(f"{'  ' * i}k{i}:\n" for i in range(100)) + "---\nbody\n"
+        with self.assertRaises(FrontmatterError):
+            parse_frontmatter(deep)
+
+    def test_frontmatter_resource_limits_return_clean_errors(self):
+        oversized = "---\ndescription: " + ("x" * 20_000) + "\n---\nbody\n"
+        with self.assertRaises(FrontmatterError):
+            parse_frontmatter(oversized)
+        many_keys = "---\n" + "".join(f"k{i}: v\n" for i in range(300)) + "---\nbody\n"
+        with self.assertRaises(FrontmatterError):
+            parse_frontmatter(many_keys)
 
 
 if __name__ == "__main__":

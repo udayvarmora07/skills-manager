@@ -73,17 +73,26 @@ Validate skills by name, all (`--all`), or a directory (`--path`). Prints issues
 ### `search TERM [--limit N] [--json] [--scope SCOPE]`
 Search with scoring (see @docs/02-modules.md); `--limit` caps results. `--scope all` searches every scope.
 
-### `import ARCHIVE [--force] [--json]`
-Import a `.tar.gz`/`.tgz`/`.tar` archive of skills into the global store (tar-only; `tarfile.open(archive, "r:*")` — `.zip` is NOT supported). `--force` overwrites existing names.
+### `import ARCHIVE [--force] [--full] [--json]`
+Import a `.tar.gz`/`.tgz`/`.tar` archive of skills into the global store. ZIP
+content is rejected even when the filename is misleading. Tar imports enforce
+resource budgets and a strict versioned `skills-mgr` manifest contract;
+`--force` overwrites existing names with staged per-skill recovery.
+`--full` restores trash and templates from a full export.
 
-### `export [--dest PATH] [--json]`
-Export all skills (global scope only) to an archive (default `backups/`). Alias: `backup`.
+### `export [--dest PATH] [--full] [--json]`
+Export all skills (global scope only) to an archive (default `backups/`).
+`--full` includes trash and templates. Alias: `backup`.
 
-### `backup [--dest PATH] [--json]`
+### `backup [--dest PATH] [--full] [--json]`
 Alias of `export` (identical behavior).
 
-### `restore NAME [--json]`
-Restore a skill from the trash.
+### `restore NAME [--snapshot TS] [--scope SCOPE] [--json]`
+Restore a skill from the trash, or roll back to a retained snapshot.
+
+### `history [NAME] [--limit N] [--json]`
+Show recent history. When `NAME` is supplied, JSON output includes retained
+snapshot IDs and text output lists them after the history table.
 
 ### `doctor [--json] [--scope SCOPE]`
 Health check: data dir, DB, skill files, consistency between FS and index. With a scope, checks that scope's dir. With `--scope all`, also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.

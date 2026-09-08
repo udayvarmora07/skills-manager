@@ -445,6 +445,9 @@ def edit_skill(
             orig_body = body
             changed = True
     if changed:
+        from .store import write_snapshot as _write_snapshot
+
+        _write_snapshot(_global_store().data_dir, scope_id, name, text)
         order = orig_keys + [k for k in data if k not in orig_keys]
         md.write_text(dump_frontmatter(data, key_order=order) + orig_body, encoding="utf-8")
     return {"name": name, "changed": changed, "scope": scope_id}
@@ -524,6 +527,9 @@ def sync_skill(
 
     synced: list[str] = []
     skipped: list[dict] = []
+    from .store import write_snapshot as _write_snapshot
+
+    snapshot_data_dir = _global_store().data_dir
     for sid in to_scopes:
         if sid == from_scope:
             skipped.append({"scope": sid, "reason": "same as source"})
@@ -532,16 +538,72 @@ def sync_skill(
         if scope is None:
             skipped.append({"scope": sid, "reason": "unknown scope"})
             continue
+        previous_content = None
         dest = _safe_scope_skill_path(scope, name)
+        if force and dest.exists():
+            old_md = dest / "SKILL.md"
+            if not old_md.is_file():
+                old_md = dest / "SKILL.md.disabled"
+            if old_md.is_file():
+                previous_content = old_md.read_text(encoding="utf-8")
         if dest.exists() and not force:
             skipped.append({"scope": sid, "reason": "already exists (use force)"})
             continue
-        scope.base.mkdir(parents=True, exist_ok=True)
         if dest.exists():
-            shutil.rmtree(dest)
-        shutil.copytree(src_dir, dest)
+            _write_snapshot(snapshot_data_dir, sid, name, previous_content or "")
+        stage = scope.base / f".{name}.skillsmgr-stage"
+        backup = scope.base / f".{name}.skillsmgr-backup"
+        try:
+            if stage.exists():
+                shutil.rmtree(stage)
+            if backup.exists():
+                shutil.rmtree(backup)
+            shutil.copytree(src_dir, stage)
+            if dest.exists():
+                shutil.move(str(dest), str(backup))
+            shutil.move(str(stage), str(dest))
+            if backup.exists():
+                shutil.rmtree(backup)
+        except OSError:
+            if dest.exists() and backup.exists():
+                shutil.rmtree(dest, ignore_errors=True)
+            if backup.exists() and not dest.exists():
+                shutil.move(str(backup), str(dest))
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
         synced.append(sid)
     return {"name": name, "from_scope": from_scope, "synced": synced, "skipped": skipped}
+
+
+def list_snapshots_for(scope_id: str, name: str) -> list[str]:
+    from .store import list_snapshots as _list_snapshots
+
+    if scope_id == "global":
+        return _list_snapshots(_global_store().data_dir, "global", name)
+    if _scope_by_id(scope_id) is None:
+        raise StoreError(f"unknown scope {scope_id!r}")
+    return _list_snapshots(_global_store().data_dir, scope_id, name)
+
+
+def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
+    from .store import read_snapshot as _read_snapshot
+    from .store import write_snapshot as _write_snapshot
+
+    if scope_id == "global":
+        return _global_store().restore(name, snapshot=snapshot)
+    scope = _scope_by_id(scope_id)
+    if scope is None:
+        raise StoreError(f"unknown scope {scope_id!r}")
+    content = _read_snapshot(_global_store().data_dir, scope_id, name, snapshot)
+    skill_dir = _safe_scope_skill_path(scope, name)
+    md = skill_dir / "SKILL.md"
+    if not md.is_file():
+        if (skill_dir / "SKILL.md.disabled").is_file():
+            raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
+        raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
+    _write_snapshot(_global_store().data_dir, scope_id, name, md.read_text(encoding="utf-8"))
+    md.write_text(content, encoding="utf-8")
+    return {"name": name, "snapshot": snapshot, "scope": scope_id}
 
 
 def search_all(term: str, scope_id: str | None = None) -> list[dict]:
@@ -551,15 +613,6 @@ def search_all(term: str, scope_id: str | None = None) -> list[dict]:
     """
     if len(term) > 200:
         raise StoreError("search query too long")
-    raw_term = term.lower()
-
-    def _matches(rec: dict) -> bool:
-        for key in ("name", "description", "body", "category"):
-            v = rec.get(key)
-            if isinstance(v, str) and raw_term in v.lower():
-                return True
-        return False
-
     if scope_id in (None, "all"):
         pool = list_all()
     elif scope_id == "global":
@@ -569,18 +622,9 @@ def search_all(term: str, scope_id: str | None = None) -> list[dict]:
     else:
         pool = scan_scope(scope_id)
 
-    if scope_id in (None, "all") or scope_id not in ("global",):
-        # For merged / agent scopes, filter in Python.
-        if term:
-            pool = [r for r in pool if _matches(r)]
-
     # Rank via search.py scoring for consistent ordering.
-    try:
-        from .search import rank_results
+    from .search import rank_results
 
-        ranked = rank_results(pool, term) if term else [(r, 0) for r in pool]
-        ranked.sort(key=lambda p: (-p[1], p[0]["name"].lower()))
-        return [r for r, _ in ranked]
-    except Exception:
-        pool.sort(key=lambda r: r["name"].lower())
-        return pool
+    ranked = rank_results(pool, term) if term else [(r, 0) for r in pool]
+    ranked.sort(key=lambda p: (-p[1], p[0]["name"].lower()))
+    return [r for r, _ in ranked]

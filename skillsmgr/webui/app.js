@@ -537,6 +537,7 @@ createApp({
         install: this.openInstall,
         import: this.openImport,
         export: this.exportArchive,
+        fullExport: () => this.exportArchive(true),
         templates: this.openTemplates,
         newtemplate: this.openNewTemplate,
         stats: this.openStats,
@@ -841,7 +842,7 @@ createApp({
     },
 
     openHistory() {
-      this.modals.history = { name: "", rows: [], loading: false };
+      this.modals.history = { name: "", rows: [], snapshots: [], loading: false };
       this.loadHistory();
     },
 
@@ -852,10 +853,32 @@ createApp({
       try {
         const name = m.name ? "&name=" + encodeURIComponent(m.name) : "";
         m.rows = await api("/api/history?limit=200" + name);
+        m.snapshots = [];
+        if (m.name) {
+          const scope = (this.selected && this.selected.scope) ? this.selected.scope : "global";
+          const snapshotResult = await api("/api/history?name=" + encodeURIComponent(m.name) + "&scope=" + encodeURIComponent(scope) + "&snapshots=1");
+          m.snapshots = snapshotResult.snapshots || [];
+        }
       } catch (e) {
         this.toast(e.message, "err");
       } finally {
         m.loading = false;
+      }
+    },
+
+    async rollbackSnapshot(name, snapshot) {
+      this.busy = true;
+      try {
+        const scope = (this.selected && this.selected.scope) ? this.selected.scope : "global";
+        const res = await api("/api/trash/" + encodeURIComponent(name) + "?snapshot=" + encodeURIComponent(snapshot) + "&scope=" + encodeURIComponent(scope), { method: "POST" });
+        this.toast(`Rolled back "${res.name}" to snapshot ${snapshot}.`);
+        await this.loadSkills();
+        await this.loadDetail(name, scope);
+        await this.loadHistory();
+      } catch (e) {
+        this.toast(e.message, "err");
+      } finally {
+        this.busy = false;
       }
     },
 
@@ -924,7 +947,7 @@ createApp({
     /* ------------------------------------------------------ import/export */
 
     openImport() {
-      this.modals.import = { file: null, force: false };
+      this.modals.import = { file: null, force: false, full: false };
     },
 
     pickImportFile() {
@@ -951,7 +974,7 @@ createApp({
       if (!m || !m.file) return;
       this.busy = true;
       try {
-        const url = "/api/import?filename=" + encodeURIComponent(m.file.name) + "&force=" + (m.force ? "1" : "0");
+        const url = "/api/import?filename=" + encodeURIComponent(m.file.name) + "&force=" + (m.force ? "1" : "0") + "&full=" + (m.full ? "1" : "0");
         const res = await fetch(url, { method: "PUT", body: m.file });
         let data = null;
         try { data = await res.json(); } catch (e) { /* ignore */ }
@@ -1006,10 +1029,10 @@ createApp({
       }
     },
 
-    async exportArchive() {
+    async exportArchive(full = false) {
       this.busy = true;
       try {
-        const res = await fetch("/api/export");
+        const res = await fetch("/api/export" + (full ? "?full=1" : ""));
         if (!res.ok) throw new Error("Export failed (HTTP " + res.status + ")");
         const blob = await res.blob();
         const cd = res.headers.get("Content-Disposition") || "";
