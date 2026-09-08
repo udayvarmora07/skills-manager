@@ -2,9 +2,10 @@
 
 **Version 1.0.0**
 
-**AI manifest:** Current-state record for the first ten executable tasks from
-`TODO.md`. This is a selective replay map for `main`; it does not approve a
-wholesale merge of either unmerged worktree.
+**AI manifest:** Current-state record for the first ten executable tasks and the
+next-five archive/trash safety slice from `TODO.md`. This is a selective replay
+map for `main`; it does not approve a wholesale merge of either unmerged
+worktree.
 
 ## 1. Selective replay map
 
@@ -61,8 +62,9 @@ open because `python3 -m build` is unavailable in the baseline environment.
 
 - No new CLI command, CLI flag, Store method, SQLite table, or schema version.
 - No localhost Origin/Host/Fetch-Metadata security implementation.
-- No new archive preflight pipeline, ZIP support, parser limits, or wildcard
-  matcher redesign.
+- No archive member count/size/compression-ratio limits, ZIP support, parser
+  limits, or wildcard matcher redesign. The archive preflight pipeline is
+  included in the next-five slice below.
 - No snapshot, migration, UX, browser accessibility, or release automation
   integration from either candidate worktree.
 - No modification of `.autogit`.
@@ -85,6 +87,32 @@ The raw global skill-read route also resolves through `Store.get()` before
 opening a file. This closes the previously uncovered encoded-traversal read
 seam; `tests.test_webapp.WebAppTestCase.test_encoded_skill_traversal_is_rejected_before_raw_read`
 proves an outside `SKILL.md` is not disclosed.
+
+## 6. Next-five archive/trash safety status
+
+| # | Task | Status | Evidence |
+|---:|---|---|---|
+| 11 | Prevent invalid forced-import destinations | `main` | Canonical manifest-name validation and force regression preserve existing destinations. |
+| 12 | Prevent unsafe/prefix-collision trash matching | `main` | Exact canonical timestamp parsing is shared by list, restore, purge, and doctor. |
+| 13 | Preflight archives before mutation | `main` | Private temporary extraction plus planned imports completes before the first destination delete/copy. |
+| 14 | Reject unsafe archive members/types/layouts | `main` | Absolute/traversal, duplicate, unexpected-layout, symlink, hard-link, FIFO, and special-member tests pass. |
+| 15 | Feature-detect tar safe extraction | `main` | `tarfile.data_filter` path and guarded no-filter regular-file/directory fallback both pass. |
+
+### Next-five acceptance evidence
+
+```text
+python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py   PASS
+python3 -m unittest discover -s tests                       PASS (65 tests)
+python3 smoke_store.py                                      PASS
+python3 smoke_web.py                                        PASS
+node --check skillsmgr/webui/app.js                         PASS
+python3 -m skillsmgr --help                                 PASS
+git diff --check                                            PASS
+```
+
+The following archive concerns remain intentionally open: member count/size/
+compression-ratio limits, ZIP support, full manifest schema/version policy, and
+transactional rollback after a destination filesystem failure.
 
 The remaining P0 and release gaps stay open in `TODO.md` until their own
 failing-first tests, implementation, owning documentation, and acceptance

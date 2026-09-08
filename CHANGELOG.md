@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Archive/trash safety hardening: forced imports cannot turn invalid names into
+  destructive paths; tar members are preflighted in a private temporary tree;
+  duplicate, traversal, unexpected-layout, symlink, hard-link, FIFO, and other
+  special members are rejected; tar extraction uses `data_filter` when
+  available and a guarded regular-file/directory fallback otherwise; malformed
+  trash entries are ignored consistently.
 - Spec-lint+ (`validator.py`): `description_score()` (use-context + filler detection), description warnings (missing "Use … when …", vague filler), body token warning (`MAX_BODY_TOKENS=5000`, progressive-disclosure guidance), `scripts/`/`references/`/`assets/` layout check for dangling mentions.
 - Cross-scope dedup: `scopes.find_duplicates()` (same-name + descriptions-differ flag), surfaced in `doctor --scope all`, `/api/doctor?scope=all`, and the doctor modal with Sync… converge buttons.
 - Token budget view (verified complete): `tokens --scope all` aggregate + `largest`, `/api/stats?window=` + `/api/tokens`, frontend budget bar with window selector.

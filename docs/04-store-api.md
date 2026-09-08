@@ -39,10 +39,15 @@
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
 - `restore(self, name) -> dict` — from trash.
 - `disable(self, name) -> dict` / `enable(self, name) -> dict` — rename `SKILL.md` <-> `SKILL.md.disabled`; trashed skills may be disallowed until restored.
-- `trash_list(self) -> list[dict]` / `purge_trash(self) -> dict`
+- `trash_list(self) -> list[dict]` / `purge_trash(self) -> dict` — only exact
+  canonical skill names with valid timestamp suffixes are recognized in trash;
+  malformed, symlinked, and prefix-collision directories are ignored.
 - `stats(self) -> dict` — counts and summary.
 - `export(self, dest=None) -> dict` / `backup(self, dest=None) -> dict` — archive to `backups/` by default.
-- `import_(self, archive, force=False) -> dict` — `StoreError` if archive missing; `tempfile.mkdtemp(prefix="skillsmgr-import-")`; returns `{imported: [...], skipped: [...]}`.
+- `import_(self, archive, force=False) -> dict` — `StoreError` if archive is
+  missing, malformed, unsafe, duplicated, or has unsupported member types;
+  `tempfile.mkdtemp(prefix="skillsmgr-import-")` is used for preflight before
+  any destination overwrite; returns `{imported: [...], skipped: [...]}`.
 - `history(self, name=None, limit=50) -> list[dict]`
 - `doctor(self) -> dict` — health check; lists FS/DB inconsistencies.
 - `db_rebuild(self)` / `db_resync(self)` — rebuild: drop + re-create index from FS; resync: sync without dropping. FS untouched.

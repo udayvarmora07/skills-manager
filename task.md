@@ -90,6 +90,26 @@
 - [x] Add hermetic regression coverage for symlink/absolute/parent escapes, Store/scope mutations, encoded REST reads/deletion, pre-handler CLI rejection, invalid archive fallback names, and victim preservation.
 - [x] Verify: compile PASS, **57 unittest PASS**, `smoke_store.py` PASS, `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, and `git diff --check` PASS.
 
+## Milestone 10 — Archive and trash safety (2026-09-08)
+
+- [x] Prevent forced imports from treating invalid manifest destinations as
+  filesystem paths or deleting an outside destination.
+- [x] Make trash list/restore/purge/doctor accept only exact canonical skill
+  names with valid timestamp suffixes; ignore malformed, symlinked, and
+  prefix-collision entries.
+- [x] Add tar archive preflight before destination mutation: validate member
+  layout and duplicates, extract privately, validate the manifest and skill
+  documents, then commit planned skills.
+- [x] Reject absolute/traversal members, unexpected layouts, symlinks, hard
+  links, FIFOs, device/special members, and duplicate archive names.
+- [x] Feature-detect `tarfile.data_filter` and use a guarded regular-file/
+  directory extractor when it is unavailable; never use unfiltered extraction.
+- [x] Add hermetic regressions for forced invalid destinations, archive
+  traversal/duplicates/special members, no-filter compatibility, malformed
+  trash entries, and valid archive round trips.
+- [x] Verify: compile PASS, **65 unittest PASS**, `smoke_store.py` PASS,
+  `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, and `git diff --check`.
+
 ## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
 
 - [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK

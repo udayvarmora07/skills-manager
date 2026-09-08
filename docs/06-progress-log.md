@@ -4,6 +4,26 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-08 — Next-five archive and trash safety slice
+
+- Completed the next five executable tasks after the first-ten path-safety
+  slice: forced-destination protection, exact trash matching, archive
+  preflight, unsafe archive-member rejection, and safe `tarfile.data_filter`
+  feature detection.
+- `Store.import_()` now validates tar member paths, duplicate names, supported
+  regular-file/directory types, manifest structure, canonical skill names,
+  and extracted skill documents in a private temporary directory before any
+  forced destination deletion or copy. Interpreters without `data_filter` use
+  an explicit guarded extractor rather than unfiltered `extractall()`.
+- Trash list/restore/purge/doctor now share exact canonical timestamped-entry
+  recognition and ignore malformed or symlinked entries consistently.
+- Added hermetic regressions for forced invalid names, unsafe members,
+  duplicates, symlinks, hard links, FIFOs, no-filter extraction, valid archive
+  compatibility, malformed trash entries, and doctor consistency.
+- Verified: compile PASS, **65 unittest PASS**, `smoke_store.py` PASS,
+  `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, and `git diff
+  --check` PASS.
+
 ## 2026-09-08 — Close encoded REST raw-read seam
 
 - Added a regression test for an encoded traversal request targeting the global

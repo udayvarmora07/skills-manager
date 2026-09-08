@@ -135,21 +135,22 @@ fail closed.
   `enable`, `add`, import, export, sync, and all agent-scope equivalents.
 - [x] Validate REST path parameters after URL decoding and before path joins.
 - [x] Validate CLI names before command handlers construct paths.
-- [ ] Ensure `--force` cannot turn an invalid destination into a valid delete.
-- [ ] Ensure trash matching cannot confuse a valid name with a path fragment or
+- [x] Ensure `--force` cannot turn an invalid destination into a valid delete.
+- [x] Ensure trash matching cannot confuse a valid name with a path fragment or
   prefix collision.
 
 ### 1B. Archive intake
 
-- [ ] Create an archive preflight pipeline separate from mutation: identify
-  format, inspect members, validate names/types/paths, enforce limits, extract
-  into a private temporary directory, validate contents, then commit.
-- [ ] Reject absolute paths, `..` components, duplicate members, device files,
-  FIFOs, hard links, symlinks, unsupported metadata, and unexpected layouts
+- [x] Create an archive preflight pipeline separate from mutation: identify
+  format, inspect members, validate names/types/paths, extract into a private
+  temporary directory, validate contents, then commit. Resource limits remain
+  a separate open task.
+- [x] Reject absolute paths, `..` components, duplicate members, device files,
+  FIFOs, hard links, symlinks, unsupported member types, and unexpected layouts
   unless explicitly supported.
-- [ ] Feature-detect `tarfile.data_filter`; never silently fall back to
-  unfiltered extraction.
-- [ ] Keep independent member validation even when the interpreter provides a
+- [x] Feature-detect `tarfile.data_filter`; never silently fall back to
+  unfiltered extraction. Older interpreters use the guarded manual extractor.
+- [x] Keep independent member validation even when the interpreter provides a
   safe extraction filter.
 - [ ] Enforce compressed-size, expanded-size, member-count, individual-member,
   path-length, nesting-depth, and compression-ratio limits.

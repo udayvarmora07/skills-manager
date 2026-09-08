@@ -103,7 +103,7 @@ mutate an outside directory.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/export` | downloads gzip archive (attachment; global scope only) |
-| PUT | `/api/import?filename=&force=` | raw archive bytes in body → Store.import_ |
+| PUT | `/api/import?filename=&force=` | raw archive bytes in body → Store.import_; archive members are preflighted and unsafe tar entries are rejected before Store mutation |
 | PUT | `/api/import` (multipart/form-data) | webkitdirectory folder upload → Store.add per SKILL.md |
 
 ## Frontend map (app.js)
