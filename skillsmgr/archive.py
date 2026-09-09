@@ -29,7 +29,16 @@ MAX_ARCHIVE_COMPRESSION_RATIO = 1000
 def normalize_member_name(name: str) -> str:
     if not isinstance(name, str) or not name or "\x00" in name:
         raise ArchiveError(f"unsafe archive member: {name!r}")
+    # Reject Windows separators on every host so a tar authored on Windows
+    # cannot smuggle a nested path past the "/" split below (tar member
+    # names are "/"-separated per POSIX; "\" must never become a separator).
     if name.startswith(("/", "\\")) or "\\" in name:
+        raise ArchiveError(f"unsafe archive member: {name!r}")
+    # Reject drive-letter prefixes ("C:...", including slash variants) on
+    # every host so extraction stays inside the managed root on Windows too;
+    # pathlib treats "C:..." as relative on POSIX while Windows resolves it
+    # against the current drive.
+    if re.fullmatch(r"[A-Za-z]:.*", name):
         raise ArchiveError(f"unsafe archive member: {name!r}")
     normalized = name.rstrip("/")
     parts = normalized.split("/") if normalized else []
