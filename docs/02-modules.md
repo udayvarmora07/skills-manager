@@ -12,9 +12,9 @@
 
 Entry point for `python3 -m skillsmgr`; delegates to `cli.main()`.
 
-## `cli.py`
+## `cli.py`, `cli_parser.py`, `cli_handlers.py`
 
-argparse-based CLI, `prog="skills-mgr"`, 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (see @docs/03-cli-surface.md). Key helpers: `_print_json(data)` (indent=2), `_err(msg)`, `_truncate(text, n)`, `_render_table(rows, headers)`. Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. `--json` on data commands. `--scope` (per-command flag) on `list`/`view`/`search`/`doctor`/`stats`, plus scope-aware `sync`/`scopes`/`tokens`/`install`. `cmd_gui` launches the local web UI via `webapp.run(...)`. The parser and command handlers remain together for now; focused contract tests protect parser/output compatibility while a larger split remains future work.
+The stable `cli.py` adapter exposes `main()`, `build_parser()`, command handler names, exit constants, and historical private helper aliases. `cli_parser.py` owns argparse construction (`prog="skills-mgr"`): 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (see @docs/03-cli-surface.md). `cli_handlers.py` owns command behavior and validates names/data before filesystem work; `cli_output.py` owns JSON/errors/table rendering. Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. Public parser/handler adapters preserve existing imports and contract tests.
 
 ## `webapp.py`
 
@@ -22,7 +22,7 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `webui/` (frontend)
 
-`index.html` (Vue templates for all screens/modals), `styles.css` (design tokens + components), `app.js` (Vue app: state, actions, markdown renderer, toasts), `static/vendor/vue.global.prod.js` (Vue 3.5.13 vendored, no build step). Scope switcher in the topbar (`activeScope` persisted to localStorage), scope-aware create/edit/remove/disable/sync. Full map: @docs/08-web-ui.md.
+`index.html` (Vue templates for all screens/modals), `styles.css` (design tokens + components), `domain.js` (transport, formatting, frontmatter, escaped Markdown renderer), `app.js` (Vue state, actions, dialogs, focus/keyboard lifecycle, and toasts), `static/vendor/vue.global.prod.js` (Vue 3.5.13 vendored, no build step). Scope switcher in the topbar (`activeScope` persisted to localStorage), scope-aware create/edit/remove/disable/sync. Full map: @docs/08-web-ui.md.
 
 ## `store.py`
 
@@ -61,6 +61,36 @@ own atomic text writes and tree hashes, archive preflight/extraction/staged
 commit behavior, resolved root-containment, and physical-root/capability/
 instance-state observations. `paths.py` remains a compatibility adapter for the
 existing containment function names.
+
+## `insights.py`
+
+Read-only Milestone 9 insight helpers (pure, stdlib-only, zero disk
+mutation): `consumer_view()` (per-consumer observed instances, precedence
+explicitly unresolved per ADR-002), `diff_skills()`/`diff_three_way()`
+(two-way field/body diff, three-way merge preview holding base on conflict),
+`ownership_states()` (`managed`/`unmanaged`/`adopted`/`quarantined`/`invalid`),
+`provenance_summary()` (known/unknown split over loader observations),
+`update_preview()` (changed files, token/body/snapshot risks, rollback flag),
+`quarantine_plan()` (stage-only plan validated by `validate_skill_name`),
+`risk_scan()` (explainable script/link/tool/pattern findings with why +
+evidence), `registry_preview()` (offline dry-run gated on explicit trust),
+`eval_plan()`/`eval_score()` (provider-neutral deterministic cases, advisory
+only), `bundle_policy()` (signatures deferred pending issue #11 review).
+Fail-closed input policy: non-dict records raise `ValueError` (never raw
+`AttributeError`/`TypeError`); `consumer_view()` skips non-dict list items;
+`update_preview()` coerces tokens safely (`None` for non-numeric) and
+rejects non-list snapshots; `diff_skills()` caps `body_diff` at
+`MAX_BODY_DIFF_LINES` (200) with a `body_diff_truncated` flag;
+`eval_plan()` requires dict cases with input/expect keys; name entry
+points (`quarantine_plan`/`eval_plan`) require real strings via
+`_canonical_name()`; all outputs are JSON-serializable; consumer views
+sort deterministically; `ownership_states()` treats a record as
+`invalid` on the loader `malformed` flag or `validator.validate_skill`
+errors against its real skill directory (body-only text is never
+revalidated as a document).
+sort deterministically; `risk_scan()` is six single-purpose scanners.
+Operates on records the existing `scopes`/`loader`/`Store.history` seams
+already return; no new CLI/Store surfaces, no schema change.
 
 ## `tokens.py`
 

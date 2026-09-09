@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Milestone 9 read-only insight foundation (`skillsmgr/insights.py`, pure stdlib-only helpers, no CLI/Store/schema/network changes): per-consumer observed views with precedence explicitly unresolved, two-way/three-way diffs, five-state ownership classification, provenance summaries, update previews with rollback flags, stage-only quarantine plans, explainable static risk scans, offline registry dry-runs gated on explicit trust, provider-neutral advisory eval plans, and a deferred signed-bundle policy. Locked by 31 red-first hermetic tests in `tests/test_insights_contracts.py` (20 foundation + 11 fail-closed hardening: clean `ValueError` input policy, safe token coercion, `MAX_BODY_DIFF_LINES` (200) body-diff bound with truncation flag, strict registry/eval shapes).
+- Browser UX/a11y baseline: dev-only Chrome CDP viewport harness with console/runtime/network failure capture; keyboard `/`, `?`, `Esc`, and Tab dialog contracts; labelled/inert modal focus lifecycle; safer destructive defaults; live status announcements; escaped Markdown editor preview; and sync source/target/overwrite/rollback preview.
+- Internal seams: CLI parser and handlers split behind `skillsmgr.cli` compatibility adapters; no-build frontend domain policy split into `webui/domain.js` before `app.js`.
+- Release engineering baseline: CI now runs a 3.10–3.14 unit matrix plus a
+  Linux/macOS/Windows path/archive matrix, separate unit/adversarial/package/
+  docs/browser jobs with least-privilege `contents: read` permissions, and a
+  build-once package gate (`check_package_data.py --dist-dir` inspects the
+  exact wheel/sdist CI publishes). A tag-gated `release.yml` builds once,
+  verifies the exact artifacts, attests build provenance, publishes via PyPI
+  Trusted Publishing (TestPyPI then the protected `release` environment, no
+  long-lived token), creates a GitHub Release, and verifies the PyPI install
+  (CLI help, vendored web assets, hermetic CRUD) plus tag/version alignment.
+- Cross-platform containment parity: `contained_path()` and archive member
+  validation now reject Windows `\` separators and drive-letter prefixes on
+  every host, with hermetic regressions proving the behavior on Linux.
+
 - Atomic sibling-temp skill/snapshot/template writes with flush/fsync/replace,
   same-process per-document mutation serialization, rollback on index/history
   failures, doctor diagnostics for transaction artifacts and filesystem/index

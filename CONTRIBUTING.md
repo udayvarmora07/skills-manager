@@ -42,6 +42,7 @@ python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py check_complexity.py c
 python3 check_complexity.py
 python3 check_docs.py
 python3 check_package_data.py   # reports UNAVAILABLE when optional build tooling is absent
+python3 check_package_data.py --dist-dir dist   # build-once check on CI-built artifacts
 python3 -m unittest discover -s tests
 python3 smoke_store.py
 python3 smoke_web.py

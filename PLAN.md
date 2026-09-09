@@ -477,6 +477,15 @@ Required interaction details:
   cancel every destructive action.
 - No modal traps focus or leaves focus in a removed DOM subtree.
 
+### Phase 7 implementation evidence (2026-09-09)
+
+The browser/accessibility gate is now implemented without changing the locked runtime constraints:
+
+- CLI parser/handler/output seams are split into `cli_parser.py`, `cli_handlers.py`, and `cli_output.py`; `cli.py` is a compatibility adapter.
+- The no-build frontend has `domain.js` for transport/formatting/frontmatter/escaped Markdown and `app.js` for Vue workflows.
+- Dialogs have labelled focus lifecycle, Tab trapping, Escape, safer destructive defaults, background inertness, focus restoration, and live status/error announcements. The editor previews escaped Markdown and sync previews source/targets/overwrite/rollback behavior.
+- `browser_harness.py` uses only Python stdlib plus an already installed system Chrome CDP endpoint; it captures runtime/console/network failures and checks 320/400/640/900/1280px viewports. It passed with zero errors and no horizontal overflow.
+
 ### Phase 8 — CI, packaging, and release
 
 #### CI design

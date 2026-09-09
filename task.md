@@ -134,8 +134,8 @@
 ## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
 
 - [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK
-- [ ] Skill-body editor with live markdown preview — needs UX approval
-- [ ] Keyboard-shortcut cheatsheet modal (`?` key) — needs UX approval
+- [x] Skill-body editor has an escaped live markdown preview; no renderer dependency added.
+- [x] Keyboard-shortcut cheatsheet modal (`?` key) added after the keyboard contract.
 - [!] Pytest suite is not planned: `tests/` uses the approved stdlib `unittest` suite; adding third-party test tooling would require an explicit tooling decision
 - [x] CI workflow (compile + unittest + smokes on push) is present in `.github/workflows/ci.yml`; future CI expansion remains tracked in the roadmap
 - [ ] Zip-import support (`import` is tar-only today) — needs CLI-surface ASK
@@ -274,3 +274,90 @@
 - [x] Fixed 15 genuine defects surgically with red-first hermetic regressions (no new commands/flags, no Store public methods, no schema change — private helpers and internal `_unlocked` splits only): trashed-row reactivation on create/add (FIX-1), same-second trash counter recognition (FIX-2), honest double-remove error (FIX-3), import backup-move recovery preserving the original (FIX-4), truncated-gzip clean StoreError (FIX-5), CLI schema bootstrap on first run (FIX-6), install source/agent validation parity (FIX-7), flow scalar + quote-char key quoting (FIX-8), list doc correction (FIX-9), nested-block mapping emission with inline empty collections (FIX-10), post-sync global resync + resync reactivation (FIX-11), per-skill lock coverage + stranded-temp cleanup (FIX-12), purge StoreError wrapping (FIX-13), duplicate frontmatter keys now fail loudly (FIX-14, promoted from OBS-1), `purged` names deduped (FIX-15, promoted from OBS-3).
 - [x] Kept every gate green without baseline inflation: 224 unittest PASS, both smokes PASS, compile/`node --check`/`git diff --check` PASS, `check_docs.py` PASS, `check_complexity.py` PASS (194 functions, new helpers under budget).
 - [x] Recorded the full method, evidence, and per-finding repro/root-cause/fix detail in `loop-engineering-findings.md`; updated `docs/02-modules.md` (store atomicity/index, frontmatter round-trip incl. duplicate-key rejection), `docs/04-store-api.md` (`purged` dedup) and `docs/03-cli-surface.md` (`list` status semantics).
+
+## Milestone 24 — Browser UX, accessibility, module seams, and documentation truth (2026-09-09)
+
+- [x] Split CLI parser construction and handlers into `cli_parser.py` and `cli_handlers.py` while preserving `skillsmgr.cli` imports and output aliases.
+- [x] Split frontend transport/formatting/frontmatter/escaped-Markdown policy into no-build `webui/domain.js`, loaded before `app.js`; package-data discovery remains recursive.
+- [x] Add dialog focus lifecycle: safer initial focus, Tab trap, Escape close, opener restoration, labelled dialogs, `inert`/`aria-hidden` background, live status/error announcements, and shortcut help.
+- [x] Add escaped editor Markdown preview and pre-sync resolution/overwrite/rollback preview.
+- [x] Add `browser_harness.py`: hermetic Store + loopback server + system Chrome CDP, console/runtime/network failure capture, and 320/400/640/900/1280px overflow matrix.
+- [x] Reconcile AGENTS, web UI/module/session docs, TODO/PLAN/task/CHANGELOG/progress claims; current effective shadowing and native-wrapper work remain explicitly approval-gated/deferred.
+- [x] Verification during implementation: CLI/web/package/docs focused tests PASS; smoke web PASS; frontend syntax PASS; browser harness PASS across all five viewports.
+
+## Milestone 23 — Controlled release engineering (2026-09-09)
+
+- [x] Rewrote `ci.yml` into separate `unit` (3.10–3.14 matrix) / `adversarial` / `package` (build-once + `--dist-dir` gate + artifact upload + clean-install smoke) / `docs` / `xplat` (Linux/macOS/Windows × 3.10/3.14 path/archive contracts) / `browser` jobs with least-privilege `contents: read` permissions and a pin-policy header.
+- [x] Added `check_package_data.py --dist-dir` build-once inspection mode with hermetic regressions (pass on exact wheel+sdist, fail on missing member).
+- [x] Closed the Windows-separator containment gap hermetically: `contained_path()` and archive member validation reject `\` and drive-letter prefixes on every host (red-first, prior suite stayed green).
+- [x] Added tag-gated `release.yml`: validate tag/package-version alignment before build or publish; build once → verify exact artifacts → attest provenance → TestPyPI → protected `release` environment PyPI via Trusted Publishing (no long-lived token) → GitHub Release → tag/version/asset/CRUD/PyPI-install verification.
+- [x] Qualified PyPI claims honestly: badge removed, README states PyPI is a future release with source/CI-artifact install paths; classifiers extended to 3.13/3.14 to match the tested matrix.
+- [x] Locked all of the above with `tests/test_ci_release_contracts.py` (CI structure, xplat containment, build-once, release, PyPI-claim contracts); updated `TODO.md` Milestone 8, `CHANGELOG.md` Unreleased, `CONTRIBUTING.md` checks, and `docs/06-progress-log.md`.
+- [x] Verified: full unittest suite PASS, both smokes PASS, compile/`node --check`/`git diff --check` PASS, `check_docs.py` PASS, `check_complexity.py` PASS, YAML parses, `git status` shows only intended files.
+- [x] Closed release-integrity and cross-platform CI gaps found in review: release tags must equal the package version before build/publish; xplat jobs use the portable `python` executable on Windows; workflows use least-privilege permissions; browser CI runs the CDP harness plus both frontend syntax checks.
+
+## Milestone 25 — Milestone 9 read-only insight foundation (2026-09-09)
+
+- [x] T1 per-consumer “what this agent sees” observed view (`insights.consumer_view`; precedence stays unresolved per ADR-002).
+- [x] T2 two-way and three-way skill diff (`insights.diff_skills`/`diff_three_way`; conflicts hold base).
+- [x] T3 ownership-state classifier (`managed`/`unmanaged`/`adopted`/`quarantined`/`invalid`).
+- [x] T4 provenance summary over loader observations (known/unknown split; persistence approval-gated).
+- [x] T5 update preview (changed files, token/body/snapshot risks, rollback flag from snapshot list).
+- [x] T6 quarantine staging planner (stage-only plan, `validate_skill_name`, zero disk mutation).
+- [x] T7 explainable static risk scan (script/link/tool/pattern findings with why + evidence).
+- [x] T8 offline registry preview (dry-run steps, explicit trust gate; network browse deferred).
+- [x] T9 provider-neutral eval harness skeleton (stdlib-only plan, caller-supplied deterministic scorer, advisory-only).
+- [x] T10 signed/team bundle deferral policy (`deferred` pending issue #11 trust review).
+- [x] T11 red-first hermetic contracts in `tests/test_insights_contracts.py` (31 tests: 20 original + 11 hardening; failed red before green).
+- [x] T12 `skillsmgr/insights.py` implementation (pure, stdlib-only, no CLI/Store/schema/network changes).
+- [x] T13 docs reconciliation (`docs/02-modules.md`, `TODO.md` Milestone 9, this milestone, `CHANGELOG.md`, progress log).
+- [x] T14 full verification ladder plus fresh-tmp live-seam exercise (recorded in progress log).
+- [x] T15 clean diff review and commit of exactly the intended files.
+
+## Milestone 26 — Insights fail-closed hardening (2026-09-09, second 15)
+
+- [x] T1 input-type guards: dict/list `ValueError` policy across diff, provenance, risk, consumer, ownership seams.
+- [x] T2 safe token coercion in `update_preview` (non-numeric/negative/bool tokens coerce to `None`, no raw raises).
+- [x] T3 bounded `body_diff` output (`MAX_BODY_DIFF_LINES` = 200 + `body_diff_truncated` flag).
+- [x] T4 strict `registry_preview`/`eval_plan`/`eval_score` shape validation (non-dict cases, missing keys rejected).
+- [x] T5 name edge cases (`quarantine_plan`/`registry_preview` reject blank and non-string names).
+- [x] T6 11 red-first hermetic hardening tests (2 failures + 9 errors before green).
+- [x] T7 `skillsmgr/insights.py` hardening implementation (pure, stdlib-only, no locked-constraint changes).
+- [x] T8 16-probe adversarial fuzz re-run (all clean `ValueError`/safe values after fix).
+- [x] T9 `docs/SESSION-CONTEXT.md` file inventory gains `insights.py` + contracts.
+- [x] T10 stale "20 tests" claims corrected; fail-closed policy documented in `docs/02-modules.md`.
+- [x] T11 full ladder: 275 unittest PASS, both smokes PASS, compile/frontend/docs/complexity/diff/help PASS.
+- [x] T12 fresh-tmp live-seam re-exercise (huge-body bound, weird-token, registry-gate, eval all OK).
+- [x] T13 `browser_harness.py` re-run PASS (`"passed": true`).
+- [x] T14 staged diff review and commit of exactly the intended files.
+- [x] T15 progress log entry with final evidence.
+
+## Milestone 27 — Insights robustness round 3 (2026-09-09, third 15)
+
+- [x] T1 strict-string names (`_canonical_name`; `123`/`True`/list/dict rejected; padded strings trim).
+- [x] T2 JSON-serializability contract across all 11 helper outputs.
+- [x] T3 deterministic ordering under shuffle (consumer view sorts; ownership preserves input order).
+- [x] T4 non-string fields locked (int body, dict description, list tools/extensions).
+- [x] T5 hostile strings (null bytes, 100KB, emoji) fast and JSON-clean.
+- [x] T6 scorer propagation + plan-shape locks (`eval_score` malformed/misaligned `ValueError`).
+- [x] T7 three-way missing-key + registry extra-key behavior locks.
+- [x] T8 whitespace names + huge-input timing bounds (4000-line diff, 100k-line scan < 5s).
+- [x] T9 4-thread concurrency smoke (100 iterations each, zero errors).
+- [x] T10 `risk_scan` refactor (19 → max 9 local complexity; hotspot ratchet unaffected).
+- [x] T11 strict-name gaps implemented to green (1 red failure first).
+- [x] T12 full ladder: 284 unittest PASS, smokes, compile/frontend/docs/complexity/diff/help PASS.
+- [x] T13 fresh-tmp live seam + `browser_harness.py` PASS.
+- [x] T14 staged diff review and commit of exactly the intended files.
+- [x] T15 progress log entry with final evidence.
+
+## Milestone 28 — Deep E2E audit of all 45 insights tasks (2026-09-09, E1–E9)
+
+- [x] E1 real lifecycle E2E (global + cursor creates, dup, disabled, list/scan/find_duplicates).
+- [x] E2 views/ownership/provenance E2E (counts, unresolved precedence, five states, content hashes).
+- [x] E3 diff/preview/rollback E2E (cross-scope diff, snapshot auto-capture, byte-accurate restore).
+- [x] E4 risk/quarantine/registry/eval/bundle E2E (hostile skill findings, trust gate, 1/1 scoring).
+- [x] E5 purity audit (SHA-256 tree hash + input deepcopy: zero mutation).
+- [x] E6 JSON/determinism/concurrency/perf probe (30× instant, 8×150 threads, 6000-line bound).
+- [x] E7 REST matrix + CLI lifecycle (200s, validate/purge clean).
+- [x] E8 one genuine defect fixed red-first (`_record_invalid` via real skill-dir validation; first wrong fix reverted with evidence).
+- [x] E9 full ladder green (289 unittest, smokes, gates, harness) recorded here and in the progress log.

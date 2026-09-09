@@ -3,11 +3,10 @@
 **The local control plane for your AI coding-agent skills.** Create, organize, sync, back up, and quality-check `SKILL.md` skills across every agent you use — from one CLI and one local web UI.
 
 [![CI](https://github.com/udayvarmora07/skills-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/udayvarmora07/skills-manager/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/skills-manager.svg)](https://pypi.org/project/skills-manager/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 
-> `skills-manager` on GitHub: `udayvarmora07/skills-manager`; on PyPI: `skills-manager` (`skills-mgr` entry point).
+> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. PyPI badge tracks a future release: `skills-manager` is not on PyPI yet, so install from source or `pip install` the CI-built wheel/sdist below. Package name `skills-manager` (`skills-mgr` entry point) is reserved for that release.
 
 ## Why this exists
 
@@ -32,6 +31,9 @@ The [Agent Skills](https://agentskills.io) format (`SKILL.md`) is now an open st
 ## Install
 
 Requires Python ≥ 3.10. The runtime is **stdlib-only** — no dependencies.
+
+PyPI is not published yet (see `.github/workflows/release.yml` for the
+controlled Trusted Publishing path). Until the first GitHub Release lands:
 
 ```bash
 pipx install skills-manager        # recommended (isolated)

@@ -65,7 +65,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 smoke_web.py            # "ALL WEB SMOKE TESTS
 PYTHONDONTWRITEBYTECODE=1 python3 -m skillsmgr --help   # webui (gui) listed, no tracebacks
 ```
 
-Browser click-through (when UI changed): `python3 -m skillsmgr webui --no-browser` + agent-browser: open → snapshot -i → exercise create/edit/disable/remove+undo/restore/trash-purge/validate/doctor/stats/history/templates/import/export/theme-toggle/400px viewport. Watch `window.__consoleErrors` (attach error listeners first).
+Browser click-through (when UI changed): `PYTHONDONTWRITEBYTECODE=1 python3 browser_harness.py` starts a hermetic server and system Chrome CDP probe, captures console/runtime/network failures, and checks 320/400/640/900/1280px viewports. For interactive debugging use `python3 -m skillsmgr webui --no-browser` + Chrome DevTools: exercise create/edit/disable/remove+undo/restore/trash-purge/validate/doctor/stats/history/templates/import/export/theme-toggle. The harness is dev-only and adds no runtime dependency.
 
 ## File inventory (build-relevant)
 
@@ -78,10 +78,15 @@ skillsmgr/
   webui/
     index.html         # Vue templates for every screen/modal
     styles.css         # design tokens + components + responsive
-    app.js             # Vue app: state, actions, markdown renderer, toasts
+    domain.js          # no-build transport/formatting/frontmatter/Markdown seam
+    app.js             # Vue app: state, actions, dialogs, keyboard/focus
     static/vendor/vue.global.prod.js   # Vue 3.5.13 (vendored)
-  cli.py               # cmd_gui → webapp.run; webui/gui parser
+  cli.py               # stable adapter: main/build_parser + compatibility names
+  cli_parser.py        # argparse construction
+  cli_handlers.py      # command behavior
   store.py             # FS/index/recovery/archive policy
+  insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
+tests/test_insights_contracts.py  # insights hermetic contracts (31 tests)
 smoke_store.py         # store smoke (green)
 smoke_web.py           # REST smoke (green)
 docs/08-web-ui.md      # authoritative web UI doc
@@ -90,4 +95,4 @@ docs/06-progress-log.md# web UI entries (newest top)
 
 ## Open questions / next steps
 
-- `[?]` None for the web UI itself. Possible future work (not requested): native window wrapper (pywebview), skill-body editor with live preview, keyboard shortcut cheat-sheet modal.
+- `[?]` None for the web UI itself. Native window wrapper remains deferred; high-zoom/contrast/touch manual browser coverage remains follow-up. Effective consumer shadowing remains approval-gated.

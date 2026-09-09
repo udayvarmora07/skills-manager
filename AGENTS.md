@@ -13,7 +13,7 @@
 
 ## Toolchain
 
-- CLI: `python3 -m skillsmgr` (stdlib only). Web UI: `python3 -m skillsmgr webui` (alias `gui`) — stdlib backend, Vue 3 frontend (vendored, no build step).
+- CLI: `python3 -m skillsmgr` (stdlib only). Parser/handlers are split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`). Web UI: `python3 -m skillsmgr webui` (alias `gui`) — stdlib backend, Vue 3 frontend (vendored, no build step); `domain.js` loads before `app.js`.
 - Test suite: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests` (stdlib-only regression/contract tests). Smoke tests `python3 smoke_store.py` (Store API) and `python3 smoke_web.py` (web REST API) remain executable end-to-end checks.
 - Docs format: HADS (see @docs/README.md). Markers: `[SPEC]` authoritative, `[NOTE]` context, `[?]` uncertainty.
 

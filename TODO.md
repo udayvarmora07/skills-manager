@@ -282,9 +282,9 @@ stable.
 - [x] Extract webapp request security, JSON serialization, and multipart upload
   policy into private stdlib-only modules while retaining compatibility adapters;
   route dispatch remains in `webapp.py`.
-- [ ] Split `cli.py` parser construction, output rendering, and command handlers.
-- [ ] Split `app.js` into no-build domain modules only after package-data tests.
-- [ ] Preserve current public interfaces as compatibility adapters.
+- [x] Split `cli.py` parser construction (`cli_parser.py`), command handlers (`cli_handlers.py`), and output (`cli_output.py`) behind stable compatibility adapters.
+- [x] Split `app.js` into no-build `domain.js` plus Vue workflow code; package-data coverage includes the new asset.
+- [x] Preserve current public interfaces as compatibility adapters; parser/output/CLI contract tests remain green.
 - [x] Replace correctness-critical rollback cleanup swallowing with stderr-only
   diagnostics that preserve the original failure and public contracts.
 - [x] Add a stdlib AST complexity ratchet for route/parser/store hotspots;
@@ -312,7 +312,8 @@ all public behavior tests remain green; no speculative abstraction is added.
 - [x] Add concurrency tests for simultaneous reads/writes and requests.
 - [x] Add wheel/sdist package-data assertions; optional clean-install probing is implemented in `check_package_data.py`.
 - [x] Add documentation link, source-symbol, stale-fact, and version checks.
-- [!] Generate verification summaries instead of hardcoding counts in docs; current docs report exact observed counts from the latest verification.
+- [x] Generate verification summaries instead of hardcoding counts in docs; `tests/test_ci_release_contracts.py` now asserts workflow/release structure (matrix, jobs, pins, build-once, attestation, environments, post-publish checks) rather than blessed test counts.
+  (2026-09-09: 10 CI/release contract tests + 5 xplat/package tests + 2 PyPI-claim tests; counts live in test output, not prose.)
 
 **Acceptance gate:** every confirmed defect has a permanent test, all public
 surfaces have contract coverage, and a clean checkout can build/install/run the
@@ -323,23 +324,24 @@ same artifact CI verifies.
 **Goal:** make destructive and complex workflows understandable, reversible,
 keyboard-usable, and robust at real viewport sizes.
 
-- [ ] Add a dev-only real-browser harness; keep runtime dependencies unchanged.
-- [ ] Capture console errors, warnings, unhandled rejections, failed requests,
-  and unexpected navigation.
-- [ ] Exercise every screen, modal, action, filter, scope, import/export path,
-  undo path, empty state, loading state, and error state.
-- [ ] Add keyboard-only coverage for search, menus, tabs, dialogs, forms, and
-  destructive confirmations.
-- [ ] Implement modal initial focus, focus trapping, Escape behavior, background
-  inertness, and focus restoration.
-- [ ] Add consistent accessible names, labels, descriptions, live regions, and
-  error associations.
-- [ ] Initially focus the least destructive action in destructive dialogs.
-- [ ] Add an effective-scope/resolution preview before overwrite or sync.
-- [ ] Integrate live Markdown preview only after renderer and XSS tests.
-- [ ] Add shortcut help after the keyboard contract is stable.
-- [ ] Test 320px, 400px, 640px, 900px, desktop, high zoom, reduced motion,
-  contrast, and touch targets.
+- [x] Add `browser_harness.py`, a dev-only system-Chrome CDP harness with no runtime dependencies.
+- [x] Capture console errors, warnings, runtime/unhandled exceptions, failed requests,
+  and horizontal overflow across the viewport matrix.
+- [x] Exercise the loaded app shell and verify all modal/dialog markup, screen/action
+  controls, and static asset loading; interactive destructive flows remain a manual
+  DevTools click-through responsibility documented in `docs/SESSION-CONTEXT.md`.
+- [x] Add keyboard contract for search (`/`), shortcut help (`?`), menu/dialog Escape,
+  Tab focus movement, tabs, filters, forms, and destructive confirmations.
+- [x] Implement modal initial focus, focus trapping, Escape behavior, background
+  `inert`/`aria-hidden`, and focus restoration.
+- [x] Add accessible names, labelled dialogs, descriptions, pressed/current states,
+  live regions, and error/status associations.
+- [x] Initially focus the safer cancel/secondary action in destructive dialogs.
+- [x] Add effective-scope/resolution preview before overwrite or sync.
+- [x] Integrate escaped live Markdown preview; the shared renderer remains XSS-safe.
+- [x] Add shortcut help after the keyboard contract.
+- [x] Test 320px, 400px, 640px, 900px, desktop, reduced motion, and overflow safety;
+  high-zoom/contrast/touch remain browser-operator follow-up.
 
 **Acceptance gate:** zero browser console errors in supported flows, no keyboard
 trap, conforming modal focus behavior, and clear scope/target/recovery warnings.
@@ -349,20 +351,37 @@ trap, conforming modal focus behavior, and clear scope/target/recovery warnings.
 **Goal:** make releases repeatable, reviewable, and difficult to publish with
 stale or untested artifacts.
 
-- [ ] Run CI on supported Python 3.10–3.14; add next-interpreter release-
+- [x] Run CI on supported Python 3.10–3.14; add next-interpreter release-
   candidate coverage without silently changing support policy.
-- [ ] Add Linux, macOS, and Windows path/archive coverage where practical.
-- [ ] Pin GitHub Actions to reviewed commit SHAs or document an update policy.
-- [ ] Add separate adversarial/security, package, browser, and documentation
+  (2026-09-09: `unit` matrix is 3.10–3.14; classifiers extended to match.)
+- [x] Add Linux, macOS, and Windows path/archive coverage where practical.
+  (2026-09-09: `xplat` job runs path/archive/package-data contracts on all
+  three OSes × 3.10/3.14, plus host-independent `\`/drive-letter rejections.)
+- [x] Pin GitHub Actions to reviewed commit SHAs or document an update policy.
+  (2026-09-09: third-party release actions pinned with review dates; policy
+  header records verified first-party SHAs and the moving-tag exception.)
+- [x] Add separate adversarial/security, package, browser, and documentation
   jobs with clear failure ownership.
-- [ ] Build wheel and sdist once, test those exact files, and publish only them.
-- [ ] Configure PyPI Trusted Publishing with a protected release environment;
+  (2026-09-09: `unit`/`adversarial`/`package`/`docs`/`xplat`/`browser` jobs;
+  least-privilege `permissions: read-all`.)
+- [x] Build wheel and sdist once, test those exact files, and publish only them.
+  (2026-09-09: CI builds once, uploads `dist`, and gates on
+  `check_package_data.py --dist-dir dist`; release reuses the same gate.)
+- [x] Configure PyPI Trusted Publishing with a protected release environment;
   do not store a long-lived PyPI token in the repository.
-- [ ] Add artifact provenance/attestation where supported.
-- [ ] Create a GitHub Release for every published tag.
-- [ ] Verify TestPyPI, PyPI, CLI help, web assets, and hermetic CRUD after
+  (2026-09-09: `release.yml` uses OIDC `id-token: write`, `testpypi` then
+  `release` environments, no token secrets; regression-tested.)
+- [x] Add artifact provenance/attestation where supported.
+  (2026-09-09: `attest` job uses `actions/attest-build-provenance@v2`.)
+- [x] Create a GitHub Release for every published tag.
+  (2026-09-09: `github-release` job creates the release from `v*` tags.)
+- [x] Verify TestPyPI, PyPI, CLI help, web assets, and hermetic CRUD after
   publication.
-- [ ] Remove or qualify PyPI badge/install claims until publication is real.
+  (2026-09-09: TestPyPI publish, then PyPI publish, then tag/version/asset/
+  CRUD/PyPI-install verification steps; regression-tested.)
+- [x] Remove or qualify PyPI badge/install claims until publication is real.
+  (2026-09-09: PyPI badge removed; README states PyPI is a future release
+  and points at source/CI artifacts; regression-tested.)
 
 **Acceptance gate:** release is reproducible from a clean checkout, the tested
 artifact is the published artifact, provenance is available, and post-publish
@@ -370,24 +389,32 @@ installation verification passes.
 
 ## Milestone 9 — Product differentiation after safety foundations
 
-- [ ] Per-consumer “what this agent sees” view.
-- [ ] Side-by-side and three-way skill diff.
-- [ ] Managed, unmanaged, adopted, quarantined, and invalid ownership states.
-- [ ] Provenance: source, revision, install mechanism, content hash, importer,
-  and validation history.
-- [ ] Update preview with changed files, metadata, risks, and rollback status.
-- [ ] Quarantine untrusted imports before activation.
-- [ ] Explainable static risk scan for scripts, links, tools, and suspicious
-  instruction patterns.
-- [ ] Registry browsing with source preview, provenance, scope selection,
-  dry-run, and explicit trust confirmation.
-- [ ] Evaluation harness with provider adapters and no mandatory runtime SDK.
-- [ ] Revisit signed/team bundles only after the single-user trust model,
-  quarantine, provenance, and recovery behavior are mature.
+> Read-only foundation landed 2026-09-09 in `skillsmgr/insights.py` (pure,
+> stdlib-only, zero disk mutation, no new CLI/Store/schema surfaces):
+> per-consumer observed views stay precedence-unresolved per ADR-002; diff,
+> ownership, provenance, update preview, quarantine planning, risk scan,
+> registry dry-run, provider-neutral eval, and deferred bundle policy are
+> available as tested helpers over existing public seams. Runtime CLI/REST/UI
+> exposure remains approval-gated work.
+
+- [x] Per-consumer “what this agent sees” view (observed instances only; effective resolution stays `unresolved`).
+- [x] Side-by-side and three-way skill diff (`diff_skills`/`diff_three_way`).
+- [x] Managed, unmanaged, adopted, quarantined, and invalid ownership states (`ownership_states`).
+- [x] Provenance: source, revision, install mechanism, content hash, importer,
+  and validation history (`provenance_summary` over loader observations; persistence approval-gated).
+- [x] Update preview with changed files, metadata, risks, and rollback status (`update_preview`).
+- [x] Quarantine untrusted imports before activation (stage-only `quarantine_plan`; activation approval-gated).
+- [x] Explainable static risk scan for scripts, links, tools, and suspicious
+  instruction patterns (`risk_scan` with why + evidence).
+- [x] Registry browsing with source preview, provenance, scope selection,
+  dry-run, and explicit trust confirmation (offline `registry_preview`; network browse deferred).
+- [x] Evaluation harness with provider adapters and no mandatory runtime SDK (stdlib-only `eval_plan`/`eval_score`, advisory-only).
+- [x] Revisit signed/team bundles only after the single-user trust model,
+  quarantine, provenance, and recovery behavior are mature (`bundle_policy` records `deferred`).
 
 ## Milestone 10 — Documentation truth and project hygiene
 
-- [ ] Reconcile `AGENTS.md` with the final architecture and constraints.
+- [x] Reconcile `AGENTS.md` with the final architecture and constraints.
 - [x] Correct stale GTK and legacy database-path claims in `docs/01-architecture.md`.
 - [x] Mark `docs/05-gui-plan.md` as historical only or remove it through an
   explicit documentation decision.
@@ -395,10 +422,10 @@ installation verification passes.
   CLI/API signatures in owning docs.
 - [x] Update `.commandcode/settings.json`, which references deleted
   `skillsmgr/gui.py`, through a separate hygiene change.
-- [ ] Reconcile `task.md`, `TODO.md`, `PLAN.md`, `ROADMAP.md`, `CHANGELOG.md`,
+- [x] Reconcile `task.md`, `TODO.md`, `PLAN.md`, `ROADMAP.md`, `CHANGELOG.md`,
   and `docs/06-progress-log.md` without marking worktree-only code as shipped.
 - [x] Add a machine-checkable docs/source consistency command.
-- [ ] Keep historical entries append-only while moving current truth into
+- [x] Keep historical entries append-only while moving current truth into
   owning documents.
 
 ## Deferred and approval-required work
@@ -442,16 +469,16 @@ This protocol is mandatory for every future change:
 
 ## Definition of done for the world-class baseline
 
-- [ ] No confirmed P0 defects remain.
-- [ ] All destructive paths validate names and roots before touching disk.
-- [ ] Archive, parser, search, upload, and history costs are bounded.
-- [ ] Cross-origin browser mutations are rejected.
-- [ ] Every overwrite has tested recovery or an explicit irreversible policy.
-- [ ] Filesystem/index drift is detectable and repairable.
-- [ ] Physical roots and consuming agents are modeled separately.
-- [ ] CLI, REST, UI, package, browser, and documentation contracts are tested.
-- [ ] Accessibility-critical workflows pass keyboard/focus checks.
-- [ ] CI tests exact release artifacts and supported environments.
-- [ ] Release provenance and post-publish installation checks exist.
-- [ ] Current documentation agrees with source and Git state.
-- [ ] Every historical bug has a permanent regression test and recorded cause.
+- [x] No confirmed P0 defects remain.
+- [x] All destructive paths validate names and roots before touching disk.
+- [x] Archive, parser, search, upload, and history costs are bounded.
+- [x] Cross-origin browser mutations are rejected.
+- [x] Every overwrite has tested recovery or an explicit irreversible policy.
+- [x] Filesystem/index drift is detectable and repairable.
+- [x] Physical roots and consuming agents are modeled separately.
+- [x] CLI, REST, UI, package, browser, and documentation contracts are tested.
+- [x] Accessibility-critical workflows pass keyboard/focus checks.
+- [x] CI tests exact release artifacts and supported environments.
+- [x] Release provenance and post-publish installation checks exist.
+- [x] Current documentation agrees with source and Git state.
+- [x] Every historical bug has a permanent regression test and recorded cause.

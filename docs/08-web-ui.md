@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.2.0**
+**Version 0.3.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -24,7 +24,7 @@ store.py ──> filesystem (source of truth) + SQLite index
 ```
 
 - **Backend**: `skillsmgr/webapp.py`. Stdlib only. Serves the static frontend from `skillsmgr/webui/` and a REST API under `/api/`. Request security, JSON serialization/body parsing, and multipart folder-upload staging live in private `web_security.py`, `web_serialization.py`, and `web_upload.py` modules; `webapp.py` keeps the route and compatibility interfaces. Scope-aware endpoints delegate to the `scopes` layer (`skillsmgr/scopes.py`), which reads/writes agent skill dirs directly (no DB).
-- **Frontend**: `skillsmgr/webui/` — `index.html`, `styles.css`, `app.js`, `static/vendor/vue.global.prod.js` (Vue 3.5.13, vendored so the app works offline).
+- **Frontend**: `skillsmgr/webui/` — `index.html`, `styles.css`, `domain.js`, `app.js`, `static/vendor/vue.global.prod.js` (Vue 3.5.13, vendored so the app works offline). `domain.js` owns transport/formatting/frontmatter/escaped Markdown rendering behind a small browser-global seam; `app.js` owns Vue state and workflows. The split is plain script loading and keeps the no-build contract.
 - **No build step**: Vue global production build, plain CSS, plain JS. No npm, no bundler, no CDN at runtime.
 
 ## How to run
@@ -121,12 +121,14 @@ mutate an outside directory.
 
 ## Frontend map (app.js)
 
-- **State**: `view` (skills|trash), `filter` (all|active|disabled), `query` (live search, 220ms debounce), `skills`, `trashSkills`, `selected`/`selectedName`, `theme` (light|dark, localStorage), `modals.*` (one object per dialog), `toasts`, `scopes` (from `/api/scopes`), `activeScope` (persisted).
-- **Flow helpers**: `api()` fetch wrapper; `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Scope helpers `_scopeParam`/`_scopeQs` append `?scope=` to skill/detail/search calls.
-- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSyncModal`/`runSync` (copy skill between scopes), `openInstall`/`runInstall` (build or run `skills add`).
-- **Markdown**: hand-rolled `renderMarkdown()` — block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
-- **Keyboard**: `/` focuses search; `Esc` closes menus/modals.
-- **Responsive**: <900px stacks sidebar above detail; <640px compacts the topbar (no brand text, no stat pill, tighter padding).
+- **State**: `view` (skills|trash), `filter` (all|active|disabled), `query` (live search, 220ms debounce), `skills`, `trashSkills`, `selected`/`selectedName`, `theme` (light|dark, localStorage), `modals.*` (one object per dialog, including help), `toasts`/`liveAnnouncement`, focus lifecycle state, `scopes` (from `/api/scopes`), `activeScope` (persisted).
+- **Domain seam (`domain.js`)**: `api()` fetch wrapper, formatting/token helpers, raw frontmatter enrichment, and hand-rolled escaped Markdown rendering; all load before `app.js` without a bundler.
+- **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Scope helpers `_scopeParam`/`_scopeQs` append `?scope=` to skill/detail/search calls.
+- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), `openInstall`/`runInstall` (build or run `skills add`), and escaped editor preview.
+- **Markdown**: block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
+- **Keyboard**: `/` focuses search; `?` opens shortcut help; `Esc` closes menus/modals; `Tab` is trapped within the active dialog and focus returns to its opener. Destructive dialogs focus the safer cancel action first. Dialog backgrounds expose `inert`/`aria-hidden` while open, with labelled dialogs and live status/error announcements.
+- **Preview and safety**: skill editors show an escaped live Markdown preview; sync dialogs show source/target resolution, skip-versus-overwrite behavior, and rollback expectations before commit.
+- **Responsive**: <900px stacks sidebar above detail; <640px compacts the topbar (no brand text, no stat pill, tighter padding). The dev-only `browser_harness.py` uses system Chrome DevTools Protocol to capture console/runtime/network failures and checks 320/400/640/900/desktop viewports.
 
 ## Design system (styles.css)
 
