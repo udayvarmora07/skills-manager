@@ -717,7 +717,7 @@ section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
   malicious-ZIP corpus; ~90% of tar policy ports verbatim; new work is
   the symlink-bit check, a zip manual extractor, and the bomb ratio).
 - Tar-fallback refusal: REJECT (keep feature-detect plus guarded manual
-  extractor; CIE matrix stays 3.10–3.14; filter-bypass CVEs prove the
+  extractor; CI matrix stays 3.10–3.14; filter-bypass CVEs prove the
   independent validator is the real defense).
 - Link warning→error: REJECT (keep warning plus `risk_scan()`; probe
   found 0 real escapes in 200 live targets).
@@ -768,10 +768,19 @@ The world-class baseline is complete only when:
 
 ## 13. Immediate next implementation action
 
-Begin with Phase 0 on a new implementation branch from `main`:
+Milestone 11 queue order still governs (L2 ZIP and issue #12 both await
+maintainer approval — no code until then). The Phase 0–1 history below is
+complete on `main` and retained as the audit trail:
 
-1. Capture baseline evidence.
-2. Add the five failing P0 reproductions.
-3. Review the unmerged adversarial branch tests.
-4. Fix P0-SEC-001 first because it directly permits data loss.
-5. Do not proceed to feature work until the Phase 1 acceptance gate is green.
+1. ~~Capture baseline evidence~~ — done (`docs/09-baseline-evidence-2026-09-07.md`).
+2. ~~Add the five failing P0 reproductions~~ — done (regression tests in
+   `tests/test_path_safety.py`, `tests/test_webapp.py`,
+   `tests/test_archive_contracts.py`, `tests/test_frontmatter_contracts.py`,
+   `tests/test_search_contracts.py`; re-verified green in round 6).
+3. ~~Review the unmerged adversarial branch tests~~ — done
+   (`docs/10-worktree-integration-comparison-2026-09-08.md`,
+   `docs/11-integration-status-2026-09-08.md`).
+4. ~~Fix P0-SEC-001 first~~ — done 2026-09-08 (traversal guards + victim
+   regression).
+5. ~~Phase 1 acceptance gate~~ — green (round-6 replay: 5/5 P0 replays
+   fail-closed, compatibility held).

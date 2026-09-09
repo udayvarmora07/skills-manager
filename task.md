@@ -523,6 +523,26 @@ Direct replay of the five Milestone 1 acceptance reproductions on current `main`
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 38 — Module-seam + backlog-truth campaign, round 7 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over loader/observations/roots/tokens/templates/web/sync/ranking/diagnostics + stale-note refresh; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff).
+- [x] T2 loader edges (good/badfm/dupkey/disabled/noload all exact; latin-1 behavior recorded — see T2b note in log).
+- [x] T3 observations (stable 64-char hashes, portable/extension split, observed_at/provenance, body-sensitive).
+- [x] T4 root discovery (dup `duplicated`+`divergent`, `unresolved`, skip-without-force, dup-root single-touch).
+- [x] T5 tokens (windows/estimate/aggregate shapes) + templates (dup/bad-name guards; 100-char names valid by rule).
+- [x] T6 web serialization (object/array/415/malformed) + install allowlist (injection/runner/types rejected, dry-run 200).
+- [x] T7 sync semantics (skip-without-force, force-converge, dup-root single-touch, bad-name rejected).
+- [x] T8 ranking (exact 100 first, shuffle-deterministic, body-match 40, 50× stable).
+- [x] T9 diagnostics (stderr-only, `None` return, context preserved).
+- [x] T10 TODO M4 note refreshed (`[?]`s closed in v1.1.0; issue #12 filed; gate PASS).
+- [x] T11 PLAN §13 rewritten as completed audit trail + `CIE`→`CI` typo (gate PASS).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entries incl. T2b finding).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).

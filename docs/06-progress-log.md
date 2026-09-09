@@ -4,6 +4,17 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Module-seam + backlog-truth campaign, round 7 (9 probes green, zero code)
+
+- Hermetic probes (stdlib only, scripts in `/tmp/r7_*.py`, outside the repo; zero product-code changes): T2 loader (good/badfm/dupkey/disabled/noload exact) + T2b latin-1 finding below; T3 observations (stable hashes, partition, provenance); T4 roots (dup states, `unresolved`, force/skip semantics); T5 tokens + templates (100-char names valid per `TEMPLATE_NAME_RE` — probe corrected); T6 web serialization + install allowlist; T7 sync (skip-without-force, force-converge, dup-root single-touch); T8 ranking deterministic (100/80/40, 50× stable); T9 diagnostics stderr-only.
+- T2b finding (pre-existing, NOT introduced this round; no product change per locked constraints — recorded, not fixed): a non-UTF8 `SKILL.md` raises raw `UnicodeDecodeError` from `loader.load_skill` (`loader.py:31`), which escapes `scan_dir` (catches `SkillNotFound` only, `loader.py:92-96`) and `Store.doctor`/`resync` (one probe each). `Store.list`/`stats` and CLI list/doctor/search/validate survive (index-backed paths catch `OSError`/`SkillNotFound` or read the DB). `validator.validate_skill` already handles it cleanly (`validator.py:382-385` catches `UnicodeDecodeError`); `archive.validate_imported_skill` catches `UnicodeError` (`archive.py:168`). Smallest correct fix (needs maintainer ASK as a behavior change, not done here): catch `UnicodeDecodeError` alongside `SkillNotFound` in `scan_dir` + the `Store.list` enrichment loop (`store.py:516`), or mark the row `malformed` — mirroring the validator contract. Repro: write `b"caf\xe9"` into any `SKILL.md`, run `Store.doctor`.
+- Stale-note refresh: TODO M4 `[?]` paragraph now records the v1.1.0 closure + issue #12; PLAN §13 rewritten from stale "begin Phase 0" imperatives to the completed audit trail; `CIE`→`CI` typo fixed. `check_docs.py` PASS after each edit.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-7 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — P0 acceptance-gate re-verification, round 6 (5/5 replays green, zero code)
 
 - Direct replays on current `main` (hermetic `/tmp/r6_*.py`, zero product-code changes): P0-001 all five mutations reject `../../victim` with sentinel surviving; P0-002 x-origin purge 403/trash-preserved + same-origin 200; P0-003 `weird name` manifestless import rejected with no destination; P0-004 201-char alternating wildcard → clean instant `ValueError`; P0-005 400-deep block + 2000-deep flow → clean `FrontmatterError` (never raw `RecursionError`).

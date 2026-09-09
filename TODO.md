@@ -270,25 +270,28 @@ them.
 - [x] Support recursive discovery only where the consumer actually does so.
 - [x] Represent read-only, writable, missing, and unsupported roots distinctly.
 - [!] Calculate effective resolution for a selected consumer and project.
-  Research verdict 2026-09-09 (loop probes + ~40 discovery sources):
+  Research verdict 2026-09-09 (loop probes + ~40 discovery sources),
+  `[?]`s CLOSED in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0
+  (Codex `.agents/skills/` REPO/USER/ADMIN/SYSTEM + no-merge, per
+  `https://learn.chatgpt.com/docs/build-skills`; Command Code six-way
+  order + Duplicate-names + `/skill:<name>` + live reload, per
+  `https://commandcode.ai/docs/skills`; Claude enterprise > personal >
+  project with both-load nested/plugin exceptions, per
+  `https://code.claude.com/docs/en/skills`):
   precedence is per-consumer, not global (Claude Code
-  enterprise > personal > project > plugins, per
-  `https://code.claude.com/docs/en/skills`; Gemini CLI
+  enterprise > personal > project > plugins; Gemini CLI
   built-in < extension < user < workspace with `/skills reload`, per
   `https://geminicli.com/docs/cli/skills/`; OpenCode upward CWD-to-root
   search at every level, per `https://opencode.ai/v2/docs/skills`; Cursor
   nested scoping to files below the directory, per
   `https://cursor.com/docs/skills`; Command Code walks at most 10 levels
-  stopping at `$HOME`, per `https://commandcode.ai/docs/skills`).
-  Codex project/precedence, Command Code precedence, and Claude same-name
-  edge cases remain `[?]` in `docs/12-agent-root-discovery-2026-09-08.md`
-  and must be closed against primary sources first. A single global
+  stopping at `$HOME`). A single global
   "winner" function would be wrong for at least one consumer, needs a
   project-CWD input the current CLI/REST contracts do not carry, and must
   not be persisted (`SCHEMA_VERSION = "1"` stays frozen). Keep
-  `effective_state: unresolved` as the honest contract. Next: propose a
-  narrow read-only diagnostic (e.g. `doctor --explain CONSUMER
-  --project DIR`), derived at read time, no persistence, citing the source
+  `effective_state: unresolved` as the honest contract. Next: the narrow
+  read-only diagnostic (filed as issue #12 on 2026-09-09),
+  derived at read time, no persistence, citing the source
   behind each winner. Blocked until the approval-gated runtime
   ConsumerRootBinding model is introduced.
 - [!] Show active, shadowed, divergent, unmanaged, invalid, disabled, and
