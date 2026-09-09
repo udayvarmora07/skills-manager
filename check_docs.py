@@ -163,7 +163,12 @@ def check_documented_source_symbols(root: Path = ROOT) -> list[str]:
 
 def _command_inventory(root: Path = ROOT) -> tuple[int, int, int, int]:
     """Return canonical top-level, nested, alias, and total parser names."""
-    cli_path = root / "skillsmgr" / "cli.py"
+    # Parser construction may live behind the stable cli.py compatibility
+    # adapter. Inspect the dedicated parser module when present, while keeping
+    # this check compatible with older checkouts that still colocate it.
+    cli_path = root / "skillsmgr" / "cli_parser.py"
+    if not cli_path.is_file():
+        cli_path = root / "skillsmgr" / "cli.py"
     tree = ast.parse(cli_path.read_text(encoding="utf-8"), filename=str(cli_path))
     top_level = 0
     nested = 0

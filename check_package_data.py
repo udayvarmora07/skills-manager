@@ -208,9 +208,37 @@ def clean_install(artifact: Path, temporary_root: Path) -> None:
         raise AssertionError(f"clean install probe failed for {artifact.name}: {probe_result.stderr.strip()}")
 
 
-def run_check(project_root: Path = ROOT, *, install: bool = False, require_build: bool = False) -> int:
-    """Run the packaging check, returning a shell-friendly status code."""
+def run_check(project_root: Path = ROOT, *, install: bool = False, require_build: bool = False, dist_dir: Path | None = None) -> int:
+    """Run the packaging check, returning a shell-friendly status code.
 
+    When *dist_dir* is given, exactly one wheel and one sdist already present
+    in that directory are inspected instead of invoking ``python -m build``.
+    CI uses this to test the exact artifacts it will publish (build-once,
+    test-exact-artifacts); local developers keep the default fresh-build
+    behavior. Only ``--require-build`` makes unavailable tooling non-zero.
+    """
+
+    if dist_dir is not None:
+        dist_dir = Path(dist_dir)
+        wheels = sorted(dist_dir.glob("*.whl"))
+        sdists = sorted(
+            [path for pattern in ("*.tar.gz", "*.tar.bz2", "*.tar.xz") for path in dist_dir.glob(pattern)]
+        )
+        if len(wheels) != 1 or len(sdists) != 1:
+            print(
+                f"FAIL: --dist-dir must hold exactly one wheel and one sdist, "
+                f"found {len(wheels)} wheel(s) and {len(sdists)} sdist(s) in {dist_dir}",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            reports = [inspect_archive(wheels[0], project_root), inspect_archive(sdists[0], project_root)]
+        except AssertionError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        for report in reports:
+            print(f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; Vue {report.vue_size} bytes)")
+        return 0
     with tempfile.TemporaryDirectory(prefix="skillsmgr-package-check-") as temp:
         temp_root = Path(temp)
         output_dir = temp_root / "dist"
@@ -246,8 +274,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project-root", type=Path, default=ROOT)
     parser.add_argument("--install", action="store_true", help="also install wheel and sdist into fresh temporary venvs")
     parser.add_argument("--require-build", action="store_true", help="return 2 when optional build tooling is unavailable")
+    parser.add_argument(
+        "--dist-dir",
+        type=Path,
+        default=None,
+        help="inspect exactly one wheel + one sdist already in DIR instead of building (CI build-once artifact check)",
+    )
     args = parser.parse_args(argv)
-    return run_check(args.project_root.resolve(), install=args.install, require_build=args.require_build)
+    return run_check(args.project_root.resolve(), install=args.install, require_build=args.require_build, dist_dir=args.dist_dir)
 
 
 if __name__ == "__main__":
