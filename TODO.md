@@ -499,8 +499,9 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   per `https://code.claude.com/docs/en/skills`. Proposed narrow
   read-only diagnostic (`doctor --explain CONSUMER --project DIR`,
   derived at read time, cites source per winner, persists nothing, keeps
-  `effective_state: unresolved`) — needs its own issue/ADR approval
-  before any implementation (locked constraint 5).
+  `effective_state: unresolved`) — filed as issue #12 on 2026-09-09;
+  awaiting maintainer approval before any implementation
+  (locked constraint 5).
 - [x] L4 — Recorded the three rejections 2026-09-09 (no code): commented
   issue #6 (keep feature-detect plus guarded manual extractor in
   `skillsmgr/archive.py:133-158`; refusal breaks the supported 3.10/3.11
@@ -549,8 +550,8 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 > 2026-09-09 entry). Each item keeps its `[!]` until its stated approval
 > lands. New sessions implement in the order given here: ~~close #10~~
 > DONE 2026-09-09 (#10 CLOSED), then ZIP on approval (#5 stays the only
-> code item), then the effective-explain diagnostic proposal (needs its
-> own issue/ADR approval).
+> code item), then the effective-explain diagnostic proposal — now filed
+> as issue #12, awaiting maintainer approval (no code until then).
 
 - [!] Registry bridge: issue #3. Research verdict: DEFER network
   browse/fetch. `skills.sh` exposes a real catalog API (`GET
@@ -662,12 +663,6 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   cosmetic gain. Optional only, never replacing the dependency-free
   browser path; an unbundled loopback-only launcher script is the most
   that should ever exist.
-- [!] Live preview and shortcut help: issue #10. CLOSED 2026-09-09 —
-  both halves verified shipped (`skillsmgr/webui/index.html:70,373,756-760`,
-  `skillsmgr/webui/domain.js:60`, `skillsmgr/webui/app.js:6,130`;
-  `TODO.md` Milestone 7, `task.md` Milestones 5/24, CHANGELOG Unreleased).
-  Evidence commented on the issue before closing; this line retained one
-  pass as the close record, then droppable.
 - [!] Team sharing/signatures: issue #11. Research verdict: correctly
   DEFERRED; design-before-code with honest stdlib limits. Probes:
   HMAC-SHA256 sign/verify plus tamper detection work in stdlib, but no

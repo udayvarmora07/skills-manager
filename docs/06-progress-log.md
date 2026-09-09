@@ -4,6 +4,17 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Loop-engineering re-verification campaign, round 3 (9 probes green, zero code)
+
+- Hermetic probes (stdlib only, scripts in `/tmp/r3_*.py`, outside the repo; zero product-code changes): T2 store burst (600+ ops incl. honest `SkillNotFound` double-remove, same-second trash cycle, doctor ok); T3 frontmatter 1200 round-trips + 8 hostile inputs (dup/deep/huge/no-close → clean `FrontmatterError`; nested-flow/large-body accepted without crash); T4 search (7 adversarial patterns fast or clean `ValueError`) + validator link matrix 8/8 exact; T5 archive (8 hostile tar classes + garbage + truncated → `StoreError`; ZIP rejection-only; valid manifest tar round-trips `['ok']`); T6 scopes (404 rows, dup flagged, isolation, sync converges); T7 concurrency (8×100 zero errors) + perf (100k-line 0.03s, 20k views 0.10s); T8 REST fuzz (655 requests, 0 fail-opens — purge takes no body by contract, no-CT probe covers `/api/skills`); T9 CLI matrix (81 checks, 0 fail-opens); T10 insights (degenerate/purity/determinism/concurrency clean; `eval_score` missing-`expect` tolerant by design, `eval_plan` strict).
+- Probe-vs-contract notes (no product change): `dump_frontmatter(data)` takes the mapping only (body appended by caller); valid import tars need the exact `{"app","version":__version__,"created":"...+Z","skills":[{"name"}]}` manifest; `consumer_view` matches on `consumer` (not `scope`); purge reads no body so the JSON-CT gate applies to body-taking routes.
+- Docs hygiene: dropped the #10 Deferred close-record line (retention pass elapsed); L3 now references filed issue #12; `task.md` Milestone 34 (this round).
+- T15 final ladder below.
+
+## 2026-09-09 — Round-3 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK. Harness + fresh-tmp recorded in the round-3 entry above.
+
 ## 2026-09-09 — Milestone 11 round 2: docs truth, diagnostic proposal, re-verification (15 tasks, zero code)
 
 - T1 baseline green on the round-1 commit: 301 unittest OK, both smokes PASS, compile/frontend PASS, `check_docs.py` PASS, `check_complexity.py` PASS (151 functions), `git diff --check` PASS.

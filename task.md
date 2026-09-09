@@ -398,7 +398,7 @@ unittest PASS, `check_docs.py` PASS, `check_complexity.py` PASS).
   and `docs/06-progress-log.md`.
 - [x] L1 closed issue #10 with evidence 2026-09-09 (no code; CLOSED) — see `TODO.md` L1.
 - [ ] L2 ZIP slice on approval (red-first corpus, extend `import` only) — see `TODO.md` L2. Remains the only code item.
-- [x] L3 effective-explain research done docs-only 2026-09-09 (3 `[?]`s closed in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0; diagnostic proposal needs issue/ADR approval) — see `TODO.md` L3.
+- [x] L3 effective-explain research done docs-only 2026-09-09 (3 `[?]`s closed in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0; diagnostic proposal filed as issue #12, awaiting approval) — see `TODO.md` L3.
 - [x] L4 rejections #6/#7/#9 recorded with file/line evidence 2026-09-09 — see `TODO.md` L4.
 - [x] L5 deferred #3/#4/#8/#11 verified untouched 2026-09-09 (all OPEN, zero comments; no network/backend/signing code) — see `TODO.md` L5.
 - [x] L6 release-gate verified 2026-09-09 (dry-run green, no publish; tag `v1.0.0` = package `1.0.0`; `release.yml` tag/version gate + build-once + `--dist-dir` + attestation + TestPyPI→`release` env; package-data honestly UNAVAILABLE without `build`) — see `TODO.md` L6.
@@ -440,6 +440,26 @@ Docs truth + GitHub proposals + verification; zero product-code changes; no lock
 - [x] T11 browser harness re-run `"passed": true` (5 viewports, zero failures).
 - [x] T12 fresh-tmp live seam (create→validate→doctor→search→remove→purge→doctor, all OK).
 - [x] T13 TODO/task/PLAN/progress-log updated for round 2 (this milestone; L6 dry-run note; stale-claim status note).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
+## Milestone 34 — Loop-engineering re-verification campaign, round 3 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) + docs hygiene + verification; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, complexity, diff; issues #5 + #12 OPEN).
+- [x] T2 store-lifecycle burst (600+ ops, honest double-remove `SkillNotFound`, same-second trash cycle, doctor ok).
+- [x] T3 frontmatter 1200 round-trips + 8 hostile inputs (dup/deep/huge/no-close fail-closed `FrontmatterError`; nested-flow/large-body accepted without crash).
+- [x] T4 search bounds (7 adversarial patterns fast or clean `ValueError`) + validator link matrix (8/8 exact).
+- [x] T5 archive boundary (8 hostile tar classes + garbage + truncated fail-closed; ZIP rejection-only; valid manifest tar round-trips).
+- [x] T6 scope differential (404 rows, dup flagged `descriptions_differ`, global/agent isolation, sync converges).
+- [x] T7 concurrency (8×100 mixed reads zero errors) + perf (100k-line scan 0.03s, 20k views 0.10s).
+- [x] T8 REST fuzz (655 requests, 0 fail-opens; purge takes no body by contract so the no-CT probe covers `/api/skills`).
+- [x] T9 CLI matrix (81 checks, 0 fail-opens: traversal/invalid names, search/hostile, lifecycle, exit codes 0/1/2).
+- [x] T10 insights sweep (degenerate/purity/determinism/concurrency clean; `eval_score` missing-`expect` tolerant by design, `eval_plan` strict).
+- [x] T11 browser harness `"passed": true` (5 viewports, zero failures).
+- [x] T12 fresh-tmp live seam (create→validate→doctor→search→remove→purge→doctor, all OK).
+- [x] T13 docs hygiene (drop #10 Deferred line now its retention pass elapsed; ref issue #12; L3 wording).
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 

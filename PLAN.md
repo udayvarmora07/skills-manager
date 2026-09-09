@@ -741,8 +741,9 @@ section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
   Next: the read-only `doctor --explain CONSUMER --project DIR`
   diagnostic needs its own issue/ADR approval (locked constraint 5); L2
   ZIP remains the only approval-gated code item. (2026-09-09 round 2:
-  the diagnostic proposal is now filed as issue #12; L2/Diagnostic both
-  await maintainer approval — no code until then.)
+  the diagnostic proposal is now filed as issue #12; round 3 re-verified
+  every probe family green with zero product-code changes. L2/Diagnostic
+  both await maintainer approval — no code until then.)
 
 External products are used to understand user expectations and portability
 patterns, not to justify copying their architecture. Repository constraints,
