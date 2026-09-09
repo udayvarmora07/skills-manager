@@ -503,6 +503,26 @@ Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over CI/r
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 37 — P0 acceptance-gate re-verification, round 6 (2026-09-09, 15 tasks)
+
+Direct replay of the five Milestone 1 acceptance reproductions on current `main` (hermetic `/tmp` scripts, no product-code changes) + red-first proof + compatibility + protocol self-audit; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff; P0 regression tests inventoried: path-safety, webapp x-origin, archive traversal, frontmatter bounds, search bounds).
+- [x] T2 P0-SEC-001 replay (get/edit/remove/disable/enable `../../victim` all rejected; victim + sentinel survive).
+- [x] T3 P0-SEC-002 replay (x-origin purge → 403, trash preserved; same-origin purge → 200).
+- [x] T4 P0-SEC-003 replay (`skills/weird name` manifestless import rejected; no destination created).
+- [x] T5 P0-SEC-004 replay (201-char alternating wildcard → clean `ValueError`, instant).
+- [x] T6 P0-SEC-005 replay (400-deep block + 2000-deep flow → clean `FrontmatterError`, never raw `RecursionError`).
+- [x] T7 red-first proof (copied tree: `NAME_RE=^.*$` → traversal test RED; archive guard `if False` → traversal test RED).
+- [x] T8 guard centralization (`validator.validate_skill_name` + `path_safety.contained_path`/`safe_skill_path`; 61 call-sites; REST decodes-then-guards per `webapp.py:198-200`).
+- [x] T9 alternate surfaces (CLI view/edit/remove/disable/enable/restore + REST `%2e%2e` forms + scopes — all rejected).
+- [x] T10 valid compatibility (64-char/boundary names, disable/enable `0`, plain + `my-*` search, Agent Skills extensions, export→import round-trip).
+- [x] T11 protocol self-audit (12/12 steps evidenced in this round; see progress log).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entries).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
