@@ -45,7 +45,8 @@
 - `disable(self, name) -> dict` / `enable(self, name) -> dict` — rename `SKILL.md` <-> `SKILL.md.disabled`; trashed skills may be disallowed until restored.
 - `trash_list(self) -> list[dict]` / `purge_trash(self) -> dict` — only exact
   canonical skill names with valid timestamp suffixes are recognized in trash;
-  malformed, symlinked, and prefix-collision directories are ignored.
+  malformed, symlinked, and prefix-collision directories are ignored. `purged`
+  lists each purged skill once even when several timestamped copies existed.
 - `stats(self) -> dict` — counts and summary.
 - `export(self, dest=None, full=False) -> Path` / `backup(self, dest=None, full=False) -> Path` — slim skills-only archive by default; `full=True` adds validated trash and templates.
 - Export manifests include a SHA-256 content hash for each skill tree; imports verify hashes in staging and after commit when present. Hashes are verification metadata, not SQLite state.

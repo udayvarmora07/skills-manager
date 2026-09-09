@@ -125,6 +125,16 @@ class FrontmatterFailureContractTests(unittest.TestCase):
     def test_malformed_block_mapping_is_clean_error(self):
         self.assert_frontmatter_error("---\nname: valid\n  unexpectedly-indented\n---\nbody\n")
 
+    def test_duplicate_keys_are_clean_errors(self):
+        # OBS-1 resolution: duplicate keys used to resolve last-wins silently,
+        # hiding authoring mistakes (e.g. two `name:` lines). Every mapping
+        # form now fails as a clean FrontmatterError instead.
+        self.assert_frontmatter_error("---\nk: 1\nk: 2\n---\nbody\n")
+        self.assert_frontmatter_error("---\nname: a\nname: b\ndescription: d\n---\n")
+        self.assert_frontmatter_error("---\nitems:\n  - a: 1\n    a: 2\n---\n")
+        self.assert_frontmatter_error("---\nitems: [{a: 1, a: 2}]\n---\n")
+        self.assert_frontmatter_error("---\nouter:\n  k: 1\n  k: 2\n---\n")
+
     def test_document_limit_is_enforced(self):
         text = "x" * (MAX_DOCUMENT_CHARS + 1)
         self.assert_frontmatter_error(text)

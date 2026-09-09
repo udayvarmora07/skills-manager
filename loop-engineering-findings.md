@@ -23,11 +23,11 @@ as FIX-8 (extended), FIX-10, FIX-11, ratchet-resolution, FIX-12, FIX-13.)
 
 | Gate | Baseline (before campaign) | Current working tree |
 |---|---|---|
-| `python3 -m unittest discover -s tests` | 208 PASS | **222 PASS** (14 loop regressions, each written red first) |
+| `python3 -m unittest discover -s tests` | 208 PASS | **224 PASS** (16 loop regressions, each written red first) |
 | `smoke_store.py` | ALL STORE SMOKE TESTS PASSED | ALL STORE SMOKE TESTS PASSED |
 | `smoke_web.py` | ALL WEB SMOKE TESTS PASSED | ALL WEB SMOKE TESTS PASSED |
 | `check_docs.py` | PASSED | PASSED |
-| `check_complexity.py` | PASSED (168 functions) | **PASSED** (181 functions; fixes refactored into small helpers, no baseline inflation) |
+| `check_complexity.py` | PASSED (168 functions) | **PASSED** (194 functions; fixes refactored into small helpers, no baseline inflation) |
 | `py_compile` / `node --check app.js` / `git diff --check` | PASS | PASS |
 | `check_package_data.py` | UNAVAILABLE (no `build` module) | UNAVAILABLE (unchanged) |
 
@@ -53,10 +53,10 @@ Working-tree diff vs baseline: `skillsmgr/{store,archive,atomic_io,cli,frontmatt
 | FIX-10 | frontmatter | Medium | FIXED | **Mappings and empty collections nested inside lists** were silently `str()`-ified or became `None` (semantic corruption) → mappings now emit as nested block sequences (flow lists stay scalar/nested-list-only; empty `{}`/`[]` stay inline so they parse back empty) |
 | FIX-11 | scopes/store | Medium | FIXED | `sync_skill(...)` into the **global scope writes the filesystem directly** — a `trashed` row could stay `trashed` while the dir is live → sync now reconciles the global index via `resync()`; `resync` treats any live dir as `active` |
 | FIX-12 | store concurrency | High | FIXED | `remove`/`disable`/`enable`/trash-`restore` move files **without the per-skill mutation lock** → racing `create`/`edit` strands `.skillsmgr-tmp` files inside trash copies and leaks raw `FileNotFoundError` |
-| FIX-13 | store | Low | FIXED | `purge_trash()` propagates raw `OSError` on a mid-purge filesystem failure → wraps as `StoreError` |
-| OBS-1 | frontmatter | Info | OBS | Duplicate frontmatter keys resolve **last-wins silently** (no error, no `malformed` flag) |
+| FIX-13 | store | Low | FIXED | `purge_trash()` propagates raw `OSError` on a mid-purge filesystem failure → wraps as `StoreError`; repeated names deduped |
+| FIX-14 | frontmatter | Low | FIXED (OBS-1 promoted) | Duplicate frontmatter keys resolve **last-wins silently** (`k: 1` + `k: 2` → `{'k': '2'}`) → all four mapping forms (block, inline `- key:`, continuation, flow `{a: 1, a: 2}`) now raise clean `FrontmatterError` |
+| FIX-15 | store | Cosmetic | FIXED (OBS-3 promoted) | `purge_trash()["purged"]` repeats a name when two trash copies exist (`["x", "x"]`) → names deduped via `_purge_trash_entries` |
 | OBS-2 | frontmatter | Info | OBS | Numeric scalars are not coerced (str/bool/None only by design); integers handed to the dumper come back as strings on parse |
-| OBS-3 | store | Info | OBS | `purge_trash()["purged"]` may repeat a name when two trash copies exist |
 | OBS-4 | web | Info | OBS | One `GET /api/tokens` timeout observed under sustained fuzz load (single occurrence, server survived; environment-correlated) |
 
 ---
@@ -189,6 +189,27 @@ Working-tree diff vs baseline: `skillsmgr/{store,archive,atomic_io,cli,frontmatt
   disabled only. Doc corrected; no behavior change (existing users' output is
   unchanged).
 
+### FIX-14 — duplicate frontmatter keys fail loudly (promoted from OBS-1)
+- **Area:** `skillsmgr/frontmatter.py` (`_parse_mapping`,
+  `_parse_inline_mapping`, `_parse_flow_map`).
+- **Reproduction:** `parse_frontmatter("---\nk: 1\nk: 2\n---\n")` previously
+  returned `{'k': '2'}` silently; a duplicated `name:`/`description:` could
+  hide authoring mistakes with no signal.
+- **Fix:** all four mapping forms now raise a clean `FrontmatterError`
+  (`duplicate frontmatter key: …`) via `_store_mapping_value` /
+  `_store_flow_value`; the loader's existing malformed-file path
+  (`loader.load_skill` → `malformed: True`, validators surface it) now covers
+  this class too.
+- **Regression test:** `test_duplicate_keys_are_clean_errors` (block, inline
+  list-item, continuation, flow, and nested duplicates).
+
+### FIX-15 — `purged` names deduped (promoted from OBS-3)
+- **Area:** `skillsmgr/store.py` (`purge_trash` → `_purge_trash_entries`).
+- **Fix:** purging two timestamped copies of one skill now reports the name
+  once (`{"purged": ["demo"]}`); the per-entry behavior (both copies deleted,
+  trashed rows removed) is unchanged.
+- **Regression test:** `test_purge_trash_dedupes_repeated_skill_names`.
+
 ---
 
 ## 4. Former OPEN findings — now fixed (kept for the record)
@@ -318,18 +339,16 @@ Working-tree diff vs baseline: `skillsmgr/{store,archive,atomic_io,cli,frontmatt
 
 ## 5. Observations (design notes, no immediate action)
 
-- **OBS-1 — duplicate keys:** `k: 1\nk: 2` parses silently to `{'k': '2'}`
-  (last-wins, `malformed: False`). Tolerated by common YAML tooling; a
-  duplicate `name:`/`description:` can hide authoring mistakes. Consider a
-  parser error or a `malformed`/warning signal later.
+> Former OBS-1 (duplicate keys) and OBS-3 (`purged` duplicates) were promoted
+> to FIX-14 and FIX-15 below their respective sections; only genuinely
+> by-design observations remain listed as OBS.
+
 - **OBS-2 — numeric fidelity:** block scalars are never coerced to numbers and
   booleans/None are; ints/floats handed to the dumper come back as strings
   after parse (visible when `metadata_extra` carries numbers; in the
   doc-subset contract this is "str/bool/None only" — no doc claims numeric
   support). The historical OPEN-2 corruption class (mappings str()-ified in
   flow lists) is separately fixed as FIX-10 above.
-- **OBS-3 — `purged` duplicates:** purging two trash copies of the same name
-  yields `purged: ["x", "x"]`; cosmetic, could be deduped.
 - **OBS-4 — `/api/tokens` latency:** one 15 s client timeout while the REST
   fuzz hammered the server; server stayed alive and healthy afterwards.
   Environment/load-correlated; no handler bug reproduced.

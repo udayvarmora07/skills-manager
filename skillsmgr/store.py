@@ -92,6 +92,22 @@ def _with_skill_lock(skill_dir: Path, func, *args, **kwargs):
         lock.release()
 
 
+def _purge_trash_entries(conn, trash_dir: Path, purge_entry) -> list[str]:
+    """Remove every validated trash entry, deduping repeated skill names.
+
+    Purging two timestamped copies of one skill must report the name once.
+    """
+    purged: list[str] = []
+    for path in sorted(trash_dir.iterdir()):
+        name = _trash_entry_name(path)
+        if name is None:
+            continue
+        purge_entry(conn, path, name)
+        if name not in purged:
+            purged.append(name)
+    return purged
+
+
 def _resync_row_changed(row, entry: dict) -> bool:
     """Compare one scanned filesystem skill against its index row."""
     return (
@@ -1061,17 +1077,11 @@ class Store:
 
     def purge_trash(self) -> dict:
         """Permanently delete everything in the trash."""
-        purged = []
         if not self.trash_dir.is_dir():
-            return {"purged": purged}
+            return {"purged": []}
         conn = self._connect()
         try:
-            for path in sorted(self.trash_dir.iterdir()):
-                name = _trash_entry_name(path)
-                if name is None:
-                    continue
-                self._purge_entry(conn, path, name)
-                purged.append(name)
+            purged = _purge_trash_entries(conn, self.trash_dir, self._purge_entry)
             conn.commit()
         finally:
             conn.close()

@@ -72,7 +72,7 @@ Token/context estimation. `WINDOWS` dict (claude 1M, claude-haiku 200k, gpt-5.6 
 
 ## `frontmatter.py`
 
-SKILL.md frontmatter (YAML-ish, delimited by `_DOC_MARKER`): `parse_frontmatter(text)` -> (frontmatter dict, body), `dump_frontmatter(frontmatter, body)`; bool/None/str coercion; raises `FrontmatterError` on malformed input. The dumper round-trips its own output (flow items with special characters and keys with quotes are quoted) and raises `TypeError` for mappings nested inside flow lists, which the parser grammar cannot express.
+SKILL.md frontmatter (YAML-ish, delimited by `_DOC_MARKER`): `parse_frontmatter(text)` -> (frontmatter dict, body), `dump_frontmatter(frontmatter, body)`; bool/None/str coercion; raises `FrontmatterError` on malformed input. Duplicate keys are rejected as clean `FrontmatterError` in every mapping form (block, inline `- key:`, continuation, flow maps) instead of resolving last-wins. The dumper round-trips its own output (flow items with special characters and keys with quotes are quoted) and raises `TypeError` for mappings nested inside flow lists, which the parser grammar cannot express.
 
 ## `validator.py`
 

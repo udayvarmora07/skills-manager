@@ -191,7 +191,7 @@ class _Parser:
             idx += 1
             self._check_key()
             value, idx = self._parse_value(idx, indent, rest, depth)
-            data[key] = value
+            _store_mapping_value(data, key, value, idx)
         return data, idx
 
     def _parse_inline_mapping(
@@ -211,7 +211,7 @@ class _Parser:
         self._check_depth(depth)
         self._check_key()
         value, idx = self._parse_value(idx, indent, rest, depth)
-        data[key] = value
+        _store_mapping_value(data, key, value, idx)
         while True:
             idx = self._skip_noise(idx)
             if idx >= self.n:
@@ -237,7 +237,7 @@ class _Parser:
             idx += 1
             self._check_key()
             value, idx = self._parse_value(idx, indent, rest, depth)
-            data[key] = value
+            _store_mapping_value(data, key, value, idx)
         return data, idx
 
     # -- block lists -------------------------------------------------------
@@ -533,7 +533,7 @@ class _Parser:
             if not ok:
                 raise FrontmatterError(f"malformed flow mapping entry: {p!r}")
             self._check_key()
-            data[key] = self._parse_inline(rest) if rest != "" else None
+            _store_flow_value(data, key, rest, self._parse_inline)
         return data
 
     # -- quoted scalars ----------------------------------------------------
@@ -703,6 +703,21 @@ class _Parser:
             i += 1
         return "".join(out)
 
+
+def _store_mapping_value(data: dict, key, value, idx: int) -> None:
+    """Store one block-mapping entry, rejecting duplicate keys loudly."""
+    if key in data:
+        raise FrontmatterError(
+            f"line {idx + 1}: duplicate frontmatter key: {key!r}"
+        )
+    data[key] = value
+
+
+def _store_flow_value(data: dict, key, rest: str, parse_inline) -> None:
+    """Store one flow-map entry parsed from its inline text."""
+    if key in data:
+        raise FrontmatterError(f"duplicate frontmatter key: {key!r}")
+    data[key] = parse_inline(rest) if rest != "" else None
 
 def _is_hex(s: str) -> bool:
     return all(c in "0123456789abcdefABCDEF" for c in s)

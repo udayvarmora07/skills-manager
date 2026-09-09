@@ -229,6 +229,21 @@ class TestStoreLifecycle(StoreContractCase):
         self.assertEqual(result["purged"], ["demo", "demo-x"])
         self.assertEqual(self.store.trash_list(), [])
 
+    def test_purge_trash_dedupes_repeated_skill_names(self):
+        # FIX-15 (promoted from OBS-3): purging two timestamped copies of one
+        # skill reported ["demo", "demo"]; the name must appear once.
+        with mock.patch(
+            "skillsmgr.store._trash_timestamp", return_value="2026-09-08_19-13-21Z"
+        ):
+            self.store.create("demo", "First", body="v1")
+            self.store.remove("demo")
+            self.store.create("demo", "Second", body="v2")
+            self.store.remove("demo")
+        self.assertEqual(len(self.store.trash_list()), 2)
+        result = self.store.purge_trash()
+        self.assertEqual(result["purged"], ["demo"])
+        self.assertEqual(self.store.trash_list(), [])
+
     def test_restore_errors_for_invalid_snapshot_missing_and_conflict(self):
         self.store.create("demo", "Demo")
         with self.assertRaises(StoreError):
