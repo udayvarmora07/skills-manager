@@ -679,5 +679,65 @@ class TestInsightsDeepE2E(unittest.TestCase):
                 encoding="utf-8")
 
 
+class TestInsightsBoundaryRound4(unittest.TestCase):
+    """Round-4 boundary locks: deep purity, callable scorer, string fields."""
+
+    def test_consumer_view_deep_copies_nested_records(self):
+        insights = _load_insights()
+        recs = [{"name": "a", "consumer": "x",
+                 "provenance": {"path": "/p", "scope": "g"}}]
+        view = insights.consumer_view(recs, "x")
+        view["visible"][0]["provenance"]["path"] = "MUTATED"
+        view["visible"].append({"name": "injected"})
+        self.assertEqual(recs[0]["provenance"]["path"], "/p")
+        self.assertEqual(len(recs), 1)
+
+    def test_eval_score_requires_callable_scorer(self):
+        insights = _load_insights()
+        plan = insights.eval_plan("abc", [{"input": "a", "expect": "b"}])
+        with self.assertRaises(ValueError):
+            insights.eval_score(plan, ["b"], "not-callable")
+
+    def test_quarantine_source_must_be_string(self):
+        insights = _load_insights()
+        self.assertEqual(
+            insights.quarantine_plan("abc")["source"], "unknown")
+        with self.assertRaises(ValueError):
+            insights.quarantine_plan("abc", source={"x": 1})
+
+    def test_snapshots_must_be_non_empty_strings(self):
+        insights = _load_insights()
+        with self.assertRaises(ValueError):
+            insights.update_preview({"tokens": 1}, {"tokens": 2},
+                                    snapshots=[123])
+        with self.assertRaises(ValueError):
+            insights.update_preview({"tokens": 1}, {"tokens": 2},
+                                    snapshots=["  "])
+
+    def test_registry_description_non_string_is_blocker(self):
+        insights = _load_insights()
+        preview = insights.registry_preview(
+            {"name": "abc", "description": 123}, True)
+        self.assertFalse(preview["may_install"])
+        self.assertTrue(preview["blockers"])
+
+    def test_consumer_argument_must_be_string(self):
+        insights = _load_insights()
+        with self.assertRaises(ValueError):
+            insights.consumer_view([{"name": "a", "consumer": "x"}], 123)
+
+    def test_registry_optional_fields_must_be_string_or_missing(self):
+        insights = _load_insights()
+        for bad in (123, ["x"], {"s": 1}):
+            with self.assertRaises(ValueError, msg=f"source {bad!r}"):
+                insights.registry_preview(
+                    {"name": "abc", "description": "Use when x.",
+                     "source": bad}, True)
+            with self.assertRaises(ValueError, msg=f"scope {bad!r}"):
+                insights.registry_preview(
+                    {"name": "abc", "description": "Use when x.",
+                     "scope": bad}, True)
+
+
 if __name__ == "__main__":
     unittest.main()
