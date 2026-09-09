@@ -52,7 +52,23 @@ def atomic_write_text(
             finally:
                 os.close(directory_fd)
     except Exception:
-        temp_path.unlink(missing_ok=True)
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        # A concurrent whole-directory move (cross-process trash/remove) may
+        # have carried the unique temp file away; find it by name under the
+        # surrounding tree so no .skillsmgr-tmp residue survives.
+        try:
+            search_root = path.parent.parent
+            if search_root.is_dir():
+                for hit in search_root.rglob(temp_path.name):
+                    try:
+                        hit.unlink()
+                    except OSError:
+                        pass
+        except OSError:
+            pass
         raise
 
 

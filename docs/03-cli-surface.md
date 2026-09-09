@@ -43,7 +43,7 @@ or mutating the data directory.
 Create the data directory layout and initialize the SQLite index.
 
 ### `list` / `ls [--json] [--disabled] [--category CAT] [--scope SCOPE]`
-List skills in the scope (default global, enabled only). `--disabled` shows disabled; `--category` filters; `--scope all` merges every scope and adds a SCOPE column.
+List skills in the scope (default global) with a STATUS column (`active`/`disabled`); disabled skills are shown marked and `--disabled` narrows the list to disabled skills only. `--category` filters; `--scope all` merges every scope and adds a SCOPE column.
 
 ### `create NAME [-d/--description TEXT] [--license LIC] [--category CAT] [--compatibility SPEC] [--version VER] [--allowed-tools TOOLS] [--body TEXT] [--body-file PATH] [--json]`
 Create a skill in the global store. Name must match `NAME_RE`; description required. `--body` and `--body-file` are mutually exclusive.

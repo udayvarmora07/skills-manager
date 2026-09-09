@@ -61,7 +61,21 @@ class CliContractTests(unittest.TestCase):
         code, _, err = self.invoke(["view", "../outside"])
         self.assertEqual(code, cli.EXIT_ERROR)
         self.assertIn("invalid skill name", err)
-        self.assertFalse((Path(self.tmp.name) / "skills-manager.db").exists())
+        # the invalid name must be rejected before any data-dir mutation
+        self.assertFalse((Path(self.tmp.name) / "skills-manager" / "skills-manager.db").exists())
+
+    def test_mutation_commands_work_on_fresh_data_dir_without_init(self):
+        # Regression: create on a brand-new data dir used to die with
+        # 'no such table: skills' unless `init` (or an auto-initializing
+        # read command) ran first.
+        code, out, err = self.invoke(["create", "fresh-skill", "-d", "first run"])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertNotIn("unexpected error", err)
+        self.assertNotIn("no such table", err)
+        code, out, err = self.invoke(["list"])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("fresh-skill", out)
+        self.assertTrue((Path(self.tmp.name) / "skills-manager" / "skills-manager.db").is_file())
 
 
 if __name__ == "__main__":

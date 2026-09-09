@@ -17,6 +17,8 @@ import sqlite3
 import tarfile
 import tempfile
 import zipfile
+import zlib
+import gzip
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -62,7 +64,11 @@ CREATE TABLE IF NOT EXISTS meta (
 CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status);
 """
 
-_TRASH_TS_RE = re.compile(r"-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d+)?Z?$")
+# Suffix written by remove() as ``name-<ts>`` where <ts> ends in ``Z``; when
+# two trashes collide within one second a ``-<n>`` counter is appended AFTER
+# the ``Z`` (``name-<ts>-1``).  The regex accepts the counter on either side
+# of an optional ``Z`` so every entry this writer produces stays canonical.
+_TRASH_TS_RE = re.compile(r"-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d+)?Z?(?:-\d+)?$")
 
 SNAPSHOT_KEEP = 5
 _SNAPSHOT_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z?(?:-\d+)?$")
@@ -70,6 +76,52 @@ _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 def _mutation_lock(path: Path):
     return mutation_lock(path)
+
+
+def _with_skill_lock(skill_dir: Path, func, *args, **kwargs):
+    """Run *func* under the per-skill mutation lock shared with create/edit.
+
+    The nested lock/unlock body rarely changes, so centralizing it keeps the
+    individual mutation methods from accumulating complexity-budget drift.
+    """
+    lock = _mutation_lock(skill_dir / "SKILL.md")
+    lock.acquire()
+    try:
+        return func(*args, **kwargs)
+    finally:
+        lock.release()
+
+
+def _resync_row_changed(row, entry: dict) -> bool:
+    """Compare one scanned filesystem skill against its index row."""
+    return (
+        row["status"] != "active"
+        or row["description"] != entry["description"]
+        or row["body"] != entry["body"]
+        or row["category"] != entry["category"]
+        or row["license"] != entry["license"]
+        or row["version"] != entry["version"]
+        or row["disabled"] != entry["disabled"]
+    )
+
+
+def _resync_row_update(conn, entry: dict, name: str) -> None:
+    """Reconcile one index row to match the live filesystem skill."""
+    conn.execute(
+        "UPDATE skills SET status = 'active', description = ?, body = ?, "
+        "category = ?, license = ?, version = ?, disabled = ?, "
+        "updated_at = ? WHERE name = ?",
+        (
+            entry["description"],
+            entry["body"],
+            entry["category"],
+            entry["license"],
+            entry["version"],
+            entry["disabled"],
+            now_iso(),
+            name,
+        ),
+    )
 
 
 def _atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
@@ -318,35 +370,31 @@ class Store:
                     ),
                 )
             else:
-                same = (
-                    row["disabled"] == entry["disabled"]
-                    and (
-                        conn.execute(
-                            "SELECT description, body, category, license, version "
-                            "FROM skills WHERE name = ?",
-                            (name,),
-                        ).fetchone()
-                    )
-                    is not None
+                current = conn.execute(
+                    "SELECT description, body, category, license, version "
+                    "FROM skills WHERE name = ?",
+                    (name,),
+                ).fetchone()
+                content_same = tuple(current) == (
+                    entry["description"],
+                    entry["body"],
+                    entry["category"],
+                    entry["license"],
+                    entry["version"],
                 )
-                if same:
-                    current = conn.execute(
-                        "SELECT description, body, category, license, version "
-                        "FROM skills WHERE name = ?",
-                        (name,),
-                    ).fetchone()
-                    same = (
-                        current["description"] == entry["description"]
-                        and current["body"] == entry["body"]
-                        and current["category"] == entry["category"]
-                        and current["license"] == entry["license"]
-                        and current["version"] == entry["version"]
-                    )
-                if not same:
+                # A live skill directory on the filesystem is by definition an
+                # active skill: any existing row (e.g. left 'trashed' by an
+                # earlier remove of the same name) must become 'active' again
+                # so list()/stats/doctor stay consistent with the filesystem.
+                if (
+                    row["status"] != "active"
+                    or row["disabled"] != entry["disabled"]
+                    or not content_same
+                ):
                     conn.execute(
                         "UPDATE skills SET description = ?, body = ?, category = ?, "
-                        "license = ?, version = ?, disabled = ?, updated_at = ? "
-                        "WHERE name = ?",
+                        "license = ?, version = ?, disabled = ?, status = 'active', "
+                        "updated_at = ? WHERE name = ?",
                         (
                             entry["description"],
                             entry["body"],
@@ -388,8 +436,8 @@ class Store:
             added, updated, removed = 0, 0, 0
             for name, entry in scanned.items():
                 row = conn.execute(
-                    "SELECT description, body, category, license, version, disabled "
-                    "FROM skills WHERE name = ?",
+                    "SELECT status, description, body, category, license, version, "
+                    "disabled FROM skills WHERE name = ?",
                     (name,),
                 ).fetchone()
                 if row is None:
@@ -412,30 +460,12 @@ class Store:
                     )
                     added += 1
                     continue
-                changed = (
-                    row["description"] != entry["description"]
-                    or row["body"] != entry["body"]
-                    or row["category"] != entry["category"]
-                    or row["license"] != entry["license"]
-                    or row["version"] != entry["version"]
-                    or row["disabled"] != entry["disabled"]
-                )
+                changed = _resync_row_changed(row, entry)
                 if changed:
-                    conn.execute(
-                        "UPDATE skills SET description = ?, body = ?, category = ?, "
-                        "license = ?, version = ?, disabled = ?, updated_at = ? "
-                        "WHERE name = ?",
-                        (
-                            entry["description"],
-                            entry["body"],
-                            entry["category"],
-                            entry["license"],
-                            entry["version"],
-                            entry["disabled"],
-                            now_iso(),
-                            name,
-                        ),
-                    )
+                    # A live directory is by definition an active skill; rows
+                    # left 'trashed' by an earlier remove whose directory has
+                    # returned (e.g. raw sync writes) must be reactivated.
+                    _resync_row_update(conn, entry, name)
                     updated += 1
             for row in conn.execute("SELECT name FROM skills WHERE status = 'active'"):
                 if row["name"] not in scanned:
@@ -835,13 +865,25 @@ class Store:
     def remove(self, name: str, purge: bool = False) -> dict:
         """Move a skill to the trash, or permanently delete it with ``purge``."""
         skill_dir = _safe_skill_path(self.skills_dir, name)
+        # Whole-directory moves must serialize with create/edit/restore which
+        # lock the same per-skill path; otherwise a concurrent writer can
+        # strand its temp file inside a trash copy (see atomic_io). A bare
+        # try/finally (no handlers) keeps the complexity ratchet flat.
+        return _with_skill_lock(skill_dir, self._remove_unlocked, name, purge=purge)
+
+    def _remove_unlocked(self, name: str, purge: bool = False) -> dict:
+        """Move a skill to the trash, or permanently delete it with ``purge``."""
+        skill_dir = _safe_skill_path(self.skills_dir, name)
+        if not skill_dir.is_dir():
+            # A row may still record a trashed copy; removing it again would
+            # be a silent no-op claiming success, so fail honestly.  Trash
+            # copies are managed through restore()/purge_trash().
+            raise SkillNotFound(f"skill '{name}' is not installed")
         conn = self._connect()
         try:
             row = conn.execute(
                 "SELECT status FROM skills WHERE name = ?", (name,)
             ).fetchone()
-            if row is None and not skill_dir.is_dir():
-                raise SkillNotFound(f"skill '{name}' is not installed")
             if purge:
                 if skill_dir.is_dir():
                     shutil.rmtree(skill_dir)
@@ -859,8 +901,7 @@ class Store:
                         self.trash_dir, f"{name}-{_trash_timestamp()}-{counter}"
                     )
                     counter += 1
-                if skill_dir.is_dir():
-                    shutil.move(str(skill_dir), str(target))
+                shutil.move(str(skill_dir), str(target))
                 conn.execute(
                     "UPDATE skills SET status = 'trashed', updated_at = ? "
                     "WHERE name = ?",
@@ -904,6 +945,7 @@ class Store:
                         _diagnose(f"snapshot rollback failed for {name!r}", rollback_exc)
                     raise
             return {"name": name, "snapshot": snapshot}
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         candidates = sorted(
             (
                 p
@@ -915,7 +957,11 @@ class Store:
         if not candidates:
             raise StoreError(f"no trashed copy of '{name}' found")
         source = candidates[-1]
-        skill_dir = _safe_skill_path(self.skills_dir, name)
+        # check-then-move body is unchanged in the helper below.
+        return _with_skill_lock(skill_dir, self._restore_unlocked, name, skill_dir, source)
+
+    def _restore_unlocked(self, name: str, skill_dir, source) -> dict:
+        """Move a validated trash copy back into the skills directory."""
         if skill_dir.exists():
             raise StoreError(
                 f"cannot restore '{name}': a skill with that name already exists"
@@ -938,6 +984,12 @@ class Store:
     def disable(self, name: str) -> dict:
         """Rename SKILL.md to SKILL.md.disabled so validators skip the skill."""
         skill_dir = _safe_skill_path(self.skills_dir, name)
+        out = _with_skill_lock(skill_dir, self._disable_unlocked, name)
+        return {"name": name, "disabled": out}
+
+    def _disable_unlocked(self, name: str) -> bool:
+        """Rename the enabled document to the disabled filename."""
+        skill_dir = _safe_skill_path(self.skills_dir, name)
         md_file = skill_dir / "SKILL.md"
         if not md_file.is_file():
             if (skill_dir / "SKILL.md.disabled").is_file():
@@ -954,10 +1006,16 @@ class Store:
             conn.commit()
         finally:
             conn.close()
-        return {"name": name, "disabled": True}
+        return True
 
     def enable(self, name: str) -> dict:
         """Rename SKILL.md.disabled back to SKILL.md."""
+        skill_dir = _safe_skill_path(self.skills_dir, name)
+        out = _with_skill_lock(skill_dir, self._enable_unlocked, name)
+        return {"name": name, "disabled": out}
+
+    def _enable_unlocked(self, name: str) -> bool:
+        """Rename the disabled document back to SKILL.md."""
         skill_dir = _safe_skill_path(self.skills_dir, name)
         disabled_file = skill_dir / "SKILL.md.disabled"
         if not disabled_file.is_file():
@@ -975,7 +1033,7 @@ class Store:
             conn.commit()
         finally:
             conn.close()
-        return {"name": name, "disabled": False}
+        return False
 
     def trash_list(self) -> list[dict]:
         """List soft-deleted skills in the trash directory."""
@@ -1004,24 +1062,34 @@ class Store:
     def purge_trash(self) -> dict:
         """Permanently delete everything in the trash."""
         purged = []
-        if self.trash_dir.is_dir():
-            conn = self._connect()
-            try:
-                for path in sorted(self.trash_dir.iterdir()):
-                    name = _trash_entry_name(path)
-                    if name is None:
-                        continue
-                    shutil.rmtree(path)
-                    conn.execute(
-                        "DELETE FROM skills WHERE name = ? AND status = 'trashed'",
-                        (name,),
-                    )
-                    self._history(conn, name, "purge")
-                    purged.append(name)
-                conn.commit()
-            finally:
-                conn.close()
+        if not self.trash_dir.is_dir():
+            return {"purged": purged}
+        conn = self._connect()
+        try:
+            for path in sorted(self.trash_dir.iterdir()):
+                name = _trash_entry_name(path)
+                if name is None:
+                    continue
+                self._purge_entry(conn, path, name)
+                purged.append(name)
+            conn.commit()
+        finally:
+            conn.close()
         return {"purged": purged}
+
+    def _purge_entry(self, conn, path, name: str) -> None:
+        """Remove one validated trash entry and its index row if trashed."""
+        try:
+            shutil.rmtree(path)
+        except OSError as exc:
+            # Surface filesystem failures through the Store error contract;
+            # entries not yet visited stay purgeable.
+            raise StoreError(f"could not purge trash: {exc}") from exc
+        conn.execute(
+            "DELETE FROM skills WHERE name = ? AND status = 'trashed'",
+            (name,),
+        )
+        self._history(conn, name, "purge")
 
     def stats(self) -> dict:
         """Return counts, sizes and a category breakdown."""
@@ -1146,7 +1214,11 @@ class Store:
                 with tarfile.open(archive, "r:*") as tar:
                     members = _validate_archive_members(tar, archive.stat().st_size)
                     _extract_archive_members(tar, tmp, members)
-            except tarfile.TarError as exc:
+            except (tarfile.TarError, EOFError, zlib.error, gzip.BadGzipFile) as exc:
+                # Truncated gzip/tar streams surface as EOFError, zlib.error,
+                # or gzip.BadGzipFile rather than tarfile.TarError; every
+                # malformed archive must fail as a clean StoreError, never as
+                # a raw decompressor exception.
                 raise StoreError(f"invalid archive: {exc}") from exc
             manifest_path = tmp / "manifest.json"
             try:

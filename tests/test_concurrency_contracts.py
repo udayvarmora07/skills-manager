@@ -246,6 +246,65 @@ class ConcurrencyContractTests(unittest.TestCase):
         self.assertTrue(self.store.doctor()["ok"])
         self.assertEqual(skill_file.read_text(encoding="utf-8"), replacement)
 
+    def test_remove_and_edit_race_leaves_no_residue_or_raw_errors(self):
+        # OPEN-5 regression: whole-dir moves (remove) must serialize with
+        # file writes (edit/disable) on the same per-skill lock. Without the
+        # lock, a mid-write temp file can be stranded inside a trash copy and
+        # raw FileNotFoundError can escape the Store API.
+        from skillsmgr.store import SkillNotFound, StoreError
+
+        self.store.create("raced", "seed", body="seed")
+        stop = threading.Event()
+        errors = []
+
+        def churn(seed):
+            for _ in range(400):
+                try:
+                    self.store.edit("raced", description=f"d{seed}", body="x" * 30000)
+                except (StoreError, SkillNotFound):
+                    pass
+                except Exception as exc:  # pragma: no cover - raw leak
+                    errors.append(f"edit {type(exc).__name__}: {exc}")
+                    return
+                if not stop.is_set():
+                    try:
+                        self.store.disable("raced")
+                        self.store.enable("raced")
+                    except (StoreError, SkillNotFound):
+                        pass
+                    except Exception as exc:  # pragma: no cover - raw leak
+                        errors.append(f"toggle {type(exc).__name__}: {exc}")
+                        return
+
+        def remover():
+            for _ in range(120):
+                try:
+                    self.store.remove("raced")
+                    self.store.create("raced", "seed", body="seed")
+                except (StoreError, SkillNotFound):
+                    pass
+                except Exception as exc:  # pragma: no cover - raw leak
+                    errors.append(f"remove {type(exc).__name__}: {exc}")
+                    return
+
+        threads = [threading.Thread(target=churn, args=(i,)) for i in range(3)]
+        threads.append(threading.Thread(target=remover))
+        for t in threads:
+            t.start()
+        stop.set()
+        alive = self._join_all(threads)
+        self.assertEqual(alive, [])
+        self.assertEqual(errors, [])
+        self.store.resync()
+        doctor = self.store.doctor()
+        self.assertTrue(doctor["ok"], doctor)
+        leftovers = [
+            p.name
+            for p in Path(self._tmp.name).rglob("*")
+            if ".skillsmgr-tmp" in p.name
+        ]
+        self.assertEqual(leftovers, [])
+
 
 if __name__ == "__main__":
     unittest.main()

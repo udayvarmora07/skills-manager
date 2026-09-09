@@ -195,11 +195,22 @@ def commit_staged_skill(
             rmtree(backup)
         return True, None
     except Exception as exc:
-        if dest.exists() and (moved_original or not backup.exists()):
+        if moved_original:
+            # dest now holds (at most) the staged copy we moved in; the user's
+            # original lives in backup, so any partial dest may be discarded
+            # before the original is moved back into place.
             rmtree(dest, ignore_errors=True)
-        if moved_original and backup.exists() and not dest.exists():
-            move(str(backup), str(dest))
-        elif not moved_original and not backup.exists():
+            if backup.exists():
+                try:
+                    move(str(backup), str(dest))
+                except Exception as restore_exc:
+                    rmtree(staged, ignore_errors=True)
+                    raise restore_exc from exc
+        else:
+            # dest was never touched by us: it is still the user's original
+            # directory (e.g. the initial backup move failed), so it must be
+            # preserved untouched.
             rmtree(staged, ignore_errors=True)
+            return False, str(exc)
         rmtree(staged, ignore_errors=True)
         return False, str(exc)

@@ -280,6 +280,28 @@ class TestFindDuplicates(ScopedHomeTestCase):
         scopes.create_skill("agents", "lone", "Lone skill")
         self.assertEqual(scopes.find_duplicates(), [])
 
+    def test_sync_into_global_reactivates_stale_trashed_row(self):
+        # OPEN-3 regression: syncing agents -> global writes the directory
+        # directly; a 'trashed' row left by an earlier global remove must be
+        # reactivated so list/doctor/duplicates stay consistent.
+        store = scopes._global_store()
+        store.create("syncme", "Global old", body="global")
+        store.remove("syncme")  # row -> trashed, dir -> trash
+        scopes.create_skill("agents", "syncme", "Agent new", body="agent")
+        out = scopes.sync_skill("syncme", "agents", ["global"])
+        self.assertEqual(out["synced"], ["global"])
+        # row reactivated by the post-sync resync
+        import sqlite3 as _sqlite3
+
+        row = _sqlite3.connect(store.db_path).execute(
+            "SELECT status FROM skills WHERE name = 'syncme'"
+        ).fetchone()
+        self.assertEqual(row[0], "active")
+        self.assertIn("syncme", [r["name"] for r in store.list()])
+        dupes = {d["name"] for d in scopes.find_duplicates()}
+        self.assertIn("syncme", dupes)
+        self.assertTrue(store.doctor()["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

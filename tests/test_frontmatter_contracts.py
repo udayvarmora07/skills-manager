@@ -89,12 +89,96 @@ class FrontmatterFailureContractTests(unittest.TestCase):
     def test_malformed_flow_collection_is_clean_error(self):
         self.assert_frontmatter_error("---\nitems: [one, two\n---\nbody\n")
 
+    def test_flow_list_scalars_with_commas_quotes_and_brackets_round_trip(self):
+        # dump_frontmatter must never emit a flow list that its own parser
+        # rejects: scalar items containing commas, quotes, or brackets need
+        # quoting inside "[...]" (loop regression found by fuzzing).
+        tricky = [
+            "5,,CPKCxrr'JKqeJFEQi^ (7\\OPu h,.,;/:nd*Vg/*",
+            "a[b]c",
+            'say "hi"',
+            "trail,",
+            ",lead",
+            "x#y",
+            "x # y",
+            "a:b",
+            "c: d",
+            "",
+            "  ",
+            "true",
+            "~",
+            "'quoted'",
+            "line\nbreak",
+            "back\\slash",
+            "sp ace",
+            "-dash",
+            "[bracket",
+            "}brace",
+            "\u00e9\u4e2d",
+        ]
+        doc = {"name": "tricky", "description": "d", "items": tricky}
+        dumped = dump_frontmatter(doc)
+        parsed, body = parse_frontmatter(dumped)
+        self.assertEqual(parsed["items"], tricky)
+        self.assertEqual(body, "")
+
     def test_malformed_block_mapping_is_clean_error(self):
         self.assert_frontmatter_error("---\nname: valid\n  unexpectedly-indented\n---\nbody\n")
 
     def test_document_limit_is_enforced(self):
         text = "x" * (MAX_DOCUMENT_CHARS + 1)
         self.assert_frontmatter_error(text)
+
+    def test_round_trip_keys_containing_quote_characters(self):
+        # OPEN-1 regression: keys with embedded ' or " were emitted unquoted,
+        # making dump_frontmatter output unparseable.
+        keys = [
+            "x'y",
+            'x"y',
+            "1oi1Va0`sl&B&e}^^q`GMRv('wxnK",
+            '=.~Mp"@l3R0wgfTFL4X<[cANgMq.5lWh(Mf5W4',
+            "a'b\"c",
+            "'lead",
+            'trail"',
+        ]
+        for key in keys:
+            with self.subTest(key=key):
+                doc = {key: None}
+                dumped = dump_frontmatter(doc)
+                parsed, _ = parse_frontmatter(dumped)
+                self.assertEqual(list(parsed), [key])
+        nested = {"outer": {"a'1": "v", 'b"2': None}}
+        dumped = dump_frontmatter(nested)
+        parsed, _ = parse_frontmatter(dumped)
+        self.assertEqual(parsed, nested)
+
+    def test_dump_serializes_mappings_inside_flow_lists(self):
+        # Mappings nested inside flow (bracket) lists used to be silently
+        # str()-ified ({"n": 1} -> "{'n': 1}"); the dumper now emits flow maps
+        # the parser already accepts, so such data round-trips.
+        docs = [
+            {"k": [["a", {"n": "1"}]]},
+            {"k": [[{"a": "1"}, {"b": "2"}]]},
+            {"k": [{"a": "1"}]},
+            {"k": [{}, {"a": "1"}]},
+            {"k": {"wrapped": [{"deep": {"n": "1"}}]}},
+            # Empty collections must stay inline so they parse back to the
+            # same empty value instead of silently becoming None.
+            {"k": [{"deep": {}}, {"list": []}]},
+            {"body": [{"x": {}}]},
+            {"k": [{"a": {}, "b": []}, {"c": "v"}]},
+        ]
+        for doc in docs:
+            with self.subTest(doc=doc):
+                dumped = dump_frontmatter(doc)
+                parsed, _ = parse_frontmatter(dumped)
+                self.assertEqual(parsed, doc)
+        # unparseable nesting depth fails loudly instead of corrupting
+        deep = ["x"]
+        for _ in range(100):
+            deep = [deep]
+        with self.assertRaises(TypeError):
+            dump_frontmatter({"k": deep})
 
     def test_key_limit_is_enforced(self):
         entries = "".join(f"key-{index}: value\n" for index in range(MAX_KEYS + 1))

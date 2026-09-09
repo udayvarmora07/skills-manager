@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -25,6 +26,10 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_USAGE = 2
 EXIT_INTERRUPT = 130
+
+# Character class shared with the REST /api/install route for ecosystem
+# source/agent/skill values that are forwarded into runner commands.
+_SAFE_SOURCE_RE = re.compile(r"[A-Za-z0-9_@./:+-]+")
 
 
 _print_json = _output_print_json
@@ -111,7 +116,12 @@ def _make_store(args) -> Store:
         COLORS.enabled = True
     elif args.color == "never":
         COLORS.enabled = False
-    return Store()
+    store = Store()
+    # Ensure the index schema exists so every command (not just `init` and
+    # read paths that self-initialize) works on a fresh data directory;
+    # `init_db` is idempotent and runs after name validation.
+    store.init_db()
+    return store
 
 
 def _add_scope_arg(parser) -> None:
@@ -810,17 +820,51 @@ def _install_command_for_display(source: str, runner: str, scope: str, agents, s
     return " ".join(parts)
 
 
-def cmd_install(args, store: Store) -> int:
-    runner = (getattr(args, "runner", None) or "npx").strip() or "npx"
+def _validated_install_runner(runner: str | None) -> str:
+    """Resolve the ecosystem runner, rejecting values outside the CLI contract."""
+    runner = (runner or "npx").strip() or "npx"
     if runner == "uvx":
         raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python packages use pipx/uvx with a PyPI package.")
     allowed = {"npx", "pnpm", "yarn", "bunx", "bun"}
     if runner not in allowed:
         raise StoreError(f"unsupported runner {runner!r}")
+    return runner
+
+
+def _validated_install_value(label: str, value: str) -> str:
+    """Accept one ecosystem value, rejecting command-injection shapes.
+
+    Mirrors the REST /api/install route: only the shared character class is
+    accepted and leading dashes are rejected either way.
+    """
+    value = str(value)
+    if not _SAFE_SOURCE_RE.fullmatch(value) or value.startswith("-"):
+        if label == "source":
+            raise StoreError("invalid source value")
+        raise StoreError(f"invalid {label} value {value!r}")
+    return value
+
+
+def _validated_install_source(raw: str | None) -> str:
+    """Require a non-empty ecosystem source and validate it."""
+    source = (raw or "").strip()
+    if not source:
+        raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
+    return _validated_install_value("source", source)
+
+
+def cmd_install(args, store: Store) -> int:
+    runner = _validated_install_runner(getattr(args, "runner", None))
     agents = getattr(args, "agent", None)
     skills_filter = getattr(args, "skill", None)
     scope = getattr(args, "scope", None) or "global"
-    cmd_str = _install_command_for_display(args.source, runner, scope, agents, skills_filter, bool(getattr(args, "copy", False)), bool(getattr(args, "list_only", False)))
+    source = _validated_install_source(getattr(args, "source", ""))
+    copied = bool(getattr(args, "copy", False))
+    list_flag = bool(getattr(args, "list_only", False))
+    for label, values in (("agent", agents), ("skill", skills_filter)):
+        for value in values or []:
+            _validated_install_value(label, value)
+    cmd_str = _install_command_for_display(source, runner, scope, agents, skills_filter, copied, list_flag)
     if getattr(args, "dry_run", False) or getattr(args, "list_only", False):
         if args.json:
             _print_json({"command": cmd_str, "runner": runner, "source": args.source, "executed": False})

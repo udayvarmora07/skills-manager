@@ -4,6 +4,13 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Advanced loop-engineering campaign closeout
+
+- Ran nine deterministic hermetic probe loops (stdlib-only, seeded; probe code kept outside the repo): store-lifecycle burst, frontmatter round-trip/hostile fuzz, failure injection, REST fuzz, concurrency stress, search/validator/loader-templates/CLI-env fuzz, CLI adversarial matrix, archive boundary+grammar fuzz, scope differential loop.
+- Fixed 13 genuine defects surgically with red-first hermetic regressions and no locked-constraint changes (no new commands/flags, no new Store public methods, `SCHEMA_VERSION = "1"` unchanged): trashed-row reactivation on create/add (incl. resync of any returned live directory), same-second trash counter recognition, honest double-remove error, import backup-move recovery preserving the original, truncated-gzip clean StoreError, CLI first-run schema bootstrap, install validation parity, flow-scalar and quote-char key quoting, nested-block mapping emission with inline empty collections, post-sync global index reconciliation, shared per-skill lock coverage with stranded-temp cleanup, and purge StoreError wrapping.
+- Full findings with repro/root-cause/fix evidence live in `loop-engineering-findings.md`; owning docs updated (`docs/02-modules.md` store/frontmatter behavior, `docs/03-cli-surface.md` list semantics) and `task.md` Milestone 22 closed.
+- Verification: full unittest suite (222 tests) PASS; `smoke_store.py` PASS (`ALL STORE SMOKE TESTS PASSED`); `smoke_web.py` PASS (`ALL WEB SMOKE TESTS PASSED`); Python compile PASS; `node --check skillsmgr/webui/app.js` PASS; `check_docs.py` PASS; `check_complexity.py` PASS (181 functions); `git diff --check` PASS; package-data gate remains honestly `UNAVAILABLE` (no `build` module in this environment; CI installs it).
+
 ## 2026-09-08 — REST two-server search isolation regression closeout (18:42 UTC)
 
 - Fixed both REST search routes (`/api/search` and `/api/skills?q=...`) to pass the request handler's `self.store` into global and merged `scopes.search_all()` calls. Agent-scope searches still use filesystem adapters; body-aware ranking, response schemas, and singleton compatibility for non-WebAppServer callers are unchanged.

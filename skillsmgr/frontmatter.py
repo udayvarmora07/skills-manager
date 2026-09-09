@@ -744,48 +744,137 @@ def _dump_kv(lines: list[str], key, value, indent: int) -> None:
     prefix = " " * indent
     key_str = _format_key(key)
     if isinstance(value, dict):
-        if not value:
-            lines.append(f"{prefix}{key_str}: {{}}")
-        else:
-            lines.append(f"{prefix}{key_str}:")
-            for k, v in value.items():
-                _dump_kv(lines, k, v, indent + 2)
+        _dump_mapping_tail(lines, prefix, key_str, value, indent)
     elif isinstance(value, list):
-        if not value or _all_scalars(value):
-            lines.append(f"{prefix}{key_str}: {_format_flow_list(value)}")
-        else:
-            lines.append(f"{prefix}{key_str}:")
-            for item in value:
-                _dump_list_item(lines, item, indent + 2)
+        _dump_sequence_tail(lines, prefix, key_str, value, indent)
     else:
         lines.append(f"{prefix}{key_str}: {_dump_scalar(value, indent)}")
 
 
+def _dump_mapping_tail(lines: list[str], prefix: str, key_str: str, value: dict, indent: int) -> None:
+    """Append the body after ``key:`` for one mapping value."""
+    if not value:
+        lines.append(f"{prefix}{key_str}: {{}}")
+        return
+    lines.append(f"{prefix}{key_str}:")
+    for key, item in value.items():
+        _dump_kv(lines, key, item, indent + 2)
+
+
+def _dump_sequence_tail(lines: list[str], prefix: str, key_str: str, value: list, indent: int) -> None:
+    """Append the body after ``key:`` for one list value."""
+    if not value or _all_scalars_and_scalar_lists(value):
+        lines.append(f"{prefix}{key_str}: {_format_flow_list(value)}")
+        return
+    lines.append(f"{prefix}{key_str}:")
+    for item in value:
+        _dump_list_item(lines, item, indent + 2)
+
+
+def _dump_scalar_value(value, indent: int) -> str:
+    """Render one leaf scalar for a mapping value."""
+    return _dump_scalar(value, indent)
+
+
+def _dump_sequence_element_value(item, indent: int) -> list[str]:
+    """Render one block sequence element as lines (no ``- `` marker)."""
+    if not isinstance(item, dict):
+        raise TypeError("scalar sequence elements are handled by _dump_sequence_element")
+    if not item:
+        return ["{}"]
+    parts: list[str] = []
+    items = list(item.items())
+    first_key, first_value = items[0]
+    parts.append(f"{_format_key(first_key)}: {_dump_scalar_value_nested(first_value, indent + 2)}")
+    for key, value in items[1:]:
+        inner: list[str] = []
+        _dump_kv(inner, key, value, indent + 2)
+        parts.extend(line[indent + 2 :] for line in inner)
+    return parts
+
+
+def _dump_scalar_value_nested(value, indent: int) -> str:
+    """Render the first value of a ``- key: value`` block item.
+
+    Scalars stay on the dash line; mappings and lists drop to nested block
+    lines joined by the caller. *indent* is the item indent; nested children
+    are re-emitted with a fresh key render so continuation lines line up.
+    Empty collections stay inline (``{}``/``[]``) so they parse back to the
+    same empty value instead of ``None``.
+    """
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        pad = " " * (indent + 2)
+        sub: list[str] = []
+        for key, item in value.items():
+            _dump_kv(sub, key, item, indent + 2)
+        return "\n" + "\n".join(pad + line[(indent + 2) :] for line in sub)
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        pad = " " * (indent + 2)
+        sub = []
+        for item in value:
+            _dump_list_item(sub, item, indent + 2)
+        return "\n" + "\n".join(pad + line[(indent + 2) :] for line in sub)
+    return _dump_scalar(value, indent)
+
+
 def _dump_list_item(lines: list[str], item, indent: int) -> None:
     prefix = " " * indent
+    _dump_block_item(lines, item, indent, is_first=True)
+
+
+def _dump_block_item(lines: list[str], item, indent: int, *, is_first: bool) -> None:
+    """Append one block item; top-level items start on the ``- `` line."""
+    marker = "- " if is_first else "- "
+    _dump_sequence_element(lines, marker, item, indent)
+
+
+def _dump_sequence_element(lines: list[str], marker: str, item, indent: int) -> None:
+    prefix = " " * indent
     if isinstance(item, dict):
-        if not item:
-            lines.append(f"{prefix}- {{}}")
+        parts = _dump_sequence_element_value(item, indent)
+        lines.append(f"{prefix}{marker}{parts[0]}")
+        lines.extend(f"{prefix}  {part}" for part in parts[1:])
+        return
+    if isinstance(item, list):
+        if not item or _all_scalars(item):
+            lines.append(f"{prefix}{marker}{_format_flow_list(item)}")
             return
-        first = next(iter(item))
-        lines.append(
-            f"{prefix}- {_format_key(first)}: {_dump_scalar(item[first], indent + 2)}"
-        )
-        for k, v in item.items():
-            if k == first:
-                continue
-            _dump_kv(lines, k, v, indent + 2)
-    elif isinstance(item, list):
-        lines.append(f"{prefix}- {_format_flow_list(item)}")
-    else:
-        lines.append(f"{prefix}- {_dump_scalar(item, indent)}")
+        # Non-scalar elements (nested lists, or mappings which flow brackets
+        # cannot hold) recurse as a nested block sequence.
+        lines.append(f"{prefix}{marker.rstrip()}")
+        for sub in item:
+            _dump_sequence_element(lines, "- ", sub, indent + 2)
+        return
+    lines.append(f"{prefix}{marker}{_dump_scalar(item, indent)}")
 
 
 def _all_scalars(items: list) -> bool:
     return all(not isinstance(i, (dict, list)) for i in items)
 
 
+def _all_scalars_and_scalar_lists(items: list) -> bool:
+    """Flow-renderable lists: every element is a scalar or a scalar list."""
+
+    def flowable(item) -> bool:
+        if isinstance(item, dict):
+            return False
+        if isinstance(item, list):
+            return all(flowable(i) for i in item)
+        return True
+
+    return all(flowable(i) for i in items)
+
+
 def _dump_scalar(value, indent: int) -> str:
+    """Render one scalar wherever a block value belongs (never in flow)."""
+    return _render_block_scalar(value, indent)
+
+
+def _render_block_scalar(value, indent: int) -> str:
     if value is None:
         return "null"
     if value is True:
@@ -794,6 +883,11 @@ def _dump_scalar(value, indent: int) -> str:
         return "false"
     if isinstance(value, (int, float)):
         return str(value)
+    if isinstance(value, (dict, list)):
+        raise TypeError(
+            "cannot inline a mapping or list as a block scalar; "
+            "emit it as a nested block instead"
+        )
     s = str(value)
     if "\n" in s:
         return _block_scalar(s, indent)
@@ -809,15 +903,51 @@ def _dump_flow_scalar(value) -> str:
         return "false"
     if isinstance(value, (int, float)):
         return str(value)
-    s = str(value)
+    return _quote_flow_text(str(value))
+
+
+_FLOW_QUOTE_CHARS = (",", "[", "]", "{", "}", "'", '"', "#")
+
+
+def _quote_flow_text(s: str) -> str:
+    """Quote text so it survives inside one flow (bracket) list element.
+
+    Bare commas/brackets/braces/quotes delimit or comment items; leaving them
+    bare would make the emitted text unparseable.
+    """
     if "\n" in s:
         escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         return f'"{escaped}"'
-    return _quote_if_needed(s)
+    quoted = _quote_if_needed(s)
+    if quoted == s and any(c in s for c in _FLOW_QUOTE_CHARS):
+        return _single_quote(s)
+    return quoted
 
 
 def _format_flow_list(items: list) -> str:
-    return "[" + ", ".join(_dump_flow_scalar(i) for i in items) + "]"
+    return "[" + ", ".join(_format_flow_item(i, 1) for i in items) + "]"
+
+
+def _format_flow_item(item, depth: int) -> str:
+    """Serialize one flow element: scalars or nested lists.
+
+    Mappings cannot be expressed in this parser's flow grammar: the bracket
+    splitter cannot pair braces reliably across the outer list boundary, so
+    fail loudly (block sequences carry mappings instead -- see
+    _dump_sequence_element).
+    """
+    if isinstance(item, dict):
+        raise TypeError(
+            "cannot serialize a mapping inside a flow (bracket) list: "
+            f"{item!r} (mappings are emitted as block sequence items instead)"
+        )
+    if isinstance(item, list):
+        if depth >= MAX_NESTING_DEPTH:
+            raise TypeError(
+                f"flow list nesting exceeds the parser limit ({MAX_NESTING_DEPTH})"
+            )
+        return "[" + ", ".join(_format_flow_item(i, depth + 1) for i in item) + "]"
+    return _dump_flow_scalar(item)
 
 
 def _block_scalar(s: str, indent: int) -> str:
@@ -856,11 +986,21 @@ def _quote_if_needed(s: str) -> str:
     return s
 
 
+# Keys containing these characters must be single-quoted: the parser treats a
+# bare quote or an inline-flow indicator mid-key as the start of a quoted
+# token and rejects the line.
+_QUOTE_KEY_CHARS = ("'", '"', "[", "]", "{", "}", "(", ")")
+
+
 def _format_key(key) -> str:
     k = str(key)
-    if k == "" or k != k.strip() or ":" in k or "#" in k or k.startswith("-"):
-        return _single_quote(k)
-    return k
+    needs_quotes = (
+        k == ""
+        or k != k.strip()
+        or k.startswith("-")
+        or any(marker in k for marker in (":", "#", *_QUOTE_KEY_CHARS))
+    )
+    return _single_quote(k) if needs_quotes else k
 
 
 def _single_quote(s: str) -> str:

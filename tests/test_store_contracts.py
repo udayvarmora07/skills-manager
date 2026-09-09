@@ -339,6 +339,151 @@ class TestStoreSnapshotsAndArchives(StoreContractCase):
         self.assertEqual(self.store.get("demo")["description"], "Original")
         self.assertEqual(self.store.get("demo")["body"], "old\n")
 
+    # ---- loop-engineering regressions (2026-09-08) ---------------------
+
+    def test_create_over_trashed_name_reactivates_index_row(self):
+        # A skill removed to trash has its row marked 'trashed'. Re-creating
+        # the same name must leave the fresh filesystem skill visible and the
+        # index row 'active' -- not silently stuck 'trashed' (which hid the
+        # skill from list()/stats and made doctor report an orphan dir).
+        self.store.create("demo", "Original", body="old")
+        self.store.remove("demo")
+        self.store.create("demo", "Replacement", body="new")
+        self.assertEqual([r["name"] for r in self.store.list()], ["demo"])
+        self.assertEqual(self.store.get("demo")["description"], "Replacement")
+        row = sqlite3.connect(self.store.db_path).execute(
+            "SELECT status FROM skills WHERE name = 'demo'"
+        ).fetchone()
+        self.assertEqual(row[0], "active")
+        self.assertEqual(self.store.stats()["active"], 1)
+        self.assertEqual(self.store.stats()["trashed"], 0)
+        self.assertTrue(self.store.doctor()["ok"])
+        # resync must not flip a healthy row back to 'trashed'
+        self.store.resync()
+        row = sqlite3.connect(self.store.db_path).execute(
+            "SELECT status FROM skills WHERE name = 'demo'"
+        ).fetchone()
+        self.assertEqual(row[0], "active")
+
+    def test_add_over_trashed_name_reactivates_index_row(self):
+        self.store.create("demo", "Original")
+        self.store.remove("demo")
+        self.write_external(name="demo")
+        self.store.add(Path(self.tmp.name) / "external" / "demo")
+        self.assertEqual([r["name"] for r in self.store.list()], ["demo"])
+        row = sqlite3.connect(self.store.db_path).execute(
+            "SELECT status FROM skills WHERE name = 'demo'"
+        ).fetchone()
+        self.assertEqual(row[0], "active")
+        self.assertTrue(self.store.doctor()["ok"])
+
+    def test_import_backup_move_failure_preserves_original_destination(self):
+        # Recovery regression: when the initial 'move original -> backup'
+        # step fails, the original skill directory is still the destination
+        # and must survive untouched (the old recovery deleted it).
+        self.store.create("demo", "Original", body="old")
+        source = Store(data_dir=Path(self.tmp.name) / "src-backup-fail")
+        source.init_db()
+        source.create("demo", "Replacement", body="new")
+        archive = source.export(Path(self.tmp.name) / "bfail.tar.gz")
+        with mock.patch("skillsmgr.archive.shutil.move", side_effect=OSError(5, "Input/output error")):
+            result = self.store.import_(archive, force=True)
+        self.assertNotIn("demo", result["imported"])
+        self.assertTrue(any("demo" in item for item in result["skipped"]))
+        self.assertEqual(self.store.get("demo")["description"], "Original")
+        self.assertEqual(self.store.get("demo")["body"], "old\n")
+        self.assertEqual(len(self.store.doctor()["transaction_artifacts"]), 0)
+
+    def test_import_truncated_gzip_archive_is_clean_store_error(self):
+        # A truncated .tar.gz previously leaked raw EOFError out of import_;
+        # malformed archives must always surface as clean StoreError values.
+        good = self.store.export(Path(self.tmp.name) / "full.tar.gz")
+        data = good.read_bytes()
+        truncated = Path(self.tmp.name) / "truncated.tar.gz"
+        truncated.write_bytes(data[: max(1, len(data) // 3)])
+        with self.assertRaisesRegex(StoreError, "invalid archive"):
+            self.store.import_(truncated)
+        # corrupt gzip header (BadGzipFile) is clean too
+        corrupt = Path(self.tmp.name) / "corrupt.tar.gz"
+        corrupt.write_bytes(b"\x1f\x8b" + os.urandom(400))
+        with self.assertRaisesRegex(StoreError, "invalid archive"):
+            self.store.import_(corrupt)
+
+    def test_resync_reactivates_row_whose_directory_returned(self):
+        # A raw directory write (e.g. sync into the global scope) can return
+        # a skill directory while its row is still 'trashed' from an earlier
+        # remove; resync must treat any live directory as active again.
+        self.store.create("demo", "One", body="old")
+        self.store.remove("demo")
+        skill_dir = self.store.skills_dir / "demo"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(document("demo", "Back", "new"), encoding="utf-8")
+        result = self.store.resync()
+        row = sqlite3.connect(self.store.db_path).execute(
+            "SELECT status FROM skills WHERE name = 'demo'"
+        ).fetchone()
+        self.assertEqual(row[0], "active")
+        self.assertEqual(result["updated"], 1)
+        self.assertIn("demo", [r["name"] for r in self.store.list()])
+        self.assertTrue(self.store.doctor()["ok"])
+
+    def test_purge_trash_wraps_filesystem_failures_as_store_error(self):
+        # OPEN-6: a mid-purge filesystem failure must surface through the
+        # StoreError contract, not as a raw OSError, and remaining entries
+        # stay purgeable.
+        for i in range(3):
+            self.store.create(f"t{i}", f"d{i}")
+            self.store.remove(f"t{i}")
+        with mock.patch("skillsmgr.store.shutil.rmtree", side_effect=OSError(5, "Input/output error")):
+            with self.assertRaisesRegex(StoreError, "could not purge trash"):
+                self.store.purge_trash()
+        self.assertEqual(len(self.store.trash_list()), 3)
+
+    def test_second_remove_of_trashed_skill_raises_not_found(self):
+        # remove() of an already-trashed name used to silently succeed with a
+        # made-up trash_path; it must fail honestly and leave the trash copy
+        # restorable (loop regression found by CLI double-remove fuzzing).
+        self.store.create("demo", "First", body="v1")
+        self.store.remove("demo")
+        with self.assertRaises(SkillNotFound):
+            self.store.remove("demo")
+        with self.assertRaises(SkillNotFound):
+            self.store.remove("demo", purge=True)
+        self.assertEqual(len(self.store.trash_list()), 1)
+        self.store.restore("demo")
+        self.assertEqual(self.store.get("demo")["body"], "v1\n")
+
+    def test_same_second_trash_counter_entries_are_listed_restored_and_purged(self):
+        # Two trashes of the same name inside one second make remove() fall
+        # back to a `-<n>` suffix. Those entries must stay recognizable as
+        # canonical trash: listed, restorable (newest first), and purgeable.
+        with mock.patch(
+            "skillsmgr.store._trash_timestamp", return_value="2026-09-08_19-13-21Z"
+        ):
+            self.store.create("demo", "First", body="v1")
+            self.store.remove("demo")
+            self.store.create("demo", "Second", body="v2")
+            self.store.remove("demo")
+        entries = sorted(p.name for p in self.store.trash_dir.iterdir())
+        self.assertEqual(
+            entries,
+            ["demo-2026-09-08_19-13-21Z", "demo-2026-09-08_19-13-21Z-1"],
+        )
+        self.assertEqual(len(self.store.trash_list()), 2)
+        # restore must return the newest copy (the counter entry)
+        self.store.restore("demo")
+        self.assertEqual(self.store.get("demo")["body"], "v2\n")
+        self.assertEqual(
+            len([p for p in self.store.trash_dir.iterdir()]), 1
+        )
+        # second copy is still independently restorable after purging the live skill
+        self.store.remove("demo", purge=True)
+        self.store.restore("demo")
+        self.assertEqual(self.store.get("demo")["body"], "v1\n")
+        self.store.remove("demo", purge=True)
+        self.assertEqual(self.store.purge_trash()["purged"], [])
+        self.assertTrue(self.store.doctor()["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

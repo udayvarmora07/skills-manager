@@ -639,6 +639,11 @@ def sync_skill(
             shutil.rmtree(stage, ignore_errors=True)
             raise
         synced.append(sid)
+    if "global" in synced:
+        # The global scope is Store-backed: raw staged writes above bypass the
+        # index, so reconcile the row (reactivating it when a stale 'trashed'
+        # row predated the sync) through the public resync seam.
+        _global_store().resync()
     return {"name": name, "from_scope": from_scope, "synced": synced, "skipped": skipped}
 
 
