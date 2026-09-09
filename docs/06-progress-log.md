@@ -4,6 +4,15 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Frontend-contract + steady-state campaign, round 11 (11 probes green, zero code)
+
+- Hermetic probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): T2 all 10 ASK/BUG issues OPEN (#6/#7/#9 carry their 1 rationale comment); T3 T2b repro unchanged (issue #13 stands); T4 CSS (900px stack + 640px topbar rules verified against the SESSION-CONTEXT gotcha; 380/420/780 are component caps, not missing breakpoints — first-pass flag was a probe regex over-match; reduced-motion/overflow-x/focus present); T5 a11y (13 labelled `aria-modal` dialogs, live region, `sr-only`, `kbd`, Esc + trap, `inert`); T6 5/5 viewports no-overflow zero-errors; T7 counts (57 + 37 re-derived); T8 PyPI 404; T9 deferred zero comments; T10 P0 spots green; T11 protocol checklist present and evidenced per-round.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-11 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Support-module + finding-filing campaign, round 10 (11 probes green, zero code)
 
 - Filed round-7 T2b as issue #13 (`[BUG] Non-UTF8 SKILL.md escapes scan_dir/doctor/resync as raw UnicodeDecodeError`; repro + smallest-fix sketch + skip-vs-malformed-vs-error scope questions; no code).

@@ -603,6 +603,26 @@ Hermetic probes (stdlib only, inline heredocs, no product-code changes) over col
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 42 — Frontend-contract + steady-state campaign, round 11 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, inline heredocs, no product-code changes) over CSS/a11y/viewports/counts/claims/gating/P0-spots/protocol; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff).
+- [x] T2 issues #5/#12/#13 + #3/#4/#8/#11 + #6/#7/#9 all still OPEN (rejections carry 1 comment each).
+- [x] T3 T2b encoding repro unchanged (raw `UnicodeDecodeError`; issue #13 stands).
+- [x] T4 CSS (900/640 stacked-layout/topbar rules + 380/420/780 component caps; `prefers-reduced-motion`; `overflow-x`; focus styles; 3 `@media` blocks).
+- [x] T5 a11y (13 labelled dialogs, `aria-modal`, live region, `sr-only`, `kbd`, Esc + focus trap, `inert`).
+- [x] T6 viewports (5/5 no overflow, zero errors, exit 0).
+- [x] T7 counts (insights 57, CLI 27+7+3=37 re-derived from AST).
+- [x] T8 PyPI still 404; README future-release claim accurate.
+- [x] T9 deferred untouched (zero comments each).
+- [x] T10 P0 spots (001 victim survives; 002 purge 403 + trash kept).
+- [x] T11 protocol compliance (12-step checklist lives in `TODO.md`; rounds evidence each step).
+- [x] T12 harness green + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
