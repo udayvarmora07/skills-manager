@@ -4,6 +4,16 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Trust-surface + docs-contract campaign, round 8 (13 probes green, zero code)
+
+- Hermetic probes (stdlib only, scripts in `/tmp/r8_*.py`, outside the repo; zero product-code changes): T2 constraints (no ORM import; schema `1`; tiktoken optional-guarded; loopback + vendored Vue + no CDN; command set preserved across the parser split — first-pass flags were probe bugs: `orm` substring in "form", relative `store`/`validator` imports, v1 `cli.py` vs split-file comparison); T3 secrets (98 files clean; `.autogit` untracked, not ignored — pre-existing, untouched); T4 README quickstart verbatim (all 7 commands rc 0); T5 CONTRIBUTING checklist green; T6 roadmap now quotes verdicts; T7 CLI (26/26 help, exit 2/1 contracts, no traceback — first-pass `create bad UX` flag was argparse multi-word usage, real invalid names exit 1 cleanly); T8 REST (8/8 JSON `{error}` + 415); T9 XSS (`esc()` map, 2 sinks via renderer, no `innerHTML`); T10 REST table (no phantom `/api/tokens` or `/api/db` — tokens ride `stats`/`scopes`, maintenance is `/api/rebuild`+`/api/resync`); T11 Store API (zero drift); T12 git (1 modified file, no large blobs).
+- Flake note: first harness run `passed:false` (one `net::ERR_ABORTED` at 320px; server logged `BrokenPipeError` on a static write — viewport-resize probe race, zero console errors). Rerun `passed:true`, exit 0. Not a product change; recorded per the never-guess rule.
+- T13/T15: harness green on rerun + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-8 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Module-seam + backlog-truth campaign, round 7 (9 probes green, zero code)
 
 - Hermetic probes (stdlib only, scripts in `/tmp/r7_*.py`, outside the repo; zero product-code changes): T2 loader (good/badfm/dupkey/disabled/noload exact) + T2b latin-1 finding below; T3 observations (stable hashes, partition, provenance); T4 roots (dup states, `unresolved`, force/skip semantics); T5 tokens + templates (100-char names valid per `TEMPLATE_NAME_RE` — probe corrected); T6 web serialization + install allowlist; T7 sync (skip-without-force, force-converge, dup-root single-touch); T8 ranking deterministic (100/80/40, 50× stable); T9 diagnostics stderr-only.

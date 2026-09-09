@@ -543,6 +543,26 @@ Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over load
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 39 — Trust-surface + docs-contract campaign, round 8 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over locked constraints, secrets, README/CONTRIBUTING verbatim, roadmap verdicts, CLI/REST error shapes, XSS, REST/Store doc coverage, git hygiene; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff).
+- [x] T2 locked constraints (no ORM import; schema `1`; stdlib-only with optional-guarded tiktoken; loopback + vendored Vue + no CDN; commands preserved across the `cli.py`→`cli_parser.py` split).
+- [x] T3 secrets scan (98 tracked files; no keys/tokens/private-keys; no world-writable; `.autogit` untracked-ignored).
+- [x] T4 README quickstart verbatim E2E (list/create/search/tokens/validate/export/install-dry-run all rc 0 on fresh tmp).
+- [x] T5 CONTRIBUTING checklist (compile/complexity/docs/package-UNAVAILABLE/init/create all green).
+- [x] T6 roadmap verdicts wired (v1.2+ six lines + `pywebview` line now quote their research verdicts; gate PASS).
+- [x] T7 CLI UX (26/26 `--help` rc 0; bad-command exit 2; invalid names exit 1 with clean message; no traceback on `SkillNotFound`).
+- [x] T8 REST errors (8/8 JSON `{error}`, no `Traceback`: 404/400 shapes + form-415).
+- [x] T9 XSS audit (`esc()` full entity map; 2 `v-html` sinks both via `renderMarkdown`; no `innerHTML`; `rel=noopener`; no `javascript:`).
+- [x] T10 REST table audit (skills/search/maintenance/trash/templates/import-export rows verified; no phantom `/api/tokens` or `/api/db` routes — tokens ride `stats`/`scopes`, maintenance is `/api/rebuild`+`/api/resync`).
+- [x] T11 Store API audit (every documented `Store.*` exists in source).
+- [x] T12 git hygiene (only `ROADMAP.md` modified + ignored `.autogit`; no large files; `dist/`/egg-info ignored).
+- [x] T13 harness `"passed": true` on rerun (first run: one `net::ERR_ABORTED` at 320px + server `BrokenPipeError` — probe-race flake, zero console errors) + fresh-tmp live seam OK.
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
