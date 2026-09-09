@@ -3,156 +3,7 @@
 
 /* ------------------------------------------------------------- utilities */
 
-async function api(url, opts = {}) {
-  const res = await fetch(url, opts);
-  let data = null;
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) data = await res.json();
-  if (!res.ok) throw new Error((data && data.error) || "HTTP " + res.status);
-  return data;
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-
-function formatBytes(n) {
-  if (n === null || n === undefined) return "—";
-  if (n < 1024) return n + " B";
-  const units = ["KB", "MB", "GB"];
-  let v = n, i = -1;
-  do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);
-  return v.toFixed(v >= 100 ? 0 : 1) + " " + units[i];
-}
-
-function formatTokens(n) {
-  if (n == null) return "—";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-  return String(n);
-}
-
-function tokenPctClass(pct) {
-  if (pct >= 80) return "pct-bad";
-  if (pct >= 50) return "pct-warn";
-  return "pct-ok";
-}
-
-function tokenBarWidth(pct) {
-  return Math.max(2, Math.min(100, pct)).toFixed(1) + "%";
-}
-
-/* Minimal, safe markdown renderer: blocks only, everything escaped. */
-
-function inlineMd(s) {
-  let out = esc(s);
-  out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
-  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  return out;
-}
-
-function renderMarkdown(md) {
-  if (!md || !md.trim()) return '<p style="color:var(--text-muted);">No documentation body.</p>';
-  const lines = String(md).split("\n");
-  const out = [];
-  let i = 0, inList = null, inCode = false, codeBuf = [], codeLang = "", inTable = false;
-
-  const closeList = () => { if (inList) { out.push("</" + inList + ">"); inList = null; } };
-  const closeTable = () => { if (inTable) { out.push("</table>"); inTable = false; } };
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (inCode) {
-      if (/^```/.test(line.trim())) {
-        out.push('<pre><code>' + esc(codeBuf.join("\n")) + "</code></pre>");
-        inCode = false; codeBuf = [];
-      } else codeBuf.push(line);
-      i++; continue;
-    }
-    if (/^```/.test(line.trim())) { inCode = true; codeLang = ""; i++; continue; }
-
-    const blank = !line.trim();
-    const h = /^(#{1,6})\s+(.*)$/.exec(line);
-    const hr = /^\s*(-{3,}|\*{3,})\s*$/.test(line);
-    const ul = /^\s*[-*+]\s+(.*)$/.exec(line);
-    const ol = /^\s*\d+\.\s+(.*)$/.exec(line);
-    const quote = /^\s*>\s?(.*)$/.exec(line);
-
-    if (blank) { closeList(); closeTable(); i++; continue; }
-
-    const tableRow = /^\s*\|.*\|\s*$/.test(line) && !h;
-    if (tableRow) {
-      closeList();
-      const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
-      const isSep = cells.every((c) => /^:?-{2,}:?$/.test(c));
-      if (!isSep) {
-        if (!inTable) { out.push("<table>"); inTable = true; }
-        out.push("<tr>" + cells.map((c) => "<td>" + inlineMd(c) + "</td>").join("") + "</tr>");
-      }
-      i++; continue;
-    }
-
-    if (h) { closeList(); closeTable(); out.push(`<h${h[1].length}>` + inlineMd(h[2]) + `</h${h[1].length}>`); i++; continue; }
-    if (hr) { closeList(); closeTable(); out.push("<hr>"); i++; continue; }
-    if (quote) { closeList(); closeTable(); out.push("<blockquote>" + inlineMd(quote[1]) + "</blockquote>"); i++; continue; }
-    if (ul || ol) {
-      const tag = ul ? "ul" : "ol";
-      const text = (ul || ol)[1];
-      closeTable();
-      if (inList !== tag) { closeList(); out.push("<" + tag + ">"); inList = tag; }
-      out.push("<li>" + inlineMd(text) + "</li>");
-      i++; continue;
-    }
-
-    closeList(); closeTable();
-    out.push("<p>" + inlineMd(line) + "</p>");
-    i++;
-  }
-
-  closeList(); closeTable();
-  if (inCode) out.push('<pre><code>' + esc(codeBuf.join("\n")) + "</code></pre>");
-
-  let html = out.join("\n");
-
-  /* table cleanup: drop stray <table> with no rows and wrap rows */
-  html = html.replace(/<table>/g, '<div class="tablewrap"><table>');
-  html = html.replace(/<\/table>/g, "</table></div>");
-
-  return html;
-}
-
-/* Extract compatibility / allowed-tools from raw SKILL.md frontmatter. */
-function parseFrontmatter(text) {
-  const m = /^---\s*\n([\s\S]*?)\n---/.exec(text || "");
-  if (!m) return {};
-  const out = {};
-  for (const line of m[1].split("\n")) {
-    const kv = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-    if (!kv) continue;
-    if (kv[1] === "compatibility" && kv[2].trim()) out.compatibility = kv[2].trim();
-    if (kv[1] === "allowed-tools" && kv[2].trim()) out.allowed_tools = kv[2].trim();
-  }
-  return out;
-}
-
-function formatCompat(v) {
-  if (!v) return "";
-  if (typeof v === "string") return v;
-  if (typeof v === "object") return Object.entries(v).map(([k, val]) => `${k} ${val}`).join(", ");
-  return String(v);
-}
-
-function formatTools(v) {
-  if (!v) return "";
-  if (Array.isArray(v)) return v.join(", ");
-  return String(v);
-}
+const { api, formatBytes, formatTokens, tokenPctClass, tokenBarWidth, renderMarkdown, parseFrontmatter, formatCompat, formatTools } = window.SkillManagerDomain;
 
 /* ------------------------------------------------------------------ app */
 
@@ -183,10 +34,13 @@ createApp({
       loadingDetail: false,
       loadingTrash: false,
       toasts: [],
+      liveAnnouncement: "",
       toastSeq: 0,
       searchTimer: null,
       listSeq: 0,
       detailSeq: 0,
+      modalRestoreFocus: null,
+      modalFocusTimer: null,
       modals: {
         skill: null,
         remove: null,
@@ -200,6 +54,7 @@ createApp({
         import: null,
         sync: null,
         install: null,
+        help: null,
       },
     };
   },
@@ -225,6 +80,9 @@ createApp({
     selectedDisabled() {
       return this.selected ? !!this.selected.disabled : false;
     },
+    activeModal() {
+      return Object.keys(this.modals).find((key) => this.modals[key]) || null;
+    },
   },
 
   watch: {
@@ -247,6 +105,14 @@ createApp({
       clearTimeout(this.searchTimer);
       this.searchTimer = setTimeout(() => this.applySearch(), 220);
     },
+    activeModal(value) {
+      clearTimeout(this.modalFocusTimer);
+      if (value) {
+        this.modalFocusTimer = setTimeout(() => this.$nextTick(() => this.focusModal()), 0);
+      } else {
+        this.modalFocusTimer = setTimeout(() => this.restoreModalFocus(), 0);
+      }
+    },
   },
 
   mounted() {
@@ -268,6 +134,39 @@ createApp({
     tokenBarWidth,
     formatCompat,
     formatTools,
+
+    modalElement() {
+      return this.activeModal ? document.querySelector('[data-modal="' + this.activeModal + '"] .modal') : null;
+    },
+
+    focusableInModal() {
+      const modal = this.modalElement();
+      if (!modal) return [];
+      return [...modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+    },
+
+    focusModal() {
+      const modal = this.modalElement();
+      if (!modal) return;
+      const focusables = this.focusableInModal();
+      const preferred = focusables.find((el) => el.matches('button.btn-secondary, input:not([readonly]), textarea, select'));
+      (preferred || focusables[0] || modal).focus();
+    },
+
+    trapModalFocus(e) {
+      if (!this.activeModal) return;
+      const focusables = this.focusableInModal();
+      if (!focusables.length || e.key !== 'Tab') return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    },
+
+    restoreModalFocus() {
+      const target = this.modalRestoreFocus;
+      this.modalRestoreFocus = null;
+      if (target && typeof target.focus === 'function' && document.contains(target)) target.focus();
+    },
 
     /* ----------------------------------------------------------- data */
 
@@ -463,6 +362,7 @@ createApp({
     toast(text, type = "ok", undo = null) {
       const id = ++this.toastSeq;
       this.toasts.push({ id, text, type, undo });
+      this.liveAnnouncement = text;
       setTimeout(() => {
         this.toasts = this.toasts.filter((t) => t.id !== id);
       }, undo ? 8000 : 4000);
@@ -493,14 +393,25 @@ createApp({
 
     closeModal(key) {
       this.modals[key] = null;
+      this.$nextTick(() => this.restoreModalFocus());
+    },
+
+    openModal(key, value = {}) {
+      this.modalRestoreFocus = document.activeElement;
+      this.modals[key] = value;
+      this.$nextTick(() => this.focusModal());
     },
 
     onKeydown(e) {
+      this.trapModalFocus(e);
       const tag = (e.target.tagName || "").toLowerCase();
       const typing = ["input", "textarea", "select"].includes(tag) || e.target.isContentEditable;
       if (e.key === "/" && !typing) {
         e.preventDefault();
         this.$refs.searchInput && this.$refs.searchInput.focus();
+      } else if (e.key === "?" && !typing && !this.activeModal) {
+        e.preventDefault();
+        this.openModal("help", {});
       } else if (e.key === "Escape") {
         if (this.menuOpen) this.menuOpen = false;
         else if (this.modals.remove) this.closeModal("remove");
@@ -515,6 +426,7 @@ createApp({
         else if (this.modals.import) this.closeModal("import");
         else if (this.modals.sync) this.closeModal("sync");
         else if (this.modals.install) this.closeModal("install");
+        else if (this.modals.help) this.closeModal("help");
       }
     },
 
@@ -535,6 +447,7 @@ createApp({
         remove: () => this.selectedName && this.confirmRemove(this.selected),
         sync: this.openSync,
         install: this.openInstall,
+        help: () => this.openModal("help", {}),
         import: this.openImport,
         export: this.exportArchive,
         fullExport: () => this.exportArchive(true),
@@ -552,22 +465,25 @@ createApp({
     },
 
     openInstall() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.install = true;
     },
 
     /* ----------------------------------------------------- skill actions */
 
     openCreate() {
+      this.modalRestoreFocus = document.activeElement;
       const defScope = (this.activeScope && this.activeScope !== "all") ? this.activeScope : "global";
       this.modals.skill = {
         mode: "create",
         form: { name: "", description: "", category: "", version: "", license: "", compatibility: "", allowed_tools: "", body: "", scope: defScope },
         errors: {},
       };
-      nextTick(() => { const el = document.getElementById("f-name"); el && el.focus(); });
+      nextTick(() => { const el = document.getElementById("f-name"); (el || this.modalElement())?.focus(); });
     },
 
     async openEdit() {
+      this.modalRestoreFocus = document.activeElement;
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
       this.modals.skill = {
         mode: this.selectedName,
@@ -701,6 +617,7 @@ createApp({
     },
 
     confirmRemove(record) {
+      this.modalRestoreFocus = document.activeElement;
       if (!record) { this.toast("Select a skill first.", "err"); return; }
       this.modals.remove = { name: record.name, mode: "trash" };
     },
@@ -747,6 +664,7 @@ createApp({
     },
 
     confirmPurge() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.purge = {};
     },
 
@@ -789,6 +707,7 @@ createApp({
     /* --------------------------------------------------------- validate */
 
     openValidate() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.validate = {
         name: this.selectedName || "",
         loading: false,
@@ -819,6 +738,7 @@ createApp({
     /* ------------------------------------------------------- maintenance */
 
     openDoctor() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.doctor = { loading: true, report: null };
       api("/api/doctor" + (this.activeScope === "all" ? "?scope=all" : ""))
         .then((report) => { if (this.modals.doctor) this.modals.doctor.report = report; })
@@ -834,6 +754,7 @@ createApp({
     },
 
     openStats() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.stats = { loading: true, report: null };
       api("/api/stats")
         .then((report) => { if (this.modals.stats) this.modals.stats.report = report; })
@@ -842,6 +763,7 @@ createApp({
     },
 
     openHistory() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.history = { name: "", rows: [], snapshots: [], loading: false };
       this.loadHistory();
     },
@@ -913,6 +835,7 @@ createApp({
     /* -------------------------------------------------------- templates */
 
     openTemplates() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.templates = { loading: true, names: [] };
       api("/api/templates")
         .then((res) => { if (this.modals.templates) this.modals.templates.names = res.templates || []; })
@@ -921,6 +844,7 @@ createApp({
     },
 
     openNewTemplate() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.newtemplate = { name: "", body: "", error: "" };
     },
 
@@ -947,6 +871,7 @@ createApp({
     /* ------------------------------------------------------ import/export */
 
     openImport() {
+      this.modalRestoreFocus = document.activeElement;
       this.modals.import = { file: null, force: false, full: false };
     },
 
@@ -997,6 +922,7 @@ createApp({
     },
 
     openSync() {
+      this.modalRestoreFocus = document.activeElement;
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
       const from = (this.selected && this.selected.scope) ? this.selected.scope : "global";
       const targets = (this.scopes || []).filter((s) => s.id !== from && s.writable);

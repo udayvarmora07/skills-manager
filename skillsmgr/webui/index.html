@@ -12,7 +12,7 @@
 <div id="app" v-cloak>
 
   <!-- ============================================================ topbar -->
-  <header class="topbar">
+  <header class="topbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
@@ -38,7 +38,7 @@
         <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
       </button>
       <div class="dropdown" ref="menuWrap">
-        <button class="btn btn-secondary" @click="menuOpen = !menuOpen" aria-haspopup="menu" :aria-expanded="menuOpen">
+        <button class="btn btn-secondary" @click="menuOpen = !menuOpen" aria-haspopup="menu" :aria-expanded="menuOpen" aria-label="Open actions menu">
           Actions
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
@@ -67,6 +67,7 @@
           <button role="menuitem" @click="menuDo('rebuild')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/><path d="M3 21v-5h5"/></svg>Rebuild index</button>
           <button role="menuitem" @click="menuDo('resync')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Resync index</button>
           <hr>
+          <button role="menuitem" @click="menuDo('help')" aria-label="Show keyboard shortcuts"><span aria-hidden="true">?</span> Keyboard shortcuts</button>
           <button role="menuitem" @click="menuDo('refresh')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Refresh</button>
         </div>
       </div>
@@ -74,18 +75,18 @@
   </header>
 
   <!-- ============================================================ layout -->
-  <main class="layout">
+  <main class="layout" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
     <aside class="sidebar">
       <nav class="viewtabs" aria-label="Views">
-        <button :class="{ active: view === 'skills' }" @click="switchView('skills')">Skills</button>
-        <button :class="{ active: view === 'trash' }" @click="switchView('trash')">
+        <button :class="{ active: view === 'skills' }" @click="switchView('skills')" :aria-current="view === 'skills' ? 'page' : undefined">Skills</button>
+        <button :class="{ active: view === 'trash' }" @click="switchView('trash')" :aria-current="view === 'trash' ? 'page' : undefined">
           Trash <span v-if="trashCount">({{ trashCount }})</span>
         </button>
       </nav>
 
       <div class="scopebar" v-if="scopes && scopes.length">
-        <button class="chip" :class="{ active: activeScope === 'all' }" @click="activeScope = 'all'">All <span class="chip-count">{{ allScopesCount }} · {{ formatTokens((scopes.reduce((n,s)=>n+(s.tokens||0),0))) }}</span></button>
-        <button v-for="s in scopes" :key="s.id" class="chip" :class="{ active: activeScope === s.id }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens'" @click="activeScope = s.id">{{ s.label }} <span class="chip-count">{{ s.count }} · {{ formatTokens(s.tokens) }}</span></button>
+        <button class="chip" :class="{ active: activeScope === 'all' }" @click="activeScope = 'all'" :aria-pressed="activeScope === 'all'">All <span class="chip-count">{{ allScopesCount }} · {{ formatTokens((scopes.reduce((n,s)=>n+(s.tokens||0),0))) }}</span></button>
+        <button v-for="s in scopes" :key="s.id" class="chip" :class="{ active: activeScope === s.id }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens'" @click="activeScope = s.id" :aria-pressed="activeScope === s.id">{{ s.label }} <span class="chip-count">{{ s.count }} · {{ formatTokens(s.tokens) }}</span></button>
       </div>
 
       <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + budget.window_tokens.toLocaleString() + ' tok)'">
@@ -112,12 +113,12 @@
       </div>
 
       <div v-if="view === 'skills'" class="filters">
-        <button class="chip" :class="{ active: !filter }" @click="setFilter('')">All</button>
-        <button class="chip" :class="{ active: filter === 'active' }" @click="setFilter('active')">Active</button>
-        <button class="chip" :class="{ active: filter === 'disabled' }" @click="setFilter('disabled')">Disabled</button>
+        <button class="chip" :class="{ active: !filter }" @click="setFilter('')" :aria-pressed="!filter">All</button>
+        <button class="chip" :class="{ active: filter === 'active' }" @click="setFilter('active')" :aria-pressed="filter === 'active'">Active</button>
+        <button class="chip" :class="{ active: filter === 'disabled' }" @click="setFilter('disabled')" :aria-pressed="filter === 'disabled'">Disabled</button>
       </div>
 
-      <div v-if="banner" :class="'banner banner-' + banner.type" role="alert">{{ banner.text }}</div>
+      <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
 
       <ul v-if="view === 'skills'" class="skilllist" aria-label="Skills">
         <li v-for="s in filteredSkills" :key="s.scope + '/' + s.name"
@@ -287,7 +288,7 @@
         <div class="detail-head">
           <h1>Trash</h1>
           <div class="detail-actions">
-            <button v-if="trashSkills.length" class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy">Empty trash permanently</button>
+            <button v-if="trashSkills.length" class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy" aria-label="Empty trash permanently">Empty trash permanently</button>
           </div>
         </div>
         <p class="lead">Skills you removed. Restore one or empty the trash forever.</p>
@@ -304,7 +305,7 @@
   </main>
 
   <!-- ========================================================= statusbar -->
-  <footer class="statusbar">
+  <footer class="statusbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
     <span v-if="view === 'skills'">{{ activeScope === 'all' ? allScopesCount : totalCount }} total · {{ activeCount }} active · {{ disabledCount }} disabled<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
     <span v-else>{{ trashCount }} trashed</span>
     <span class="spacer"></span>
@@ -316,8 +317,9 @@
   <!-- ============================================================ modals -->
 
   <!-- New / Edit skill -->
-  <div v-if="modals.skill" class="overlay" @mousedown.self="closeModal('skill')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" :aria-label="modals.skill.mode === 'create' ? 'New skill' : 'Edit skill'">
+  <div v-if="modals.skill" class="overlay" data-modal="skill" @mousedown.self="closeModal('skill')">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="skill-modal-title" tabindex="-1">
+      <span id="skill-modal-title" class="sr-only">{{ modals.skill.mode === 'create' ? 'New skill' : 'Edit skill' }}</span>
       <div class="modal-head">
         <h2>{{ modals.skill.mode === 'create' ? 'New skill' : 'Edit ' + modals.skill.mode }}</h2>
         <button class="modal-close" aria-label="Close" @click="closeModal('skill')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -366,8 +368,9 @@
           </div>
           <div class="form-field full">
             <label for="f-body">Body (SKILL.md content)</label>
-            <textarea id="f-body" v-model="modals.skill.form.body" rows="10" spellcheck="false"></textarea>
-            <span class="hint">Markdown instructions for the skill.</span>
+            <textarea id="f-body" v-model="modals.skill.form.body" rows="10" spellcheck="false" aria-describedby="f-body-hint"></textarea>
+            <span id="f-body-hint" class="hint">Markdown instructions for the skill. Preview below.</span>
+            <div class="markdown-preview" aria-label="Markdown preview" v-html="renderMarkdown(modals.skill.form.body)"></div>
           </div>
         </div>
       </div>
@@ -382,8 +385,9 @@
   </div>
 
   <!-- Remove skill -->
-  <div v-if="modals.remove" class="overlay" @mousedown.self="closeModal('remove')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Remove skill">
+  <div v-if="modals.remove" class="overlay" data-modal="remove" @mousedown.self="closeModal('remove')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title" tabindex="-1">
+      <h2 id="remove-modal-title" class="sr-only">Remove {{ modals.remove.name }}</h2>
       <div class="modal-head"><h2>Remove {{ modals.remove.name }}</h2></div>
       <div class="modal-body">
         <p>Move this skill to the trash, or delete it permanently.</p>
@@ -400,7 +404,7 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('remove')">Cancel</button>
-        <button class="btn" :class="modals.remove.mode === 'purge' ? 'btn-danger' : 'btn-primary'" :disabled="busy" @click="doRemove">
+        <button class="btn" :class="modals.remove.mode === 'purge' ? 'btn-danger' : 'btn-primary'" :disabled="busy" @click="doRemove" :aria-label="modals.remove.mode === 'purge' ? 'Confirm permanent deletion' : 'Confirm move to trash'">
           {{ modals.remove.mode === 'purge' ? 'Delete permanently' : 'Move to trash' }}
         </button>
       </div>
@@ -408,22 +412,24 @@
   </div>
 
   <!-- Purge trash -->
-  <div v-if="modals.purge" class="overlay" @mousedown.self="closeModal('purge')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Empty trash">
+  <div v-if="modals.purge" class="overlay" data-modal="purge" @mousedown.self="closeModal('purge')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="purge-modal-title" tabindex="-1">
+      <h2 id="purge-modal-title" class="sr-only">Empty trash permanently</h2>
       <div class="modal-head"><h2>Empty trash permanently</h2></div>
       <div class="modal-body">
         <p>Permanently delete <strong>{{ trashSkills.length }}</strong> trashed skill(s)? This cannot be undone.</p>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('purge')">Cancel</button>
-        <button class="btn btn-danger" :disabled="busy" @click="purgeTrash">Empty trash permanently</button>
+        <button class="btn btn-danger" :disabled="busy" @click="purgeTrash" aria-label="Confirm empty trash permanently">Empty trash permanently</button>
       </div>
     </div>
   </div>
 
   <!-- Validate -->
-  <div v-if="modals.validate" class="overlay" @mousedown.self="closeModal('validate')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Validation">
+  <div v-if="modals.validate" class="overlay" data-modal="validate" @mousedown.self="closeModal('validate')">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="validate-modal-title" tabindex="-1">
+      <h2 id="validate-modal-title" class="sr-only">Validation</h2>
       <div class="modal-head"><h2>Validate</h2><button class="modal-close" aria-label="Close" @click="closeModal('validate')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div v-if="modals.validate.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
@@ -456,8 +462,9 @@
   </div>
 
   <!-- Doctor -->
-  <div v-if="modals.doctor" class="overlay" @mousedown.self="closeModal('doctor')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Doctor">
+  <div v-if="modals.doctor" class="overlay" data-modal="doctor" @mousedown.self="closeModal('doctor')">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="doctor-modal-title" tabindex="-1">
+      <h2 id="doctor-modal-title" class="sr-only">Doctor</h2>
       <div class="modal-head"><h2>Doctor</h2><button class="modal-close" aria-label="Close" @click="closeModal('doctor')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div v-if="modals.doctor.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
@@ -498,8 +505,9 @@
   </div>
 
   <!-- Stats -->
-  <div v-if="modals.stats" class="overlay" @mousedown.self="closeModal('stats')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Stats">
+  <div v-if="modals.stats" class="overlay" data-modal="stats" @mousedown.self="closeModal('stats')">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title" tabindex="-1">
+      <h2 id="stats-modal-title" class="sr-only">Stats</h2>
       <div class="modal-head"><h2>Stats</h2><button class="modal-close" aria-label="Close" @click="closeModal('stats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div v-if="modals.stats.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
@@ -527,8 +535,9 @@
   </div>
 
   <!-- History -->
-  <div v-if="modals.history" class="overlay" @mousedown.self="closeModal('history')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="History">
+  <div v-if="modals.history" class="overlay" data-modal="history" @mousedown.self="closeModal('history')">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="history-modal-title" tabindex="-1">
+      <h2 id="history-modal-title" class="sr-only">History</h2>
       <div class="modal-head"><h2>History</h2><button class="modal-close" aria-label="Close" @click="closeModal('history')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -571,8 +580,9 @@
   </div>
 
   <!-- Templates -->
-  <div v-if="modals.templates" class="overlay" @mousedown.self="closeModal('templates')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Templates">
+  <div v-if="modals.templates" class="overlay" data-modal="templates" @mousedown.self="closeModal('templates')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="templates-modal-title" tabindex="-1">
+      <h2 id="templates-modal-title" class="sr-only">Templates</h2>
       <div class="modal-head"><h2>Templates</h2><button class="modal-close" aria-label="Close" @click="closeModal('templates')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div v-if="modals.templates.loading" class="skeleton"><div class="skel-row"></div></div>
@@ -594,8 +604,9 @@
   </div>
 
   <!-- New template -->
-  <div v-if="modals.newtemplate" class="overlay" @mousedown.self="closeModal('newtemplate')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="New template">
+  <div v-if="modals.newtemplate" class="overlay" data-modal="newtemplate" @mousedown.self="closeModal('newtemplate')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="newtemplate-modal-title" tabindex="-1">
+      <h2 id="newtemplate-modal-title" class="sr-only">New template</h2>
       <div class="modal-head">
         <h2>New template</h2>
         <button class="modal-close" aria-label="Close" @click="closeModal('newtemplate')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -621,8 +632,9 @@
   </div>
 
   <!-- Import -->
-  <div v-if="modals.import" class="overlay" @mousedown.self="closeModal('import')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Import archive">
+  <div v-if="modals.import" class="overlay" data-modal="import" @mousedown.self="closeModal('import')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" tabindex="-1">
+      <h2 id="import-modal-title" class="sr-only">Import archive</h2>
       <div class="modal-head"><h2>Import archive</h2></div>
       <div class="modal-body">
         <p>Import skills from a <code>.tar.gz</code> archive exported by Skills Manager.</p>
@@ -654,12 +666,19 @@
   </div>
 
   <!-- Sync to all agents -->
-  <div v-if="modals.sync" class="overlay" @mousedown.self="closeModal('sync')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Sync skill">
+  <div v-if="modals.sync" class="overlay" data-modal="sync" @mousedown.self="closeModal('sync')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sync-modal-title" tabindex="-1">
+      <h2 id="sync-modal-title" class="sr-only">Sync skill</h2>
       <div class="modal-head"><h2>Sync “{{ modals.sync.name }}” to agents</h2><button class="modal-close" aria-label="Close" @click="closeModal('sync')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <p>From <strong>{{ modals.sync.from_scope }}</strong>. Pick targets (writable scopes only):</p>
         <p v-if="selected && selected.tokens" class="hint">This skill is {{ formatTokens(selected.tokens) }} tokens; syncing to N agents ≈ {{ formatTokens((selected.tokens||0) * Object.keys(modals.sync.picked).filter(k=>modals.sync.picked[k]).length) }} total across targets.</p>
+        <div class="preview-panel" role="status" aria-live="polite">
+          <strong>Resolution preview</strong>
+          <span>Source: {{ modals.sync.from_scope }} · Targets: {{ Object.keys(modals.sync.picked).filter(k=>modals.sync.picked[k]).join(', ') || 'none selected' }}</span>
+          <span v-if="modals.sync.force">Existing target copies will be overwritten; a rollback snapshot is created before commit.</span>
+          <span v-else>Existing target copies are skipped; choose overwrite only when the source is authoritative.</span>
+        </div>
         <div v-for="t in modals.sync.targets" :key="t.id" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
           <input type="checkbox" :id="'sync-'+t.id" v-model="modals.sync.picked[t.id]" style="accent-color:var(--accent);">
           <label :for="'sync-'+t.id" style="flex:1;cursor:pointer;"><strong>{{ t.label }}</strong> <span class="hint">— {{ t.path }}</span></label>
@@ -677,8 +696,9 @@
   </div>
 
   <!-- Install via npx / pnpm / bunx -->
-  <div v-if="modals.install" class="overlay" @mousedown.self="closeModal('install')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Install skills">
+  <div v-if="modals.install" class="overlay" data-modal="install" @mousedown.self="closeModal('install')">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="install-modal-title" tabindex="-1">
+      <h2 id="install-modal-title" class="sr-only">Install skills</h2>
       <div class="modal-head"><h2>Install via npx / pnpm / bunx</h2><button class="modal-close" aria-label="Close" @click="closeModal('install')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <p class="hint">Source is <code>owner/repo</code>, a GitHub URL, or a local path. The <code>skills</code> npm package handles discovery + symlink/copy per agent. <code>uvx</code> does not apply here — it's for PyPI packages.</p>
@@ -733,9 +753,20 @@
     </div>
   </div>
 
+  <!-- Keyboard shortcuts -->
+  <div v-if="modals.help" class="overlay" data-modal="help" @mousedown.self="closeModal('help')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" tabindex="-1">
+      <h2 id="help-modal-title" class="sr-only">Keyboard shortcuts</h2>
+      <div class="modal-head"><h2>Keyboard shortcuts</h2><button class="modal-close" aria-label="Close keyboard shortcuts" @click="closeModal('help')">×</button></div>
+      <div class="modal-body"><dl class="kv"><dt><kbd>/</kbd></dt><dd>Focus skill search</dd><dt><kbd>Esc</kbd></dt><dd>Close menu or dialog</dd><dt><kbd>Tab</kbd></dt><dd>Move through the active dialog</dd><dt><kbd>?</kbd></dt><dd>Open this help</dd></dl></div>
+      <div class="modal-foot"><button class="btn btn-secondary" @click="closeModal('help')">Close</button></div>
+    </div>
+  </div>
+
   <!-- ============================================================ toasts -->
-  <div class="toasts" aria-live="polite">
-    <div v-for="t in toasts" :key="t.id" :class="'toast toast-' + t.type">
+  <div class="toasts" aria-live="polite" aria-atomic="false">
+    <span class="sr-only" aria-live="assertive">{{ liveAnnouncement }}</span>
+    <div v-for="t in toasts" :key="t.id" :class="'toast toast-' + t.type" role="status">
       <svg v-if="t.type === 'ok'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m22 7-9 9-5-5"/><circle cx="12" cy="12" r="10"/></svg>
       <svg v-else-if="t.type === 'err'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
       <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
@@ -747,6 +778,7 @@
 </div>
 
 <script src="/static/vendor/vue.global.prod.js"></script>
+<script src="/domain.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
