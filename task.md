@@ -308,7 +308,7 @@
 - [x] T8 offline registry preview (dry-run steps, explicit trust gate; network browse deferred).
 - [x] T9 provider-neutral eval harness skeleton (stdlib-only plan, caller-supplied deterministic scorer, advisory-only).
 - [x] T10 signed/team bundle deferral policy (`deferred` pending issue #11 trust review).
-- [x] T11 red-first hermetic contracts in `tests/test_insights_contracts.py` (31 tests: 20 original + 11 hardening; failed red before green).
+- [x] T11 red-first hermetic contracts in `tests/test_insights_contracts.py` (52 tests: 20 foundation + 11 fail-closed + 9 round-3 + 7 round-4 + 5 E2E; all red-first).
 - [x] T12 `skillsmgr/insights.py` implementation (pure, stdlib-only, no CLI/Store/schema/network changes).
 - [x] T13 docs reconciliation (`docs/02-modules.md`, `TODO.md` Milestone 9, this milestone, `CHANGELOG.md`, progress log).
 - [x] T14 full verification ladder plus fresh-tmp live-seam exercise (recorded in progress log).
@@ -373,4 +373,17 @@
 - [x] T7 registry source/scope/content_hash must be strings or missing.
 - [x] T8 7 red-first boundary tests (5 failures + 2 errors before green; 52 total).
 - [x] T9 ladder green: 296 unittest, smokes, compile/frontend/docs/complexity/diff/help, harness, fresh-tmp.
+- [x] T10 per-group commits plus push (this entry, then push step).
+
+## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
+
+- [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
+- [x] T2 adversarial sweep: degenerate/nested/unicode/large inputs all JSON-clean.
+- [x] T3 filesystem audit: dangling/file/deleted/locked paths `invalid`; insights performs no direct `open()`.
+- [x] T4 concurrency + perf: 8×150 mixed 2.49s clean; 200k-line scan 0.06s; 20k views < 0.1s.
+- [x] T5 REST/CLI/Store regression: validate/search/purge clean, no drift.
+- [x] T6 docs truth: stale "31 tests" claims corrected to 52 in three files.
+- [x] T7 5 red-first round-5 lock tests (57 total in the file).
+- [x] T8 minimal fixes (docs truth only; zero product-code changes needed).
+- [x] T9 full ladder + harness + fresh-tmp recorded here and in the progress log.
 - [x] T10 per-group commits plus push (this entry, then push step).

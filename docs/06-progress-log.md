@@ -4,6 +4,14 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Insights audit round 5 (degenerate, fs, perf, docs truth)
+
+- Swept degenerate inputs (empty lists/dicts, `None`/`0` bodies, empty consumer), nested/odd structures (list provenance, dict hashes, falsy flags, nested body values, int names, bool skill, int/None eval fields, unicode), and large inputs (500KB body 0.06s, 10k links 0.03s, 20k-line diff 0.01s, 5k eval cases instant, 10k-record views): all JSON-clean, no raw errors.
+- Filesystem audit: dangling/file/deleted/locked paths classify `invalid`; non-string paths skip dir validation (`managed`, documented); locked-file probe confirmed `scopes.get_skill()` itself raises `PermissionError` before insights runs (Store/scopes seam, out of scope); `insights.py` performs no direct `open()`.
+- Perf: 8-thread × 150 mixed-helper workload 2.49s zero errors; 200k-line scan 0.06s; 20k-record views under 0.1s. REST/CLI regression clean (validate/search/purge).
+- Docs truth: stale "31 tests" claims in SESSION-CONTEXT/task/CHANGELOG corrected to 52. Added 5 round-5 lock tests (57 total in the file).
+- Verification: 301 unittest PASS, both smokes PASS, compile/frontend/docs/complexity/diff/help PASS, package-data honestly UNAVAILABLE (no `build` module), `browser_harness.py` PASS (`"passed": true`), fresh-tmp validate/purge OK.
+
 ## 2026-09-09 — Insights boundary round 4 (deep-copy, callable, strings)
 
 - Probed 7 hypothesized boundaries; all 7 confirmed genuine: `consumer_view()` shallow-copied nested dicts (caller mutation leaked into inputs), `eval_score()` let non-callable scorers raise raw `TypeError`, `quarantine_plan()` accepted non-string sources into JSON output, `update_preview()` accepted non-string snapshot items, `registry_preview()` crashed on non-string descriptions and accepted non-string source/scope, `consumer_view()` accepted non-string consumers.

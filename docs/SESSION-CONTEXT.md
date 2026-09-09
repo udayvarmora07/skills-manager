@@ -86,7 +86,7 @@ skillsmgr/
   cli_handlers.py      # command behavior
   store.py             # FS/index/recovery/archive policy
   insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
-tests/test_insights_contracts.py  # insights hermetic contracts (31 tests)
+tests/test_insights_contracts.py  # insights hermetic contracts (52 tests)
 smoke_store.py         # store smoke (green)
 smoke_web.py           # REST smoke (green)
 docs/08-web-ui.md      # authoritative web UI doc
