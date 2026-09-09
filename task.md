@@ -483,6 +483,26 @@ Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over reco
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 36 — CI/contracts/migration re-verification campaign, round 5 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over CI/release structure, docs/frontend/security contracts, migration, snapshots, and process concurrency; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest after one flaky concurrency rerun, docs, complexity, diff; 9 issues OPEN).
+- [x] T2 CI/release audit (unit 3.10–3.14 + adversarial/package/docs/xplat-3OS/browser jobs; `contents:read`; build-once + `--dist-dir`; release tag-gate + attest + TestPyPI→`release` + GitHub Release + post-publish verify).
+- [x] T3 package-data offline (exact-accept wheel+sdist, vue-missing reject, `--require-build` exit 2).
+- [x] T4 docs deep-links (all `@docs/` resolve; module paths exist; `Store.*` methods exist).
+- [x] T5 frontend wiring (9 domain exports, 19 menuDo actions dispatched, `/` `?` Esc + focus-trap, 13 modals `role=dialog`).
+- [x] T6 live security headers (CSP/`frame-ancestors 'none'`/nosniff/referrer/CORP/Cache-Control on `/`, `/api/*`, `/app.js`).
+- [x] T7 threat-model/ADR file:line refs (all resolve to real files + in-range lines).
+- [x] T8 complexity baseline (151 functions, budget ≤ 15, gate exit 0; no drift).
+- [x] T9 full migration (skip-by-default respected; `--full --force` restores skills + trash + templates).
+- [x] T10 snapshot retention (7 edits → newest 5 kept; byte-accurate `--snapshot` restore).
+- [x] T11 cross-process CLI (2 procs × 10 edits rc 0; doctor consistent).
+- [x] T12 version alignment (`1.0.0` everywhere) + gitignore (`dist/`, egg-info, pycache ignored).
+- [x] T13 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
