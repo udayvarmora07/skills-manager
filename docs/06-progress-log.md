@@ -4,6 +4,16 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — CLI-surface behavior campaign, round 12 (11 probes green, zero code)
+
+- Hermetic CLI probes (fresh `$SKILLS_MANAGER_DATA` per probe, outside the repo; zero product-code changes): T2 history story + limits + JSON; T3 trash cycle + honest double-remove; T4 disable/enable state machine + honest re-toggle errors; T5 partial-edit field preservation; T6 scopes (7 ids; `cursor` documented though `~/.cursor/skills` absent on this box → clean empty); T7 sync skip/force messages; T8 tokens skill/text/scope/window + bad-window choices; T9 validate name/all/external-dir/JSON/missing (`--path` is an external skill dir, not the data dir — first-pass flag was a probe path mistake, corrected with evidence); T10 templates empty/dup messages; T11 db rebuild/resync counts.
+- Live-scope note: the R12-T7 probe synced `sy-1` into the real `~/.agents/skills` (default `SKILLS_MANAGER_DATA` leaked into one probe env). Removed immediately (`rm -rf ~/.agents/skills/sy-1`); live global store verified clean. Lesson recorded: scope-touching probes must export an isolated `HOME` as well as `SKILLS_MANAGER_DATA`.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-12 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Frontend-contract + steady-state campaign, round 11 (11 probes green, zero code)
 
 - Hermetic probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): T2 all 10 ASK/BUG issues OPEN (#6/#7/#9 carry their 1 rationale comment); T3 T2b repro unchanged (issue #13 stands); T4 CSS (900px stack + 640px topbar rules verified against the SESSION-CONTEXT gotcha; 380/420/780 are component caps, not missing breakpoints — first-pass flag was a probe regex over-match; reduced-motion/overflow-x/focus present); T5 a11y (13 labelled `aria-modal` dialogs, live region, `sr-only`, `kbd`, Esc + trap, `inert`); T6 5/5 viewports no-overflow zero-errors; T7 counts (57 + 37 re-derived); T8 PyPI 404; T9 deferred zero comments; T10 P0 spots green; T11 protocol checklist present and evidenced per-round.

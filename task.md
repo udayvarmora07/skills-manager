@@ -623,6 +623,26 @@ Hermetic probes (stdlib only, inline heredocs, no product-code changes) over CSS
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 43 — CLI-surface behavior campaign, round 12 (2026-09-09, 15 tasks)
+
+Hermetic CLI-behavior probes (fresh `$SKILLS_MANAGER_DATA` per probe, no product-code changes) over history/trash/states/edit/scopes/sync/tokens/validate/templates/db; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then. (Live-`~/.agents` note: one R12-T7 probe wrote `sy-1` to the real agents scope; removed immediately after, verified clean.)
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff).
+- [x] T2 history (create+edit story, `--limit`, `--json` rows, missing → empty, `doctor --json ok`).
+- [x] T3 trash (list/restore/purge cycle; double-remove honest error; purge empties; doctor consistent).
+- [x] T4 states (disable→`disabled`, re-disable honest error; enable→`active`, re-enable honest error; JSON `disabled: 0`).
+- [x] T5 edit (description-only keeps category; body-only keeps description; `--metadata` accepted; missing → clean error).
+- [x] T6 scopes (7 ids incl. `cursor`; missing `~/.cursor/skills` → clean empty, documented in `03-cli-surface`; bogus scope → clean error).
+- [x] T7 sync (`--from/--to/--force/--json`; skip-without-force message; force converges).
+- [x] T8 tokens (skill/text/scope/window shapes; bad window lists choices cleanly).
+- [x] T9 validate (name/all/external-`--path`/json/missing contracts; `--path` takes an external skill dir).
+- [x] T10 templates (empty hint, `new`, list, dup `FileExistsError` as clean error).
+- [x] T11 db (`rebuild` added-counts; `resync` complete-counts).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
