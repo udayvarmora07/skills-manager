@@ -643,6 +643,26 @@ Hermetic CLI-behavior probes (fresh `$SKILLS_MANAGER_DATA` per probe, no product
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 44 — Remaining-CLI + frontend-seam campaign, round 13 (2026-09-09, 15 tasks)
+
+Hermetic probes (fresh tmp envs, no product-code changes) over add/view/create/list/search/install/export-open/snapshots/domain.js; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff) + issues #5/#12/#13 OPEN.
+- [x] T2 gating re-confirmed (zero comments; ZIP rejection-only).
+- [x] T3 add (existing dir, `--name` requires frontmatter rename first, missing-dir + bad-name clean errors).
+- [x] T4 view (`--raw` round-trips body; `--json` 17-key record incl. hashes/provenance).
+- [x] T5 create (`--body-file`, `--allowed-tools`, `--license/--category/--version`; dup clean error).
+- [x] T6 list (`--disabled`, `--category`, `--json` shapes) + search (`--limit`, `--json` hits).
+- [x] T7 scopes note (7 ids; `cursor` clean-empty) — see round 12.
+- [x] T8 install (dry-run default print vs `--dry-run` bare command; `../evil` passes char-allowlist — runner allowlist + dry-run-first is the control; bad runner clean error).
+- [x] T9 export/backup alias (both write tarballs) + `open` (`EDITOR=true` resyncs; missing → clean error).
+- [x] T10 snapshots (`history --json` ids; `--snapshot` byte-accurate rollback; bogus id clean error).
+- [x] T11 `domain.js` via browser-global seam (compat/tools enrichment, `1.5k`, `rel=noopener` strong/link render).
+- [x] T12 harness `"passed": true` on rerun (first run: one `net::ERR_ABORTED` at 1280px + `BrokenPipeError` — probe-race flake, zero console errors) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
