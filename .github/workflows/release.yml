@@ -1,0 +1,188 @@
+name: Release
+
+# Controlled release path: tag -> build once -> attest -> publish the exact
+# tested artifacts -> GitHub Release -> post-publish verification.
+#
+# Policy: third-party actions below are pinned to reviewed full commit SHAs
+# with a "# <version> — <date> reviewed" comment. First-party actions/*
+# and github/* stay on moving tags by policy
+# (actions/checkout@v4 = 11d5960a326750d5838078e36cf38b85af677262,
+# actions/setup-python@v5 = a26af69be951a213d495a4c3e4e4022e16d87065,
+# actions/download-artifact@v4, actions/attest-build-provenance@v2 =
+# 96b4a1ef7235a096b17240c259729fdd70c83d45 — all verified 2026-09-09;
+# re-verify SHAs before changing them). `push: tags: v*` plus a protected `release` environment gate who can
+# publish. No long-lived PyPI token is stored: publishing uses PyPI Trusted
+# Publishing (OIDC) via the release environment.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: build release artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', Path("pyproject.toml").read_text())
+          if not match:
+              raise SystemExit("package version is missing from pyproject.toml")
+          version = match.group(1)
+          if tag != "v" + version:
+              raise SystemExit(f"release tag {tag!r} does not match package version {version!r}")
+          PY
+      - name: Build wheel and sdist once
+        run: |
+          python3 -m pip install --disable-pip-version-check "build==1.2.2.post1"
+          python3 -m build --wheel --sdist --outdir dist
+      - name: Verify package data on the exact artifacts
+        run: python3 check_package_data.py --dist-dir dist
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  verify:
+    name: verify exact artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Package-data coverage on the exact artifacts
+        run: python3 check_package_data.py --dist-dir dist
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests
+      - name: Docs consistency
+        run: python3 check_docs.py
+      - name: Store smoke on a clean install of the wheel
+        run: |
+          python3 -m venv /tmp/release-venv
+          /tmp/release-venv/bin/python -m pip install --no-index --no-deps dist/*.whl
+          SKILLS_MANAGER_DATA=$(mktemp -d) /tmp/release-venv/bin/python -m skillsmgr --help
+          SKILLS_MANAGER_DATA=$(mktemp -d) /tmp/release-venv/bin/python -m skillsmgr create demo -d "Release smoke check"
+
+  attest:
+    name: attest build provenance
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"
+
+  publish-testpypi:
+    name: publish to TestPyPI
+    runs-on: ubuntu-latest
+    needs: attest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2 — 2026-07-29 reviewed
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          attestations: true
+
+  publish-pypi:
+    name: publish to PyPI
+    runs-on: ubuntu-latest
+    needs: publish-testpypi
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2 — 2026-07-29 reviewed
+        with:
+          attestations: true
+
+  github-release:
+    name: github release + post-publish verification
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Create GitHub Release with the exact artifacts
+        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3 — 2026-09-09 reviewed
+        with:
+          files: dist/*
+      - name: Verify tag, package version, web assets, and hermetic CRUD
+        run: |
+          test "${GITHUB_REF_NAME#v}" = "$(python3 -c 'import skillsmgr; print(skillsmgr.__version__)')"
+          test "${GITHUB_REF_NAME#v}" = "$(python3 -c 'import re; print(re.search(r"(?m)^version\s*=\s*\"([^\"]+)\"", open("pyproject.toml").read()).group(1))')"
+          test -s skillsmgr/webui/static/vendor/vue.global.prod.js
+          python3 -m venv /tmp/postpublish-venv
+          /tmp/postpublish-venv/bin/python -m pip install --no-index --no-deps dist/*.whl
+          /tmp/postpublish-venv/bin/python -m skillsmgr --help
+          SKILLS_MANAGER_DATA=$(mktemp -d) /tmp/postpublish-venv/bin/python -m skillsmgr create demo -d "Release smoke check"
+      - name: Verify PyPI install and hermetic CRUD after publication
+        run: |
+          python3 -m venv /tmp/pypi-verify-venv
+          /tmp/pypi-verify-venv/bin/python -m pip install --no-deps "skills-manager==${GITHUB_REF_NAME#v}"
+          /tmp/pypi-verify-venv/bin/python -m skillsmgr --help
+          /tmp/pypi-verify-venv/bin/python -c "from pathlib import Path; import skillsmgr; p = Path(skillsmgr.__file__).parent / 'webui' / 'static' / 'vendor' / 'vue.global.prod.js'; assert p.is_file() and p.stat().st_size > 0, p"
+          SKILLS_MANAGER_DATA=$(mktemp -d) /tmp/pypi-verify-venv/bin/python -m skillsmgr create demo -d "Post-publish smoke check"
