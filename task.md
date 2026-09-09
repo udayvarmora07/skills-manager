@@ -563,6 +563,26 @@ Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over lock
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 40 — Steady-state verification, round 9 (2026-09-09, 15 tasks)
+
+Hermetic spot-probes (stdlib only, `/tmp` scripts, no product-code changes) confirming the steady state holds; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, complexity, diff).
+- [x] T2 L2/L6 still gated (issues #5 + #12 OPEN, zero comments; ZIP rejection-only, no `ZipFile` extraction).
+- [x] T3 deferred #3/#4/#8/#11 untouched (all OPEN zero comments).
+- [x] T4 P0 spot (001 traversal rejected + victim survives; 002 x-origin 403).
+- [x] T5 archive (ZIP reject with reason; valid versioned-manifest tar round-trips `['ok']`).
+- [x] T6 search/validator (alternating wildcard clean `ValueError`; escape warns, `https` clean).
+- [x] T7 release dry-run (`1.0.0` aligned, no bump/tag/publish; PyPI still 404; package-data UNAVAILABLE).
+- [x] T8 docs gates (docs/complexity PASS; package-data honest UNAVAILABLE).
+- [x] T9 CLI isolation (each data-dir finds only its own; exit 1 missing / 2 usage).
+- [x] T10 REST fail-closed (purge 403 + trash preserved; form 415; bad install 400 JSON; long query 400).
+- [x] T11 hygiene (versions aligned; `dist/` ignored; 5 worktrees unmerged as documented; tree clean but `.autogit`).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).

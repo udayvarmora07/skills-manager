@@ -4,6 +4,15 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Steady-state verification, round 9 (spot-probes green, zero code)
+
+- Hermetic spot-probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): L2/L6 still gated (#5 + #12 OPEN zero comments; ZIP rejection-only); deferred #3/#4/#8/#11 untouched; P0-001 traversal rejected + victim survives; archive ZIP-rejects with reason and versioned tar round-trips; alternating wildcard → clean `ValueError`; escape warns / `https` clean; REST purge-403 + trash-preserved / form-415 / bad-install-400-JSON / long-query-400; CLI isolation per data-dir + exit 1/2 contracts; versions `1.0.0` aligned with no bump/tag/publish, PyPI still 404, package-data honest UNAVAILABLE; worktrees all unmerged as documented.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-9 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Trust-surface + docs-contract campaign, round 8 (13 probes green, zero code)
 
 - Hermetic probes (stdlib only, scripts in `/tmp/r8_*.py`, outside the repo; zero product-code changes): T2 constraints (no ORM import; schema `1`; tiktoken optional-guarded; loopback + vendored Vue + no CDN; command set preserved across the parser split — first-pass flags were probe bugs: `orm` substring in "form", relative `store`/`validator` imports, v1 `cli.py` vs split-file comparison); T3 secrets (98 files clean; `.autogit` untracked, not ignored — pre-existing, untouched); T4 README quickstart verbatim (all 7 commands rc 0); T5 CONTRIBUTING checklist green; T6 roadmap now quotes verdicts; T7 CLI (26/26 help, exit 2/1 contracts, no traceback — first-pass `create bad UX` flag was argparse multi-word usage, real invalid names exit 1 cleanly); T8 REST (8/8 JSON `{error}` + 415); T9 XSS (`esc()` map, 2 sinks via renderer, no `innerHTML`); T10 REST table (no phantom `/api/tokens` or `/api/db` — tokens ride `stats`/`scopes`, maintenance is `/api/rebuild`+`/api/resync`); T11 Store API (zero drift); T12 git (1 modified file, no large blobs).
