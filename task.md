@@ -361,3 +361,16 @@
 - [x] E7 REST matrix + CLI lifecycle (200s, validate/purge clean).
 - [x] E8 one genuine defect fixed red-first (`_record_invalid` via real skill-dir validation; first wrong fix reverted with evidence).
 - [x] E9 full ladder green (289 unittest, smokes, gates, harness) recorded here and in the progress log.
+
+## Milestone 29 — Insights boundary round 4 (2026-09-09, next 10)
+
+- [x] T1 deep-copy records in `consumer_view` (nested mutation leak closed).
+- [x] T2 scorer must be callable (`eval_score` clean `ValueError`).
+- [x] T3 quarantine source must be a string.
+- [x] T4 snapshot items must be non-empty strings.
+- [x] T5 registry description non-string becomes a blocker, not a crash.
+- [x] T6 consumer argument must be a string.
+- [x] T7 registry source/scope/content_hash must be strings or missing.
+- [x] T8 7 red-first boundary tests (5 failures + 2 errors before green; 52 total).
+- [x] T9 ladder green: 296 unittest, smokes, compile/frontend/docs/complexity/diff/help, harness, fresh-tmp.
+- [x] T10 per-group commits plus push (this entry, then push step).

@@ -87,7 +87,11 @@ points (`quarantine_plan`/`eval_plan`) require real strings via
 sort deterministically; `ownership_states()` treats a record as
 `invalid` on the loader `malformed` flag or `validator.validate_skill`
 errors against its real skill directory (body-only text is never
-revalidated as a document).
+revalidated as a document); `consumer_view()` deep-copies records;
+`eval_score()` requires a callable scorer; snapshot items and
+quarantine sources must be strings; non-string registry descriptions
+become install blockers; registry source/scope/hash must be strings
+when present.
 sort deterministically; `risk_scan()` is six single-purpose scanners.
 Operates on records the existing `scopes`/`loader`/`Store.history` seams
 already return; no new CLI/Store surfaces, no schema change.

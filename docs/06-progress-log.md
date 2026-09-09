@@ -4,6 +4,12 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Insights boundary round 4 (deep-copy, callable, strings)
+
+- Probed 7 hypothesized boundaries; all 7 confirmed genuine: `consumer_view()` shallow-copied nested dicts (caller mutation leaked into inputs), `eval_score()` let non-callable scorers raise raw `TypeError`, `quarantine_plan()` accepted non-string sources into JSON output, `update_preview()` accepted non-string snapshot items, `registry_preview()` crashed on non-string descriptions and accepted non-string source/scope, `consumer_view()` accepted non-string consumers.
+- Fixed red-first (7 new tests, 52 total in the file; 5 failures + 2 errors before green): `copy.deepcopy` record copies, `callable()` scorer guard, `isinstance(str)` source guard, non-empty-string snapshot items, description non-string becomes a blocker, `_require_optional_str()` for source/scope/content_hash, consumer `isinstance(str)` guard. No locked-constraint changes.
+- Verification: 296 unittest PASS, both smokes PASS, compile/frontend/docs/complexity/diff/help PASS, package-data honestly UNAVAILABLE (no `build` module), `browser_harness.py` PASS (`"passed": true`), fresh-tmp validate/purge OK.
+
 ## 2026-09-09 — Deep E2E audit of all 45 insights tasks (E1–E9)
 
 - Built isolated-tmp E2E worlds (global + cursor scopes, duplicates, disabled, risky, real snapshots): E1 lifecycle OK (4 global incl. disabled, 2 cursor, `find_duplicates` flags `e2e-dup`); E2 views OK (3 vs 2, precedence unresolved) with all-five ownership states and 64-char provenance hashes; E3 diff OK (description+body, 6-line bound) and snapshot rollback byte-accurate; E4 risk OK (script/link/pattern on the hostile skill, clean skill empty), quarantine stage-only, registry trust-gated, eval 1/1, bundle deferred.
