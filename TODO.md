@@ -1,9 +1,13 @@
 # TODO — Skills Manager World-Class Execution Backlog
 
-**Plan version:** 2.0.0
+**Plan version:** 2.1.0
 **Backlog date:** 2026-09-07
 **Baseline:** `main` at `667fabb` in `/home/uday-varmora/skills-manager`
 **Companion plan:** `/home/uday-varmora/skills-manager/PLAN.md`
+**Research annex (2026-09-09):** loop-engineering probes plus a 200+-source
+web survey, distilled into per-item verdicts in the Milestone 4 note, the
+Deferred section, and the new Milestone 11 queue. Docs-only change: no
+code, no locked-constraint changes. New sessions start at Milestone 11.
 
 > This is the canonical execution backlog for the next product cycle. It is
 > deliberately risk-first: protect user data and make future regressions
@@ -257,11 +261,33 @@ them.
   approval-gated ADR and discovery inventory; runtime entities remain deferred.
 - [x] Support recursive discovery only where the consumer actually does so.
 - [x] Represent read-only, writable, missing, and unsupported roots distinctly.
-- [!] Calculate effective resolution for a selected consumer and project; blocked
-  until the approval-gated runtime ConsumerRootBinding model is introduced.
+- [!] Calculate effective resolution for a selected consumer and project.
+  Research verdict 2026-09-09 (loop probes + ~40 discovery sources):
+  precedence is per-consumer, not global (Claude Code
+  enterprise > personal > project > plugins, per
+  `https://code.claude.com/docs/en/skills`; Gemini CLI
+  built-in < extension < user < workspace with `/skills reload`, per
+  `https://geminicli.com/docs/cli/skills/`; OpenCode upward CWD-to-root
+  search at every level, per `https://opencode.ai/v2/docs/skills`; Cursor
+  nested scoping to files below the directory, per
+  `https://cursor.com/docs/skills`; Command Code walks at most 10 levels
+  stopping at `$HOME`, per `https://commandcode.ai/docs/skills`).
+  Codex project/precedence, Command Code precedence, and Claude same-name
+  edge cases remain `[?]` in `docs/12-agent-root-discovery-2026-09-08.md`
+  and must be closed against primary sources first. A single global
+  "winner" function would be wrong for at least one consumer, needs a
+  project-CWD input the current CLI/REST contracts do not carry, and must
+  not be persisted (`SCHEMA_VERSION = "1"` stays frozen). Keep
+  `effective_state: unresolved` as the honest contract. Next: propose a
+  narrow read-only diagnostic (e.g. `doctor --explain CONSUMER
+  --project DIR`), derived at read time, no persistence, citing the source
+  behind each winner. Blocked until the approval-gated runtime
+  ConsumerRootBinding model is introduced.
 - [!] Show active, shadowed, divergent, unmanaged, invalid, disabled, and
-  duplicated instances; observed states are implemented, but shadowing requires
-  the approval-gated effective resolver.
+  duplicated instances; observed states (`active`, `disabled`, `invalid`,
+  `duplicated`, `divergent`, `unmanaged` in `root_discovery.py` and
+  `insights.py`) are implemented and probed green, but `shadowed` requires
+  the approval-gated effective resolver above.
 - [x] Make sync operate on unique physical roots exactly once.
 - [x] Preserve unknown/client-specific frontmatter while separating portable
   standard fields from consumer extensions.
@@ -428,25 +454,220 @@ installation verification passes.
 - [x] Keep historical entries append-only while moving current truth into
   owning documents.
 
+## Milestone 11 — Research-verdict implementation queue (2026-09-09; new sessions start here)
+
+**Goal:** execute the 2026-09-09 research verdicts in order. Every code
+item follows the error-prevention protocol below (failing reproduction
+first, full ladder green, owning docs plus the progress log). Nothing
+here changes a locked constraint; each `[!]` keeps its stated approval.
+
+- [x] L1 — Closed issue #10 with evidence 2026-09-09 (no code):
+  commented the shipped file/line facts
+  (`skillsmgr/webui/index.html:70,373,756-760`,
+  `skillsmgr/webui/domain.js:60`, `skillsmgr/webui/app.js:6,130`),
+  closed the issue (`gh issue view 10` = CLOSED). Deferred line for #10
+  dropped below in this same pass.
+- [ ] L2 — ZIP import slice (issue #5, needs approval first): red-first
+  malicious-ZIP corpus (traversal, absolute, `\`, drive-letter,
+  symlink-bit, duplicate, bomb-ratio, garbage/truncated) through the
+  Milestone 1 pipeline shape — zip preflight mirroring `validate_members`
+  (name normalization, `\`/drive rejection, duplicate detection, layout
+  allowlist, six budgets via `file_size`/`compress_size`), a zip manual
+  extractor with the `(external_attr >> 16)` symlink-bit check (zip has
+  no `data_filter` equivalent), then the existing validate plus staged
+  commit and content-hash verify. Extend `import` only — no new command.
+  Done when the corpus fails before / passes after, the full ladder is
+  green, and CLI/REST/UI plus `docs/02-modules.md` agree on the new
+  format support.
+- [x] L3 — Effective-explain research track done docs-only 2026-09-09
+  (no code; runtime model stays approval-gated): closed the three `[?]`
+  in `docs/12-agent-root-discovery-2026-09-08.md` (v1.1.0) against
+  primary sources — Codex `.agents/skills/` REPO/USER/ADMIN/SYSTEM roots
+  with no-merge same-name policy (facade `~/.codex/skills` is compat-only)
+  per `https://learn.chatgpt.com/docs/build-skills`; Command Code six-way
+  selection order + Duplicate-names warnings + `/skill:<name>` hatch +
+  live reload per `https://commandcode.ai/docs/skills`; Claude
+  enterprise > personal > project with both-load nested/plugin exceptions
+  per `https://code.claude.com/docs/en/skills`. Proposed narrow
+  read-only diagnostic (`doctor --explain CONSUMER --project DIR`,
+  derived at read time, cites source per winner, persists nothing, keeps
+  `effective_state: unresolved`) — needs its own issue/ADR approval
+  before any implementation (locked constraint 5).
+- [x] L4 — Recorded the three rejections 2026-09-09 (no code): commented
+  issue #6 (keep feature-detect plus guarded manual extractor in
+  `skillsmgr/archive.py:133-158`; refusal breaks the supported 3.10/3.11
+  matrix for zero fail-closed gain), #7 (keep the warning in
+  `skillsmgr/validator.py:323-352` plus `risk_scan()` in
+  `skillsmgr/insights.py:342-354`; promotion hard-fails legitimate
+  monorepo-relative layouts), and #9 (browser stays canonical per locked
+  constraint 4; at most an unbundled loopback-only launcher). Each issue
+  carries the rationale with file/line evidence.
+- [x] L5 — Held the deferred four 2026-09-09 (no code; verified): issues
+  #3/#4/#8/#11 all still OPEN with zero comments; no network
+  (`urllib` only in `webapp.py`/`web_security.py` for URL parsing),
+  backend (eval stays stdlib `eval_plan`/`eval_score`, no SDK/model
+  calls), extension (no TS/VS Code surface), or signing
+  (`bundle_policy()` returns `deferred`) code in `skillsmgr/`; ZIP stays
+  rejection-only (`store.py:1221` `is_zipfile` guard, no `ZipFile`
+  extraction). Staged paths unchanged: registry #3 (offline preview
+  gate, then id-to-`install` mapping, then a network ADR), eval #4
+  (advisory-only, file-based, never blocking), extension #8 (separate
+  repo; missing endpoints get their own ASK), team sharing #11
+  (design-only ADR plus threat-model delta before any bundle format).
+- [ ] L6 — Release only through the existing gate: version bump, tag
+  equal to the package version, build once, `check_package_data.py
+  --dist-dir` on the exact artifacts, provenance attestation, TestPyPI
+  then the protected `release` environment, GitHub Release, and
+  post-publish install verification. Make no PyPI-install claim until
+  that pipeline actually publishes.
+
+**Acceptance gate:** L1 and L4 recorded on their issues; L2 green on the
+full ladder with corpus regressions; L3 `[?]`s closed with sources; L5
+untouched without approvals; L6 artifacts equal the tested artifacts.
+
 ## Deferred and approval-required work
 
-- [!] Registry bridge: issue #3; decide API, caching, provenance, trust, and
+> Research verdicts 2026-09-09 (loop-engineering probes in isolated temp
+> dirs, stdlib only, no product-code changes; ~200 web sources across
+> registry, eval, archive, localhost, signing, discovery, atomicity, and
+> accessibility families; full detail in `docs/06-progress-log.md`
+> 2026-09-09 entry). Each item keeps its `[!]` until its stated approval
+> lands. New sessions implement in the order given here: ~~close #10~~
+> DONE 2026-09-09 (#10 CLOSED), then ZIP on approval (#5 stays the only
+> code item), then the effective-explain diagnostic proposal (needs its
+> own issue/ADR approval).
+
+- [!] Registry bridge: issue #3. Research verdict: DEFER network
+  browse/fetch. `skills.sh` exposes a real catalog API (`GET
+  /api/v1/skills|search|curated|{source}/{skill}|audit/{source}/{skill}`
+  with file contents plus a SHA-256 `hash`, per
+  `https://www.skills.sh/docs/api`), but authenticated reads require a
+  Vercel OIDC bearer token (600/min per team/project, HTTP 401 without,
+  per the same reference) — `vercel link` plus token plumbing is
+  unsuitable for a local-first stdlib tool. Install itself is `npx skills
+  add owner/repo` (per `https://www.skills.sh/docs/cli`); the third-party
+  audit surface (Socket/Snyk/Trust-Hub verdicts) is linkable, not
+  proxyable. The product has zero network imports today and `install`
+  deliberately delegates to the ecosystem runner with dry-run-first plus
+  allowlist validation (threat-model H-1 posture). The offline half is
+  already shipped (`insights.registry_preview()`: dry-run steps,
+  explicit-trust gate, blockers). Approved staging: (1) keep the preview
+  gate, (2) map registry ids to `npx skills add` through the existing
+  `install` dry-run machinery, (3) surface the audit link plus `hash` for
+  invalidation. Network fetch, caching, auth, and provenance design need
+  their own ADR first: decide API, caching, provenance, trust, and
   whether to extend `install` or add a new surface.
-- [!] Eval harness: issue #4; decide provider abstraction, credentials,
-  persistence, isolation, and advisory versus blocking behavior.
-- [!] ZIP import: issue #5; use the Milestone 1 archive pipeline if approved.
-- [!] Python <3.12 tar policy: issue #6; prefer capability detection and safe
-  independent validation over a silent unsafe fallback.
-- [!] Out-of-root link severity: issue #7; decide strictness and legitimate
-  project-relative link policy.
-- [!] VS Code extension: issue #8; keep it separate until REST contracts and
-  local API security are stable.
-- [!] Native desktop wrapper: issue #9; optional only, never replacing the
-  dependency-free browser path.
-- [!] Live preview and shortcut help: issue #10; frontend-only after browser
-  and accessibility foundations.
-- [!] Team sharing/signatures: issue #11; requires a trust/key-distribution
-  design and a new threat-model review.
+- [!] Eval harness: issue #4. Research verdict: ADVISORY-ONLY stays;
+  defer any runtime backend indefinitely. The official
+  evaluating-skills guide prescribes `evals/evals.json`
+  (prompt/expected/files), with-skill versus without-skill (or
+  previous-version) baselines, and
+  `iteration-N/eval-*/{with_skill,without_skill}/` workspaces (per
+  `https://agentskills.io/skill-creation/evaluating-skills`); external
+  practice confirms deterministic assertions plus provider-agnostic
+  runners (promptfoo) and warns that LLM-as-judge position/verbosity
+  bias is systematic. The stdlib-safe subset is already shipped
+  (`insights.eval_plan()`/`eval_score()`: deterministic cases,
+  caller-supplied scorer, "scores never block installs", no SDK, no
+  network). Backend = none in-product (bring your own runner outside the
+  trust boundary); results live as skill-dir files per the spec, never in
+  SQLite (schema frozen); verdicts never gate installs or edits. Decide
+  provider abstraction, credentials, persistence, isolation, and advisory
+  versus blocking behavior — the standing answer is advisory-only.
+- [!] ZIP import: issue #5. Research verdict: APPROVE as a scoped
+  extension of the existing `import` (highest-value feature approval, one
+  focused slice, no new command). Probes: `Store.import_` rejects ZIP
+  cleanly today (`StoreError`, locked regression); tar `validate_members`
+  rejects traversal/absolute/`\`/`C:`/symlink/FIFO; `zipfile` preserves
+  hostile names verbatim (`../../evil.txt`, `/abs.txt`,
+  `skills/ok/../../escape.md`), so a manual guard is mandatory; symlink
+  members are detectable via `(external_attr >> 16) & 0o170000 ==
+  0o120000`. External authorities: ZipSlip ([Snyk
+  research](https://security.snyk.io/research/zip-slip-vulnerability)),
+  `ZipInfo.external_attr` semantics, and traversal-sanitization
+  guidance. Parity map: ~90% of the tar policy ports verbatim (name
+  normalization, `\`/drive rejection, duplicate detection, layout
+  allowlist, six budgets via `file_size`/`compress_size`, staged commit
+  plus content-hash verify); genuinely new work is only (1) the
+  ZipInfo symlink-bit check, (2) a zip manual extractor (zip has no
+  `data_filter` equivalent), (3) the zip-bomb ratio on `compress_size`.
+  Required: red-first malicious-ZIP corpus (traversal, absolute, `\`,
+  drive-letter, symlink-bit, duplicate, bomb-ratio, garbage/truncated)
+  through the same preflight, private extraction, validation, and
+  staged-commit pipeline. Use the Milestone 1 archive pipeline if
+  approved.
+- [!] Python <3.12 tar policy: issue #6. Research verdict: REJECT refusal;
+  keep feature-detect plus the guarded manual extractor. Probes: this
+  environment is Python 3.12.3 (`data_filter` present); hostile-tar probe
+  rejects traversal, `skills\evil`, symlink, and `C:/evil` through the
+  independent pre-validator. Authorities: [PEP
+  706](https://peps.python.org/pep-0706/) and the [tarfile
+  docs](https://docs.python.org/3/library/tarfile.html) say to
+  feature-detect (`hasattr(tarfile, "data_filter")`), not version-gate
+  (3.14 flips the default to `data`); filter-bypass CVEs (e.g.
+  CVE-2025-4138) prove an independent validator is the real defense even
+  on new interpreters. Refusal would break `import` on the supported
+  3.10/3.11 matrix (`requires-python >= 3.10`) for zero fail-closed
+  gain. Prefer capability detection and safe independent validation over
+  a silent unsafe fallback — the current design already does this.
+- [!] Out-of-root link severity: issue #7. Research verdict: REJECT the
+  warning-to-error promotion; keep the warning plus `risk_scan()`.
+  Probes: `../../../etc/shadow`, `/etc/passwd`, and `../shared/common.md`
+  all warn correctly today; `https://`, `#anchor`, and `<angled>` targets
+  stay clean; a 200-target walk over live plus repo `SKILL.md` files
+  found 145 external/anchor, 55 in-root, and 0 out-of-root (an earlier
+  34-hit count was a shell-regex artifact). Promotion without an
+  allowlist key (itself a new surface) would hard-fail `validate` on
+  legitimate monorepo-relative layouts. Threat-model R-4 is Low/Low with
+  "consider/optionally" language, and `risk_scan()` already flags
+  out-of-root links as medium findings with why plus evidence while
+  quarantine staging covers untrusted imports. Decide strictness and
+  legitimate project-relative link policy — the standing answer is warn,
+  not error.
+- [!] VS Code extension: issue #8. Research verdict: separate-repo spike
+  when pursued; no backend changes here. The REST table in
+  `docs/08-web-ui.md` already covers everything an extension needs
+  (CRUD, search, validate, sync, install, trash/snapshots, templates,
+  export/import, scopes, tokens, doctor/history); loopback binding is
+  enforced with Host/Origin/Referer/Fetch-Metadata plus JSON
+  content-type gates (ADR-001), and the REST probe matrix stays
+  fail-closed (cross-origin purge 403, missing content-type 415, bad
+  install types 400, long query 400). Extension work (TypeScript client,
+  tree view, webview, spawn/attach lifecycle, vsix/marketplace) sits
+  outside the stdlib product and its gates. Keep it separate until REST
+  contracts and local API security are stable; any missing endpoint gets
+  its own ASK first.
+- [!] Native desktop wrapper: issue #9. Research verdict: REJECT as a
+  product direction; keep the browser canonical. The GTK4 GUI was deleted
+  2026-08-14 in favor of the web UI, which `browser_harness.py` verifies
+  across 320–1280px viewports with zero console errors. `pywebview`
+  needs a third-party install plus OS webview runtimes — allowed only as
+  an optional extra under locked constraint 4, never the default — while
+  adding native failure modes and accessibility-regression surface for a
+  cosmetic gain. Optional only, never replacing the dependency-free
+  browser path; an unbundled loopback-only launcher script is the most
+  that should ever exist.
+- [!] Live preview and shortcut help: issue #10. CLOSED 2026-09-09 —
+  both halves verified shipped (`skillsmgr/webui/index.html:70,373,756-760`,
+  `skillsmgr/webui/domain.js:60`, `skillsmgr/webui/app.js:6,130`;
+  `TODO.md` Milestone 7, `task.md` Milestones 5/24, CHANGELOG Unreleased).
+  Evidence commented on the issue before closing; this line retained one
+  pass as the close record, then droppable.
+- [!] Team sharing/signatures: issue #11. Research verdict: correctly
+  DEFERRED; design-before-code with honest stdlib limits. Probes:
+  HMAC-SHA256 sign/verify plus tamper detection work in stdlib, but no
+  asymmetric signing exists there (`ed25519` absent) — the options are a
+  shared-secret HMAC (key-distribution, revocation, and
+  non-repudiation problems), shelling out to OpenSSL (not a stdlib
+  contract), or vendoring pure-Python Ed25519 (new audited-crypto
+  burden). External models: minisign-style Ed25519 file signing, TUF
+  trust delegation with thresholds, in-toto layouts with functionary
+  link metadata, and SLSA/Sigstore keyless provenance. None of
+  `bundle_policy()`'s prerequisites hold yet (explicit trust model,
+  approved plus tested quarantine activation — today stage-only —
+  persisted provenance/hashes — today observation-only — verified
+  recovery). Requires a trust/key-distribution design and a new
+  threat-model review — no bundle format code until that ADR lands.
 
 ## Error-prevention protocol
 

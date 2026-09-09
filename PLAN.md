@@ -1,7 +1,9 @@
 # Implementation Plan — Skills Manager World-Class Roadmap
 
-**Plan version:** 2.0.0
+**Plan version:** 2.1.0
 **Prepared:** 2026-09-07
+**Research annex:** 2026-09-09 (loop probes + ~200 sources; verdicts in §9
+and §11). Docs-only change: no code, no locked-constraint changes.
 **Repository:** `/home/uday-varmora/skills-manager`
 **Baseline:** `main` at `667fabb`
 **Execution backlog:** `/home/uday-varmora/skills-manager/TODO.md`
@@ -524,18 +526,44 @@ release environment protected and require approval for publication.
 
 ### Phase 9 — Product differentiation
 
-Only after Phases 1–8 are green:
+Only after Phases 1–8 are green (research verdicts 2026-09-09; the
+read-only `insights.py` foundation for the first seven bullets is
+shipped, runtime exposure stays approval-gated):
 
-- effective per-consumer views;
-- provenance and content hashes;
-- safe adoption of unmanaged skills;
-- explainable static risk findings;
-- quarantine and approval workflow;
-- side-by-side/three-way diff;
-- update preview and rollback;
-- registry discovery with trust/provenance;
-- provider-neutral skill evaluation;
-- optional signed/team bundles after a new trust-model decision.
+- effective per-consumer views — observed views shipped with
+  `effective_state: unresolved`; the precedence resolver is DEFERRED.
+  Per-consumer precedence is not global (Claude Code enterprise >
+  personal > project > plugins; Gemini built-in < extension < user <
+  workspace; OpenCode upward CWD-to-root; Cursor nested file-scoping;
+  Command Code ≤10 levels to `$HOME`). Close the Codex/Command-Code/
+  Claude `[?]`s against primaries first, then propose a read-only
+  `doctor --explain CONSUMER --project DIR` diagnostic, derived at
+  read time, persisting nothing;
+- provenance and content hashes — observations shipped, persistence
+  approval-gated (schema frozen);
+- safe adoption of unmanaged skills — via the approved
+  explain/diff/preview seams, not silent mutation;
+- explainable static risk findings — `risk_scan()` shipped (9 findings
+  on the hostile probe skill);
+- quarantine and approval workflow — `quarantine_plan()` stage-only
+  shipped; activation approval-gated;
+- side-by-side/three-way diff — `diff_skills()`/`diff_three_way()`
+  shipped (conflicts hold base);
+- update preview and rollback — `update_preview()` shipped (risks plus
+  rollback flag from snapshot list);
+- registry discovery with trust/provenance — DEFER network
+  browse/fetch: `skills.sh` reads need Vercel OIDC bearer auth
+  (unsuitable for a local-first stdlib tool); keep the offline
+  `registry_preview()` trust gate, map ids through existing `install`
+  dry-run, link (don't proxy) the Socket/Snyk/Trust-Hub audit surface;
+- provider-neutral skill evaluation — ADVISORY-ONLY stays: deterministic
+  stdlib `eval_plan()`/`eval_score()` shipped; no in-product model
+  backend, file-based results per the official evaluating-skills guide,
+  verdicts never block installs (LLM-judge bias is systematic);
+- optional signed/team bundles — DEFERRED: stdlib has HMAC but no
+  asymmetric signing; needs a trust/key-distribution ADR plus a
+  threat-model delta first (minisign-style, TUF delegation, in-toto, and
+  SLSA/Sigstore models surveyed).
 
 These features should make the manager trusted and understandable, not merely a
 larger installer front-end.
@@ -670,6 +698,49 @@ phase because client discovery behavior and tooling specifications change.
 - PyPA Trusted Publishers: `https://docs.pypi.org/trusted-publishers/`
 - GitHub artifact attestations: `https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations`
 - Python Packaging User Guide: `https://packaging.python.org/`
+
+### 2026-09-09 research annex (loop probes + ~200 sources)
+
+Probes (hermetic, isolated temp dirs, stdlib only, no product-code
+changes; scripts kept in `/tmp/probe_*.py`, outside the repo):
+link-warning matrix, zip hostile-member plus symlink-bit behavior, tar
+hostile-member rejection, wildcard-bounds timing, frontmatter
+limits/round-trip, eval/risk/registry/quarantine behavior, effective
+boundary, REST fail-closed matrix (403/415/400s), stdlib signing
+reality. Baseline held green (301 unittest, docs, complexity gates).
+
+Verdicts distilled into `TODO.md` (Milestone 4 note, Deferred
+section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
+§9 above. Standing answers for a new session:
+
+- ZIP import: APPROVE as a scoped `import` extension (red-first
+  malicious-ZIP corpus; ~90% of tar policy ports verbatim; new work is
+  the symlink-bit check, a zip manual extractor, and the bomb ratio).
+- Tar-fallback refusal: REJECT (keep feature-detect plus guarded manual
+  extractor; CIE matrix stays 3.10–3.14; filter-bypass CVEs prove the
+  independent validator is the real defense).
+- Link warning→error: REJECT (keep warning plus `risk_scan()`; probe
+  found 0 real escapes in 200 live targets).
+- Registry: DEFER network (OIDC-gated API); staged offline→passthrough
+  path only.
+- Eval: ADVISORY-ONLY, file-based, never blocking.
+- VS Code extension: separate repo; no backend changes here.
+- Desktop wrapper: REJECT as product direction (browser canonical).
+  Recorded on issue #9 2026-09-09 with constraint-4 + harness evidence.
+- Live preview + cheatsheet: CLOSED 2026-09-09 (issue #10 commented with
+  file/line evidence and closed; zero work remained).
+- Team sharing: DEFERRED pending a trust/key-distribution ADR plus a
+  threat-model delta.
+- Effective resolution: keep `unresolved`; the three `[?]`s were CLOSED
+  2026-09-09 in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0
+  against primary sources (Codex `.agents/skills/` REPO/USER/ADMIN/SYSTEM
+  + no-merge per `https://learn.chatgpt.com/docs/build-skills`; Command
+  Code six-way order + Duplicate-names + `/skill:<name>` + live reload
+  per `https://commandcode.ai/docs/skills`; Claude triple-winner +
+  both-load exceptions per `https://code.claude.com/docs/en/skills`).
+  Next: the read-only `doctor --explain CONSUMER --project DIR`
+  diagnostic needs its own issue/ADR approval (locked constraint 5); L2
+  ZIP remains the only approval-gated code item.
 
 External products are used to understand user expectations and portability
 patterns, not to justify copying their architecture. Repository constraints,

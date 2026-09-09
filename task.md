@@ -131,16 +131,16 @@
   `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, focused REST probes
   PASS, and `git diff --check` PASS.
 
-## Milestone 5 — Proposed ideas (not approved — needs ASK per locked constraint 5)
+## Milestone 5 — Proposed ideas (research verdicts 2026-09-09, see Milestone 31)
 
-- [ ] Native window wrapper (pywebview/Electron) for a desktop feel — needs UI-framework ASK
+- [!] Native window wrapper (pywebview/Electron) — verdict: REJECT as a product direction; browser stays canonical. At most an unbundled loopback-only launcher, never a shipped dependency.
 - [x] Skill-body editor has an escaped live markdown preview; no renderer dependency added.
 - [x] Keyboard-shortcut cheatsheet modal (`?` key) added after the keyboard contract.
 - [!] Pytest suite is not planned: `tests/` uses the approved stdlib `unittest` suite; adding third-party test tooling would require an explicit tooling decision
 - [x] CI workflow (compile + unittest + smokes on push) is present in `.github/workflows/ci.yml`; future CI expansion remains tracked in the roadmap
-- [ ] Zip-import support (`import` is tar-only today) — needs CLI-surface ASK
-- [ ] Tar-fallback refusal on Python < 3.12 (threat-model R-1) — needs ASK (behavior change)
-- [ ] Out-of-root link warning → validation error (threat-model R-4) — needs ASK (behavior change)
+- [ ] Zip-import support, APPROVED-direction (research 2026-09-09): extend `import` only, no new command — red-first malicious-ZIP corpus through the Milestone 1 pipeline shape (zip preflight mirroring tar guards, manual extractor with symlink-bit check, staged commit + hash verify). See Milestone 31 L2.
+- [!] Tar-fallback refusal on Python < 3.12 — verdict: REJECT (keep feature-detect + guarded manual extractor; refusal breaks supported 3.10/3.11 for zero fail-closed gain). Record on issue #6.
+- [!] Out-of-root link warning → validation error — verdict: REJECT strict promotion (keep warning + `risk_scan()`; 200-target probe found 0 real escapes). Record on issue #7.
 
 ## Milestone 12 — Archive resource, manifest, and commit safety (2026-09-08)
 
@@ -374,6 +374,54 @@
 - [x] T8 7 red-first boundary tests (5 failures + 2 errors before green; 52 total).
 - [x] T9 ladder green: 296 unittest, smokes, compile/frontend/docs/complexity/diff/help, harness, fresh-tmp.
 - [x] T10 per-group commits plus push (this entry, then push step).
+
+## Milestone 31 — Loop-engineering research verdicts (2026-09-09, start here next session)
+
+Research: 9 hermetic probe scripts (isolated temp dirs, stdlib only, no
+product-code changes) + ~30 web-search batches (~200 sources) + 5 primary
+`web_fetch` reads + repo evidence. Baseline held green throughout (301
+unittest PASS, `check_docs.py` PASS, `check_complexity.py` PASS).
+
+- [x] R1 probes recorded: link matrix (`../`, absolute, deep escape warn;
+  `https://`/`#`/`<angled>` clean; 200-target walk = 145
+  external/anchor, 55 in-root, 0 out-of-root); zip (`zipfile` keeps
+  hostile names verbatim; symlink-bit detectable); tar (6/6 hostile
+  classes rejected); search (`*a*a*a*a*` instant, 500-char query clean
+  `ValueError`); frontmatter (dup/huge/flow-bomb all clean
+  `FrontmatterError`); eval/risk/registry/quarantine (9 findings on
+  hostile skill, trust gate `False→True`, stage-only); effective
+  boundary (`consumer_view` count + `unresolved`, 3-way sides, preview
+  risks, `unknown` provenance); REST (x-origin 403, no-CT 415, bad
+  install 400, long query 400); signing (HMAC ok, `ed25519` absent).
+- [x] R2 verdicts written into `TODO.md` (Milestone 4 note, Deferred
+  section, Milestone 11 queue), this milestone, `PLAN.md` (§9 + §11),
+  and `docs/06-progress-log.md`.
+- [x] L1 closed issue #10 with evidence 2026-09-09 (no code; CLOSED) — see `TODO.md` L1.
+- [ ] L2 ZIP slice on approval (red-first corpus, extend `import` only) — see `TODO.md` L2. Remains the only code item.
+- [x] L3 effective-explain research done docs-only 2026-09-09 (3 `[?]`s closed in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0; diagnostic proposal needs issue/ADR approval) — see `TODO.md` L3.
+- [x] L4 rejections #6/#7/#9 recorded with file/line evidence 2026-09-09 — see `TODO.md` L4.
+- [x] L5 deferred #3/#4/#8/#11 verified untouched 2026-09-09 (all OPEN, zero comments; no network/backend/signing code) — see `TODO.md` L5.
+- [x] L6 release-gate verified 2026-09-09 (no publish; tag `v1.0.0` = package `1.0.0`; `release.yml` tag/version gate + build-once + `--dist-dir` + attestation + TestPyPI→`release` env; package-data honestly UNAVAILABLE without `build`) — see `TODO.md` L6.
+
+## Milestone 32 — Milestone 11 verdict execution, round 1 (2026-09-09, 15 tasks)
+
+Docs + GitHub only; zero product-code changes; no locked-constraint changes.
+
+- [x] T1 baseline ladder green on clean tree (301 unittest, smokes, compile/frontend/docs/complexity/diff recorded).
+- [x] T2 L1 evidence pinned (`index.html:70,373,756-760`, `domain.js:60`, `app.js:6,130`).
+- [x] T3 issue #10 commented with evidence and CLOSED.
+- [x] T4 tar-fallback rejection recorded on issue #6 (`archive.py:133-158`, PEP 706, 3.10/3.11 matrix).
+- [x] T5 link-warning rejection recorded on issue #7 (`validator.py:323-352`, 200-target walk, `risk_scan()`).
+- [x] T6 desktop-wrapper rejection recorded on issue #9 (constraint 4, harness 320–1280px).
+- [x] T7 Codex `[?]` closed (`.agents/skills/` REPO/USER/ADMIN/SYSTEM + no-merge; facade compat-only) — `https://learn.chatgpt.com/docs/build-skills`.
+- [x] T8 Command Code `[?]` closed (six-way order, Duplicate-names, `/skill:<name>`, live reload) — `https://commandcode.ai/docs/skills`.
+- [x] T9 Claude same-name `[?]` closed (triple-winner + both-load exceptions) — `https://code.claude.com/docs/en/skills`.
+- [x] T10 read-only `doctor --explain CONSUMER --project DIR` diagnostic proposed (issue/ADR approval needed; `check_docs.py` PASS).
+- [x] T11 deferred #3/#4/#8/#11 verified untouched (all OPEN zero comments; no network/backend/extension/signing code; ZIP rejection-only).
+- [x] T12 release gate verified without publishing (tag=version, `--dist-dir`/attestation/TestPyPI→release env; package-data UNAVAILABLE honestly).
+- [x] T13 TODO/task/PLAN/progress-log updated for L1/L3/L4/L5/L6 (L2 stays the only code item, approval-gated).
+- [x] T14 full ladder + harness + fresh-tmp re-run (recorded in progress log).
+- [x] T15 clean diff review, commit, and push of exactly the intended files.
 
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
