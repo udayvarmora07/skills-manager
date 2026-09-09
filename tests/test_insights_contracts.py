@@ -739,5 +739,116 @@ class TestInsightsBoundaryRound4(unittest.TestCase):
                      "scope": bad}, True)
 
 
+class TestInsightsAuditRound5(unittest.TestCase):
+    """Round-5 audit locks: degenerate, nested, unicode, fs, perf, docs."""
+
+    def test_degenerate_inputs_stay_json_clean(self):
+        import json
+
+        insights = _load_insights()
+        outputs = [
+            insights.consumer_view([], "x"),
+            insights.consumer_view([], ""),
+            insights.ownership_states([]),
+            insights.diff_skills({}, {}),
+            insights.diff_three_way({}, {}, {}),
+            insights.provenance_summary({}),
+            insights.update_preview({}, {}),
+            insights.risk_scan({}),
+            insights.risk_scan({"body": None}),
+            insights.risk_scan({"body": 0}),
+            insights.bundle_policy(),
+        ]
+        for output in outputs:
+            json.dumps(output)
+        self.assertEqual(insights.consumer_view([], "x")["count"], 0)
+        self.assertEqual(insights.risk_scan({"body": None}), [])
+
+    def test_nested_and_odd_structures_never_raise_raw(self):
+        import json
+
+        insights = _load_insights()
+        outputs = [
+            insights.provenance_summary({"name": "x", "provenance": ["a"]}),
+            insights.provenance_summary(
+                {"name": "x", "content_hash": {"h": 1}}),
+            insights.ownership_states(
+                [{"name": "x", "scope": "global", "consumer": "c",
+                  "malformed": 0, "adopted_from": ""}]),
+            insights.diff_skills({"body": {"a": [1, 2]}},
+                                 {"body": {"a": [1, 2]}}),
+            insights.eval_plan("ab", [{"input": 1, "expect": None}]),
+            insights.registry_preview(
+                {"name": "ab", "description": "Uso cuando \U0001f600 test"},
+                True),
+        ]
+        for output in outputs:
+            json.dumps(output)
+        self.assertEqual(
+            insights.eval_plan(
+                "ab", [{"input": 1, "expect": None}])["cases"],
+            [{"input": "1", "expect": "None"}])
+
+    def test_large_inputs_complete_within_budget(self):
+        import time
+
+        insights = _load_insights()
+        started = time.time()
+        insights.risk_scan({"body": "ok\n" * 200000})
+        self.assertLess(time.time() - started, 5)
+        started = time.time()
+        insights.consumer_view(
+            [{"name": f"s{i % 500}", "consumer": "x"} for i in range(10000)],
+            "x")
+        self.assertLess(time.time() - started, 5)
+        started = time.time()
+        scored = insights.eval_score(
+            insights.eval_plan(
+                "ab",
+                [{"input": str(i), "expect": str(i)} for i in range(1000)]),
+            [str(i) for i in range(1000)], lambda o, e: o == e)
+        self.assertLess(time.time() - started, 5)
+        self.assertEqual((scored["passed"], scored["total"]), (1000, 1000))
+
+    def test_filesystem_edge_records_classify_fail_closed(self):
+        insights = _load_insights()
+        base = {"name": "ghost", "scope": "global", "consumer": "c"}
+        self.assertEqual(
+            insights.ownership_states(
+                [dict(base, path="/nonexistent/skill-dir")])[0]["ownership"],
+            "invalid")
+        self.assertEqual(
+            insights.ownership_states(
+                [dict(base, path=123)])[0]["ownership"],
+            "managed")
+
+    def test_mixed_concurrent_workload_stays_clean(self):
+        import threading
+
+        insights = _load_insights()
+        recs = [{"name": f"s{i}", "scope": "global", "consumer": "c",
+                 "body": "hello", "tokens": i} for i in range(100)]
+        errors: list = []
+
+        def worker():
+            try:
+                for _ in range(60):
+                    insights.consumer_view(recs, "c")
+                    insights.ownership_states(recs)
+                    insights.diff_skills(recs[0], recs[-1])
+                    insights.risk_scan(recs[0])
+                    insights.update_preview(recs[0], recs[1],
+                                            snapshots=["s1"])
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+
+
 if __name__ == "__main__":
     unittest.main()
