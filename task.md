@@ -463,6 +463,26 @@ Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) + docs hy
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 35 — Recovery/contract re-verification campaign, round 4 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, `/tmp` scripts, no product-code changes) over recovery + contract surfaces; no locked-constraint changes. L2 ZIP and issue #12 both await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, complexity, diff).
+- [x] T2 failure injection (dropped-table edit preserves FS content + stderr-only rollback diagnostic; rebuild heals; row-delete drift flagged then resynced).
+- [x] T3 upload bounds (oversize/bad Content-Length → 400; 250-part multipart → 400; valid folder PUT → 200).
+- [x] T4 history clamp (limit 5/0/huge/missing) + stats shape + tokens estimate/aggregate + long-search `ValueError`.
+- [x] T5 backup/restore hash-verified (`content_hash` + file bytes equal, not row counts) + template dup/bad-name guards.
+- [x] T6 doctor drift (`.skillsmgr-tmp` + `.skillsmgr-stage` leftovers flagged; orphan dir flagged then resynced; stale snapshot flagged).
+- [x] T7 two-data-dir CLI isolation (each dir finds only its own skill) + REST two-server contracts (11 search tests incl. isolation, all OK).
+- [x] T8 REST isolation suite green (same 11-test run covers global/agent/merged + two-server cases).
+- [x] T9 concurrent same-skill writes (4×25 zero errors, doctor clean, no stranded temps, 101 history rows).
+- [x] T10 insights E2E (views/diff/ownership/preview/quarantine-stage-only/risk/registry-trust/eval-1-1/bundle-deferred + store purity).
+- [x] T11 browser harness `"passed": true` file-verified (5 viewports, zero failures; `tail`-pipe artifact explained — JSON split across streams).
+- [x] T12 fresh-tmp live seam (create→validate→doctor→remove→purge→doctor, all OK).
+- [x] T13 docs hygiene (this milestone + progress-log entries; no backlog wording changes needed).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).
