@@ -1,8 +1,8 @@
 # Architecture — Skills Manager
 
-**Version 0.2.0**
+**Version 0.2.1**
 
-**AI manifest**: Current architecture and data-flow facts verified against source on September 8, 2026. The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
+**AI manifest**: Current architecture and data-flow facts verified against source on September 9, 2026 (repo-map refresh: split CLI/web policy modules, `insights.py`, harness, smoke fixtures, package-data gate; 301-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
 
 ## Repo map
 
@@ -11,22 +11,40 @@ skills-manager/
   skillsmgr/
     __init__.py      # __version__ = "1.0.0"
     __main__.py      # entry: python3 -m skillsmgr -> cli.main()
-    cli.py           # argparse CLI, prog="skills-mgr"
+    cli.py           # stable adapter: main/build_parser + handler/private-helper aliases
+    cli_parser.py    # argparse construction (27 top-level + 3 aliases; 7 nested)
+    cli_handlers.py  # command behavior + name/data validation
+    cli_output.py    # JSON/errors/table rendering
     store.py         # Store: FS + SQLite index; StoreError, SkillNotFound
+    scopes.py        # agent-scope model + per-agent filesystem ops
+    loader.py        # shared SKILL.md loader + dir scanner (Store + scopes)
+    tokens.py        # token/context estimation
     archive.py       # archive preflight, extraction, staged commit policy
     atomic_io.py     # atomic text writes, mutation locks, tree hashes
     observations.py  # non-persisted hashes, provenance, frontmatter partitions
     root_discovery.py# physical-root and observed-scope policy
-    paths.py         # data_dir(), db_path(), subdirs, resolved containment helpers
+    paths.py         # data_dir(), db_path(), subdirs (containment adapter)
     path_safety.py   # resolved root-containment and canonical skill-path policy
+    diagnostics.py   # stderr-only recovery/optional-enrichment diagnostics
     frontmatter.py   # parse/dump SKILL.md YAML-ish frontmatter
     validator.py     # canonical name/field rules, Issue dataclass
     search.py        # regex search + scoring
     templates.py     # default template + template list/new
     colors.py        # TTY-aware color helpers
-  smoke_store.py     # smoke test driving the Store API
-  tests/             # stdlib unittest regression suite
+    webapp.py        # stdlib backend: routing + server (policy in web_*.py)
+    web_security.py  # loopback mutation validation policy
+    web_serialization.py # JSON body/response helpers
+    web_upload.py    # multipart folder-upload staging policy
+    insights.py      # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
+    webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
+  smoke_store.py     # smoke test driving the Store API (hermetic fixture)
+  smoke_web.py       # smoke test driving the REST API (hermetic fixture)
+  smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers
+  browser_harness.py # dev-only system-Chrome CDP viewport probe (no runtime dep)
+  tests/             # stdlib unittest regression suite (301 tests, 2026-09-09)
   check_docs.py      # machine-checkable docs/source consistency gate
+  check_complexity.py# AST complexity ratchet (+ complexity-baseline.json)
+  check_package_data.py # wheel/sdist package-data verification
   AGENTS.md          # hot cache (this repo's operating manual)
   docs/              # HADS docs (this tree)
   task.md            # live checklist
@@ -47,9 +65,10 @@ skills-manager/
 ## Data flow
 
 ```
-CLI (cli.py) ──┐
+CLI (cli.py/cli_parser.py/cli_handlers.py/cli_output.py) ──┐
                ├──> Store/scopes ──> filesystem (source of truth)
 Web UI         ─┘          │
+(webapp.py + web_security/serialization/upload) │
                            └──> SQLite index (rebuildable cache)
 ```
 

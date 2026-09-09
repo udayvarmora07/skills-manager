@@ -308,7 +308,7 @@
 - [x] T8 offline registry preview (dry-run steps, explicit trust gate; network browse deferred).
 - [x] T9 provider-neutral eval harness skeleton (stdlib-only plan, caller-supplied deterministic scorer, advisory-only).
 - [x] T10 signed/team bundle deferral policy (`deferred` pending issue #11 trust review).
-- [x] T11 red-first hermetic contracts in `tests/test_insights_contracts.py` (52 tests: 20 foundation + 11 fail-closed + 9 round-3 + 7 round-4 + 5 E2E; all red-first).
+- [x] T11 red-first hermetic contracts in `tests/test_insights_contracts.py` (57 tests: 20 foundation + 11 fail-closed + 9 round-3 + 7 round-4 + 5 E2E + 5 round-5 audit locks; all red-first).
 - [x] T12 `skillsmgr/insights.py` implementation (pure, stdlib-only, no CLI/Store/schema/network changes).
 - [x] T13 docs reconciliation (`docs/02-modules.md`, `TODO.md` Milestone 9, this milestone, `CHANGELOG.md`, progress log).
 - [x] T14 full verification ladder plus fresh-tmp live-seam exercise (recorded in progress log).
@@ -401,7 +401,7 @@ unittest PASS, `check_docs.py` PASS, `check_complexity.py` PASS).
 - [x] L3 effective-explain research done docs-only 2026-09-09 (3 `[?]`s closed in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0; diagnostic proposal needs issue/ADR approval) — see `TODO.md` L3.
 - [x] L4 rejections #6/#7/#9 recorded with file/line evidence 2026-09-09 — see `TODO.md` L4.
 - [x] L5 deferred #3/#4/#8/#11 verified untouched 2026-09-09 (all OPEN, zero comments; no network/backend/signing code) — see `TODO.md` L5.
-- [x] L6 release-gate verified 2026-09-09 (no publish; tag `v1.0.0` = package `1.0.0`; `release.yml` tag/version gate + build-once + `--dist-dir` + attestation + TestPyPI→`release` env; package-data honestly UNAVAILABLE without `build`) — see `TODO.md` L6.
+- [x] L6 release-gate verified 2026-09-09 (dry-run green, no publish; tag `v1.0.0` = package `1.0.0`; `release.yml` tag/version gate + build-once + `--dist-dir` + attestation + TestPyPI→`release` env; package-data honestly UNAVAILABLE without `build`) — see `TODO.md` L6.
 
 ## Milestone 32 — Milestone 11 verdict execution, round 1 (2026-09-09, 15 tasks)
 
@@ -422,6 +422,26 @@ Docs + GitHub only; zero product-code changes; no locked-constraint changes.
 - [x] T13 TODO/task/PLAN/progress-log updated for L1/L3/L4/L5/L6 (L2 stays the only code item, approval-gated).
 - [x] T14 full ladder + harness + fresh-tmp re-run (recorded in progress log).
 - [x] T15 clean diff review, commit, and push of exactly the intended files.
+
+## Milestone 33 — Milestone 11 verdict execution, round 2 (2026-09-09, 15 tasks)
+
+Docs truth + GitHub proposals + verification; zero product-code changes; no locked-constraint changes.
+
+- [x] T1 baseline ladder green (301 unittest, smokes, compile/frontend/docs/complexity/diff).
+- [x] T2 docs-truth audit (`01-architecture` repo-map gaps, `05-gui-plan` SUPERSEDED label, `settings.json` history, historical counters).
+- [x] T3 `SESSION-CONTEXT.md` v0.3.0 (date, 27+7+3=37 counts, full module inventory, insights-57, Milestone 11 status, discovery v1.1.0 pointer).
+- [x] T4 counts truth (`CHANGELOG` 52→57 with round breakdown; `task.md` T11 52→57; `01-architecture` repo-map refresh; CLI 27+7+3=37 re-derived from `check_docs._command_inventory` + live parser).
+- [x] T5 L2 confirmed approval-gated (issue #5 OPEN zero comments; `store.py:1221` ZIP rejection-only, no `ZipFile` extraction).
+- [x] T6 `doctor --explain CONSUMER --project DIR` proposal filed as issue #12 (read-only, cited, unpersisted; constraint-5 approval requested).
+- [x] T7 deferred #3/#4/#8/#11 re-verified untouched (all OPEN zero comments; no network/backend/extension/signing code).
+- [x] T8 release dry-run (package/`__version__`/tag `1.0.0` aligned; tag gate + perms verified; no bump/tag/publish).
+- [x] T9 package-data honestly UNAVAILABLE; README PyPI-future claim + live 404 confirmed.
+- [x] T10 worktree map checked (5 Carson dirs; `git worktree list` heads recorded; `docs/10` scope is the 2-candidate comparison, not a live map).
+- [x] T11 browser harness re-run `"passed": true` (5 viewports, zero failures).
+- [x] T12 fresh-tmp live seam (create→validate→doctor→search→remove→purge→doctor, all OK).
+- [x] T13 TODO/task/PLAN/progress-log updated for round 2 (this milestone; L6 dry-run note; stale-claim status note).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
 
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 

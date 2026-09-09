@@ -4,6 +4,24 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Milestone 11 round 2: docs truth, diagnostic proposal, re-verification (15 tasks, zero code)
+
+- T1 baseline green on the round-1 commit: 301 unittest OK, both smokes PASS, compile/frontend PASS, `check_docs.py` PASS, `check_complexity.py` PASS (151 functions), `git diff --check` PASS.
+- T2 docs-truth audit: `docs/01-architecture.md` repo-map was missing the split modules (`cli_parser/handlers/output`, `scopes`/`loader`/`tokens`, `diagnostics`, `web_security/serialization/upload`, `insights`, harness, fixtures, package-data gate) — refreshed. `docs/05-gui-plan.md` confirmed correctly labelled SUPERSEDED with `gui.py`-deleted + alias facts (body stays historical by design). `.commandcode/settings.json` confirmed clean (the `gui.py` compile entry was replaced by `skillsmgr/*.py` in `2ae27bf`; remaining `gui.py` hits are append-only history). CLI 27+7+3=37 re-derived from `check_docs._command_inventory` AST walk + live parser (30 top-level names incl. aliases + 7 nested); insights 57 re-counted (`grep -c "def test"`).
+- T3/T4 fixes: `docs/SESSION-CONTEXT.md` v0.3.0 (date, counts, full inventory, insights-57, Milestone 11 status, discovery v1.1.0); `docs/01-architecture.md` repo-map + data-flow diagram; `CHANGELOG.md` Unreleased 52→57 with round breakdown; `task.md` T11 52→57. `check_docs.py` PASS after each edit (one interim fail caught a `nested subcommands` phrasing the gate regex does not accept — fixed to the canonical `subcommands (trash/templates/db)` form).
+- T5 L2 still gated: issue #5 OPEN zero comments; `store.py:1221` ZIP rejection-only, no `ZipFile` extraction anywhere in `skillsmgr/`.
+- T6 diagnostic proposal filed as issue #12 (`[ASK] Read-only effective-resolution diagnostic (doctor --explain CONSUMER --project DIR)`): read-only, per-winner source citations, no persistence/schema change, hermetic per-consumer fixtures sketched, constraint-5 approval explicitly requested.
+- T7 deferred re-verified: #3/#4/#8/#11 all OPEN zero comments; no `urlopen`/`http.client`/`socket`/SDK/model-subprocess code in `skillsmgr/` (`urllib` is URL-parsing only in `webapp.py`/`web_security.py`).
+- T8/T9 release dry-run: `pyproject.toml` version == `__version__` == `1.0.0` == tag `v1.0.0`; `release.yml` tag/version gate + least-privilege perms verified; no bump/tag/publish performed. `check_package_data.py` honestly UNAVAILABLE; README PyPI-future claim accurate; live PyPI `skills-manager` JSON still 404.
+- T10 worktrees: 5 Carson dirs exist; `git worktree list` heads recorded (`todo-plan-implementation 2bb7280`, `milestone5-research-user-needs c5a7161`, three at `667fabb`); `docs/10` scope is the 2-candidate comparison, not a live 5-dir map — no doc change needed.
+- T11/T12 re-verification: `browser_harness.py` `"passed": true` (5 viewports); fresh-tmp lifecycle (create→validate→doctor→search→remove→purge→doctor) all OK.
+- T13 docs updated for round 2: `TODO.md` (L6 dry-run note, stale-claim status note), `task.md` Milestones 31-L6 + 33 (this round), `PLAN.md` annex (issue #12 filed), this log.
+- T14/T15 below: diff review + commit/push, then the final ladder re-run.
+
+## 2026-09-09 — Milestone 11 round-2 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK; `check_package_data.py` → honestly UNAVAILABLE (standing behavior).
+
 ## 2026-09-09 — Milestone 11 verdict execution round 1 (L1/L3/L4/L5/L6; docs + GitHub, zero code)
 
 - L1: pinned live-preview + cheatsheet evidence (`skillsmgr/webui/index.html:70,373,756-760`, `skillsmgr/webui/domain.js:60`, `skillsmgr/webui/app.js:6,130`), commented it on issue #10, and CLOSED the issue (`gh issue view 10` = CLOSED). No code.

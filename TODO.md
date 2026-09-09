@@ -73,7 +73,15 @@ code, no locked-constraint changes. New sessions start at Milestone 11.
 - [!] `docs/01-architecture.md`, `docs/05-gui-plan.md`,
   `.commandcode/settings.json`, and several historical counters contain stale
   claims. Documentation reconciliation is planned work, not evidence that the
-  stale behavior still exists.
+  stale behavior still exists. (2026-09-09 round-2 status: `01-architecture.md`
+  repo-map refreshed to the split CLI/web policy modules + `insights.py` +
+  harness + fixtures + package-data gate; `05-gui-plan.md` confirmed correctly
+  labelled SUPERSEDED/historical with `gui.py`-deleted + alias facts;
+  `.commandcode/settings.json` confirmed clean — the `gui.py` compile entry
+  was replaced by `skillsmgr/*.py` on 2026-09-08 (`2ae27bf`), remaining hits
+  are historical progress-log entries; CLI 27+7+3=37 and insights-57 counts
+  corrected in SESSION-CONTEXT/CHANGELOG/task. Historical counters in dated
+  evidence/progress entries stay append-only by policy.)
 
 ## Release policy
 
@@ -514,12 +522,19 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   (advisory-only, file-based, never blocking), extension #8 (separate
   repo; missing endpoints get their own ASK), team sharing #11
   (design-only ADR plus threat-model delta before any bundle format).
-- [ ] L6 — Release only through the existing gate: version bump, tag
-  equal to the package version, build once, `check_package_data.py
-  --dist-dir` on the exact artifacts, provenance attestation, TestPyPI
-  then the protected `release` environment, GitHub Release, and
-  post-publish install verification. Make no PyPI-install claim until
-  that pipeline actually publishes.
+- [ ] L6 — Release only through the existing gate (dry-run green
+  2026-09-09, no publish): package `1.0.0` == `__version__` ==
+  tag `v1.0.0`; `release.yml` tag/version gate + build-once +
+  `--dist-dir` + attestation + TestPyPI→protected `release` env;
+  README makes no PyPI-install claim and live PyPI still 404s;
+  `check_package_data.py` honestly UNAVAILABLE without `build`.
+  No version bump, tag, publish, or install claim until that pipeline
+  actually publishes: version bump, tag equal to the package version,
+  build once, `check_package_data.py --dist-dir` on the exact
+  artifacts, provenance attestation, TestPyPI then the protected
+  `release` environment, GitHub Release, and post-publish install
+  verification. Make no PyPI-install claim until that pipeline
+  actually publishes.
 
 **Acceptance gate:** L1 and L4 recorded on their issues; L2 green on the
 full ladder with corpus regressions; L3 `[?]`s closed with sources; L5

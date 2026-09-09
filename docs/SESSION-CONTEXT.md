@@ -1,21 +1,26 @@
 # Session Context — Skills Manager
 
-**Version 0.2.0**
+**Version 0.3.0** (2026-09-09: inventory refresh — split CLI/web policy
+modules, `insights.py` + 57-test contracts, smoke fixtures, harness,
+package-data gate; CLI counts re-verified; Milestone 11 L1/L3/L4 done,
+L2 ZIP the only approval-gated code item.)
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
-## What exists today (2026-09-08)
+## What exists today (2026-09-09)
 
-- **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names, exit codes 0/1/2/130. Works.
-- **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. See @docs/03-cli-surface.md.
+- **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
+- **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.1.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only; a read-only `doctor --explain` diagnostic needs its own issue/ADR approval). See @docs/03-cli-surface.md.
 - **Store**: `skillsmgr/store.py` — FS source of truth + SQLite index. Public API in @docs/04-store-api.md. **Signatures that surprise people** (docs used to lie about these, fixed on 2026-08-14):
   - `export()` / `backup()` return a **Path**, not a dict.
   - `db_rebuild()` returns `{"added", "updated", "removed"}` (no `"skills"` key).
   - `doctor()` returns `ok`/`db_integrity` etc. (no `trash_mismatch`/`db_rebuilt` keys).
-- **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14). `webui` is the command, `gui` is its alias.
-  - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default).
-  - Frontend: `skillsmgr/webui/` (Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
- - **Tests**: stdlib `unittest` regression/contract suite (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API), and repository gates `python3 check_docs.py`, `python3 check_complexity.py`, and `python3 check_package_data.py` (package check may report `UNAVAILABLE` when optional build tooling is absent).
+- **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
+  - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
+  - Frontend: `skillsmgr/webui/` (`domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
+ - **Tests**: stdlib `unittest` regression/contract suite — 301 tests green 2026-09-09 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (151 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
+- **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Locked by 57 red-first hermetic tests in `tests/test_insights_contracts.py`.
+- **Milestone 11 queue (2026-09-09)**: L1 done (#10 CLOSED with evidence), L3 done (`[?]`s closed, diagnostic proposed, approval needed), L4 done (#6/#7/#9 rationales recorded), L5 verified (#3/#4/#8/#11 untouched), L6 gate verified without publishing. **L2 ZIP (`import`-only extension, issue #5) is the only approval-gated code item — no code until approved.**
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
 
 ## Common tasks (router)
@@ -71,10 +76,17 @@ Browser click-through (when UI changed): `PYTHONDONTWRITEBYTECODE=1 python3 brow
 
 ```
 skillsmgr/
-  webapp.py            # backend: routing + multipart + server (read before changing endpoints)
+  webapp.py + web_security.py  # backend: routing + server + loopback mutation policy
+      web_serialization.py     # JSON body/response helpers
+      web_upload.py            # multipart folder-upload staging policy
   scopes.py            # agent-scope reads/writes (list/create/edit/remove/toggle/sync/search)
   loader.py            # shared SKILL.md loader + dir scanner (Store + scopes)
+  observations.py      # non-persisted hashes, provenance, frontmatter partitions
+  root_discovery.py    # physical-root + observed-scope policy
+  atomic_io.py         # atomic text writes, mutation locks, tree hashes
+  archive.py           # archive preflight, extraction, staged commit policy
   tokens.py            # token/context estimation (tiktoken or chars/4)
+  diagnostics.py       # stderr-only recovery diagnostics (no schema change)
   webui/
     index.html         # Vue templates for every screen/modal
     styles.css         # design tokens + components + responsive
@@ -84,13 +96,17 @@ skillsmgr/
   cli.py               # stable adapter: main/build_parser + compatibility names
   cli_parser.py        # argparse construction
   cli_handlers.py      # command behavior
+  cli_output.py        # JSON/errors/table rendering
   store.py             # FS/index/recovery/archive policy
   insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
-tests/test_insights_contracts.py  # insights hermetic contracts (52 tests)
+tests/test_insights_contracts.py  # insights hermetic contracts (57 tests)
 smoke_store.py         # store smoke (green)
 smoke_web.py           # REST smoke (green)
+smoke_fixtures.py      # shared tmp-store + loopback-server lifecycle helpers
+browser_harness.py     # dev-only Chrome CDP viewport probe (green, 5 viewports)
 docs/08-web-ui.md      # authoritative web UI doc
-docs/06-progress-log.md# web UI entries (newest top)
+docs/12-agent-root-discovery-2026-09-08.md  # discovery inventory v1.1.0 ([?]s closed)
+docs/06-progress-log.md# dated entries (newest top)
 ```
 
 ## Open questions / next steps

@@ -2,7 +2,7 @@
 
 **Version 0.3.0**
 
-**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-08-16. Keep this doc updated when module internals change.
+**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-09 (round-2 re-check: CLI 27+7+3=37 via `check_docs._command_inventory` + live parser; insights 57 via test count). Keep this doc updated when module internals change.
 
 ## `__init__.py`
 
