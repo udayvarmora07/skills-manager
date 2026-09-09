@@ -683,6 +683,26 @@ Hermetic probes (fresh tmp envs incl. isolated `HOME` for scope tests, no produc
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 46 — Skills-catalog + encoding-deep-dive + bounds-rotation campaign, round 15 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, inline heredocs, no product-code changes) covering the goal's skill requirements plus bound-family rotation; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, complexity, diff).
+- [x] T2 catalog audit (62 `~/.agents/skills`, incl. `sy-1` probe residue already cleaned round 12) + `first-principles-production-engineering` loaded and applied (smallest-change, verification-before-claims, root-cause loops).
+- [x] T3 `find-skills` loaded; decision: no install — stdlib-only constraint + hermetic-probe workflow need no ecosystem skill; recorded here.
+- [x] T4 T2b deep-dive (26 `read_text` sites classified; only archive/validator catch decode; user-visible is fail-closed exit-1/JSON-error; finding commented on issue #13 with fix options).
+- [x] T5 P0 rotation (003 rejected + no dest; 004 bounded `ValueError`; 005 block+flow `FrontmatterError`).
+- [x] T6 archive budgets (member-count 201, nesting 20, path-length 520 — all rejected).
+- [x] T7 parser limits (keys/scalar bounded; deep-nest + huge-doc parsed without crash).
+- [x] T8 search timing (6 adversarial patterns ≤ 184ms or clean `ValueError`).
+- [x] T9 REST matrix (Host/Fetch/Referer/Origin → 403; 5 security headers live).
+- [x] T10 CLI contracts (8 missing-skill + 3 invalid-name paths: rc 1, clean messages, zero tracebacks).
+- [x] T11 docs truth (gates PASS; insights 57; CLI 27+7+3=37; versions `1.0.0`).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).

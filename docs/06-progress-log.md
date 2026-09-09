@@ -4,6 +4,17 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Skills-catalog + encoding-deep-dive + bounds-rotation campaign, round 15 (12 probes green, zero code)
+
+- Goal skill requirements: catalog audited (62 installed incl. both required skills); `first-principles-production-engineering` loaded and applied throughout (smallest-change, verification-before-claims, root-cause-not-symptom); `find-skills` loaded with a recorded no-install decision (stdlib-only + hermetic workflow needs nothing external).
+- T2b deep-dive (commented on issue #13, no code): all 26 `read_text(encoding="utf-8")` sites classified — only `archive.py:167` + `validator.py:382` catch decode errors; user-visible behavior is fail-closed (CLI exit 1 clean message via `cli.py:107` `ValueError` path, REST JSON errors) with the sharp edge narrowed to `scan_dir` raising raw + codec-naming messages. Fix options (a)/(b)/(c) recorded on the issue.
+- Rotation probes: P0-003/004/005 green; archive budgets (201 members / 20 nesting / 520 path) rejected; parser keys+scalar bounded; search ≤184ms; REST 4×403 + 5 headers; CLI 11 paths rc-1 clean.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-15 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Global-flags + lifecycle-defaults campaign, round 14 (11 probes green, zero code)
 
 - Hermetic probes (fresh tmp envs, isolated `HOME` for scope tests, outside the repo; zero product-code changes): T3 init layout + idempotent re-init; T4 webui flags + `gui` alias; T5 `--data-dir` alt-root + color flags; T6 `skills-mgr 1.0.0`; T7 remove default-trash/`--purge`/`--trash` + missing-restore error; T8 sync defaults with isolated `HOME` → `(none)` targets, no live writes (round-12 `sy-1` lesson applied); T9 JSON parity across six commands; T10 uniform name-error message (`-lead` reaches argparse option parsing first — CLI convention, recorded not flagged); T11 smokes PASS twice each.
