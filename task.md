@@ -703,6 +703,26 @@ Hermetic probes (stdlib only, inline heredocs, no product-code changes) covering
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 47 — Suite-health + stability campaign, round 16 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, inline heredocs, no product-code changes) over suite stability, gate coverage, workflows, hygiene, and P0 rotation; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, complexity, diff).
+- [x] T2 gating re-confirmed (#5 OPEN 0 comments; #13 OPEN 1 deep-dive comment; ZIP rejection-only).
+- [x] T3 concurrency file 5/5 green (no flake this round; round-5 single slow-join noted as scheduling).
+- [x] T4 full suite 2/2 green back-to-back (18.2s + 18.4s).
+- [x] T5 suite health (0 skips; 301 counted; per-file table recorded; `-v` shows 300 `ok` + 1 diagnostic-print line, not a skip).
+- [x] T6 gate coverage (`CURRENT_DOCS` pins v1.1.0 discovery + v0.3.0 context; round milestones live in `task.md`/progress-log by design).
+- [x] T7 workflows (ci: unit/adversarial/package/docs/xplat/browser; release: build/verify/attest/testpypi/pypi/github-release; CI contracts 20/20).
+- [x] T8 tracked-junk zero (`dist/`/egg-info/pycache/`.pyc` untracked).
+- [x] T9 deferred untouched (zero comments each) + PyPI still 404.
+- [x] T10 P0 rotation (003 rejected + no dest; 004 bounded; 005 flow `FrontmatterError`).
+- [x] T11 compliance (AGENTS.md ALWAYS + 12-step protocol present; rounds evidence each step).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).

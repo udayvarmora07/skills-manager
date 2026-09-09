@@ -4,6 +4,15 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Suite-health + stability campaign, round 16 (11 probes green, zero code)
+
+- Hermetic probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): T3 concurrency file 5/5 green (round-5 slow-join stands as scheduling, not a contract break); T4 full suite 2/2 back-to-back green; T5 suite health — 0 skips, 301 counted (per-file: insights 57, store 47, web_scopes 27, store_contracts 27, webapp 21, ci_release 20, path_safety 22, archive 14, frontmatter 14, search 11, scope 11, cli 6, complexity 6, docs 5, package 4, concurrency 4, compat 3, smoke_fixtures 2; `-v` shows 300 `... ok` lines + 1 diagnostic-print line, not a skip); T6 gate pins v1.1.0 + v0.3.0 in `CURRENT_DOCS`; T7 workflows + CI contracts 20/20; T8 tracked-junk zero; T9 deferred + PyPI 404; T10 P0 rotation green.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-16 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Skills-catalog + encoding-deep-dive + bounds-rotation campaign, round 15 (12 probes green, zero code)
 
 - Goal skill requirements: catalog audited (62 installed incl. both required skills); `first-principles-production-engineering` loaded and applied throughout (smallest-change, verification-before-claims, root-cause-not-symptom); `find-skills` loaded with a recorded no-install decision (stdlib-only + hermetic workflow needs nothing external).
