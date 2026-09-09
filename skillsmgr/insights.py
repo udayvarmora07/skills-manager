@@ -17,6 +17,7 @@ explicitly ``unresolved`` per ADR-002 until the approval-gated
 
 from __future__ import annotations
 
+import copy
 import difflib
 import re
 from typing import Callable
@@ -81,8 +82,17 @@ def _require_records(records: object, label: str) -> list:
     return records
 
 
+def _require_optional_str(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string when present")
+    return value
+
+
 def _record_copy(record: dict) -> dict:
-    return {key: record.get(key) for key in sorted(record.keys())}
+    return copy.deepcopy({key: record.get(key)
+                          for key in sorted(record.keys())})
 
 
 def _coerce_tokens(value: object) -> int | None:
@@ -103,6 +113,8 @@ def _coerce_tokens(value: object) -> int | None:
 def consumer_view(records: list[dict], consumer: str) -> dict:
     """Group one consumer's visible instances without resolving precedence."""
     _require_records(records, "records")
+    if not isinstance(consumer, str):
+        raise ValueError("consumer must be a string")
     visible = [
         _record_copy(record)
         for record in records
@@ -261,6 +273,9 @@ def update_preview(current: dict, incoming: dict,
         snapshots = []
     elif not isinstance(snapshots, list):
         raise ValueError("snapshots must be a list of snapshot ids")
+    for item in snapshots:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("snapshots must be a list of snapshot ids")
     snapshots = list(snapshots)
     diff = diff_skills(current, incoming)
     risks: list[str] = []
@@ -287,6 +302,8 @@ def update_preview(current: dict, incoming: dict,
 def quarantine_plan(name: str, source: str = "unknown") -> dict:
     """Return a stage-only quarantine plan; performs zero disk mutation."""
     canonical = _canonical_name(name, "name")
+    if not isinstance(source, str):
+        raise ValueError("source must be a string")
     return {
         "name": canonical,
         "source": source,
@@ -395,15 +412,23 @@ def registry_preview(entry: dict, trust_confirmed: bool = False) -> dict:
     if not trust_confirmed:
         blockers.append("trust not confirmed: review source preview and "
                         "provenance, then confirm explicitly")
-    if not (entry.get("description") or "").strip():
+    description = entry.get("description")
+    if not isinstance(description, str) or not description.strip():
         blockers.append("entry has no description; provenance is incomplete")
+        description = description if isinstance(description, str) else ""
+    source = entry.get("source", "unknown")
+    _require_optional_str(source, "source")
+    target_scope = entry.get("scope", "global")
+    _require_optional_str(target_scope, "scope")
+    content_hash = _require_optional_str(entry.get("content_hash"),
+                                         "content_hash")
     steps = ["download", "validate", "stage", "activate"]
     return {
         "name": name,
-        "source": entry.get("source", "unknown"),
-        "description": entry.get("description", ""),
-        "content_hash": entry.get("content_hash"),
-        "target_scope": entry.get("scope", "global"),
+        "source": source,
+        "description": description,
+        "content_hash": content_hash,
+        "target_scope": target_scope,
         "dry_run": steps,
         "may_install": not blockers,
         "blockers": blockers,
@@ -434,6 +459,8 @@ def eval_score(plan: dict, outputs: list[str],
         raise ValueError("plan cases must be a list")
     if not isinstance(outputs, list):
         raise ValueError("outputs must align one-to-one with plan cases")
+    if not callable(scorer):
+        raise ValueError("scorer must be a callable")
     if len(outputs) != len(cases):
         raise ValueError("outputs must align one-to-one with plan cases")
     passed = sum(1 for case, output in zip(cases, outputs)
