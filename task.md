@@ -663,6 +663,26 @@ Hermetic probes (fresh tmp envs, no product-code changes) over add/view/create/l
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 45 — Global-flags + lifecycle-defaults campaign, round 14 (2026-09-09, 15 tasks)
+
+Hermetic probes (fresh tmp envs incl. isolated `HOME` for scope tests, no product-code changes) over init/webui/globals/version/remove/sync-defaults/JSON-shapes/name-errors/smoke-idempotence; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff) + issues #5/#12/#13 OPEN.
+- [x] T2 gating re-confirmed (zero comments; ZIP rejection-only).
+- [x] T3 init (layout skills/db/templates/backups/trash; idempotent re-init).
+- [x] T4 webui (`--host/--port/--no-browser` flags; `gui` alias shares help).
+- [x] T5 globals (`--data-dir` creates alt root; `--color/--no-color` accepted).
+- [x] T6 version (`skills-mgr 1.0.0`, `prog="skills-mgr"`).
+- [x] T7 remove (default trash with hint; `--purge` deletes; `--trash` explicit; missing-restore clean error).
+- [x] T8 sync defaults (isolated `HOME`: `(none)` targets + clean message; no live-scope writes this round).
+- [x] T9 JSON parity (list/view-17/search/doctor-15/stats/history shapes all parse).
+- [x] T10 name errors (uniform `must match` message; `-lead` hits argparse option parsing — CLI convention, not a bug).
+- [x] T11 smokes idempotent (store + web PASS twice in a row).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).

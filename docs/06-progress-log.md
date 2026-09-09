@@ -4,6 +4,15 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Global-flags + lifecycle-defaults campaign, round 14 (11 probes green, zero code)
+
+- Hermetic probes (fresh tmp envs, isolated `HOME` for scope tests, outside the repo; zero product-code changes): T3 init layout + idempotent re-init; T4 webui flags + `gui` alias; T5 `--data-dir` alt-root + color flags; T6 `skills-mgr 1.0.0`; T7 remove default-trash/`--purge`/`--trash` + missing-restore error; T8 sync defaults with isolated `HOME` → `(none)` targets, no live writes (round-12 `sy-1` lesson applied); T9 JSON parity across six commands; T10 uniform name-error message (`-lead` reaches argparse option parsing first — CLI convention, recorded not flagged); T11 smokes PASS twice each.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-14 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Remaining-CLI + frontend-seam campaign, round 13 (11 probes green, zero code)
 
 - Hermetic probes (fresh tmp envs, outside the repo; zero product-code changes): T3 add (`--name` requires frontmatter rename first — `store.py:728-732` contract, not a bug); T4 view raw/JSON (17 keys); T5 create extended flags; T6 list/search filters; T8 install (dry-run default prints `running:` banner, `--dry-run` bare command; `../evil` passes the shared char-allowlist — the control is runner-allowlist + dry-run-first + confirm gate per threat-model H-1, probe recorded not flagged); T9 export/backup alias + `open` resync; T10 snapshot rollback byte-accurate; T11 `domain.js` (`parseFrontmatter` enriches compat/tools only — first-pass probe assumed full frontmatter, corrected with evidence).
