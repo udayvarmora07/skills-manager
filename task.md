@@ -583,6 +583,26 @@ Hermetic spot-probes (stdlib only, `/tmp` scripts, no product-code changes) conf
 - [x] T14 clean diff review, commit, and push of exactly the intended files.
 - [x] T15 final ladder re-run + evidence (recorded in progress log).
 
+## Milestone 41 — Support-module + finding-filing campaign, round 10 (2026-09-09, 15 tasks)
+
+Hermetic probes (stdlib only, inline heredocs, no product-code changes) over colors/cli_output/history/web-static/path_safety/validator/frontmatter/atomic_io/insights-trust + T2b filed as issue #13; no locked-constraint changes. L2 ZIP and issues #12/#13 await approval — no code until then.
+
+- [x] T1 baseline ladder green (301 unittest, docs, diff).
+- [x] T2 T2b encoding finding filed as issue #13 (repro + smallest-fix sketch + scope questions; no code).
+- [x] T3 colors (`Colors.paint`, NO_COLOR/FORCE_COLOR, empty-text, helpers).
+- [x] T4 `cli_output` (`render_table` list-of-lists + header bold, `truncate`, `print_json`, `err` to stderr).
+- [x] T5 history/stats (limit clamp/0/missing; total/active/disabled/trashed counts).
+- [x] T6 web static (`/`, `/app.js`, vendored Vue) + raw (`text/plain`, scope-404, traversal-404).
+- [x] T7 `path_safety` (`\`/drive/`..`/absolute rejected on POSIX; valid composes under root).
+- [x] T8 validator (valid/use-context/token-over-5000/name-mismatch contracts).
+- [x] T9 frontmatter dump (quote/nested round-trips; flow-mapping `TypeError` scoped to bracket lists; dup-key loud).
+- [x] T10 `atomic_io` (write/replace, no stranded temps, deterministic + sensitive tree hash, lock context).
+- [x] T11 insights trust gates (quarantine `stage-only`/`activated:false`, blank/non-string rejected; registry trust gate both ways; JSON-clean).
+- [x] T12 harness `"passed": true` (5 viewports, exit 0) + fresh-tmp live seam OK.
+- [x] T13 docs hygiene (this milestone + progress-log entry).
+- [x] T14 clean diff review, commit, and push of exactly the intended files.
+- [x] T15 final ladder re-run + evidence (recorded in progress log).
+
 ## Milestone 30 — Insights audit round 5 (2026-09-09, next 10)
 
 - [x] T1 baseline ladder green on clean tree (296 unittest, smokes, gates recorded).

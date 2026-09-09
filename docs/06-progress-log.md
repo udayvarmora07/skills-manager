@@ -4,6 +4,16 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-09 — Support-module + finding-filing campaign, round 10 (11 probes green, zero code)
+
+- Filed round-7 T2b as issue #13 (`[BUG] Non-UTF8 SKILL.md escapes scan_dir/doctor/resync as raw UnicodeDecodeError`; repro + smallest-fix sketch + skip-vs-malformed-vs-error scope questions; no code).
+- Hermetic probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): T3 `Colors` (piped-off default, NO_COLOR/FORCE_COLOR, empty-text, helper codes); T4 `cli_output` (`render_table` is list-of-lists→str with bold header, `truncate`, `print_json`, `err` to stderr); T5 history/stats edges; T6 web static + raw (`text/plain`, scope-404, traversal-404); T7 `path_safety` (`\`/drive/`..`/absolute rejected on POSIX); T8 validator limits; T9 dump edges (flow-mapping `TypeError` is bracket-list-only — block sequences of mappings are the supported shape); T10 atomic writes + tree hashes; T11 quarantine/registry trust gates. First-pass probe bugs (module-level `color()`, dict-shaped `render_table`, flow-vs-block scope) corrected against source with evidence.
+- T12/T15: harness `"passed": true` (5 viewports, exit 0) + fresh-tmp lifecycle OK; final ladder below.
+
+## 2026-09-09 — Round-10 final ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK; both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Steady-state verification, round 9 (spot-probes green, zero code)
 
 - Hermetic spot-probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): L2/L6 still gated (#5 + #12 OPEN zero comments; ZIP rejection-only); deferred #3/#4/#8/#11 untouched; P0-001 traversal rejected + victim survives; archive ZIP-rejects with reason and versioned tar round-trips; alternating wildcard → clean `ValueError`; escape warns / `https` clean; REST purge-403 + trash-preserved / form-415 / bad-install-400-JSON / long-query-400; CLI isolation per data-dir + exit 1/2 contracts; versions `1.0.0` aligned with no bump/tag/publish, PyPI still 404, package-data honest UNAVAILABLE; worktrees all unmerged as documented.
