@@ -4,6 +4,28 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-10 — Release-pipeline rehearsal for a candidate version
+
+- The `release.yml` build + verify half was rehearsed against a clean
+  `git archive HEAD` copy with a candidate version (`1.0.1`) applied **only in
+  the copy**, so the remaining publication path is proven rather than assumed:
+  `RELEASE_TAG=v1.0.1` passes the workflow's tag/version gate
+  (`tag == "v" + version`), `python -m build --wheel --sdist` succeeds,
+  `check_package_data.py --dist-dir` PASSes on the exact candidate artifacts,
+  all 315 unittest pass, `check_docs.py` PASSes, `check_complexity.py` PASSes,
+  and a fresh venv clean-installs the candidate wheel with `--no-index --no-deps`
+  and runs `--help`.
+- The rehearsal found two concrete release-pipeline requirements that a
+  maintainer version bump must satisfy, which is exactly the kind of thing it
+  existed to find: `check_docs.py` pins the documented `__version__` in
+  `docs/01-architecture.md` and `docs/02-modules.md`, so bumping
+  `pyproject.toml` + `skillsmgr/__init__.py` alone fails BOTH the `docs`
+  consistency test and the `verify` job. With those two doc lines updated the
+  whole rehearsal goes green. A release bump is therefore a 4-line change
+  (`pyproject.toml`, `skillsmgr/__init__.py`, `docs/01-architecture.md`,
+  `docs/02-modules.md`) followed by rebuild + re-verification.
+- CI is green for every commit in this round, including `f0aea5d` (15/15 jobs).
+
 ## 2026-09-10 — CI flake root cause: read-time stamp in no-mutation assertions
 
 - CI run 34490116017 failed only on `unit (py3.14)`:

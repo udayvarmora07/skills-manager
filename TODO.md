@@ -605,6 +605,23 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   expectation on Windows, Chrome DevTools port discovery, the Node 20 WebSocket
   gap, and a flaky fixed-timeout join. No tag was created and nothing was
   published; the release gate remains unfulfilled by external configuration.
+  **Rehearsed 2026-09-10 (nothing published):** the workflow's build + verify
+  half was run against a clean `git archive HEAD` copy with a candidate version
+  applied only in that copy — tag/version gate PASS for `v1.0.1`, build once,
+  `--dist-dir` gate PASS on the candidate artifacts, 315 unittest OK,
+  `check_docs.py` PASS, complexity PASS, clean wheel install PASS. The rehearsal
+  found that `check_docs.py` pins the documented `__version__` in
+  `docs/01-architecture.md` and `docs/02-modules.md`, so a version bump is a
+  4-line change (those two files plus `pyproject.toml` and
+  `skillsmgr/__init__.py`) before rebuilding.
+  **Exact remaining steps (maintainer-gated):** (1) register a PyPI trusted
+  publisher (and TestPyPI) for this repository/workflow/environments — only the
+  account owner can do this; (2) create the GitHub `testpypi` and protected
+  `release` environments; (3) choose the release version and apply the 4-line
+  bump; (4) tag `v<version>` and push — the workflow then builds once, attests
+  provenance, publishes to TestPyPI, then PyPI, creates the GitHub Release, and
+  verifies the published install. Everything up to and including step 4's local
+  equivalents is proven green.
 
 **Acceptance gate:** L1 and L4 recorded on their issues; L2 green on the
 full ladder with corpus regressions; L3 `[?]`s closed with sources; L5

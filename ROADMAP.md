@@ -33,7 +33,12 @@ shipped; the remaining lines below are future or rejected directions:
   publisher is registered (`pypi.org`/`test.pypi.org` both 404 for this
   package), and tag `v1.0.0` already points at the earlier release commit, so
   publishing this slice needs a maintainer version-bump + tag decision. The CI
-  prerequisite is met: run 34488162920 is green across all 15 jobs.
+  prerequisite is met: CI is green across all 15 jobs, and the workflow's build
+  + verify half was rehearsed against a candidate version (tag/version gate,
+  build once, exact-artifact gate, tests, docs, complexity, clean wheel
+  install — all PASS). Remaining steps are maintainer-gated: register the PyPI
+  trusted publisher, create the `testpypi`/`release` environments, choose the
+  version (a 4-line bump), then tag and monitor.
 
 ## Ambitious (exploring)
 
