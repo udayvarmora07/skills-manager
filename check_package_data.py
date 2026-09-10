@@ -238,6 +238,19 @@ def run_check(project_root: Path = ROOT, *, install: bool = False, require_build
             return 1
         for report in reports:
             print(f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; Vue {report.vue_size} bytes)")
+        if install:
+            # Release jobs inspect exact artifacts and then install those exact
+            # artifacts; a silently ignored --install would look like verified
+            # installation without running one.
+            with tempfile.TemporaryDirectory(prefix="skillsmgr-package-install-") as temp:
+                temp_root = Path(temp)
+                try:
+                    for artifact in (wheels[0], sdists[0]):
+                        clean_install(artifact, temp_root)
+                        print(f"PASS: clean install {artifact.name}")
+                except (BuildUnavailable, BuildFailed, AssertionError) as exc:
+                    print(f"UNAVAILABLE: {exc}" if isinstance(exc, BuildUnavailable) else f"FAIL: {exc}", file=sys.stderr)
+                    return 2 if isinstance(exc, BuildUnavailable) and not require_build else 1
         return 0
     with tempfile.TemporaryDirectory(prefix="skillsmgr-package-check-") as temp:
         temp_root = Path(temp)

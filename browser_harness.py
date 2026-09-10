@@ -36,27 +36,41 @@ def _chrome() -> str:
     raise RuntimeError("Chrome/Chromium is required for browser_harness.py")
 
 
-def _devtools_port(process: subprocess.Popen[str]) -> int:
-    deadline = time.monotonic() + 10
+def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float = 30.0) -> int:
+    """Return the DevTools port Chrome actually bound.
+
+    Chrome writes the port it bound to ``DevToolsActivePort`` inside its
+    profile directory. Letting the OS choose the port (``--remote-debugging-
+    port=0``) and reading that file keeps the probe working when 9222 is taken
+    and gives a cold runner more than a few seconds to start Chrome.
+    """
+    port_file = profile / "DevToolsActivePort"
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError("Chrome exited before DevTools became available")
         try:
-            with urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=0.2) as response:
-                if response.status == 200:
-                    return 9222
-        except (OSError, urllib.error.URLError):
+            port = int(port_file.read_text(encoding="utf-8").splitlines()[0])
+        except (OSError, ValueError, IndexError):
             time.sleep(0.05)
+            continue
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.5) as response:
+                if response.status == 200:
+                    return port
+        except (OSError, urllib.error.URLError):
+            pass
+        time.sleep(0.05)
     raise RuntimeError("Chrome DevTools endpoint did not start")
 
 
-def _run_probe(url: str, width: int, height: int) -> dict:
+def _run_probe(url: str, width: int, height: int, port: int) -> dict:
     """Use Chrome's remote debugging endpoint through a tiny Node CDP client."""
     script = r"""
 const http = require('http');
 const WebSocket = globalThis.WebSocket;
-const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]);
-function getJson(path) { return new Promise((resolve, reject) => { const req=http.request('http://127.0.0.1:9222' + path, {method:'PUT'}, r => { let b=''; r.on('data', x=>b+=x); r.on('end',()=>resolve(JSON.parse(b))); }); req.on('error',reject); req.end(); }); }
+const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]), port = Number(process.argv[4]);
+function getJson(path) { return new Promise((resolve, reject) => { const req=http.request('http://127.0.0.1:' + port + path, {method:'PUT'}, r => { let b=''; r.on('data', x=>b+=x); r.on('end',()=>resolve(JSON.parse(b))); }); req.on('error',reject); req.end(); }); }
 (async () => {
   const tabs = await getJson('/json/new?' + encodeURIComponent(url));
   const ws = new WebSocket(tabs.webSocketDebuggerUrl);
@@ -71,7 +85,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   ws.close(); console.log(JSON.stringify({width,height,document:JSON.parse(value.result.result.value),errors,warnings,failed}));
 })().catch(e=>{ console.error(e.stack||String(e)); process.exit(1); });
 """
-    result = subprocess.run(["node", "-e", script, url, str(width), str(height)], capture_output=True, text=True, timeout=20)
+    result = subprocess.run(["node", "-e", script, url, str(width), str(height), str(port)], capture_output=True, text=True, timeout=20)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     lines = [line for line in result.stdout.splitlines() if line.strip()]
@@ -90,10 +104,11 @@ def run() -> int:
         server = WebAppServer(store, port=0)
         server_thread = Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
-        chrome = subprocess.Popen([_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=9222", "--user-data-dir=" + str(Path(directory) / "chrome"), "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        profile = Path(directory) / "chrome"
+        chrome = subprocess.Popen([_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
         try:
-            _devtools_port(chrome)
-            results = [_run_probe(server.url, width, height) for width, height in VIEWPORTS]
+            port = _devtools_port(chrome, profile)
+            results = [_run_probe(server.url, width, height, port) for width, height in VIEWPORTS]
             failures = [r for r in results if r["errors"] or r["failed"] or r["document"]["overflow"]]
             print(json.dumps({"viewports": results, "passed": not failures}, indent=2))
             return 1 if failures else 0

@@ -110,7 +110,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Compile
-        run: python -m py_compile skillsmgr/*.py tests/test_path_safety.py tests/test_archive_contracts.py tests/test_ci_release_contracts.py check_package_data.py
+        run: python -m compileall -q skillsmgr tests check_package_data.py smoke_store.py smoke_web.py browser_harness.py check_docs.py check_complexity.py
       - name: Path, archive, package-data contracts
         run: python -m unittest tests.test_path_safety tests.test_archive_contracts tests.test_package_data tests.test_ci_release_contracts.CrossPlatformContractTests
 

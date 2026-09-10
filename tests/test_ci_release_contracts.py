@@ -70,7 +70,10 @@ class CiWorkflowContractTests(unittest.TestCase):
         text = _workflow_text("ci.yml")
         xplat = text.split("\n  xplat:", 1)[1].split("\n  browser:", 1)[0]
         self.assertNotIn("run: python3 -m", xplat)
-        self.assertIn("run: python -m py_compile", xplat)
+        # compileall takes directories and files, so the command works on
+        # Windows runners where the shell does not expand "skillsmgr/*.py".
+        self.assertIn("run: python -m compileall", xplat)
+        self.assertNotIn("*.py", xplat)
         self.assertIn("run: python -m unittest", xplat)
 
     def test_ci_browser_job_runs_harness_and_both_frontend_syntax_checks(self):
@@ -157,6 +160,39 @@ class CrossPlatformContractTests(unittest.TestCase):
             wheel.unlink()
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(check_package_data.run_check(dist_dir=dist_dir), 1)
+
+    def test_dist_dir_install_flag_actually_installs_exact_artifacts(self):
+        import contextlib
+        import io
+        import tarfile
+        import tempfile
+        import zipfile
+        from unittest import mock
+
+        members = {
+            name: (b"vue payload" if name == check_package_data.VUE_MEMBER else b"asset")
+            for name in check_package_data.expected_webui_members()
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            dist_dir = Path(directory) / "dist"
+            dist_dir.mkdir()
+            wheel = dist_dir / "skills_manager-1.0.0-py3-none-any.whl"
+            with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
+                for name, data in sorted(members.items()):
+                    archive.writestr(name, data)
+            sdist = dist_dir / "skills_manager-1.0.0.tar.gz"
+            with tarfile.open(sdist, "w:gz") as archive:
+                for name, data in sorted(members.items()):
+                    info = tarfile.TarInfo("skills_manager-1.0.0/" + name)
+                    info.size = len(data)
+                    info.mtime = 0
+                    archive.addfile(info, io.BytesIO(data))
+            installed: list[str] = []
+            with mock.patch.object(
+                check_package_data, "clean_install", side_effect=lambda artifact, root: installed.append(artifact.name)
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(check_package_data.run_check(dist_dir=dist_dir, install=True), 0)
+            self.assertEqual(installed, [wheel.name, sdist.name])
 
 
 class ReleaseWorkflowContractTests(unittest.TestCase):
