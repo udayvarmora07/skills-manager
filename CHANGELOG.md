@@ -33,6 +33,10 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   into the index so `stats()`/`doctor()` agree with `trash_list()`.
 - Manifest validation rejects a non-boolean `full` flag and non-plain
   `trash`/`templates` entry names before any filesystem work.
+- The REST no-mutation tests compare persisted state instead of
+  `Store.get()` snapshots that embed the read-time `observed_at` stamp, which
+  made them fail whenever two reads straddled a UTC second boundary (seen on
+  the Python 3.14 CI leg). A genuine mutation is still detected.
 - The concurrency contract helper waits for worker threads with a generous
   deadline instead of a fixed 10 s per-thread join, which flaked on loaded CI
   runners while still detecting genuinely stuck threads.

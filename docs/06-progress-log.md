@@ -4,6 +4,25 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-10 — CI flake root cause: read-time stamp in no-mutation assertions
+
+- CI run 34490116017 failed only on `unit (py3.14)`:
+  `test_malformed_patch_fields_return_json_400_without_mutation` reported
+  `updated_at`-looking timestamps `...:36:23Z` vs `...:36:22Z`. Root cause (not a
+  product mutation): `Store.get()` decorates the stored row with observations
+  computed at read time, and `observations.document_observations()` stamps
+  `observed_at` with `datetime.now(timezone.utc)`. The test compared two full
+  `Store.get()` snapshots, so it failed whenever the three 400-returning HTTP
+  requests straddled a UTC second boundary — a race in the test, exactly like the
+  earlier fixed-timeout join, and it happened to surface on the slowest leg.
+- Fixed at the root in `tests/test_webapp.py`: a `_persisted()` helper compares
+  the stored row (minus only the read-time `observed_at` stamp) plus the document
+  bytes. Verified that the assertion still fails on a real mutation
+  (`store.edit()` between reads) and passes on a stamp-only change, so the
+  no-mutation contract keeps its teeth while the timing assumption is gone.
+- Verification: 315 unittest → OK, `check_docs.py` → PASSED,
+  `check_complexity.py` → PASSED (157 functions), `git diff --check` → OK.
+
 ## 2026-09-10 — ZIP import verified end to end through the real CLI
 
 - Unit tests exercise `Store.import_` directly, so the shipped surface was also

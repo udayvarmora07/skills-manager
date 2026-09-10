@@ -33,6 +33,21 @@ class WebAppTestCase(unittest.TestCase):
         )
         cls._thread.start()
 
+    @staticmethod
+    def _persisted(store, name):
+        """Return the durable state of one skill, without read-time stamps.
+
+        ``Store.get()`` decorates the stored row with observations computed at
+        read time (``observed_at`` is stamped with ``datetime.now()``), so two
+        reads that straddle a UTC second boundary differ even when nothing was
+        written. The no-mutation contract is about persisted state, so compare
+        the stored row and the document bytes and drop only the read-time stamp.
+        """
+        record = dict(store.get(name))
+        record.pop("observed_at", None)
+        document = (store.skills_dir / name / "SKILL.md").read_text(encoding="utf-8")
+        return record, document
+
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
@@ -202,7 +217,7 @@ class WebAppTestCase(unittest.TestCase):
 
     def test_scalar_metadata_types_return_json_400_without_mutation(self):
         store = self.server.httpd.store
-        before = (store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"))
+        before = self._persisted(store, "demo")
         for method, path, base in (
             ("POST", "/api/skills", {"name": "bad-meta", "description": "bad"}),
             ("PATCH", "/api/skills/demo", {}),
@@ -219,12 +234,12 @@ class WebAppTestCase(unittest.TestCase):
                     urllib.request.urlopen(request)
                 self.assertEqual(ctx.exception.code, 400, (method, field))
                 self.assertEqual(json.loads(ctx.exception.read()), {"error": f"{field} must be a string"})
-        self.assertEqual((store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8")), before)
+        self.assertEqual(self._persisted(store, "demo"), before)
         self.assertFalse((store.skills_dir / "bad-meta").exists())
 
     def test_malformed_patch_fields_return_json_400_without_mutation(self):
         store = self.server.httpd.store
-        before = (store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"))
+        before = self._persisted(store, "demo")
         for field in ("description", "body", "allowed_tools"):
             request = urllib.request.Request(
                 f"http://127.0.0.1:{self.port}/api/skills/demo",
@@ -237,7 +252,7 @@ class WebAppTestCase(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 400)
             expected = f"{field} must be a string"
             self.assertEqual(json.loads(ctx.exception.read()), {"error": expected})
-        after = (store.get("demo"), (store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8"))
+        after = self._persisted(store, "demo")
         self.assertEqual(after, before)
 
     def test_allowed_tools_lists_are_rejected_for_global_and_agent_scopes(self):
