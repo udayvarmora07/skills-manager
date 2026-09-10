@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-09-10
+
 ### Added
 
 - ZIP archive import for the existing `import` command and `PUT /api/import`

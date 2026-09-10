@@ -4,6 +4,48 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-10 — `v1.0.1` prepared and release infrastructure created
+
+- Version bumped to `1.0.1` in the four places the repository enforces:
+  `pyproject.toml`, `skillsmgr/__init__.py`, `docs/01-architecture.md`, and
+  `docs/02-modules.md` (the last two are pinned by `check_docs.py`; the earlier
+  rehearsal is what identified them). The workflow's tag/version gate was
+  simulated locally: `v1.0.1` == `pyproject` == `__version__`.
+- GitHub environments created via the API: `testpypi` (plain) and `release`
+  with a `required_reviewers` rule naming `udayvarmora07`, and
+  `prevent_self_review: false` so a single maintainer can approve their own tag
+  push instead of deadlocking the publish job. Verified by reading the
+  environment back (`environments: 2`).
+- Exact artifacts built once from a clean copy of the bumped tree with the pinned
+  `build==1.2.2.post1`: wheel `skills_manager-1.0.1-py3-none-any.whl` sha256
+  `d2e65a8b7991…` (172,363 B) and sdist `skills_manager-1.0.1.tar.gz` sha256
+  `cd1d51a93bf8…` (209,373 B). `check_package_data.py --dist-dir` PASSes on both
+  (5 web UI files, Vue 157,924 B); the wheel clean-installs into a fresh venv with
+  `--no-index --no-deps` and reports `skills-mgr 1.0.1`; the sdist installs with
+  `--no-deps --no-build-isolation` and reports the same, with the vendored Vue
+  bundle and `webui/domain.js` present. Full ladder on the bump: 315 unittest OK,
+  both smokes PASSED, `check_docs.py` PASSED, complexity PASSED (157 functions),
+  frontend syntax OK, compile OK, `git diff --check` OK.
+- **Recorded gotcha (found by a false verification result):** a stale,
+  gitignored `skills_manager.egg-info/` in the repo root (PKG-INFO `Version:
+  1.0.0`, left by a 2026-09-10 in-tree build) shadows the *installed*
+  distribution for `importlib.metadata` whenever Python runs with the repository
+  as cwd, so `importlib.metadata.version("skills-manager")` reported `1.0.0`
+  while the artifact was `1.0.1`. The stale tree was quarantined and the check
+  re-verified from both the repo cwd and a neutral cwd. CI is unaffected: a fresh
+  clone has no `egg-info`, and both post-publish verification steps compare
+  `skillsmgr.__version__` or install into a new venv.
+- **Post-publish follow-up (do not forget):** README's line 9 states "PyPI badge
+  tracks a future release: `skills-manager` is not on PyPI yet". After the first
+  successful publish that sentence and its pinning test
+  (`test_pypi_claims_are_qualified_until_publication_is_real`) must be updated
+  together, or the README will assert something false while CI stays green.
+- Still blocked externally: publishing needs the PyPI **and** TestPyPI pending
+  trusted publisher registered under the maintainer's account
+  (`pypi.org/manage/account/publishing/`,
+  `test.pypi.org/manage/account/publishing/`), which is a web login no API can
+  perform. Nothing was tagged or published.
+
 ## 2026-09-10 — Release-pipeline rehearsal for a candidate version
 
 - The `release.yml` build + verify half was rehearsed against a clean

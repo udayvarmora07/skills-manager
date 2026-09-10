@@ -6,7 +6,7 @@
 
 ## `__init__.py`
 
-`__version__ = "1.0.0"`. No other code.
+`__version__ = "1.0.1"`. No other code.
 
 ## `__main__.py`
 

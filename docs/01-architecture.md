@@ -9,7 +9,7 @@
 ```
 skills-manager/
   skillsmgr/
-    __init__.py      # __version__ = "1.0.0"
+    __init__.py      # __version__ = "1.0.1"
     __main__.py      # entry: python3 -m skillsmgr -> cli.main()
     cli.py           # stable adapter: main/build_parser + handler/private-helper aliases
     cli_parser.py    # argparse construction (27 top-level + 3 aliases; 7 nested)

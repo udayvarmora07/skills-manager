@@ -25,6 +25,20 @@ shipped; the remaining lines below are future or rejected directions:
 
 ## Release
 
+- **`v1.0.1` prepared, publishing awaits the PyPI trusted publisher (2026-09-10).**
+  Version bumped in the four enforced places (`pyproject.toml`,
+  `skillsmgr/__init__.py`, `docs/01-architecture.md`, `docs/02-modules.md`;
+  `check_docs.py` pins the last two). Built once from a clean copy of the bumped
+  tree: wheel `skills_manager-1.0.1-py3-none-any.whl` sha256 `d2e65a8b7991…`,
+  sdist `skills_manager-1.0.1.tar.gz` sha256 `cd1d51a93bf8…`; the exact-artifact
+  gate PASSes on both and both clean-install with working CLI CRUD, vendored web
+  assets, and `importlib.metadata` reporting `1.0.1`. GitHub environments
+  `testpypi` and `release` now exist, with `release` requiring reviewer approval
+  (self-review allowed so a single maintainer is not deadlocked). Remaining
+  step: register the PyPI **and** TestPyPI pending trusted publisher for
+  `skills-manager` → owner `udayvarmora07`, repo `skills-manager`, workflow
+  `release.yml`, environments `release`/`testpypi`; then tag `v1.0.1`.
+
 - **v1.0.0 gate holds, publication blocked externally (2026-09-10):** fresh wheel
   + sdist were built from the current tree and pass the exact-artifact
   package-data gate, and the wheel clean-installs with working CLI CRUD and
