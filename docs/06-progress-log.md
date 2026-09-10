@@ -4,6 +4,25 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-10 — ZIP import verified end to end through the real CLI
+
+- Unit tests exercise `Store.import_` directly, so the shipped surface was also
+  verified the way a user touches it: a full tar export
+  (`skills` + `trash` + `templates`) was converted to a ZIP that includes
+  explicit directory entries (`skills/`, `skills/<name>/`, `trash/…`) and
+  imported into a fresh data directory with
+  `python3 -m skillsmgr import full.zip --full --json`. Result: the live skill
+  restored, `restored_trash` and `restored_templates` both populated,
+  `trash list` showed the trashed skill, `stats` reported `trashed: 1`, the
+  template file was restored, and `doctor` reported `ok: true` — i.e. the index
+  and the filesystem agree after a full import.
+- Real-world writer compatibility was checked against third-party ZIP tools, not
+  only Python's `zipfile`: the system `zip -r` archive (with DOS-style explicit
+  directory entries, including the root `skills/` entry that a naive layout
+  allowlist rejects) and a `7z a -tzip` archive both imported successfully
+  through the CLI (`imported: ['real-zip']`). This is the compatibility case the
+  slash-only-directory and layout-allowlist changes were made for.
+
 ## 2026-09-10 — Release-gate execution (fresh artifacts) + CI portability fixes
 
 - L6 executed as far as the environment permits. Built once from a clean copy of
