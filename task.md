@@ -466,8 +466,8 @@ an authorized clean build/publish.
   zero errors and no overflow; a fresh temporary Store served one live skill
   through a loopback `WebAppServer`.
 - [x] T10 docs hygiene and finalization: this milestone and the progress log
-  record exact evidence; only intended documentation files are eligible for the
-  commit; final ladder and Git status/diff review remain the release check.
+  record exact evidence; only the four intended documentation files were
+  committed and pushed; the final ladder and Git status/diff review passed.
 
 ## Milestone 31 — Loop-engineering research verdicts (2026-09-09, start here next session)
 
