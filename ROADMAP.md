@@ -25,37 +25,24 @@ shipped; the remaining lines below are future or rejected directions:
 
 ## Release
 
-- **`v1.0.1` prepared, publishing awaits the maintainer's release tag (2026-09-10).**
-  Version bumped in the four enforced places (`pyproject.toml`,
-  `skillsmgr/__init__.py`, `docs/01-architecture.md`, `docs/02-modules.md`;
-  `check_docs.py` pins the last two). Built once from a clean copy of the bumped
-  tree: wheel `skill_control_plane-1.0.1-py3-none-any.whl` (distribution rename
-  invalidates the earlier `skills_manager` artifact hash), and sdist
-  `skill_control_plane-1.0.1.tar.gz`; the exact-artifact
-  gate PASSes on both and both clean-install with working CLI CRUD, vendored web
-  assets, and `importlib.metadata` reporting `1.0.1`. GitHub environments
-  `testpypi` and `release` now exist, with `release` requiring reviewer approval
-  (self-review allowed so a single maintainer is not deadlocked). Trusted
-  publishers for PyPI and TestPyPI are registered for `skill-control-plane`
-  → owner `udayvarmora07`, repo `skills-manager`, workflow `release.yml`,
-  environments `release`/`testpypi`; remaining step is the maintainer's tag
-  `v1.0.1` (no tag or publication was performed in this change).
+- **`v1.0.1` published successfully (2026-09-10).** The existing release
+  workflow built and verified the exact `skill_control_plane-1.0.1` wheel and
+  sdist, attested provenance, published to TestPyPI and PyPI, created the
+  GitHub Release, and passed post-publish install/CRUD verification. The
+  distribution is available at [PyPI](https://pypi.org/project/skill-control-plane/).
+  No publication action is performed by this documentation cleanup.
 
 - **HISTORICAL/SUPERSEDED — v1.0.0 gate holds, publication blocked externally
   (2026-09-10):** fresh wheel
   + sdist were built from the current tree and pass the exact-artifact
   package-data gate, and the wheel clean-installs with working CLI CRUD and
-  vendored web assets. Publishing is tag-triggered and cannot run yet: the
-  repository has no `release`/`testpypi` GitHub environments, no PyPI trusted
-  publisher is registered (`pypi.org`/`test.pypi.org` both 404 for this
-  package), and tag `v1.0.0` already points at the earlier release commit, so
-  publishing this slice needs a maintainer version-bump + tag decision. The CI
-  prerequisite is met: CI is green across all 15 jobs, and the workflow's build
-  + verify half was rehearsed against a candidate version (tag/version gate,
-  build once, exact-artifact gate, tests, docs, complexity, clean wheel
-  install — all PASS). Remaining steps are maintainer-gated: register the PyPI
-  trusted publisher, create the `testpypi`/`release` environments, choose the
-  version (a 4-line bump), then tag and monitor.
+  vendored web assets. Publishing was then tag-triggered and blocked by missing
+  release configuration; the subsequent `v1.0.1` workflow run completed
+  successfully, so this pre-publish record is retained only as history. The CI
+  prerequisite was met: CI was green across all 15 jobs, and the workflow's
+  build + verify half was rehearsed against a candidate version (tag/version
+  gate, build once, exact-artifact gate, tests, docs, complexity, clean wheel
+  install — all PASS).
 
 ## Ambitious (exploring)
 

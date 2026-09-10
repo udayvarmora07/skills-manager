@@ -5,8 +5,9 @@
 [![CI](https://github.com/udayvarmora07/skills-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/udayvarmora07/skills-manager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
+[![PyPI](https://img.shields.io/pypi/v/skill-control-plane.svg)](https://pypi.org/project/skill-control-plane/)
 
-> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. PyPI badge tracks a future release: `skill-control-plane` is not on PyPI yet, so install from source or `pip install` the CI-built wheel/sdist below. Distribution name `skill-control-plane` (`skills-mgr` entry point) is reserved for that release.
+> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. The `skill-control-plane` 1.0.1 distribution is published on PyPI; install it with `pip` or `pipx`. The Python import package remains `skillsmgr`, and the CLI entry point remains `skills-mgr`.
 
 ## Why this exists
 
@@ -32,13 +33,12 @@ The [Agent Skills](https://agentskills.io) format (`SKILL.md`) is now an open st
 
 Requires Python ≥ 3.10. The runtime is **stdlib-only** — no dependencies.
 
-PyPI is not published yet (see `.github/workflows/release.yml` for the
-controlled Trusted Publishing path). Until the first GitHub Release lands:
+The published PyPI package is the recommended installation path:
 
 ```bash
-pipx install skill-control-plane        # recommended (isolated)
-# or
 pip install skill-control-plane
+# or, for an isolated application environment
+pipx install skill-control-plane
 ```
 
 Run without installing:

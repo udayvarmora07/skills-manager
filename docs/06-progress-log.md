@@ -4,20 +4,34 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-10 — `skill-control-plane` 1.0.1 published successfully
+
+- The release workflow completed successfully through TestPyPI, PyPI, GitHub
+  Release, provenance attestation, and post-publish install/CRUD verification.
+- The published distribution is `skill-control-plane`; Python imports remain
+  `skillsmgr`, the executable remains `skills-mgr`, and the repository and
+  internal data/database names remain `skills-manager`.
+- README installation guidance now points to the published PyPI project with
+  `pip install skill-control-plane` and `pipx install skill-control-plane`.
+- This append-only documentation cleanup performs no publication, tag, or push.
+
 ## 2026-09-10 — Distribution renamed to `skill-control-plane`
 
-- **CURRENT RELEASE STATE:** Publisher registration and GitHub release
-  environments are complete. The only pending repository action is to create
-  and push tag `v1.0.1`; do not tag, push, or publish in this task.
-- Current package/release identity is now `skill-control-plane`; Python imports
+**HISTORICAL/SUPERSEDED pre-publish record:** Publisher registration and GitHub
+release environments were complete. The then-pending repository action was to
+create and push tag `v1.0.1`; the subsequent release workflow completed
+publication successfully, as recorded in the newer entry above.
+
+- Package/release identity was set to `skill-control-plane`; Python imports
   remain `skillsmgr`, the executable remains `skills-mgr`, and the GitHub
   repository remains `udayvarmora07/skills-manager`.
-- Release verification and README install commands use the new distribution
-  only where artifact/PyPI identity is required. Internal data paths, database
+- Release verification and README install commands used the new distribution
+  only where artifact/PyPI identity was required. Internal data paths, database
   names, product terminology, repository URLs, and historical release facts
-  intentionally retain `skills-manager`.
-- PyPI and TestPyPI trusted publishers are registered for distribution
-  `skill-control-plane` against `release.yml`; no tag or publication was done.
+  intentionally retained `skills-manager`.
+- PyPI and TestPyPI trusted publishers were registered for distribution
+  `skill-control-plane` against `release.yml`; no tag or publication had yet
+  occurred.
 
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
@@ -25,9 +39,8 @@
 ## 2026-09-10 — `v1.0.1` prepared and release infrastructure created
 
 **HISTORICAL/SUPERSEDED release-preparation record:** This entry preserves
-pre-registration and pre-environment observations. The current active release
-instruction is maintained at the top of this append-only log: after publisher
-registration, only tag/push remains; do not tag, push, or publish in this task.
+pre-registration and pre-environment observations. Publication is recorded in
+the newer entry above; this historical entry is not the current release state.
 
 - Version bumped to `1.0.1` in the four places the repository enforces:
   `pyproject.toml`, `skillsmgr/__init__.py`, `docs/01-architecture.md`, and
@@ -58,11 +71,9 @@ registration, only tag/push remains; do not tag, push, or publish in this task.
   re-verified from both the repo cwd and a neutral cwd. CI is unaffected: a fresh
   clone has no `egg-info`, and both post-publish verification steps compare
   `skillsmgr.__version__` or install into a new venv.
-- **Post-publish follow-up (do not forget):** README's line 9 states "PyPI badge
-  tracks a future release: `skills-manager` is not on PyPI yet". After the first
-  successful publish that sentence and its pinning test
-  (`test_pypi_claims_are_qualified_until_publication_is_real`) must be updated
-  together, or the README will assert something false while CI stays green.
+- **HISTORICAL/SUPERSEDED post-publish follow-up:** Before publication, README
+  line 9 and its pinning test carried a future-release claim. The newer entry
+  records their update after the successful publish.
 - **HISTORICAL/SUPERSEDED external blocker:** publishing then needed the PyPI
   **and** TestPyPI trusted publishers to be registered under the maintainer's
   account (`pypi.org/manage/account/publishing/`,

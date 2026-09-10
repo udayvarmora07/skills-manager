@@ -22,14 +22,11 @@
   existing skill, `--full` trash/templates install as one rolled-back
   transaction with index reconciliation, and manifest `full`/metadata types are
   validated before mutation. 315 unittest green (2026-09-10).
-- **L6 release gate: EXECUTED AS FAR AS THE ENVIRONMENT PERMITS.** The
-  `skill-control-plane` 1.0.1 wheel + sdist are covered by exact-artifact
-  checks; imports, CLI, and internal data/database names remain unchanged.
-  Trusted publishers are registered on PyPI and TestPyPI for the existing
-  `udayvarmora07/skills-manager` repository and `release.yml` workflow. **Current
-  active instruction: after publisher registration, the only pending repository
-  action is to create and push tag `v1.0.1`; do not tag, push, or publish in
-  this worktree.**
+- **L6 release: PUBLISHED SUCCESSFULLY (2026-09-10).** The
+  `skill-control-plane` 1.0.1 release completed through TestPyPI, PyPI, GitHub
+  Release, provenance attestation, and post-publish install/CRUD verification.
+  Imports, CLI, and internal data/database names remain unchanged. This
+  worktree performs no publish, tag, or push action.
 - CI portability defects (Windows glob, macOS resolved-path expectation, Chrome
   DevTools port discovery) are fixed in this round; dated milestones below are
   historical records and are not rewritten.
@@ -327,7 +324,7 @@
 - [x] Added `check_package_data.py --dist-dir` build-once inspection mode with hermetic regressions (pass on exact wheel+sdist, fail on missing member).
 - [x] Closed the Windows-separator containment gap hermetically: `contained_path()` and archive member validation reject `\` and drive-letter prefixes on every host (red-first, prior suite stayed green).
 - [x] Added tag-gated `release.yml`: validate tag/package-version alignment before build or publish; build once → verify exact artifacts → attest provenance → TestPyPI → protected `release` environment PyPI via Trusted Publishing (no long-lived token) → GitHub Release → tag/version/asset/CRUD/PyPI-install verification.
-- [x] Qualified PyPI claims honestly: badge removed, README states PyPI is a future release with source/CI-artifact install paths; classifiers extended to 3.13/3.14 to match the tested matrix.
+- [x] **HISTORICAL/SUPERSEDED pre-publish record:** Qualified PyPI claims before publication: badge removed, README stated PyPI was a future release with source/CI-artifact install paths; classifiers extended to 3.13/3.14 to match the tested matrix. The README now records the successful 1.0.1 publication.
 - [x] Locked all of the above with `tests/test_ci_release_contracts.py` (CI structure, xplat containment, build-once, release, PyPI-claim contracts); updated `TODO.md` Milestone 8, `CHANGELOG.md` Unreleased, `CONTRIBUTING.md` checks, and `docs/06-progress-log.md`.
 - [x] Verified: full unittest suite PASS, both smokes PASS, compile/`node --check`/`git diff --check` PASS, `check_docs.py` PASS, `check_complexity.py` PASS, YAML parses, `git status` shows only intended files.
 - [x] Closed release-integrity and cross-platform CI gaps found in review: release tags must equal the package version before build/publish; xplat jobs use the portable `python` executable on Windows; workflows use least-privilege permissions; browser CI runs the CDP harness plus both frontend syntax checks.

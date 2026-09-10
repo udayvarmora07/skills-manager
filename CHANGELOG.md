@@ -4,14 +4,14 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
-- Rename the published distribution to `skill-control-plane` while preserving
-  the `skills-manager` repository, product/data names, `skillsmgr` import package,
-  and `skills-mgr` CLI executable.
-
 ## [1.0.1] — 2026-09-10
 
 ### Added
 
+- Published the `skill-control-plane` 1.0.1 distribution through the controlled
+  TestPyPI → PyPI → GitHub Release workflow, including provenance attestation
+  and post-publish install/CRUD verification. The `skills-manager` repository,
+  `skillsmgr` import package, and `skills-mgr` CLI executable remain unchanged.
 - ZIP archive import for the existing `import` command and `PUT /api/import`
   route (issue #5, approved 2026-09-10): content-sniffed tar/ZIP detection,
   canonical member-name and layout allowlists, duplicate detection,

@@ -19,12 +19,11 @@ authorization — each item now carries a **FINAL:** line with evidence.
 **Execution update (2026-09-10):** L2 ZIP import is shipped in the approved
 scoped `import` extension and hardened by an adversarial audit round (per-member
 ratio budget, staged-commit rollback, transactional full-import restore, index
-reconciliation; 315 unittest green). L6 release preparation is complete for
-`skill-control-plane` 1.0.1: the PyPI and TestPyPI trusted publishers and the
-GitHub environments are registered for the existing `skills-manager`
-repository/workflow. **Current active instruction: after publisher registration,
-the only pending repository action is to create and push tag `v1.0.1`; do not
-publish or perform any other release action from this worktree.**
+reconciliation; 315 unittest green). L6 is published successfully: the
+`skill-control-plane` 1.0.1 release completed through TestPyPI, PyPI, GitHub
+Release, provenance attestation, and post-publish install/CRUD verification.
+This worktree only records the completed release; no publish, tag, or push is
+performed here.
 
 > This is the canonical execution backlog for the next product cycle. It is
 > deliberately risk-first: protect user data and make future regressions
@@ -56,8 +55,9 @@ publish or perform any other release action from this worktree.**
 - [x] The current baseline passes 47 `unittest` tests, `smoke_store.py`,
   `smoke_web.py`, `node --check skillsmgr/webui/app.js`, and CLI help.
 - [x] The repository is published to GitHub with tag `v1.0.0` and green CI.
-- [!] PyPI publication is not confirmed by the repository history; publishing
-  must use a clean artifact and a controlled release workflow.
+- [x] PyPI publication is confirmed for `skill-control-plane` 1.0.1 through
+  the controlled release workflow; TestPyPI, PyPI, GitHub Release, provenance,
+  and post-publish install/CRUD verification all succeeded.
   **HISTORICAL/SUPERSEDED (2026-09-10):** This pre-registration observation
   recorded the then-current PyPI 404 and stale-artifact blocker. It is retained
   as history; the current release state is maintained in L6 below.
@@ -449,9 +449,9 @@ stale or untested artifacts.
   publication.
   (2026-09-09: TestPyPI publish, then PyPI publish, then tag/version/asset/
   CRUD/PyPI-install verification steps; regression-tested.)
-- [x] Remove or qualify PyPI badge/install claims until publication is real.
-  (2026-09-09: PyPI badge removed; README states PyPI is a future release
-  and points at source/CI artifacts; regression-tested.)
+- [x] Update PyPI badge/install claims after publication.
+  (2026-09-10: README links the published `skill-control-plane` project and
+  documents `pip install`/`pipx install`; regression-tested.)
 
 **Acceptance gate:** release is reproducible from a clean checkout, the tested
 artifact is the published artifact, provenance is available, and post-publish
@@ -552,17 +552,14 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   (advisory-only, file-based, never blocking), extension #8 (separate
   repo; missing endpoints get their own ASK), team sharing #11
   (design-only ADR plus threat-model delta before any bundle format).
-- [/] L6 — Release only through the existing gate (2026-09-10: fresh artifacts
-  built and verified; publication is intentionally not performed): package
+- [x] L6 — Release completed through the existing gate (2026-09-10): package
   `1.0.1` == `__version__`; the published distribution is
   `skill-control-plane` while `skills-mgr`, `skillsmgr`, and the
   `skills-manager` repository/data names remain unchanged. `release.yml`
-  validates the tag/version, builds once, checks exact artifacts, attests, then
-  publishes to TestPyPI → protected PyPI → GitHub Release. Trusted publishers
-  for `skill-control-plane` are registered for both PyPI services against owner
-  `udayvarmora07`, repository `skills-manager`, workflow `release.yml`, and
-  environments `testpypi`/`release`. No version tag, publish, or post-publish
-  install claim has been made.
+  validated the tag/version, built once, checked exact artifacts, attested
+  provenance, published to TestPyPI → protected PyPI → GitHub Release, and
+  passed post-publish install/CRUD verification. This worktree performs no
+  publish, tag, or push action.
   **HISTORICAL/SUPERSEDED executed record (2026-09-10, pre-rename artifacts):** built once from a clean copy of the
   current tree with `build==1.2.2.post1`; wheel
   `skills_manager-1.0.0-py3-none-any.whl` sha256 `6e2dbac79f06…` (172 KB) and
@@ -590,31 +587,25 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   `https://test.pypi.org/pypi/skills-manager/json` → 404 (no project and no
   registered trusted publisher, so OIDC publishing would be rejected);
   `git ls-remote --tags origin` → only `v1.0.0` at `d94cc02` (an earlier release
-  commit), so publishing this slice needs a maintainer-owned version bump and
-  tag decision; the CI prerequisite is now met — run 34488162920 for `a3a055d`
-  is **success** across all 15 jobs (unit 3.10–3.14, adversarial, package, docs,
-  browser, and the 3 OS × 2 interpreter cross-platform matrix), after fixing the
-  Windows compile glob, the macOS resolved-path expectation, the ZIP backslash
-  expectation on Windows, Chrome DevTools port discovery, the Node 20 WebSocket
-  gap, and a flaky fixed-timeout join. No tag was created and nothing was
-  published; the release gate remains unfulfilled by external configuration.
-  **Rehearsed 2026-09-10 (nothing published):** the workflow's build + verify
-  half was run against a clean `git archive HEAD` copy with a candidate version
-  applied only in that copy — tag/version gate PASS for `v1.0.1`, build once,
-  `--dist-dir` gate PASS on the candidate artifacts, 315 unittest OK,
-  `check_docs.py` PASS, complexity PASS, clean wheel install PASS. The rehearsal
-  found that `check_docs.py` pins the documented `__version__` in
-  `docs/01-architecture.md` and `docs/02-modules.md`, so a version bump is a
-  4-line change (those two files plus `pyproject.toml` and
-  `skillsmgr/__init__.py`) before rebuilding.
+  commit), so publishing this slice needed a maintainer-owned version bump and
+  tag decision. The subsequent `skill-control-plane` 1.0.1 release completed
+  successfully; this blocker is retained only as pre-publish history. The CI
+  prerequisite was met — run 34488162920 for `a3a055d` was **success** across
+  all 15 jobs.
+  **HISTORICAL/SUPERSEDED rehearsal (2026-09-10, nothing published at that
+  time):** the workflow's build + verify half was run against a clean
+  `git archive HEAD` copy with a candidate version applied only in that copy —
+  tag/version gate PASS for `v1.0.1`, build once, `--dist-dir` gate PASS on the
+  candidate artifacts, 315 unittest OK, `check_docs.py` PASS, complexity PASS,
+  clean wheel install PASS. The rehearsal found that `check_docs.py` pins the
+  documented `__version__` in `docs/01-architecture.md` and
+  `docs/02-modules.md`, so a version bump was a 4-line change.
   **HISTORICAL/SUPERSEDED exact remaining steps (maintainer-gated):** (1) register a PyPI trusted
-  publisher (and TestPyPI) for this repository/workflow/environments — only the
-  account owner can do this; (2) create the GitHub `testpypi` and protected
-  `release` environments; (3) choose the release version and apply the 4-line
-  bump; (4) tag `v<version>` and push — the workflow then builds once, attests
-  provenance, publishes to TestPyPI, then PyPI, creates the GitHub Release, and
-  verifies the published install. Everything up to and including step 4's local
-  equivalents is proven green.
+  publisher (and TestPyPI) for this repository/workflow/environments; (2) create
+  the GitHub `testpypi` and protected `release` environments; (3) choose the
+  release version and apply the 4-line bump; (4) tag `v<version>` and push. The
+  subsequent workflow completed all remaining steps successfully; this list is
+  retained only as pre-publish history.
 
 **Acceptance gate:** L1 and L4 recorded on their issues; L2 green on the
 full ladder with corpus regressions; L3 `[?]`s closed with sources; L5

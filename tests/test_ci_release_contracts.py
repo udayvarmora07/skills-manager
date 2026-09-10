@@ -266,16 +266,19 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 
 
 class ReleaseClaimContractTests(unittest.TestCase):
-    def test_pypi_claims_are_qualified_until_publication_is_real(self):
+    def test_pypi_claims_confirm_publication_and_install_paths(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("PyPI badge tracks a future release", readme)
+        self.assertIn("skill-control-plane` 1.0.1 distribution is published on PyPI", readme)
         self.assertIn("pip install skill-control-plane", readme)
         self.assertIn("pipx install skill-control-plane", readme)
-        self.assertIn("Distribution name `skill-control-plane`", readme)
+        self.assertIn("Python import package remains `skillsmgr`", readme)
+        self.assertNotIn("not on PyPI yet", readme)
+        self.assertNotIn("future release", readme)
 
-    def test_pypi_badge_is_removed(self):
+    def test_pypi_badge_links_to_published_project(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertNotIn("img.shields.io/pypi/v/skill-control-plane", readme)
+        self.assertIn("img.shields.io/pypi/v/skill-control-plane.svg", readme)
+        self.assertIn("https://pypi.org/project/skill-control-plane/", readme)
 
     def test_distribution_metadata_and_artifact_identity(self):
         import email
