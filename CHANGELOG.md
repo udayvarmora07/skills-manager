@@ -33,6 +33,9 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   into the index so `stats()`/`doctor()` agree with `trash_list()`.
 - Manifest validation rejects a non-boolean `full` flag and non-plain
   `trash`/`templates` entry names before any filesystem work.
+- The concurrency contract helper waits for worker threads with a generous
+  deadline instead of a fixed 10 s per-thread join, which flaked on loaded CI
+  runners while still detecting genuinely stuck threads.
 - `check_package_data.py --dist-dir --install` now actually installs the exact
   artifacts it inspected; the install step used to be skipped silently.
 - CI portability: the cross-platform job compiles with `python -m compileall`

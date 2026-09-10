@@ -2,6 +2,7 @@
 
 import json
 import tempfile
+import time
 import threading
 import unittest
 import urllib.error
@@ -33,10 +34,21 @@ class ConcurrencyContractTests(unittest.TestCase):
         self.store.resync()
         return skill_file, old_text, new_text
 
-    @staticmethod
-    def _join_all(threads, timeout=10):
+    def _join_all(self, threads, timeout=10, deadline_seconds=120):
+        """Wait for worker threads, tolerating slow shared CI runners.
+
+        A fixed per-thread join turned scheduling slowness into a flaky failure
+        on loaded runners (recorded in the 2026-09-09 progress log). The
+        contract under test is that the workers *finish* and leave no residue,
+        so keep waiting until a generous deadline and only then report the
+        threads that are genuinely stuck.
+        """
         for thread in threads:
             thread.join(timeout=timeout)
+        deadline = time.monotonic() + deadline_seconds
+        while any(thread.is_alive() for thread in threads) and time.monotonic() < deadline:
+            for thread in threads:
+                thread.join(timeout=0.05)
         return [thread for thread in threads if thread.is_alive()]
 
     def test_same_skill_edits_and_reads_observe_complete_documents(self):

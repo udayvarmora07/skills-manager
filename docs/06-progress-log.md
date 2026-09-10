@@ -57,6 +57,13 @@
   browser job now pins Node 22 and the harness fails with a clear message on
   older Node. Verification after both: 315 unittest → OK, browser harness
   `passed: true`.
+- Third CI run (34487833099): every Windows, macOS, and Linux leg green; the
+  only failure was the known flaky `unit (py3.10)` concurrency contract
+  (`test_remove_and_edit_race_leaves_no_residue_or_raw_errors`, one churn
+  thread still finishing after the fixed 10 s join). The real contract is that
+  the workers finish and leave no residue, so `_join_all` now waits until a
+  120 s deadline before reporting stuck threads, removing the timing assumption
+  while keeping hang detection.
 
 ## 2026-09-10 — ZIP import hardening round (adversarial audit fixes)
 
