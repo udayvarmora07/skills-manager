@@ -130,7 +130,8 @@ jobs:
       - name: Frontend syntax
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Node >= 22 provides the global WebSocket the CDP probe uses.
+          node-version: "22"
       - name: Frontend syntax and browser harness
         run: |
           node --check skillsmgr/webui/app.js

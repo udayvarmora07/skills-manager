@@ -5,7 +5,9 @@ This intentionally uses the system Chrome DevTools Protocol instead of adding
 runtime or test dependencies. It starts a hermetic web server, launches
 headless Chrome with a temporary profile, captures console/runtime/network
 failures, and checks the supported viewport matrix. It is a developer check,
-not part of the product CLI.
+not part of the product CLI. Requirements: system Chrome/Chromium and Node >= 22
+(the CDP client uses the global WebSocket, which older Node releases do not
+provide).
 """
 from __future__ import annotations
 
@@ -68,6 +70,10 @@ def _run_probe(url: str, width: int, height: int, port: int) -> dict:
     """Use Chrome's remote debugging endpoint through a tiny Node CDP client."""
     script = r"""
 const http = require('http');
+if (typeof globalThis.WebSocket !== 'function') {
+  console.error('browser_harness.py needs Node >= 22 for the global WebSocket used by the CDP client');
+  process.exit(2);
+}
 const WebSocket = globalThis.WebSocket;
 const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]), port = Number(process.argv[4]);
 function getJson(path) { return new Promise((resolve, reject) => { const req=http.request('http://127.0.0.1:' + port + path, {method:'PUT'}, r => { let b=''; r.on('data', x=>b+=x); r.on('end',()=>resolve(JSON.parse(b))); }); req.on('error',reject); req.end(); }); }

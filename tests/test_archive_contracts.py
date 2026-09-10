@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import tarfile
 import tempfile
 import unittest
@@ -264,8 +265,18 @@ class ArchiveContractTests(unittest.TestCase):
             with self.subTest(label=label):
                 archive = self.root / f"{label}.zip"
                 _write_zip(archive, [(member_name, b"escape")], symlinks={member_name} if label == "symlink" else ())
-                with self.assertRaises(StoreError):
+                try:
                     self._store(label).import_(archive, force=True)
+                except StoreError:
+                    pass
+                else:
+                    # Windows: zipfile normalizes "\\" to "/" inside ZipInfo on
+                    # both write and read, so this member can no longer smuggle a
+                    # separator past name validation; the import must then stay
+                    # contained and simply find no skill document.
+                    self.assertEqual(label, "backslash")
+                    self.assertEqual(os.name, "nt", "only Windows may accept the backslash member")
+                # The invariant that matters on every host: nothing escaped.
                 self.assertEqual(victim.read_text(encoding="utf-8"), "keep")
 
     def test_zip_per_member_compression_ratio_is_enforced(self):

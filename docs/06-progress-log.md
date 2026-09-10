@@ -43,6 +43,20 @@
   Chrome for all five viewports; `check_docs.py` → PASSED;
   `check_complexity.py` → PASSED (157 functions, budget ≤ 15); `py_compile` →
   OK; `git diff --check` → OK.
+- First CI re-run after the portability fixes (run 34487469333) went green on
+  both macOS legs and every Linux leg, and exposed two remaining defects with
+  exact causes: (1) the Windows leg failed
+  `test_zip_traversal_absolute_windows_and_symlink_members_rejected_before_extraction`
+  (`label='backslash'`) because `zipfile.ZipInfo` rewrites `\` to `/` in
+  `filename` on Windows for both writing and reading, so the member can no
+  longer smuggle a separator — the test now asserts the contained-import
+  invariant on Windows and still requires rejection on POSIX; (2) the browser
+  job reached Chrome but the CDP probe died with
+  `TypeError: WebSocket is not a constructor`, because the global `WebSocket`
+  the client uses only exists in Node ≥ 22 while the job pinned Node 20. The
+  browser job now pins Node 22 and the harness fails with a clear message on
+  older Node. Verification after both: 315 unittest → OK, browser harness
+  `passed: true`.
 
 ## 2026-09-10 — ZIP import hardening round (adversarial audit fixes)
 

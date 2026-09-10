@@ -37,9 +37,12 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   artifacts it inspected; the install step used to be skipped silently.
 - CI portability: the cross-platform job compiles with `python -m compileall`
   (Windows runners do not expand `skillsmgr/*.py`), `contained_path` test
-  expectations resolve the root (macOS `/var` → `/private/var`), and the
-  browser harness discovers Chrome's DevTools port from `DevToolsActivePort`
-  with a longer cold-start budget.
+  expectations resolve the root (macOS `/var` → `/private/var`), the ZIP
+  backslash case asserts the contained-import invariant on Windows (where
+  `zipfile` normalizes `\` to `/` inside `ZipInfo`), and the browser harness
+  discovers Chrome's DevTools port from `DevToolsActivePort` with a longer
+  cold-start budget and requires Node ≥ 22 for the global WebSocket (the CI
+  browser job is pinned accordingly).
 
 - Milestone 9 read-only insight foundation (`skillsmgr/insights.py`, pure stdlib-only helpers, no CLI/Store/schema/network changes): per-consumer observed views with precedence explicitly unresolved, two-way/three-way diffs, five-state ownership classification, provenance summaries, update previews with rollback flags, stage-only quarantine plans, explainable static risk scans, offline registry dry-runs gated on explicit trust, provider-neutral advisory eval plans, and a deferred signed-bundle policy. Locked by 57 red-first hermetic tests in `tests/test_insights_contracts.py` (20 foundation + 11 fail-closed + 9 round-3 strictness + 7 round-4 boundaries + 5 round-5 audit locks + 5 deep-E2E).
 - Browser UX/a11y baseline: dev-only Chrome CDP viewport harness with console/runtime/network failure capture; keyboard `/`, `?`, `Esc`, and Tab dialog contracts; labelled/inert modal focus lifecycle; safer destructive defaults; live status announcements; escaped Markdown editor preview; and sync source/target/overwrite/rollback preview.
