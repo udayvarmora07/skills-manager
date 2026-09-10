@@ -13,14 +13,27 @@ Public direction for `skills-manager`. Items move from Proposed → Accepted →
 ## Then (v1.2+)
 
 Research verdicts 2026-09-09 (`TODO.md` Deferred section; `PLAN.md` §11
-annex) govern these — verdict first, then the roadmap line:
+annex) govern these — verdict first, then the roadmap line. ZIP import is
+shipped; the remaining lines below are future or rejected directions:
 
 - [ ] **Registry bridge** — verdict: DEFER network browse/fetch (OIDC-gated API; staged offline→passthrough): browse `skills.sh` → install into chosen scope; publish local skills upstream.
 - [ ] **Eval harness** — verdict: ADVISORY-ONLY stays, file-based, never blocking: per-skill before/after prompt tests (per official evaluating-skills guidance).
 - [ ] **VS Code extension** — verdict: separate-repo spike, no backend changes here: thin wrapper over the existing REST API.
 - [ ] **Team sharing** — verdict: DEFERRED pending trust/key-distribution ADR + threat-model delta: signed bundles, internal index, draft → review → publish stages.
 - [ ] **Refuse unsafe tar fallback** on Python < 3.12 (threat-model R-1) — verdict: REJECT refusal (keep feature-detect + guarded manual extractor).
-- [ ] **Zip-import support** (`import` is tar-only today) — verdict: APPROVE as a scoped `import` extension (issue #5; red-first malicious-ZIP corpus; no new command).
+- [x] **Zip-import support** (shipped 2026-09-10): scoped extension of `import` with bounded preflight, safe manual extraction, and malicious-ZIP regressions; no new command.
+
+## Release
+
+- **v1.0.0 gate holds, publication blocked externally (2026-09-10):** fresh wheel
+  + sdist were built from the current tree and pass the exact-artifact
+  package-data gate, and the wheel clean-installs with working CLI CRUD and
+  vendored web assets. Publishing is tag-triggered and cannot run yet: the
+  repository has no `release`/`testpypi` GitHub environments, no PyPI trusted
+  publisher is registered (`pypi.org`/`test.pypi.org` both 404 for this
+  package), tag `v1.0.0` already points at the earlier release commit, and the
+  GitHub CI run for current `main` was failing on its Windows/macOS/browser legs
+  (fixed in this round; a green run is required before tagging).
 
 ## Ambitious (exploring)
 

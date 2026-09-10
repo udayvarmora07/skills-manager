@@ -2,10 +2,11 @@
 
 **Version 1.0.0**
 
-**AI manifest:** Current-state record for the first ten executable tasks and the
-next-five archive/trash safety slice from `TODO.md`. This is a selective replay
-map for `main`; it does not approve a wholesale merge of either unmerged
-worktree.
+**AI manifest:** Historical as-of-2026-09-08 record for the first ten executable
+tasks and the next-five archive/trash safety slice from `TODO.md`. This is a
+selective replay map for `main`; it does not approve a wholesale merge of either
+unmerged worktree. Later ZIP completion is recorded in the newest progress-log
+entry and current module/API docs.
 
 ## 1. Selective replay map
 

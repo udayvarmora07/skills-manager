@@ -16,6 +16,11 @@ Skills spec, pywebview/VS Code/GFS/Unicode, and TUF/Sigstore/CSRF/Claude
 precedence). Baseline held green (301 unittest, both smokes, compile,
 frontend, docs, complexity, diff). Verdicts below are FINAL per maintainer
 authorization — each item now carries a **FINAL:** line with evidence.
+**Execution update (2026-09-10):** L2 ZIP import is shipped in the approved
+scoped `import` extension and hardened by an adversarial audit round (per-member
+ratio budget, staged-commit rollback, transactional full-import restore, index
+reconciliation; 315 unittest green). L6 release preparation is in progress and
+publication remains subject to the existing controlled workflow.
 
 > This is the canonical execution backlog for the next product cycle. It is
 > deliberately risk-first: protect user data and make future regressions
@@ -184,8 +189,10 @@ fail closed.
   path-length, nesting-depth, and compression-ratio limits.
 - [x] Validate manifest schema, version, names, paths, and duplicate entries.
 - [x] Validate manifestless fallback names with the canonical name rule.
-- [x] Decide and document ZIP support: ZIP remains intentionally unsupported;
-  archive content is sniffed and rejected before tar parsing.
+- [x] Decide and document ZIP support (as of 2026-09-10): the approved scoped
+  `import` extension now accepts ZIP content after the same bounded preflight
+  and guarded manual extraction policy; no new command was added. This replaces
+  the original 2026-09-08 baseline decision recorded below.
 - [x] Make imports all-or-nothing per skill or clearly report partial commits;
   never leave an unexplained half-imported tree.
 
@@ -500,18 +507,11 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   `skillsmgr/webui/domain.js:60`, `skillsmgr/webui/app.js:6,130`),
   closed the issue (`gh issue view 10` = CLOSED). Deferred line for #10
   dropped below in this same pass.
-- [ ] L2 — ZIP import slice (issue #5, needs approval first): red-first
-  malicious-ZIP corpus (traversal, absolute, `\`, drive-letter,
-  symlink-bit, duplicate, bomb-ratio, garbage/truncated) through the
-  Milestone 1 pipeline shape — zip preflight mirroring `validate_members`
-  (name normalization, `\`/drive rejection, duplicate detection, layout
-  allowlist, six budgets via `file_size`/`compress_size`), a zip manual
-  extractor with the `(external_attr >> 16)` symlink-bit check (zip has
-  no `data_filter` equivalent), then the existing validate plus staged
-  commit and content-hash verify. Extend `import` only — no new command.
-  Done when the corpus fails before / passes after, the full ladder is
-  green, and CLI/REST/UI plus `docs/02-modules.md` agree on the new
-  format support.
+- [x] L2 — ZIP import slice (issue #5, approved 2026-09-10): red-first
+  malicious-ZIP corpus (traversal, absolute, `\`, drive-letter, symlink-bit,
+  duplicate, bomb-ratio, garbage/truncated) through the shared preflight,
+  private extraction, validation, and staged-commit pipeline. ZIP support extends
+  the existing `import` command/REST route only; no new command was added.
 - [x] L3 — Effective-explain research track done docs-only 2026-09-09
   (no code; runtime model stays approval-gated): closed the three `[?]`
   in `docs/12-agent-root-discovery-2026-09-08.md` (v1.1.0) against
@@ -541,15 +541,16 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   (`urllib` only in `webapp.py`/`web_security.py` for URL parsing),
   backend (eval stays stdlib `eval_plan`/`eval_score`, no SDK/model
   calls), extension (no TS/VS Code surface), or signing
-  (`bundle_policy()` returns `deferred`) code in `skillsmgr/`; ZIP stays
-  rejection-only (`store.py:1221` `is_zipfile` guard, no `ZipFile`
-  extraction). Staged paths unchanged: registry #3 (offline preview
+  (`bundle_policy()` returns `deferred`) code in `skillsmgr/`; ZIP import is
+  now implemented in the approved scoped extension with guarded preflight and
+  manual extraction. Staged paths unchanged: registry #3 (offline preview
   gate, then id-to-`install` mapping, then a network ADR), eval #4
   (advisory-only, file-based, never blocking), extension #8 (separate
   repo; missing endpoints get their own ASK), team sharing #11
   (design-only ADR plus threat-model delta before any bundle format).
-- [ ] L6 — Release only through the existing gate (dry-run green
-  2026-09-09, no publish; re-verified 2026-09-10): package `1.0.0` ==
+- [/] L6 — Release only through the existing gate (2026-09-10: fresh artifacts
+  built and verified; publication is blocked externally, not skipped):
+  package `1.0.0` ==
   `__version__` == tag `v1.0.0`; `release.yml` tag/version gate
   (`:36-52`) + build-once + `--dist-dir` (`:58`, `:83`) + attestation
   (`attest-build-provenance@v2`, `:110`) + TestPyPI (`testpypi`, `:118`)
@@ -557,11 +558,11 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   PyPI-install claim (":9 not on PyPI yet") and live PyPI still 404s;
   `check_package_data.py` honestly UNAVAILABLE without `build`
   (code-real branch, `:33-34`, `:246-250`). **FINAL (2026-09-10): GATE
-  HOLDS, one pre-release fix required — `dist/` is stale:** the
-  2026-09-05 wheel predates `domain.js` and fails `--dist-dir`
-  (`missing=['skillsmgr/webui/domain.js']`; `pyproject.toml:43-44`
-  `webui/*` covers it once rebuilt — stale-artifact bug, not a config
-  bug; release must build once from a clean tree per the existing gate).
+  HOLDS.** The stale-artifact defect it flagged is now fixed: the 2026-09-05
+  wheel predated `domain.js` and failed `--dist-dir`
+  (`missing=['skillsmgr/webui/domain.js']`; `pyproject.toml:43-44` `webui/*`
+  covers it once rebuilt), and `dist/` now holds artifacts rebuilt from the
+  current tree that pass the gate.
   No version bump, tag, publish, or install claim until that pipeline
   actually publishes: version bump, tag equal to the package version,
   build once, `check_package_data.py --dist-dir` on the exact
@@ -569,6 +570,28 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   `release` environment, GitHub Release, and post-publish install
   verification. Make no PyPI-install claim until that pipeline
   actually publishes.
+  **Executed 2026-09-10 (fresh artifacts):** built once from a clean copy of the
+  current tree with `build==1.2.2.post1`; wheel
+  `skills_manager-1.0.0-py3-none-any.whl` sha256 `8131d7ae8670…` (172,365 B) and
+  sdist `skills_manager-1.0.0.tar.gz` sha256 `38e43041c65a…` (208,280 B);
+  `check_package_data.py --dist-dir` PASS on both (5 web UI files, Vue 157,924 B);
+  wheel clean-install PASS (`--help`, `create demo`, vendored Vue + `domain.js`
+  present); sdist clean-install honestly UNAVAILABLE offline (fresh venv has no
+  `setuptools` and the check runs `--no-index`). The stale 2026-09-05 artifacts
+  are preserved under `dist/stale-2026-09-05/` (they fail the gate: missing
+  `domain.js`).
+  **Publication blocker (evidence, 2026-09-10):** `gh api
+  repos/udayvarmora07/skills-manager/environments` → `total_count: 0` (no
+  `release`/`testpypi` environment, so no protected approval gate exists);
+  `https://pypi.org/pypi/skills-manager/json` → 404 and
+  `https://test.pypi.org/pypi/skills-manager/json` → 404 (no project and no
+  registered trusted publisher, so OIDC publishing would be rejected);
+  `git ls-remote --tags origin` → only `v1.0.0` at `d94cc02` (an earlier release
+  commit), so publishing this slice needs a maintainer-owned version bump and
+  tag decision; `gh run list` showed the latest CI run failing on the Windows,
+  macOS, and browser legs — those portability defects are fixed in this round and
+  need a green CI run before tagging. No tag was created and nothing was
+  published; the release gate remains unfulfilled by external configuration.
 
 **Acceptance gate:** L1 and L4 recorded on their issues; L2 green on the
 full ladder with corpus regressions; L3 `[?]`s closed with sources; L5
@@ -610,10 +633,10 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 > entries, 194 unique sources) + 3 targeted `web_search` batches. Baseline
 > held green (301 unittest, both smokes, all gates). Each item keeps its
 > `[!]` until its stated approval lands. New sessions implement in the
-> order given here: ~~close #10~~ DONE 2026-09-09 (#10 CLOSED), then ZIP
-> on approval (#5 stays the only code item), then the effective-explain
-> diagnostic proposal — now filed as issue #12, awaiting maintainer
-> approval (no code until then).
+> order given here: ~~close #10~~ DONE 2026-09-09 (#10 CLOSED), ~~ZIP on
+> approval~~ DONE 2026-09-10 (L2 shipped in the scoped `import` extension),
+> then the effective-explain diagnostic proposal — filed as issue #12,
+> awaiting maintainer approval (no code until then).
 
 - [!] Registry bridge: issue #3. Research verdict: DEFER network
   browse/fetch. **FINAL (2026-09-10): DEFERRED — confirmed by Snyk
@@ -667,21 +690,24 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   SQLite (schema frozen); verdicts never gate installs or edits. Decide
   provider abstraction, credentials, persistence, isolation, and advisory
   versus blocking behavior — the standing answer is advisory-only.
-- [!] ZIP import: issue #5. Research verdict: APPROVE as a scoped
+- [x] ZIP import: issue #5. Research verdict: APPROVE as a scoped
   extension of the existing `import` (highest-value feature approval, one
-  focused slice, no new command). **FINAL (2026-09-10): APPROVED — the
-  only code item; exact 1:1 parity map proven.** Re-probes (Python 3.12.3,
-  `data_filter` present): `Store.import_` rejects ZIP cleanly today
-  (`StoreError` "ZIP archives are not supported", `store.py:1221`, no
-  destination, locked regression); tar `validate_members` rejects 9/9
-  hostile classes (traversal/absolute/nested-dotdot/`\`/`C:`/symlink/FIFO/duplicate,
-  `archive.py:50`); `zipfile` preserves hostile names verbatim
+  focused slice, no new command). **COMPLETED 2026-09-10:** `Store.import_`
+  content-sniffs ZIP files, applies the shared normalized-name/layout/type and
+  compressed/expanded/member/path/nesting/ratio budgets, rejects symlink bits,
+  manually extracts only to contained staging paths, then reuses manifest,
+  frontmatter, staged commit, and content-hash verification. Red-first tests
+  cover valid round-trip, traversal, absolute, backslash, drive-letter,
+  symlink-bit, duplicate, malformed, and REST ZIP cases. Existing tar imports
+  and the schema remain unchanged. Historical research follows:
+  `zipfile` preserves hostile names verbatim
   (`../../evil.txt`, `/abs.txt`, `skills/ok/../../escape.md`,
   `skills\evil`, `C:/evil`, duplicates count 2, symlink-bit
   `(external_attr >> 16) & 0o170000 == 0o120000`), so a manual guard is
   mandatory; budgets re-verified exact (200 members ok/201 reject;
   path 512 ok/513 reject; nesting 16 ok/17 reject; 9MB member reject;
-  40000:1 ratio reject; `archive.py:20-26`). External authorities: ZipSlip ([Snyk
+  40000:1 ratio reject; `archive.py:20-26`). The research below is retained as historical context.
+  External authorities: ZipSlip ([Snyk
   research](https://security.snyk.io/research/zip-slip-vulnerability))
   — `zipfile.extract` strips drive/leading slashes but `extractall` docs
   still warn files CAN land outside path and `zipfile.Path` does NOT

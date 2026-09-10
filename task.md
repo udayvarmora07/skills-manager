@@ -4,6 +4,30 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Current state — 2026-09-10 (authoritative; older milestones below are dated records)
+
+- **L2 ZIP import: DONE.** `Store.import_` accepts ZIP or tar content (sniffed),
+  applies the shared budgets (`archive.py`), rejects symlink-bit/disallowed
+  members, extracts only to contained staging paths, and reuses the staged
+  commit pipeline. REST `PUT /api/import` accepts `.zip`. No new CLI command,
+  schema change, or dependency. Hardened after an adversarial audit: per-member
+  compression-ratio budget, a failed staging copy can no longer delete the
+  existing skill, `--full` trash/templates install as one rolled-back
+  transaction with index reconciliation, and manifest `full`/metadata types are
+  validated before mutation. 315 unittest green (2026-09-10).
+- **L6 release gate: EXECUTED AS FAR AS THE ENVIRONMENT PERMITS.** Fresh wheel +
+  sdist were built from the current tree and pass
+  `check_package_data.py --dist-dir`; the wheel clean-installs with working CLI
+  CRUD and web assets. Publication is blocked externally — no GitHub
+  `release`/`testpypi` environments, no PyPI trusted publisher registered (PyPI
+  and TestPyPI both 404), and tag `v1.0.0` already points at the earlier release
+  commit, so publishing this slice needs a maintainer version-bump/tag decision.
+  Nothing was tagged or published.
+- CI portability defects (Windows glob, macOS resolved-path expectation, Chrome
+  DevTools port discovery) are fixed in this round; dated milestones below are
+  historical records and are not rewritten.
+
+
 ## Milestone 1 — Docs layer (2026-08-13)
 
 - [x] Confirm repo layout and module inventory
@@ -138,7 +162,10 @@
 - [x] Keyboard-shortcut cheatsheet modal (`?` key) added after the keyboard contract.
 - [!] Pytest suite is not planned: `tests/` uses the approved stdlib `unittest` suite; adding third-party test tooling would require an explicit tooling decision
 - [x] CI workflow (compile + unittest + smokes on push) is present in `.github/workflows/ci.yml`; future CI expansion remains tracked in the roadmap
-- [ ] Zip-import support, APPROVED-direction (research 2026-09-09): extend `import` only, no new command — red-first malicious-ZIP corpus through the Milestone 1 pipeline shape (zip preflight mirroring tar guards, manual extractor with symlink-bit check, staged commit + hash verify). See Milestone 31 L2.
+- [x] Zip-import support, approved 2026-09-10: extended `import` only with a
+  shared bounded ZIP preflight, explicit contained-path extractor, symlink-bit
+  rejection, staged commit/hash verification, and malicious-ZIP regressions. No
+  new command or runtime dependency was added.
 - [!] Tar-fallback refusal on Python < 3.12 — verdict: REJECT (keep feature-detect + guarded manual extractor; refusal breaks supported 3.10/3.11 for zero fail-closed gain). Record on issue #6.
 - [!] Out-of-root link warning → validation error — verdict: REJECT strict promotion (keep warning + `risk_scan()`; 200-target probe found 0 real escapes). Record on issue #7.
 
@@ -149,14 +176,16 @@
 - [x] Validate the `skills-mgr` manifest app/version/timestamp contract,
   canonical unique names, manifest-to-path alignment, and extracted
   frontmatter names before any destination mutation.
-- [x] Preserve canonical manifestless fallback validation and explicitly reject
-  ZIP archives by content; ZIP support remains deferred by policy.
+- [x] Preserve canonical manifestless fallback validation and support ZIP
+  archives by content sniffing; both tar and ZIP formats use the shared
+  preflight/validation/commit pipeline.
 - [x] Stage each skill commit, restore the prior destination on replacement
   failure, clean failed new destinations, and report completed/failed skills
   explicitly in `imported`/`skipped`.
 - [x] Add hermetic regressions for archive budgets, strict manifests, ZIP
-  rejection, frontmatter/name mismatch, forced-destination preservation, and
-  injected per-skill copy failures.
+  traversal/absolute/backslash/drive/symlink/duplicate cases, frontmatter/name
+  mismatch, forced-destination preservation, and injected per-skill copy
+  failures.
 - [x] Verify: compile PASS, **86 unittest PASS**, both smoke suites PASS,
   frontend syntax PASS, CLI help PASS, and `git diff --check` PASS.
 

@@ -2,7 +2,7 @@
 
 **Version 0.2.1**
 
-**AI manifest**: Current architecture and data-flow facts verified against source on September 9, 2026 (repo-map refresh: split CLI/web policy modules, `insights.py`, harness, smoke fixtures, package-data gate; 301-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
+**AI manifest**: Current architecture and data-flow facts verified against source on September 10, 2026 (repo-map refresh: split CLI/web policy modules, `insights.py`, harness, smoke fixtures, package-data gate; ZIP archive import plus transactional full-import restore; 315-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
 
 ## Repo map
 
@@ -41,7 +41,7 @@ skills-manager/
   smoke_web.py       # smoke test driving the REST API (hermetic fixture)
   smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers
   browser_harness.py # dev-only system-Chrome CDP viewport probe (no runtime dep)
-  tests/             # stdlib unittest regression suite (301 tests, 2026-09-09)
+  tests/             # stdlib unittest regression suite (315 tests, 2026-09-10)
   check_docs.py      # machine-checkable docs/source consistency gate
   check_complexity.py# AST complexity ratchet (+ complexity-baseline.json)
   check_package_data.py # wheel/sdist package-data verification

@@ -1,13 +1,13 @@
 # Session Context — Skills Manager
 
-**Version 0.3.0** (2026-09-09: inventory refresh — split CLI/web policy
-modules, `insights.py` + 57-test contracts, smoke fixtures, harness,
-package-data gate; CLI counts re-verified; Milestone 11 L1/L3/L4 done,
-L2 ZIP the only approval-gated code item.)
+**Version 0.3.0** (2026-09-10: ZIP import shipped in the approved scoped
+`import` extension; split CLI/web policy modules, `insights.py` + 57-test
+contracts, smoke fixtures, harness, package-data gate; CLI counts re-verified;
+Milestone 11 L1/L2/L3/L4 done.)
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
-## What exists today (2026-09-09)
+## What exists today (2026-09-10)
 
 - **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.1.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only; a read-only `doctor --explain` diagnostic needs its own issue/ADR approval). See @docs/03-cli-surface.md.
@@ -18,9 +18,9 @@ L2 ZIP the only approval-gated code item.)
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
- - **Tests**: stdlib `unittest` regression/contract suite — 301 tests green 2026-09-09 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (151 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
+ - **Tests**: stdlib `unittest` regression/contract suite — 315 tests green 2026-09-10 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (157 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
 - **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Locked by 57 red-first hermetic tests in `tests/test_insights_contracts.py`.
-- **Milestone 11 queue (2026-09-09)**: L1 done (#10 CLOSED with evidence), L3 done (`[?]`s closed, diagnostic proposed, approval needed), L4 done (#6/#7/#9 rationales recorded), L5 verified (#3/#4/#8/#11 untouched), L6 gate verified without publishing. **L2 ZIP (`import`-only extension, issue #5) is the only approval-gated code item — no code until approved.**
+- **Milestone 11 queue (2026-09-10)**: L1/L2/L3/L4 done; L2 ZIP import is shipped as an `import`-only extension with bounded preflight and guarded extraction. L5 remains deferred (#3/#4/#8/#11 untouched), and L6 release remains gated on a fresh exact artifact build and authorized publication.
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
 
 ## Common tasks (router)

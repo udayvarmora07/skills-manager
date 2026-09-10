@@ -759,11 +759,11 @@ section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
   per `https://commandcode.ai/docs/skills`; Claude triple-winner +
   both-load exceptions per `https://code.claude.com/docs/en/skills`).
   Next: the read-only `doctor --explain CONSUMER --project DIR`
-  diagnostic needs its own issue/ADR approval (locked constraint 5); L2
-  ZIP remains the only approval-gated code item. (2026-09-09 round 2:
-  the diagnostic proposal is now filed as issue #12; round 3 re-verified
-  every probe family green with zero product-code changes. L2/Diagnostic
-  both await maintainer approval — no code until then.)
+  diagnostic needs its own issue/ADR approval (locked constraint 5). (2026-09-09
+  round 2: the diagnostic proposal is now filed as issue #12; round 3
+  re-verified every probe family green with zero product-code changes. ZIP was
+  approved and completed in the scoped import extension on 2026-09-10; only
+  the diagnostic remains approval-gated.)
 
 External products are used to understand user expectations and portability
 patterns, not to justify copying their architecture. Repository constraints,
@@ -775,12 +775,26 @@ Round 17 completed ten read-only, approval-safe verification tasks over the
 latest backlog: baseline ladder, installed-skill catalog audit, P0 fail-closed
 rotation, issue #13 characterization, release-artifact hygiene, REST security,
 resource bounds, CLI contracts, browser/live checks, and documentation hygiene.
-No product code, SQLite schema, dependencies, release artifacts, tags, or live
-user skill roots were changed. The stale ignored `dist/` wheel remains a known
-pre-release finding because it predates `domain.js`; the existing release
-workflow must build once from a clean tree before publication. ZIP support,
-the effective-resolution diagnostic, and issue #13 remediation remain gated by
-explicit decisions that were not available in this session.
+No SQLite schema, dependencies, release artifacts, tags, or live user skill
+roots were changed. ZIP import was implemented in the approved scoped `import`
+extension with fresh security regressions. The stale ignored `dist/` wheel remains
+an outdated pre-release artifact; the existing release workflow must build once
+from a clean tree before publication. The effective-resolution diagnostic and
+issue #13 remediation remain gated by explicit decisions.
+
+## Milestone 50 — ZIP hardening + release-gate execution (2026-09-10)
+
+The approved ZIP slice was hardened after four independent adversarial audits
+(staged-commit rollback, per-member compression ratio, transactional full-import
+restore with index reconciliation, strict full-manifest metadata) and the
+release gate was executed as far as the environment permits: fresh wheel + sdist
+built once from the current tree, verified with the exact-artifact package gate,
+and clean-installed with working CLI CRUD and vendored web assets. Publication
+remains unfulfilled by external configuration — no GitHub `release`/`testpypi`
+environments, no registered PyPI trusted publisher, and tag `v1.0.0` already
+pointing at the earlier release commit — so no tag was created and nothing was
+published. CI portability defects (Windows compile glob, macOS resolved-path
+expectation, Chrome DevTools port discovery) were fixed alongside.
 
 ## 12. Final definition of done
 
@@ -801,9 +815,10 @@ The world-class baseline is complete only when:
 
 ## 13. Immediate next implementation action
 
-Milestone 11 queue order still governs (L2 ZIP and issue #12 both await
-maintainer approval — no code until then). The Phase 0–1 history below is
-complete on `main` and retained as the audit trail:
+Milestone 11 queue order still governs: L2 ZIP is complete in the approved
+scoped import extension; issue #12 still awaits maintainer approval and remains
+read-only. The Phase 0–1 history below is complete on `main` and retained as the
+audit trail:
 
 1. ~~Capture baseline evidence~~ — done (`docs/09-baseline-evidence-2026-09-07.md`).
 2. ~~Add the five failing P0 reproductions~~ — done (regression tests in

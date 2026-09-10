@@ -4,6 +4,103 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-10 — Release-gate execution (fresh artifacts) + CI portability fixes
+
+- L6 executed as far as the environment permits. Built once from a clean copy of
+  the current tree with the pinned `build==1.2.2.post1`: wheel
+  `skills_manager-1.0.0-py3-none-any.whl` (172,365 B, sha256 `8131d7ae8670…`)
+  and sdist `skills_manager-1.0.0.tar.gz` (208,280 B, sha256 `38e43041c65a…`).
+  `python3 check_package_data.py --dist-dir` → PASS on both (5 web UI files,
+  Vue 157,924 B). A fresh venv installed the wheel with `--no-index --no-deps`,
+  ran `--help` and `create demo`, and asserted the vendored Vue bundle plus
+  `webui/domain.js` are present. The sdist clean-install reports an honest
+  `UNAVAILABLE` offline (the pristine venv has no `setuptools` and the check
+  installs with `--no-index`). The stale 2026-09-05 artifacts are preserved under
+  `dist/stale-2026-09-05/`; `dist/` now holds the verified rebuild.
+- Publication is blocked by external configuration, not by code: `gh api
+  repos/udayvarmora07/skills-manager/environments` → `total_count: 0` (no
+  `release`/`testpypi` environment); PyPI and TestPyPI both return 404 for
+  `skills-manager` (no project, no registered trusted publisher); the only
+  remote tag is `v1.0.0` at `d94cc02`, so publishing this slice requires a
+  maintainer-owned version bump and tag. Nothing was tagged or published and no
+  PyPI-install claim was added.
+- CI portability defects that gated the release were fixed with evidence from
+  the failing run (`gh run view 34478740147`): the cross-platform job failed
+  because Windows shells do not expand `skillsmgr/*.py` (`[Errno 22] Invalid
+  argument`), so it now compiles with `python -m compileall`; the macOS leg
+  failed because `contained_path()` resolves the root and the test compared an
+  unresolved `/var/...` temp path against a resolved `/private/var/...` one, so
+  the expectation resolves too; and the browser job failed with "Chrome DevTools
+  endpoint did not start", so `browser_harness.py` now lets the OS pick the
+  DevTools port (`--remote-debugging-port=0`), reads the bound port from
+  `DevToolsActivePort`, and allows a 30 s cold start instead of assuming 9222.
+- `check_package_data.py --dist-dir` printed no install line even with
+  `--install` because the exact-artifact branch returned before the install
+  step; the flag now installs the artifacts it inspected, with a regression
+  asserting both artifacts are passed to `clean_install`.
+- Verification after these changes: 315 unittest → OK; `smoke_store.py` →
+  PASSED; `smoke_web.py` → PASSED; `browser_harness.py` → `passed: true` on
+  Chrome for all five viewports; `check_docs.py` → PASSED;
+  `check_complexity.py` → PASSED (157 functions, budget ≤ 15); `py_compile` →
+  OK; `git diff --check` → OK.
+
+## 2026-09-10 — ZIP import hardening round (adversarial audit fixes)
+
+- Four independent audit agents reviewed the uncommitted ZIP slice (security,
+  compatibility, docs, and a deep archive/full-import audit). Every confirmed
+  finding was fixed red-first; six new regression tests were added
+  (`tests/test_archive_contracts.py`).
+- P0 fixed — a staged skill commit deleted an existing skill. When
+  `copytree(source, staged)` failed before the original was moved aside,
+  `moved_original=False` was treated as "no original existed" and the user's
+  skill directory was removed. `commit_staged_skill` now records `dest_existed`
+  up front and only removes a destination this call created (`archive.py`).
+- P1 fixed — the ZIP compression ratio was only checked cumulatively, so a
+  stored incompressible member masked a later bomb (probe: 1 MB `ZIP_STORED`
+  padding + 8 MB zero-filled `ZIP_DEFLATED` at ~1028:1 previously imported).
+  The budget is now a per-member invariant plus the archive-total check.
+- P1 fixed — full-import trash/templates were copied non-transactionally with
+  raw `shutil` calls after skills were committed: an injected mid-copy failure
+  raised raw `OSError`, deleted an existing trash entry before copying, and left
+  mixed old/new templates. `_plan_full_restore` now validates every payload
+  before any mutation, `archive.restore_full_payload` stages each payload,
+  moves the previous entry aside, and rolls the whole set back on failure, and
+  the failure surfaces as a clean `StoreError` (REST → 400).
+- Fixed — restored trash entries were absent from the index, so
+  `stats()["trashed"]` reported 0 while `trash_list()` returned 1;
+  `_record_restored_trash` now reconciles those rows and `doctor()` stays `ok`.
+- Fixed — manifest `full` must now be a real boolean and `trash`/`templates`
+  entries must be plain names; malformed metadata previously fell through to
+  `skipped_full`/truthiness instead of failing preflight. Malformed ZIP central
+  metadata (`NotImplementedError`/`UnicodeError`) and slash-only ZIP directory
+  entries (no Unix/DOS directory bits) are handled cleanly too.
+- Independent verification probe (hermetic temp data, no repo writes) confirmed:
+  the original skill survives a failed staging copy, the ratio bomb is rejected,
+  full-payload failure is a clean `StoreError` with the previous template intact
+  and no staging residue, `stats()["trashed"] == 1` with `doctor()["ok"]`, and
+  the REST route returns 400 for malformed full metadata and 200 for a valid ZIP.
+- Verification: 314 unittest → OK; `smoke_store.py` → PASSED;
+  `smoke_web.py` → PASSED; `check_docs.py` → PASSED; `check_complexity.py` →
+  PASSED (157 functions, budget ≤ 15); `py_compile` → OK; `git diff --check` →
+  OK. The ignored local `dist/` wheel predates `domain.js` and stays a stale
+  pre-release artifact until the controlled release gate rebuilds it.
+
+## 2026-09-10 — ZIP import completion and release-gate preparation
+
+- Implemented the approved issue #5 scoped `import` extension. ZIP archives are
+  content-sniffed, bounded and preflighted with canonical path/layout/type and
+  duplicate checks, compressed/expanded/member/path/nesting/ratio budgets, and
+  symlink-bit rejection. Validated members are manually copied to contained
+  staging paths; existing manifest/frontmatter/hash/commit recovery is reused.
+- Red-first tests now cover valid ZIP round-trip, traversal, absolute,
+  backslash, drive-letter, symlink-bit, duplicate, malformed/empty manifest,
+  and live REST import. Existing tar tests remain green. Web filename validation
+  accepts `.zip`; no new CLI command, schema, or dependency was added.
+- Verification at that point: 305 unit tests, both smoke suites, docs
+  consistency, complexity, and diff checks passed (superseded by the hardening
+  round above). The local ignored `dist/` artifact is stale; the release gate
+  must build fresh artifacts before publication.
+
 ## 2026-09-10 — Approval-safe verification campaign, round 17 (10 tasks, zero code)
 
 - T1 baseline ladder: `check_docs.py`, 301 `unittest` tests, both smokes,
