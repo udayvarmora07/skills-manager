@@ -8,6 +8,14 @@
 web survey, distilled into per-item verdicts in the Milestone 4 note, the
 Deferred section, and the new Milestone 11 queue. Docs-only change: no
 code, no locked-constraint changes. New sessions start at Milestone 11.
+**Final-verdict round (2026-09-10):** all 14 blockers re-probed hermetically
+(4 probe agents, stdlib only, zero product-code changes) and re-surveyed
+(8-family workflow, 309 quoted URL entries / 194 unique sources, plus 3
+targeted `web_search` batches on skills.sh API, minisign/PEP 740, Agent
+Skills spec, pywebview/VS Code/GFS/Unicode, and TUF/Sigstore/CSRF/Claude
+precedence). Baseline held green (301 unittest, both smokes, compile,
+frontend, docs, complexity, diff). Verdicts below are FINAL per maintainer
+authorization — each item now carries a **FINAL:** line with evidence.
 
 > This is the canonical execution backlog for the next product cycle. It is
 > deliberately risk-first: protect user data and make future regressions
@@ -41,6 +49,9 @@ code, no locked-constraint changes. New sessions start at Milestone 11.
 - [x] The repository is published to GitHub with tag `v1.0.0` and green CI.
 - [!] PyPI publication is not confirmed by the repository history; publishing
   must use a clean artifact and a controlled release workflow.
+  **FINAL (2026-09-10): still unpublished — live PyPI 404, README makes no
+  install claim, release gate holds; pre-release fix required (rebuild stale
+  `dist/` missing `domain.js`). See L6.**
 
 ### Confirmed defects on `main` — release blockers
 
@@ -64,10 +75,13 @@ code, no locked-constraint changes. New sessions start at Milestone 11.
 
 - [!] `/home/uday-varmora/skills-manager.worktrees/todo-plan-implementation`
   contains approved rollback/full-migration work plus adversarial fixes and
-  tests; it is not part of `main`.
+  tests; it is not part of `main`. **FINAL (2026-09-10): still unmerged
+  (2 commits ahead) — selective replay only, never wholesale merge.**
 - [!] `/home/uday-varmora/skills-manager.worktrees/milestone5-research-user-needs`
   contains a different archive hardening/ZIP/UX implementation; it is not part
-  of `main` and must not be merged wholesale.
+  of `main` and must not be merged wholesale. **FINAL (2026-09-10): still
+  unmerged (1 commit ahead) — selective replay only. (The other 3 worktree
+  dirs are merged-but-stale leftovers with 0 unique commits.)**
 - [x] GitHub issues #1 and #2 are closed as approved design decisions, but their
   code must still be selectively integrated and re-reviewed on `main`.
 - [!] `docs/01-architecture.md`, `docs/05-gui-plan.md`,
@@ -82,6 +96,9 @@ code, no locked-constraint changes. New sessions start at Milestone 11.
   are historical progress-log entries; CLI 27+7+3=37 and insights-57 counts
   corrected in SESSION-CONTEXT/CHANGELOG/task. Historical counters in dated
   evidence/progress entries stay append-only by policy.)
+  **FINAL (2026-09-10): docs verified true (arch repo-map, SUPERSEDED label,
+  settings.json clean, CLI 27+7+3=37, insights 57) — remaining `[!]` is only
+  the append-only historical counters, which stay by policy.**
 
 ## Release policy
 
@@ -270,35 +287,40 @@ them.
 - [x] Support recursive discovery only where the consumer actually does so.
 - [x] Represent read-only, writable, missing, and unsupported roots distinctly.
 - [!] Calculate effective resolution for a selected consumer and project.
-  Research verdict 2026-09-09 (loop probes + ~40 discovery sources),
-  `[?]`s CLOSED in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0
-  (Codex `.agents/skills/` REPO/USER/ADMIN/SYSTEM + no-merge, per
-  `https://learn.chatgpt.com/docs/build-skills`; Command Code six-way
-  order + Duplicate-names + `/skill:<name>` + live reload, per
-  `https://commandcode.ai/docs/skills`; Claude enterprise > personal >
-  project with both-load nested/plugin exceptions, per
-  `https://code.claude.com/docs/en/skills`):
-  precedence is per-consumer, not global (Claude Code
-  enterprise > personal > project > plugins; Gemini CLI
-  built-in < extension < user < workspace with `/skills reload`, per
-  `https://geminicli.com/docs/cli/skills/`; OpenCode upward CWD-to-root
-  search at every level, per `https://opencode.ai/v2/docs/skills`; Cursor
-  nested scoping to files below the directory, per
-  `https://cursor.com/docs/skills`; Command Code walks at most 10 levels
-  stopping at `$HOME`). A single global
-  "winner" function would be wrong for at least one consumer, needs a
-  project-CWD input the current CLI/REST contracts do not carry, and must
-  not be persisted (`SCHEMA_VERSION = "1"` stays frozen). Keep
-  `effective_state: unresolved` as the honest contract. Next: the narrow
-  read-only diagnostic (filed as issue #12 on 2026-09-09),
-  derived at read time, no persistence, citing the source
-  behind each winner. Blocked until the approval-gated runtime
+  **FINAL (2026-09-10): KEEP BLOCKED — `unresolved` is the correct contract.**
+  Re-probes (hermetic loopback + isolated-HOME probes, zero code): project
+  scopes require live project-CWD input (`scopes.py` appends project roots
+  only `if cand.is_dir()` under CWD — absent in `/tmp`, present in a project
+  CWD); same-name global+project duplicates both report
+  `duplicated`/`divergent` with `effective_state: unresolved`
+  (`root_discovery.py:61`, `scopes.py:269`), no winner elected anywhere;
+  `SCHEMA_VERSION = "1"` (`store.py:39`) frozen. 2026-09-09 research
+  (`docs/12-agent-root-discovery-2026-09-08.md` v1.1.0, `[?]`s CLOSED
+  against primaries) plus 2026-09-10 re-survey (Claude enterprise >
+  personal > project > plugins per
+  [Datadog](https://securitylabs.datadoghq.com/articles/malicious-skills-supply-chain-risks-in-coding-agents-with-dynamic-context/) /
+  [Amp](https://ampcode.com/manual); Gemini tiered discovery per
+  `https://geminicli.com/docs/cli/using-agent-skills/`; OpenCode upward
+  CWD-to-root per `https://opencode.ai/docs/skills/`;
+  Cursor nested scoping per `https://cursor.com/docs/rules`; Codex
+  REPO/USER/ADMIN/SYSTEM no-merge per
+  `https://learn.chatgpt.com/docs/build-skills`; Command Code six-way order
+  per `https://commandcode.ai/docs/skills`) prove precedence is per-consumer,
+  not global: a single winner function is wrong for at least one consumer,
+  needs a project-CWD input the CLI/REST contracts do not carry, and must not
+  be persisted (schema frozen). Landing a resolver now would silently hide
+  losing instances and break filesystem-as-source-of-truth. Next: the narrow
+  read-only diagnostic (issue #12, derived at read time, cites source per
+  winner, persists nothing). Blocked until the approval-gated runtime
   ConsumerRootBinding model is introduced.
 - [!] Show active, shadowed, divergent, unmanaged, invalid, disabled, and
-  duplicated instances; observed states (`active`, `disabled`, `invalid`,
-  `duplicated`, `divergent`, `unmanaged` in `root_discovery.py` and
-  `insights.py`) are implemented and probed green, but `shadowed` requires
-  the approval-gated effective resolver above.
+  duplicated instances; **FINAL (2026-09-10): observed states SHIPPED,
+  `shadowed` STAYS BLOCKED.** Observed states (`active`, `disabled`,
+  `invalid`, `duplicated`, `divergent`, `unmanaged` in `root_discovery.py`
+  and `insights.py` `consumer_view()`/`ownership_states()`) are implemented
+  and probed green with zero disk mutation (tree-hash proven); `shadowed`
+  requires the approval-gated effective resolver above and stays blocked
+  with it.
 - [x] Make sync operate on unique physical roots exactly once.
 - [x] Preserve unknown/client-specific frontmatter while separating portable
   standard fields from consumer extensions.
@@ -527,11 +549,19 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   repo; missing endpoints get their own ASK), team sharing #11
   (design-only ADR plus threat-model delta before any bundle format).
 - [ ] L6 — Release only through the existing gate (dry-run green
-  2026-09-09, no publish): package `1.0.0` == `__version__` ==
-  tag `v1.0.0`; `release.yml` tag/version gate + build-once +
-  `--dist-dir` + attestation + TestPyPI→protected `release` env;
-  README makes no PyPI-install claim and live PyPI still 404s;
-  `check_package_data.py` honestly UNAVAILABLE without `build`.
+  2026-09-09, no publish; re-verified 2026-09-10): package `1.0.0` ==
+  `__version__` == tag `v1.0.0`; `release.yml` tag/version gate
+  (`:36-52`) + build-once + `--dist-dir` (`:58`, `:83`) + attestation
+  (`attest-build-provenance@v2`, `:110`) + TestPyPI (`testpypi`, `:118`)
+  → protected `release` env (`:138`) → GitHub Release; README makes no
+  PyPI-install claim (":9 not on PyPI yet") and live PyPI still 404s;
+  `check_package_data.py` honestly UNAVAILABLE without `build`
+  (code-real branch, `:33-34`, `:246-250`). **FINAL (2026-09-10): GATE
+  HOLDS, one pre-release fix required — `dist/` is stale:** the
+  2026-09-05 wheel predates `domain.js` and fails `--dist-dir`
+  (`missing=['skillsmgr/webui/domain.js']`; `pyproject.toml:43-44`
+  `webui/*` covers it once rebuilt — stale-artifact bug, not a config
+  bug; release must build once from a clean tree per the existing gate).
   No version bump, tag, publish, or install claim until that pipeline
   actually publishes: version bump, tag equal to the package version,
   build once, `check_package_data.py --dist-dir` on the exact
@@ -544,48 +574,92 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
 full ladder with corpus regressions; L3 `[?]`s closed with sources; L5
 untouched without approvals; L6 artifacts equal the tested artifacts.
 
+## Milestone 49 — Approval-safe verification campaign (2026-09-10, round 17)
+
+- [x] T1 baseline ladder: 301 `unittest` tests, both smoke suites, compile,
+  frontend syntax, docs, complexity, diff, and CLI help passed.
+- [x] T2 catalog: 62 installed skills audited; required skills loaded; no install
+  performed because stdlib-only and hermetic constraints make it unnecessary.
+- [x] T3 P0 rotation: P0-001 traversal, P0-002 cross-origin purge, P0-003 archive
+  destination safety, P0-004 wildcard bounds, and P0-005 parser recursion all
+  failed closed in hermetic probes.
+- [x] T4 issue #13 remains characterized but unfixed: invalid UTF-8 still leaks
+  `UnicodeDecodeError` from store-wide scan paths; validator catches it cleanly.
+  No behavior decision or code change was made without approval.
+- [x] T5 L6 hygiene: versions/tag align and workflow gates are present; stale
+  ignored `dist/` wheel fails exact package-data verification due to missing
+  `domain.js`, so no release action was taken.
+- [x] T6 REST fail-closed matrix passed: hostile browser metadata 403, missing
+  JSON 415, malformed input/long query 400, same-origin create 201, five headers.
+- [x] T7 archive/parser/search resource-bound probes passed.
+- [x] T8 fresh temporary-data CLI contract probes passed with clean errors.
+- [x] T9 browser harness passed five viewports and fresh loopback live seam passed.
+- [x] T10 docs updated in `task.md`, this file, `PLAN.md`, and the append-only
+  progress log; final verification and Git review are recorded in the log.
+
 ## Deferred and approval-required work
 
 > Research verdicts 2026-09-09 (loop-engineering probes in isolated temp
 > dirs, stdlib only, no product-code changes; ~200 web sources across
 > registry, eval, archive, localhost, signing, discovery, atomicity, and
 > accessibility families; full detail in `docs/06-progress-log.md`
-> 2026-09-09 entry). Each item keeps its `[!]` until its stated approval
-> lands. New sessions implement in the order given here: ~~close #10~~
-> DONE 2026-09-09 (#10 CLOSED), then ZIP on approval (#5 stays the only
-> code item), then the effective-explain diagnostic proposal — now filed
-> as issue #12, awaiting maintainer approval (no code until then).
+> 2026-09-09 entry). **Final-verdict round 2026-09-10:** 4 hermetic
+> re-probe agents (archive, parser/search/links, REST/effective/insights,
+> release/docs/worktrees/encoding/signing/atomicity — all stdlib-only,
+> zero product-code changes) + 8-family survey workflow (309 quoted URL
+> entries, 194 unique sources) + 3 targeted `web_search` batches. Baseline
+> held green (301 unittest, both smokes, all gates). Each item keeps its
+> `[!]` until its stated approval lands. New sessions implement in the
+> order given here: ~~close #10~~ DONE 2026-09-09 (#10 CLOSED), then ZIP
+> on approval (#5 stays the only code item), then the effective-explain
+> diagnostic proposal — now filed as issue #12, awaiting maintainer
+> approval (no code until then).
 
 - [!] Registry bridge: issue #3. Research verdict: DEFER network
-  browse/fetch. `skills.sh` exposes a real catalog API (`GET
+  browse/fetch. **FINAL (2026-09-10): DEFERRED — confirmed by Snyk
+  ToxicSkills audit.** `skills.sh` exposes a real catalog API (`GET
   /api/v1/skills|search|curated|{source}/{skill}|audit/{source}/{skill}`
   with file contents plus a SHA-256 `hash`, per
   `https://www.skills.sh/docs/api`), but authenticated reads require a
   Vercel OIDC bearer token (600/min per team/project, HTTP 401 without,
   per the same reference) — `vercel link` plus token plumbing is
-  unsuitable for a local-first stdlib tool. Install itself is `npx skills
-  add owner/repo` (per `https://www.skills.sh/docs/cli`); the third-party
-  audit surface (Socket/Snyk/Trust-Hub verdicts) is linkable, not
-  proxyable. The product has zero network imports today and `install`
-  deliberately delegates to the ecosystem runner with dry-run-first plus
-  allowlist validation (threat-model H-1 posture). The offline half is
-  already shipped (`insights.registry_preview()`: dry-run steps,
-  explicit-trust gate, blockers). Approved staging: (1) keep the preview
-  gate, (2) map registry ids to `npx skills add` through the existing
-  `install` dry-run machinery, (3) surface the audit link plus `hash` for
-  invalidation. Network fetch, caching, auth, and provenance design need
-  their own ADR first: decide API, caching, provenance, trust, and
-  whether to extend `install` or add a new surface.
+  unsuitable for a local-first stdlib tool. New 2026-09-10 evidence
+  hardens the deferral: Snyk's ToxicSkills audit of 3,984 skills
+  (ClawHub + skills.sh) found 13.4% (534) critical, 36.82% any issue,
+  and 76 confirmed malicious payloads with prompt-injection+malware
+  convergence (per
+  [Snyk](https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/));
+  re-probes confirm the product has zero network imports today
+  (`urllib` is URL-parsing only in `webapp.py`/`web_security.py`) and
+  `install` deliberately delegates to the ecosystem runner with
+  dry-run-first plus allowlist validation (threat-model H-1 posture).
+  Install itself is `npx skills add owner/repo` (per
+  `https://www.skills.sh/docs/cli`); the third-party audit surface
+  (Socket/Snyk/Trust-Hub verdicts) is linkable, not proxyable. The
+  offline half is already shipped (`insights.registry_preview()`:
+  dry-run steps, explicit-trust gate, blockers). Approved staging: (1)
+  keep the preview gate, (2) map registry ids to `npx skills add`
+  through the existing `install` dry-run machinery, (3) surface the audit
+  link plus `hash` for invalidation. Network fetch, caching, auth, and
+  provenance design need their own ADR first: decide API, caching,
+  provenance, trust, and whether to extend `install` or add a new
+  surface.
 - [!] Eval harness: issue #4. Research verdict: ADVISORY-ONLY stays;
-  defer any runtime backend indefinitely. The official
-  evaluating-skills guide prescribes `evals/evals.json`
+  defer any runtime backend indefinitely. **FINAL (2026-09-10):
+  ADVISORY-ONLY — confirmed by promptfoo + LLM-judge-bias literature.**
+  The official evaluating-skills guide prescribes `evals/evals.json`
   (prompt/expected/files), with-skill versus without-skill (or
   previous-version) baselines, and
   `iteration-N/eval-*/{with_skill,without_skill}/` workspaces (per
-  `https://agentskills.io/skill-creation/evaluating-skills`); external
-  practice confirms deterministic assertions plus provider-agnostic
-  runners (promptfoo) and warns that LLM-as-judge position/verbosity
-  bias is systematic. The stdlib-safe subset is already shipped
+  `https://agentskills.io/skill-creation/evaluating-skills`); promptfoo's
+  assertion model (deterministic equals/contains/regex/is-json plus
+  weighted model-graded llm-rubric, per
+  [promptfoo](https://www.promptfoo.dev/docs/configuration/expected-outputs/))
+  confirms deterministic-first is the stdlib-safe subset; LLM-judge
+  position (~65% flip on swap), verbosity, and self-preference biases are
+  measured and systematic (per [arXiv 2410.21819](https://arxiv.org/abs/2410.21819)
+  and [bias survey](https://ai-tldr.dev/learn/evaluation-safety/llm-as-judge/llm-judge-biases/)).
+  The stdlib-safe subset is already shipped
   (`insights.eval_plan()`/`eval_score()`: deterministic cases,
   caller-supplied scorer, "scores never block installs", no SDK, no
   network). Backend = none in-product (bring your own runner outside the
@@ -595,16 +669,31 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   versus blocking behavior — the standing answer is advisory-only.
 - [!] ZIP import: issue #5. Research verdict: APPROVE as a scoped
   extension of the existing `import` (highest-value feature approval, one
-  focused slice, no new command). Probes: `Store.import_` rejects ZIP
-  cleanly today (`StoreError`, locked regression); tar `validate_members`
-  rejects traversal/absolute/`\`/`C:`/symlink/FIFO; `zipfile` preserves
-  hostile names verbatim (`../../evil.txt`, `/abs.txt`,
-  `skills/ok/../../escape.md`), so a manual guard is mandatory; symlink
-  members are detectable via `(external_attr >> 16) & 0o170000 ==
-  0o120000`. External authorities: ZipSlip ([Snyk
-  research](https://security.snyk.io/research/zip-slip-vulnerability)),
-  `ZipInfo.external_attr` semantics, and traversal-sanitization
-  guidance. Parity map: ~90% of the tar policy ports verbatim (name
+  focused slice, no new command). **FINAL (2026-09-10): APPROVED — the
+  only code item; exact 1:1 parity map proven.** Re-probes (Python 3.12.3,
+  `data_filter` present): `Store.import_` rejects ZIP cleanly today
+  (`StoreError` "ZIP archives are not supported", `store.py:1221`, no
+  destination, locked regression); tar `validate_members` rejects 9/9
+  hostile classes (traversal/absolute/nested-dotdot/`\`/`C:`/symlink/FIFO/duplicate,
+  `archive.py:50`); `zipfile` preserves hostile names verbatim
+  (`../../evil.txt`, `/abs.txt`, `skills/ok/../../escape.md`,
+  `skills\evil`, `C:/evil`, duplicates count 2, symlink-bit
+  `(external_attr >> 16) & 0o170000 == 0o120000`), so a manual guard is
+  mandatory; budgets re-verified exact (200 members ok/201 reject;
+  path 512 ok/513 reject; nesting 16 ok/17 reject; 9MB member reject;
+  40000:1 ratio reject; `archive.py:20-26`). External authorities: ZipSlip ([Snyk
+  research](https://security.snyk.io/research/zip-slip-vulnerability))
+  — `zipfile.extract` strips drive/leading slashes but `extractall` docs
+  still warn files CAN land outside path and `zipfile.Path` does NOT
+  sanitize (caller must abspath+commonpath check), per
+  [zipfile docs](https://docs.python.org/3/library/zipfile.html);
+  `ZipInfo.external_attr` symlink semantics per
+  [discussion](https://discuss.python.org/t/how-info-zip-represents-symlinks/4104);
+  42.zip (42KB → 4.5PB nested deflate) per
+  [Zip bomb](https://en.wikipedia.org/wiki/Zip_bomb); PEP 706 explicitly
+  deferred zipfile filters as out-of-scope (no `data_filter`
+  equivalent), per [PEP 706](https://peps.python.org/pep-0706/) — manual
+  member-list validation is required. Parity map: ~90% of the tar policy ports verbatim (name
   normalization, `\`/drive rejection, duplicate detection, layout
   allowlist, six budgets via `file_size`/`compress_size`, staged commit
   plus content-hash verify); genuinely new work is only (1) the
@@ -616,68 +705,103 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   staged-commit pipeline. Use the Milestone 1 archive pipeline if
   approved.
 - [!] Python <3.12 tar policy: issue #6. Research verdict: REJECT refusal;
-  keep feature-detect plus the guarded manual extractor. Probes: this
-  environment is Python 3.12.3 (`data_filter` present); hostile-tar probe
-  rejects traversal, `skills\evil`, symlink, and `C:/evil` through the
-  independent pre-validator. Authorities: [PEP
+  keep feature-detect plus the guarded manual extractor. **FINAL
+  (2026-09-10): REJECTED — CVE-2025-4138 proves the independent validator
+  is the real defense.** Probes: this environment is Python 3.12.3
+  (`data_filter` present); hostile-tar probe rejects traversal,
+  `skills\evil`, symlink, and `C:/evil` through the independent
+  pre-validator (`archive.py:29-60` + `extract_members`
+  `archive.py:131-153`). Authorities: [PEP
   706](https://peps.python.org/pep-0706/) and the [tarfile
   docs](https://docs.python.org/3/library/tarfile.html) say to
   feature-detect (`hasattr(tarfile, "data_filter")`), not version-gate
-  (3.14 flips the default to `data`); filter-bypass CVEs (e.g.
-  CVE-2025-4138) prove an independent validator is the real defense even
-  on new interpreters. Refusal would break `import` on the supported
-  3.10/3.11 matrix (`requires-python >= 3.10`) for zero fail-closed
-  gain. Prefer capability detection and safe independent validation over
+  (3.14 flips the default to `data`); [CVE-2025-4138](https://www.sentinelone.com/vulnerability-database/cve-2025-4138)
+  (plus the PATH_MAX/hardlink/errorlevel=0 cluster, CPython issue 135034)
+  proves data/tar filters are bypassable via symlink targets — the
+  independent validator is the real defense even on new interpreters.
+  Refusal would break `import` on the supported 3.10/3.11 matrix
+  (`requires-python >= 3.10`) for zero fail-closed gain. Prefer capability detection and safe independent validation over
   a silent unsafe fallback — the current design already does this.
 - [!] Out-of-root link severity: issue #7. Research verdict: REJECT the
   warning-to-error promotion; keep the warning plus `risk_scan()`.
-  Probes: `../../../etc/shadow`, `/etc/passwd`, and `../shared/common.md`
-  all warn correctly today; `https://`, `#anchor`, and `<angled>` targets
-  stay clean; a 200-target walk over live plus repo `SKILL.md` files
-  found 145 external/anchor, 55 in-root, and 0 out-of-root (an earlier
-  34-hit count was a shell-regex artifact). Promotion without an
-  allowlist key (itself a new surface) would hard-fail `validate` on
-  legitimate monorepo-relative layouts. Threat-model R-4 is Low/Low with
+  **FINAL (2026-09-10): REJECTED — promotion would break 68 legitimate
+  layouts (measured).** Probes: `../../../etc/shadow`, `/etc/passwd`, and `../shared/common.md`
+  all warn correctly today (`validator.py:323-360`, warning-only);
+  `https://`, `#anchor`, and `<angled>` targets stay clean; walk found
+  `~/.agents` 55 in-root/0 out-of-root and `~/.claude` + `~/.codex` 34
+  out-of-root EACH — ALL legitimate sibling-skill/monorepo-relative
+  references (e.g. mysql→`../postgresql/`, convex-backend→
+  `../../../devops/ai/agent-observability/`), not `/etc` escapes; plus
+  `_LINK_RE`/`_SCRIPT_RE` regex artifacts (nested parens, titles,
+  `chmod +x` prose) would become false errors. Authorities: the Agent
+  Skills spec requires SKILL.md-relative references with upward
+  project-root discovery (OpenCode walks cwd→root every level, Codex
+  scans `.agents/skills` upward, per
+  [Agent Skills spec](https://agentskills.io/specification) and
+  [OpenCode](https://opencode.ai/v2/docs/skills)); warn-by-default is the
+  consistent tooling precedent (zudo-doc warn mode, mlc/linkspector
+  internal-only gating, REF-001 per-file resolution, per
+  [mlc](https://github.com/becheran/mlc) and
+  [REF-001](https://contextlint.dev/docs/rules/ref-001/)). Threat-model R-4 is Low/Low with
   "consider/optionally" language, and `risk_scan()` already flags
   out-of-root links as medium findings with why plus evidence while
   quarantine staging covers untrusted imports. Decide strictness and
   legitimate project-relative link policy — the standing answer is warn,
   not error.
 - [!] VS Code extension: issue #8. Research verdict: separate-repo spike
-  when pursued; no backend changes here. The REST table in
+  when pursued; no backend changes here. **FINAL (2026-09-10):
+  SEPARATE REPO — backend already sufficient.** The REST table in
   `docs/08-web-ui.md` already covers everything an extension needs
   (CRUD, search, validate, sync, install, trash/snapshots, templates,
   export/import, scopes, tokens, doctor/history); loopback binding is
   enforced with Host/Origin/Referer/Fetch-Metadata plus JSON
   content-type gates (ADR-001), and the REST probe matrix stays
   fail-closed (cross-origin purge 403, missing content-type 415, bad
-  install types 400, long query 400). Extension work (TypeScript client,
-  tree view, webview, spawn/attach lifecycle, vsix/marketplace) sits
-  outside the stdlib product and its gates. Keep it separate until REST
-  contracts and local API security are stable; any missing endpoint gets
-  its own ASK first.
+  install types 400, long query 400 — re-verified hermetically this
+  round, headers CSP/`frame-ancestors 'none'`/nosniff/DENY/no-referrer/CORP
+  live). Extension work (TypeScript client, tree view, webview,
+  spawn/attach lifecycle, vsix/marketplace) sits outside the stdlib
+  product and its gates (per [REST Client precedent](https://github.com/Huachao/vscode-restclient)
+  and [publishing docs](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)).
+  Keep it separate until REST contracts and local API security are
+  stable; any missing endpoint gets its own ASK first.
 - [!] Native desktop wrapper: issue #9. Research verdict: REJECT as a
-  product direction; keep the browser canonical. The GTK4 GUI was deleted
+  product direction; keep the browser canonical. **FINAL (2026-09-10):
+  REJECTED — pywebview adds runtimes for cosmetic gain.** The GTK4 GUI was deleted
   2026-08-14 in favor of the web UI, which `browser_harness.py` verifies
-  across 320–1280px viewports with zero console errors. `pywebview`
-  needs a third-party install plus OS webview runtimes — allowed only as
-  an optional extra under locked constraint 4, never the default — while
-  adding native failure modes and accessibility-regression surface for a
+  across 320–1280px viewports with zero console errors (re-verified this
+  round). `pywebview` ([repo](https://github.com/r0x0r/pywebview)) is a
+  native webview wrapper needing a third-party install plus OS webview
+  runtimes (WebView2/GTK-WebKit/Cocoa) — allowed only as an optional
+  extra under locked constraint 4, never the default — while adding
+  native failure modes and accessibility-regression surface for a
   cosmetic gain. Optional only, never replacing the dependency-free
   browser path; an unbundled loopback-only launcher script is the most
   that should ever exist.
 - [!] Team sharing/signatures: issue #11. Research verdict: correctly
-  DEFERRED; design-before-code with honest stdlib limits. Probes:
-  HMAC-SHA256 sign/verify plus tamper detection work in stdlib, but no
-  asymmetric signing exists there (`ed25519` absent) — the options are a
-  shared-secret HMAC (key-distribution, revocation, and
-  non-repudiation problems), shelling out to OpenSSL (not a stdlib
-  contract), or vendoring pure-Python Ed25519 (new audited-crypto
-  burden). External models: minisign-style Ed25519 file signing, TUF
-  trust delegation with thresholds, in-toto layouts with functionary
-  link metadata, and SLSA/Sigstore keyless provenance. None of
-  `bundle_policy()`'s prerequisites hold yet (explicit trust model,
-  approved plus tested quarantine activation — today stage-only —
+  DEFERRED; design-before-code with honest stdlib limits. **FINAL
+  (2026-09-10): DEFERRED — HMAC cannot sign for a team (NIST), Ed25519
+  is not stdlib.** Probes: HMAC-SHA256 sign/verify plus tamper detection
+  work in stdlib, but no asymmetric signing exists there (`ed25519`
+  absent; `cryptography`/`nacl` are OS packages, not stdlib — unusable
+  under the stdlib-only constraint); HMAC is symmetric, so anyone who can
+  verify can also forge — "not transferable to third parties, contrary
+  to non-repudiation provided by digital signatures" (per
+  [NIST SP 800-224](https://csrc.nist.gov/pubs/sp/800/224/ipd)); TUF
+  delegation needs threshold>=1 validation (threshold=0 bypasses
+  verification entirely, per
+  [CVE-2026-23992](https://cvereports.com/reports/CVE-2026-23992)).
+  External models: minisign-style Ed25519 file signing (per
+  [minisign](https://jedisct1.github.io/minisign/)), TUF
+  trust delegation with thresholds (per
+  [TUF spec](https://theupdateframework.github.io/specification/latest/)),
+  in-toto layouts with functionary link metadata, and SLSA/Sigstore
+  keyless provenance (Fulcio short-lived cert + Rekor transparency, per
+  [Sigstore](https://docs.sigstore.dev/cosign/signing/overview/) and
+  [PEP 740](https://peps.python.org/pep-0740/) / [PyPI
+  attestations](https://blog.pypi.org/posts/2024-11-14-pypi-now-supports-digital-attestations/)).
+  None of `bundle_policy()`'s prerequisites hold yet (explicit trust
+  model, approved plus tested quarantine activation — today stage-only —
   persisted provenance/hashes — today observation-only — verified
   recovery). Requires a trust/key-distribution design and a new
   threat-model review — no bundle format code until that ADR lands.

@@ -375,6 +375,100 @@
 - [x] T9 ladder green: 296 unittest, smokes, compile/frontend/docs/complexity/diff/help, harness, fresh-tmp.
 - [x] T10 per-group commits plus push (this entry, then push step).
 
+## Milestone 48 — Final-verdict loop-engineering round (2026-09-10, FINAL per maintainer authorization)
+
+Method: 4 hermetic re-probe agents (archive ZIP/TAR; parser/search/links;
+REST/effective/insights; release/docs/worktrees/encoding/signing/atomicity —
+stdlib only, `/tmp` probes, zero product-code changes) + 8-family survey
+workflow (309 quoted URL entries, 194 unique sources) + 3 targeted
+`web_search` batches. Baseline held green (301 unittest, both smokes,
+compile, frontend, docs, complexity, diff).
+
+- [x] F1 archive re-probes (Python 3.12.3, `data_filter` present): ZIP
+  rejected cleanly (`StoreError`, `store.py:1221`, no destination);
+  `zipfile` preserves all hostile names verbatim + dupes + symlink-bit
+  (`(external_attr>>16)&0o170000==0o120000`); tar `validate_members`
+  9/9 hostile rejections (`archive.py:50`); budgets exact (200 ok/201
+  reject, path 512/513, nesting 16/17, 9MB member, 40000:1 ratio;
+  `archive.py:20-26`); feature-detect `archive.py:131-153`.
+- [x] F2 parser/search/link re-probes: dup/huge/400-deep/2000-deep all
+  clean `FrontmatterError`, never `RecursionError`; >10 stars/>200 chars
+  instant `ValueError` (worst valid 11ms); link matrix exact
+  (`validator.py:323-360` warning-only); walk: `~/.agents` 55/0,
+  `~/.claude` + `~/.codex` 34 legitimate out-of-root each (sibling-skill
+  refs, not escapes) + regex artifacts documented.
+- [x] F3 REST/effective/insights re-probes: x-origin purge 403 + trash kept,
+  bad/missing CT 415, bad install 400, long query 400, same-origin
+  201/200, 5 headers live; `consumer_view`/`effective_state` unresolved,
+  10 `risk_scan` findings hostile / 0 clean, registry trust gate,
+  eval advisory-only, bundle deferred; tree-hash zero-mutation proven;
+  no network/backend/extension/signing code (`urllib` parse-only);
+  CWD-dependent project scopes + `SCHEMA_VERSION = "1"` frozen.
+- [x] F4 release/docs/worktree/encoding/signing/atomicity re-probes:
+  versions/tag `1.0.0` aligned, release gate present, PyPI 404, UNAVAILABLE
+  branch code-real; **NEW: `dist/` wheel stale (missing `domain.js`,
+  `--dist-dir` FAILs — rebuild from clean tree before release)**; docs
+  truth all green (CLI 27+7+3=37, insights 57); **worktrees: 3 merged-but-stale
+  + 2 genuinely unmerged** (via `merge-base`); **#13 confirmed**
+  (`loader.py:31` raw escape breaks store-wide scans; validator catches);
+  HMAC ok / `ed25519` absent; atomic writes + newest-5 snapshots green.
+- [x] F5 survey synthesis: registry DEFER (ToxicSkills 13.4% critical);
+  eval ADVISORY-ONLY (promptfoo + judge-bias lit); ZIP APPROVE (PEP 706
+  has no zip equivalent — manual validation mandatory); tar-refusal REJECT
+  (CVE-2025-4138 bypasses filters); link REJECT (68 legit layouts +
+  warn-precedent); extension SEPARATE; wrapper REJECT; signing DEFER
+  (NIST non-repudiation gap + threshold=0 flaw).
+- [x] F6 verdicts recorded FINAL in `TODO.md` (header + M4 ×2 + Deferred
+  ×8 + L6), `PLAN.md` (§9 + §11), this milestone, and progress log; full
+  ladder re-run green (recorded in progress log).
+- [x] Standing order: L2 ZIP is the only code item (needs approval #5);
+  issue #12 diagnostic next (needs approval); REJECT items (#6/#7/#9)
+  ready to close with evidence; DEFER items (#3/#4/#8/#11) untouched;
+  L6 gate holds with one pre-release fix (rebuild `dist/`).
+
+## Milestone 49 — Approval-safe verification campaign, round 17 (2026-09-10, 10 tasks)
+
+Goal: execute the latest `TODO.md`/`PLAN.md` queue without crossing locked
+constraints. This round made no product-code, schema, dependency, release, or
+live-user-data changes. ZIP support and the effective-resolution diagnostic
+remain approval-gated; the release gate remains intentionally unfulfilled until
+an authorized clean build/publish.
+
+- [x] T1 baseline ladder: 301 `unittest` tests, both smoke suites, compile,
+  frontend syntax, docs, complexity, diff, and CLI help all passed.
+- [x] T2 skills catalog: 62 installed skills audited; `find-skills` and
+  `first-principles-production-engineering` were loaded; no new skill installed
+  because the stdlib-only and hermetic-workflow constraints need no dependency.
+- [x] T3 P0 rotation: P0-001 traversal victim survived; P0-002 hostile-origin
+  purge returned 403 and preserved trash; P0-003 hostile archive was rejected
+  before destination creation; P0-004 wildcard complexity was bounded; and
+  P0-005 deep flow input returned `FrontmatterError`, never raw recursion.
+- [x] T4 issue #13 characterization: an invalid UTF-8 `SKILL.md` still causes
+  raw `UnicodeDecodeError` in `scan_dir`, `Store.list`, `doctor`, and `resync`,
+  while validator handling remains clean. No fix was applied because the issue
+  is an explicit behavior decision and approval is unavailable.
+- [x] T5 L6 hygiene: package/`__version__`/`v1.0.0` remain aligned; the existing
+  release workflow has build-once, exact-artifact, attestation, TestPyPI,
+  protected-release, and GitHub Release gates; the stale local wheel still
+  fails `check_package_data.py --dist-dir` for missing `domain.js`, so no publish
+  or version/tag action was taken.
+- [x] T6 REST matrix: hostile Origin, Referer, Fetch Metadata, and Host were
+  rejected with 403; missing JSON content type returned 415; malformed install
+  input and overlong search returned 400; same-origin create returned 201; all
+  five defensive response headers were present.
+- [x] T7 resource bounds: archive member-count/path/nesting limits, parser
+  deep/large-document limits, and search length/star limits rejected or returned
+  clean bounded errors through their public seams.
+- [x] T8 CLI contracts: fresh-data create/list/search/doctor/remove paths worked;
+  missing skills, invalid names, missing restore targets, and invalid token
+  windows returned clean nonzero results without tracebacks.
+- [x] T9 browser/live seam: `browser_harness.py` passed all five viewports with
+  zero errors and no overflow; a fresh temporary Store served one live skill
+  through a loopback `WebAppServer`.
+- [x] T10 docs hygiene and finalization: this milestone and the progress log
+  record exact evidence; only intended documentation files are eligible for the
+  commit; final ladder and Git status/diff review remain the release check.
+
 ## Milestone 31 — Loop-engineering research verdicts (2026-09-09, start here next session)
 
 Research: 9 hermetic probe scripts (isolated temp dirs, stdlib only, no

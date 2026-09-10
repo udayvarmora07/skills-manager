@@ -709,6 +709,24 @@ limits/round-trip, eval/risk/registry/quarantine behavior, effective
 boundary, REST fail-closed matrix (403/415/400s), stdlib signing
 reality. Baseline held green (301 unittest, docs, complexity gates).
 
+### 2026-09-10 final-verdict round (maintainer-authorized; all 14 FINAL)
+
+Method: 4 hermetic re-probe agents (archive ZIP/TAR, parser/search/links,
+REST/effective/insights, release/docs/worktrees/encoding/signing/atomicity;
+stdlib only, `/tmp` probes, zero product-code changes) + 8-family survey
+workflow (309 quoted URL entries, 194 unique sources) + 3 targeted
+`web_search` batches. New decisive evidence: Snyk ToxicSkills audit
+(3,984 skills: 13.4% critical, 76 confirmed malicious — hardens registry
+DEFER); CVE-2025-4138 filter-bypass cluster (independent validator is the
+real defense — hardens tar-refusal REJECT); 68 legitimate cross-skill
+relative links measured in `~/.claude` + `~/.codex` (promotion would break
+them — hardens link REJECT); `dist/` wheel missing `domain.js`
+(stale-artifact pre-release fix); `git merge-base` shows 3 of 5 worktree
+dirs already merged-but-stale, 2 genuinely unmerged; single poisoned
+SKILL.md (latin-1 byte) breaks store-wide scans via `loader.py:31`
+(issue #13, fix seam identified, no code). Baseline held green throughout
+(301 unittest, both smokes, compile, frontend, docs, complexity, diff).
+
 Verdicts distilled into `TODO.md` (Milestone 4 note, Deferred
 section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
 §9 above. Standing answers for a new session:
@@ -719,8 +737,10 @@ section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
 - Tar-fallback refusal: REJECT (keep feature-detect plus guarded manual
   extractor; CI matrix stays 3.10–3.14; filter-bypass CVEs prove the
   independent validator is the real defense).
-- Link warning→error: REJECT (keep warning plus `risk_scan()`; probe
-  found 0 real escapes in 200 live targets).
+- Link warning→error: REJECT (keep warning plus `risk_scan()`; 2026-09-10
+  walk: 68 legitimate sibling-skill/monorepo-relative links in
+  `~/.claude` + `~/.codex` would break under promotion, plus regex
+  artifacts).
 - Registry: DEFER network (OIDC-gated API); staged offline→passthrough
   path only.
 - Eval: ADVISORY-ONLY, file-based, never blocking.
@@ -748,6 +768,19 @@ section, Milestone 11 queue), `task.md` Milestones 5 and 31, and PLAN
 External products are used to understand user expectations and portability
 patterns, not to justify copying their architecture. Repository constraints,
 measured failures, and user-data safety remain the decision authority.
+
+## Milestone 49 — Approval-safe verification campaign (2026-09-10)
+
+Round 17 completed ten read-only, approval-safe verification tasks over the
+latest backlog: baseline ladder, installed-skill catalog audit, P0 fail-closed
+rotation, issue #13 characterization, release-artifact hygiene, REST security,
+resource bounds, CLI contracts, browser/live checks, and documentation hygiene.
+No product code, SQLite schema, dependencies, release artifacts, tags, or live
+user skill roots were changed. The stale ignored `dist/` wheel remains a known
+pre-release finding because it predates `domain.js`; the existing release
+workflow must build once from a clean tree before publication. ZIP support,
+the effective-resolution diagnostic, and issue #13 remediation remain gated by
+explicit decisions that were not available in this session.
 
 ## 12. Final definition of done
 

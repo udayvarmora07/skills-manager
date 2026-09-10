@@ -4,6 +4,50 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-09-10 — Approval-safe verification campaign, round 17 (10 tasks, zero code)
+
+- T1 baseline ladder: `check_docs.py`, 301 `unittest` tests, both smokes,
+  compile, `node --check` for both frontend files, complexity, `git diff --check`,
+  and CLI help passed.
+- T2 catalog: 62 installed skills audited; required skills were loaded; no new
+  skill installed because the repository's stdlib-only and hermetic constraints
+  make installation unnecessary.
+- T3 P0 rotation: traversal victim preserved; hostile-origin purge 403 with trash
+  preserved; hostile archive rejected before destination mutation; wildcard
+  bounds returned clean `ValueError`; deep frontmatter returned clean
+  `FrontmatterError`.
+- T4 issue #13 read-only repro remains: a latin-1 byte produces raw
+  `UnicodeDecodeError` from `scan_dir`, `Store.list`, `doctor`, and `resync`, while
+  `validator.validate_skill` returns a structured error. No product fix was made
+  because the issue's behavior choice is not approved and approval prompts are
+  unavailable.
+- T5 L6: package metadata, `__version__`, and `v1.0.0` remain aligned; the stale
+  ignored wheel fails `check_package_data.py --dist-dir` because it predates
+  `domain.js`. No publish, version bump, tag, or artifact replacement was done.
+- T6 REST: Origin/Referer/Fetch-Metadata/Host hostile mutations → 403, missing
+  content type → 415, malformed install and long query → 400, same-origin create
+  → 201, and all five security headers verified live.
+- T7 archive/parser/search bounds, T8 fresh-data CLI contracts, and T9 browser
+  harness plus fresh temporary live seam all passed. T10 documentation is updated
+  in `task.md`, `TODO.md`, `PLAN.md`, and this append-only log.
+- Scope decision: L2 ZIP, issue #12 diagnostic, and issue #13 remediation stay
+  untouched; deferred/rejected roadmap items remain unchanged. The release gate
+  remains blocked only by the stale local artifact and absent authorized publish.
+
+## 2026-09-10 — Final-verdict loop-engineering round (maintainer-authorized; all 14 FINAL, zero code)
+
+- Method: 4 hermetic re-probe agents (stdlib only, `/tmp` probes, isolated temp dirs/HOME/loopback servers, zero product-code changes) + 8-family survey workflow (309 quoted URL entries, 194 unique sources across registry/eval/zip/tar-localhost/link/discovery/signing/release families) + 3 targeted `web_search` batches (skills.sh API, minisign/PEP 740/Agent Skills spec, pywebview/VS Code/GFS/Unicode, TUF/Sigstore/CSRF/Claude precedence).
+- F1 archive (Python 3.12.3, `data_filter` present): `Store.import_` rejects ZIP cleanly (`StoreError` "ZIP archives are not supported", `store.py:1221`, no `skills/ok`, no tmp residue); `zipfile` preserves hostile names verbatim (`../../evil.txt`, `/abs.txt`, `skills/ok/../../escape.md`, `skills\evil`, `C:/evil`, dupes count 2, symlink-bit `(external_attr>>16)&0o170000==0o120000` True); tar `validate_members` 9/9 hostile rejections (`unsafe`/`unsupported`/`duplicate ArchiveError`, `archive.py:50`); budgets exact (members 200 ok/201 reject, path 512/513, nesting 16/17, 9MB reject, ratio 40000:1 reject; `archive.py:20-26`); feature-detect `archive.py:131-153`. ZIP parity map: verbatim `normalize_member_name` + `contained_path`, all budgets/layout/dup/exactly-one-manifest, symlink-bit→unsupported, manual contained extraction (no `data_filter` equivalent per PEP 706), manifest preflight before dest writes, `StoreError` hygiene + mkdtemp/finally.
+- F2 parser/search/links: dup keys (block+flow), 600KB doc, 400-deep block, 2000-deep flow → all clean `FrontmatterError`, never raw `RecursionError` (P0-SEC-005 holds); valid Agent-Skills + client-extension fixtures round-trip; >10 stars/>200 chars → instant `ValueError` ~0.0ms, worst valid 11.1ms (P0-SEC-004 holds), valid plain+wildcard searches work; link matrix warns (`../../../etc/shadow`, `/etc/passwd`, `../shared/common.md`) and stays clean (`https://`, `#anchor`, `<angled>`) per `validator.py:323-360` (warning-only); walk: live skills 12/0, `~/.agents` 55/0, `~/.claude` 40+34 legit sibling/monorepo refs, `~/.codex` 51+34 same, repo 0 SKILL.md; `_LINK_RE`/`_SCRIPT_RE` artifacts documented (nested parens, titles, `chmod +x` prose) — promotion would convert them into false errors.
+- F3 REST/effective/insights: x-origin purge → 403 + trash preserved, bad/missing JSON CT → 415, bad install scalars → 400 JSON, 300-char query → 400, same-origin → 201/200, all 5 security headers live (CSP `frame-ancestors 'none'`, nosniff, DENY, no-referrer, same-origin CORP); `consumer_view` count + `unresolved-precedence-approval-gated`, `effective_state: unresolved` everywhere, diff/3-way (conflict holds base), 5 ownership states, provenance known/unknown, preview risks + rollback flag, quarantine stage-only/`activated:false`, 10 risk findings hostile / 0 clean, registry trust gate False→True, eval advisory-only, bundle deferred; tree hash unchanged (zero mutation); product `urllib` is parse-only (`urlparse`/`parse_qs`/`unquote`), no urlopen/http.client/socket/SDK, no `.ts`, `zipfile.is_zipfile` rejection-only; project scopes require live CWD (absent in `/tmp`, present in project CWD), duplicates stay `duplicated+unresolved` with no winner, `SCHEMA_VERSION = "1"` frozen.
+- F4 release/docs/worktrees/encoding/signing/atomicity: `1.0.0` aligned everywhere (pyproject/`__version__`/tag `v1.0.0`, HEAD 43 commits on); release gate present (tag check `:36-52`, build-once `:56`, `--dist-dir` `:58`/`:83`, attest `:110`, testpypi `:118`→release `:138`→GitHub Release); README makes no false PyPI claim (":9 not on PyPI yet"); live PyPI 404; UNAVAILABLE branch code-real; **NEW FINDING: `dist/` stale — wheel missing `skillsmgr/webui/domain.js`, live `--dist-dir` FAILs; rebuild from clean tree before release (config covers `webui/*`)**; docs truth all green (arch repo-map, SUPERSEDED label, settings clean, CLI 27+7+3=37, insights 57); **worktrees: 3 merged-but-stale + 2 genuinely unmerged** (`merge-base` proof; local dirt noted); **#13 confirmed**: single latin-1 byte breaks store-wide scans (`loader.py:31` raw `UnicodeDecodeError` escapes `scan_dir`/doctor/resync; `validator.py:382-385` catches; fix seam = loader per-skill catch, no code); HMAC-SHA256 works / `ed25519` absent / crypto-nacl are OS packages not stdlib; atomic sibling-temp/fsync/replace preserves prior content with no residue; snapshots newest-5 confirmed.
+- Survey synthesis (final): #3 DEFER (ToxicSkills 13.4% critical/76 malicious, [Snyk](https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/)); #4 ADVISORY-ONLY ([promptfoo](https://www.promptfoo.dev/docs/configuration/expected-outputs/), [arXiv 2410.21819](https://arxiv.org/abs/2410.21819)); #5 APPROVE (no zip `data_filter` per [PEP 706](https://peps.python.org/pep-0706/), ZipSlip per [Snyk](https://security.snyk.io/research/zip-slip-vulnerability), symlink-bit per [discussion](https://discuss.python.org/t/how-info-zip-represents-symlinks/4104)); #6 REJECT ([CVE-2025-4138](https://www.sentinelone.com/vulnerability-database/cve-2025-4138)); #7 REJECT (68 legit layouts + [mlc](https://github.com/becheran/mlc)/[REF-001](https://contextlint.dev/docs/rules/ref-001/) warn-precedent); #8 SEPARATE ([REST Client](https://github.com/Huachao/vscode-restclient)); #9 REJECT ([pywebview](https://github.com/r0x0r/pywebview) runtimes); #11 DEFER ([NIST SP 800-224](https://csrc.nist.gov/pubs/sp/800/224/ipd), [threshold=0](https://cvereports.com/reports/CVE-2026-23992), [minisign](https://jedisct1.github.io/minisign/), [TUF](https://theupdateframework.github.io/specification/latest/), [Sigstore](https://docs.sigstore.dev/cosign/signing/overview/), [PEP 740](https://peps.python.org/pep-0740/)); M4 `unresolved` ([Datadog](https://securitylabs.datadoghq.com/articles/malicious-skills-supply-chain-risks-in-coding-agents-with-dynamic-context/), [Amp](https://ampcode.com/manual)).
+- Docs: `TODO.md` (header + M4 ×2 FINAL + Deferred ×8 FINAL + L6 stale-dist), `PLAN.md` (§9 + §11 final-verdict round), `task.md` Milestone 48, this entry. `git status` shows only intended files (plus ignored `.autogit`).
+
+## 2026-09-10 — Final-verdict ladder (T15)
+
+- `check_docs.py` → PASSED; 301 unittest → OK (19.5s); both smokes → PASSED; `py_compile` → OK; `node --check` (`app.js` + `domain.js`) → OK; `check_complexity.py` → PASSED (151 functions, budget ≤ 15); `git diff --check` → OK; `--help` → OK.
+
 ## 2026-09-09 — Suite-health + stability campaign, round 16 (11 probes green, zero code)
 
 - Hermetic probes (stdlib only, inline heredocs, outside the repo; zero product-code changes): T3 concurrency file 5/5 green (round-5 slow-join stands as scheduling, not a contract break); T4 full suite 2/2 back-to-back green; T5 suite health — 0 skips, 301 counted (per-file: insights 57, store 47, web_scopes 27, store_contracts 27, webapp 21, ci_release 20, path_safety 22, archive 14, frontmatter 14, search 11, scope 11, cli 6, complexity 6, docs 5, package 4, concurrency 4, compat 3, smoke_fixtures 2; `-v` shows 300 `... ok` lines + 1 diagnostic-print line, not a skip); T6 gate pins v1.1.0 + v0.3.0 in `CURRENT_DOCS`; T7 workflows + CI contracts 20/20; T8 tracked-junk zero; T9 deferred + PyPI 404; T10 P0 rotation green.
