@@ -578,8 +578,15 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   and `--dist-dir --install` clean-installs the inspected wheel; a separate
   pristine venv installed the wheel with `--no-index --no-deps`, ran `--help`
   and `create demo`, and asserted the vendored Vue bundle plus `webui/domain.js`
-  are present. The sdist clean-install reports an honest `UNAVAILABLE` offline
-  (that venv has no `setuptools` and the check installs with `--no-index`).
+  are present. The sdist clean-install reports an honest `UNAVAILABLE` offline,
+  so it was verified separately instead: a venv with `setuptools` provisioned
+  installed `dist/skills_manager-1.0.0.tar.gz` (`--no-deps
+  --no-build-isolation`), ran `--help` and `create sdist-demo`, and asserted the
+  vendored Vue bundle (157,924 B), `webui/domain.js` (5,537 B), and
+  `webui/index.html` (55,840 B) are present. Cross-artifact consistency: the
+  wheel and sdist each carry 32 `skillsmgr/` files whose SHA-256 digests are
+  equal to each other and to the source tree at `80bc02a`, with `METADATA`
+  `Version: 1.0.0` and the console entry point present.
   Wheel members are byte-identical across rebuilds (only ZIP timestamps differ);
   the stale 2026-09-05 artifacts are preserved under `dist/stale-2026-09-05/`
   (they fail the gate: missing `domain.js`).

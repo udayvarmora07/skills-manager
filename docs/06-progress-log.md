@@ -78,6 +78,20 @@
   trusted publisher registered (PyPI/TestPyPI 404), and tag `v1.0.0` already
   pointing at the earlier release commit, so a version bump + tag is a
   maintainer decision.
+- Both exact artifacts were then verified end to end, closing the one honest
+  `UNAVAILABLE` gap in the gate. The sdist has no offline install backend on this
+  box (a fresh venv has no `setuptools` and the gate installs with `--no-index`),
+  so a separate venv provisioned `setuptools` once and then installed
+  `dist/skills_manager-1.0.0.tar.gz` with `--no-deps --no-build-isolation`:
+  `python -m skillsmgr --help` OK, `create sdist-demo` OK, and the installed tree
+  contains the vendored Vue bundle (157,924 B), `webui/domain.js` (5,537 B), and
+  `webui/index.html` (55,840 B). The hermetic `--no-index` gate still reports
+  `UNAVAILABLE` for the sdist, which is the honest result and is unchanged.
+- Cross-artifact consistency was checked directly: the wheel and the sdist each
+  carry 32 `skillsmgr/` files whose SHA-256 digests are equal to each other and
+  to the source tree at `80bc02a`, `METADATA` reports `Version: 1.0.0`, and the
+  console entry point is present in the wheel. That is the strongest available
+  local evidence that the tested source is exactly what the gate would publish.
 
 ## 2026-09-10 — ZIP import hardening round (adversarial audit fixes)
 
