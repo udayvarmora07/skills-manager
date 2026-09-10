@@ -1,6 +1,6 @@
 # Threat Model — skills-manager
 
-**Date:** 2026-09-04 · **Version:** 1.0 · **Scope:** `skills-mgr` CLI + local web UI (`skillsmgr/webapp.py`, `skillsmgr/webui/`), `Store` + `scopes` data layer.
+**Date:** 2026-09-10 · **Version:** 1.1 · **Scope:** `skills-mgr` CLI + local web UI (`skillsmgr/webapp.py`, `skillsmgr/webui/`), `Store` + `scopes` data layer. Updated for approved ZIP import support.
 
 ## 1. System overview
 
@@ -24,7 +24,7 @@ CLI (argparse, stdlib-only) ─────────────────�
 ## 3. Trust boundaries
 
 - **B-1 Loopback HTTP** (`127.0.0.1:8765`): any local process or user can call the API. There is no auth boundary inside the machine — by design. Browser state-changing requests additionally pass Host, Fetch Metadata, Origin, and Referer checks.
-- **B-2 Archive/folder intake** (`PUT /api/import`, multipart upload, `Store.import_`, `Store.add`): untrusted bytes → filesystem writes. Highest-risk boundary; mitigated by basename/type checks, size/part caps, tar `filter="data"`.
+- **B-2 Archive/folder intake** (`PUT /api/import`, multipart upload, `Store.import_`, `Store.add`): untrusted bytes → filesystem writes. Highest-risk boundary; mitigated by basename/type checks, size/part caps, independent tar validation plus `filter="data"`, and ZIP member preflight with explicit contained-path extraction and symlink-bit rejection.
 - **B-3 Skill-body rendering** (SKILL.md → `renderMarkdown` → DOM): untrusted markdown → browser. Mitigated by escape-first renderer, `https?`-only links, no raw HTML.
 - **B-4 Ecosystem install** (`/api/install`, `install` command): remote repo name → local `npx skills add` execution. Mitigated by allowlists, list-form exec, default dry-run, UI confirm.
 - **B-5 Scope dirs**: writes escape the manager's data dir into agent config dirs. Mitigated by known-scope registry and unknown-scope rejection.
@@ -44,8 +44,8 @@ Out of scope: TLS/HSTS/`Secure` cookies (localhost tool), CSRF tokens (no sessio
 
 | Path | Mitigation | Residual |
 |---|---|---|
-| T-1 Archive path traversal (`../../evil`, absolute members) | Independent member validation, resolved containment, `filter="data"` on Python ≥ 3.12, and guarded regular-file/directory fallback | None known in the supported tar path |
-| T-2 Oversized archive/body exhausting memory/disk | 25 MB body cap + `Content-Length` validation; 200 upload parts; tar compressed/expanded/member/path/nesting/ratio budgets | Disk-fill by many separate local imports remains accepted local-user behavior |
+| T-1 Archive path traversal (`../../evil`, absolute members) | Independent tar/ZIP member validation, canonical resolved containment, `filter="data"` on Python ≥ 3.12 plus guarded tar fallback, and explicit ZIP regular-file/directory extraction; ZIP symlink bits rejected | None known in supported formats |
+| T-2 Oversized archive/body exhausting memory/disk | 25 MB body cap + `Content-Length` validation; 200 upload parts; tar/ZIP compressed/expanded/member/path/nesting/ratio budgets | Disk-fill by many separate local imports remains accepted local-user behavior |
 | T-3 Stored XSS via skill body | Escape-first renderer, `https?` links only, `rel="noopener"`, no `v-html` (`app.js:15, 47-110`) | None known |
 | T-4 Command injection via install params | Allowlist regex + no-leading-dash on source/agents/skills; list-form `subprocess.run`; runner closed set (`webapp.py:514-543`) | T-4R: postinstall scripts of the installed repo still run — inherent to the feature; keep confirm gate |
 | T-5 Skill-name traversal (`../../x`) reaching outside skill dirs | `NAME_RE` + `MAX_NAME` enforced on create/add/sync (`validator.py`, `store.py`, `scopes.py:282, 452`) | None known |
@@ -61,7 +61,7 @@ Out of scope: TLS/HSTS/`Secure` cookies (localhost tool), CSRF tokens (no sessio
 
 | ID | Risk | Likelihood | Impact | Priority |
 |---|---|---|---|---|
-| R-1 | Unfiltered tar fallback on old Python (T-1R) | Low (most envs ≥ 3.12) | High (arbitrary write) | Guarded fallback implemented |
+| R-1 | Unfiltered tar fallback on old Python (T-1R) | Low (most envs ≥ 3.12) | High (arbitrary write) | Guarded fallback implemented; ZIP has independent manual extraction |
 | R-2 | Malicious repo postinstall on `install --run` (T-4R) | Low (needs explicit run) | High (code exec as user) | Keep confirm + docs |
 | R-3 | Port rebound to LAN/forwarded, exposing unauthenticated API | Low | Medium (local data + skill writes) | Rejected by default; document "never expose" |
 | R-4 | Link-escape warning ignored (T-8) | Low | Low | Consider blocking |

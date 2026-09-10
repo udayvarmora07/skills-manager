@@ -6,6 +6,41 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- ZIP archive import for the existing `import` command and `PUT /api/import`
+  route (issue #5, approved 2026-09-10): content-sniffed tar/ZIP detection,
+  canonical member-name and layout allowlists, duplicate detection,
+  compressed/expanded/member/path/nesting/ratio budgets, ZIP symlink-bit
+  rejection, explicit contained-path extraction, and the existing staged
+  commit/hash pipeline. No new CLI command, no schema change, no dependency.
+- Regression corpus for the ZIP slice: round trip, traversal, absolute,
+  backslash, drive-letter, symlink, duplicate, malformed central metadata,
+  slash-only directory entries, per-member ratio bombs, full-import failures,
+  and a live REST import.
+
+### Fixed
+
+- A failed staging copy no longer deletes the destination skill. Previously a
+  `copytree` failure that happened before the original was moved aside was
+  indistinguishable from "no original existed", so the user's skill directory
+  was removed (`skillsmgr/archive.py`).
+- ZIP compression-ratio budget is enforced per member as well as per archive; a
+  stored incompressible member can no longer mask a later highly compressible
+  one.
+- `--full` imports of trash/templates are now one all-or-nothing transaction:
+  every payload is validated before any mutation, each is staged and swapped
+  with rollback, and failures surface as `StoreError` (REST → 400) instead of
+  raw `OSError` with mixed old/new state. Restored trash names are reconciled
+  into the index so `stats()`/`doctor()` agree with `trash_list()`.
+- Manifest validation rejects a non-boolean `full` flag and non-plain
+  `trash`/`templates` entry names before any filesystem work.
+- `check_package_data.py --dist-dir --install` now actually installs the exact
+  artifacts it inspected; the install step used to be skipped silently.
+- CI portability: the cross-platform job compiles with `python -m compileall`
+  (Windows runners do not expand `skillsmgr/*.py`), `contained_path` test
+  expectations resolve the root (macOS `/var` → `/private/var`), and the
+  browser harness discovers Chrome's DevTools port from `DevToolsActivePort`
+  with a longer cold-start budget.
+
 - Milestone 9 read-only insight foundation (`skillsmgr/insights.py`, pure stdlib-only helpers, no CLI/Store/schema/network changes): per-consumer observed views with precedence explicitly unresolved, two-way/three-way diffs, five-state ownership classification, provenance summaries, update previews with rollback flags, stage-only quarantine plans, explainable static risk scans, offline registry dry-runs gated on explicit trust, provider-neutral advisory eval plans, and a deferred signed-bundle policy. Locked by 57 red-first hermetic tests in `tests/test_insights_contracts.py` (20 foundation + 11 fail-closed + 9 round-3 strictness + 7 round-4 boundaries + 5 round-5 audit locks + 5 deep-E2E).
 - Browser UX/a11y baseline: dev-only Chrome CDP viewport harness with console/runtime/network failure capture; keyboard `/`, `?`, `Esc`, and Tab dialog contracts; labelled/inert modal focus lifecycle; safer destructive defaults; live status announcements; escaped Markdown editor preview; and sync source/target/overwrite/rollback preview.
 - Internal seams: CLI parser and handlers split behind `skillsmgr.cli` compatibility adapters; no-build frontend domain policy split into `webui/domain.js` before `app.js`.
@@ -46,10 +81,11 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   special members are rejected; tar extraction uses `data_filter` when
   available and a guarded regular-file/directory fallback otherwise; malformed
   trash entries are ignored consistently.
-- Archive intake budgets and migration contract: tar compressed/expanded/member/
-  path/nesting/ratio limits, strict versioned manifests, extracted frontmatter
-  name checks, content-based ZIP rejection, and staged per-skill import rollback
-  with explicit imported/skipped reporting.
+- Archive intake budgets and migration contract: tar and ZIP
+  compressed/expanded/member/path/nesting/ratio limits, strict versioned
+  manifests, extracted frontmatter name checks, content-based format detection,
+  guarded ZIP extraction (including symlink-bit rejection), and staged per-skill
+  import rollback with explicit imported/skipped reporting.
 - Spec-lint+ (`validator.py`): `description_score()` (use-context + filler detection), description warnings (missing "Use … when …", vague filler), body token warning (`MAX_BODY_TOKENS=5000`, progressive-disclosure guidance), `scripts/`/`references/`/`assets/` layout check for dangling mentions.
 - Cross-scope dedup: `scopes.find_duplicates()` (same-name + descriptions-differ flag), surfaced in `doctor --scope all`, `/api/doctor?scope=all`, and the doctor modal with Sync… converge buttons.
 - Token budget view (verified complete): `tokens --scope all` aggregate + `largest`, `/api/stats?window=` + `/api/tokens`, frontend budget bar with window selector.

@@ -42,7 +42,10 @@ class TestContainedPath(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "root"
             root.mkdir()
-            self.assertEqual(contained_path(root, "child"), root / "child")
+            # contained_path() resolves the root it guards, and on macOS the
+            # temporary directory lives behind the /var -> /private/var
+            # symlink, so the expectation must resolve too.
+            self.assertEqual(contained_path(root, "child"), root.resolve() / "child")
 
     def test_rejects_parent_escape_and_symlink_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -338,16 +341,15 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             self.assertEqual(result["imported"], ["demo"])
             self.assertEqual(target.get("demo")["description"], "Demo skill")
 
-    def test_zip_archive_is_rejected_by_content(self):
+    def test_zip_archive_with_empty_manifest_is_validated_by_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(data_dir=Path(tmp) / "manager")
             store.init_db()
             archive = Path(tmp) / "skills.tar.gz"
             with zipfile.ZipFile(archive, "w") as zf:
                 zf.writestr("manifest.json", '{"app":"skills-mgr","version":"1.0.0","created":"2026-09-08T00:00:00Z","skills":[]}')
-            with self.assertRaises(StoreError) as ctx:
-                store.import_(archive)
-            self.assertIn("tar", str(ctx.exception).lower())
+            result = store.import_(archive)
+            self.assertEqual(result["imported"], [])
 
     def test_archive_member_limits_reject_before_destination_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:

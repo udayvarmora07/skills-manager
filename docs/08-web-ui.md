@@ -116,7 +116,7 @@ mutate an outside directory.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/export[?full=1]` | downloads slim or full gzip archive (attachment; global scope only) |
-| PUT | `/api/import?filename=&force=&full=` | raw tar archive bytes → Store.import_; `full=1` restores trash/templates from a full archive |
+| PUT | `/api/import?filename=&force=&full=` | raw tar or ZIP archive bytes → Store.import_; `full=1` restores trash/templates from a full archive |
 | PUT | `/api/import` (multipart/form-data) | webkitdirectory folder upload → Store.add per SKILL.md |
 
 ## Frontend map (app.js)

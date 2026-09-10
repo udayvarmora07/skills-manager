@@ -101,7 +101,7 @@ skills-mgr webui --no-browser # server only
 skills-mgr webui --port 9000  # custom port
 ```
 
-Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, templates, import/export, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
+Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, templates, tar export plus tar/ZIP import, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
 
 ## Data model
 

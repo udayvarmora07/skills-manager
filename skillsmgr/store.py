@@ -285,6 +285,94 @@ def _extract_archive_members(
         raise StoreError(str(exc)) from exc
 
 
+def _validate_zip_members(
+    archive: zipfile.ZipFile,
+    compressed_size: int,
+) -> list[tuple[zipfile.ZipInfo, str]]:
+    """Compatibility adapter for the ZIP member preflight."""
+    try:
+        return _archive.validate_zip_members(archive, compressed_size)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
+
+
+def _extract_zip_members(
+    archive: zipfile.ZipFile,
+    dest: Path,
+    members: list[tuple[zipfile.ZipInfo, str]],
+) -> None:
+    """Compatibility adapter for the guarded ZIP extractor."""
+    try:
+        return _archive.extract_zip_members(archive, dest, members)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
+
+
+def _validate_full_payload(kind: str, source: Path) -> bool:
+    """Return whether one preflighted full-import payload is usable."""
+    if kind == "trash":
+        return source.is_dir() and _trash_entry_name(source) is not None
+    return source.is_file()
+
+
+def _plan_full_restore(store: "Store", tmp: Path, manifest: dict) -> list[tuple[str, str, Path, Path]]:
+    """Validate full-archive trash/templates payloads before any mutation.
+
+    Every manifest entry must resolve to a safe contained destination and to an
+    existing archive payload; otherwise the whole import fails before a single
+    live skill or metadata file is touched.
+    """
+    entries: list[tuple[str, str, Path, Path]] = []
+    for kind in ("trash", "templates"):
+        dest_root = store.trash_dir if kind == "trash" else store.templates_dir
+        for label in manifest.get(kind) or []:
+            source = tmp / kind / label
+            if not _validate_full_payload(kind, source):
+                raise StoreError(f"archive {kind} entry is missing or invalid: {label!r}")
+            try:
+                dest = paths.contained_path(dest_root, label)
+            except ValueError as exc:
+                raise StoreError(f"archive {kind} entry escapes the data directory: {label!r}") from exc
+            entries.append((kind, label, source, dest))
+    return entries
+
+
+def _record_restored_trash(store: "Store", labels: list[str]) -> None:
+    """Reconcile the index with trash entries installed by a full import."""
+    if not labels:
+        return
+    conn = store._connect()
+    try:
+        for label in labels:
+            name = _trash_entry_name(store.trash_dir / label)
+            if name is None or _safe_skill_path(store.skills_dir, name).is_dir():
+                continue
+            conn.execute(
+                "INSERT OR IGNORE INTO skills (name, status, added_at, updated_at) "
+                "VALUES (?, 'trashed', ?, ?)",
+                (name, now_iso(), now_iso()),
+            )
+            conn.execute(
+                "UPDATE skills SET status = 'trashed', updated_at = ? WHERE name = ?",
+                (now_iso(), name),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _extract_import_archive(archive: Path, dest: Path) -> None:
+    """Sniff and safely extract either supported archive format."""
+    if zipfile.is_zipfile(archive):
+        with zipfile.ZipFile(archive, "r") as zipped:
+            members = _validate_zip_members(zipped, archive.stat().st_size)
+            _extract_zip_members(zipped, dest, members)
+        return
+    with tarfile.open(archive, "r:*") as tar:
+        members = _validate_archive_members(tar, archive.stat().st_size)
+        _extract_archive_members(tar, dest, members)
+
+
 def _has_skill_document(source: Path) -> bool:
     try:
         return _archive.has_skill_document(source)
@@ -1218,13 +1306,9 @@ class Store:
         imported: list[str] = []
         skipped: list[str] = []
         try:
-            if zipfile.is_zipfile(archive):
-                raise StoreError("ZIP archives are not supported; use a tar archive")
             try:
-                with tarfile.open(archive, "r:*") as tar:
-                    members = _validate_archive_members(tar, archive.stat().st_size)
-                    _extract_archive_members(tar, tmp, members)
-            except (tarfile.TarError, EOFError, zlib.error, gzip.BadGzipFile) as exc:
+                _extract_import_archive(archive, tmp)
+            except (tarfile.TarError, zipfile.BadZipFile, EOFError, zlib.error, gzip.BadGzipFile, NotImplementedError, UnicodeError) as exc:
                 # Truncated gzip/tar streams surface as EOFError, zlib.error,
                 # or gzip.BadGzipFile rather than tarfile.TarError; every
                 # malformed archive must fail as a clean StoreError, never as
@@ -1238,6 +1322,7 @@ class Store:
             skills = _validate_archive_manifest(manifest)
             if full and not manifest.get("full"):
                 raise StoreError("archive is not a full export; re-export with --full")
+            full_entries = _plan_full_restore(self, tmp, manifest) if full else []
             planned: list[tuple[str, Path, dict]] = []
             planned_names: set[str] = set()
             for entry in skills:
@@ -1320,37 +1405,13 @@ class Store:
             restored_templates: list[str] = []
             skipped_full: list[str] = []
             if full:
-                for trash_name in manifest.get("trash") or []:
-                    if not isinstance(trash_name, str) or Path(trash_name).name != trash_name:
-                        skipped_full.append(f"trash/{trash_name}")
-                        continue
-                    source = tmp / "trash" / trash_name
-                    if not source.is_dir() or _trash_entry_name(source) is None:
-                        skipped_full.append(f"trash/{trash_name}")
-                        continue
-                    dest = paths.contained_path(self.trash_dir, trash_name)
-                    if dest.exists() and not force:
-                        skipped_full.append(f"trash/{trash_name}")
-                        continue
-                    if dest.exists():
-                        shutil.rmtree(dest)
-                    shutil.copytree(source, dest)
-                    restored_trash.append(trash_name)
-                for template_name in manifest.get("templates") or []:
-                    if not isinstance(template_name, str) or Path(template_name).name != template_name or not template_name.endswith(".md"):
-                        skipped_full.append(f"templates/{template_name}")
-                        continue
-                    source = paths.contained_path(tmp / "templates", template_name)
-                    if not source.is_file():
-                        skipped_full.append(f"templates/{template_name}")
-                        continue
-                    dest = paths.contained_path(self.templates_dir, template_name)
-                    if dest.exists() and not force:
-                        skipped_full.append(f"templates/{template_name}")
-                        continue
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(source, dest)
-                    restored_templates.append(template_name)
+                try:
+                    restored_trash, restored_templates, skipped_full = _archive.restore_full_payload(
+                        full_entries, replace=force
+                    )
+                except _archive.ArchiveError as exc:
+                    raise StoreError(str(exc)) from exc
+                _record_restored_trash(self, restored_trash)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         result = {

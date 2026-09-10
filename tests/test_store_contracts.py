@@ -307,13 +307,13 @@ class TestStoreSnapshotsAndArchives(StoreContractCase):
         self.assertEqual(manifest["skills"][0]["name"], "demo")
         self.assertFalse(manifest["full"])
 
-    def test_import_rejects_missing_zip_invalid_tar_and_bad_manifest(self):
+    def test_import_rejects_missing_malformed_archive_and_bad_manifest(self):
         with self.assertRaises(StoreError):
             self.store.import_(Path(self.tmp.name) / "missing.tar.gz")
         zip_path = Path(self.tmp.name) / "bad.zip"
         with zipfile.ZipFile(zip_path, "w") as archive:
             archive.writestr("manifest.json", "{}")
-        with self.assertRaisesRegex(StoreError, "ZIP"):
+        with self.assertRaises(StoreError):
             self.store.import_(zip_path)
         invalid = Path(self.tmp.name) / "invalid.tar"
         invalid.write_bytes(b"not a tar")

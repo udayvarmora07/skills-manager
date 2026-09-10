@@ -2,7 +2,7 @@
 
 **Version 0.3.0**
 
-**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against `cli.py` on 2026-09-08. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
+**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against `cli.py` and import behavior on 2026-09-10. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
 
 **[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
 
@@ -75,10 +75,11 @@ Validate skills by name, all (`--all`), or a directory (`--path`). Prints issues
 Search with scoring (see @docs/02-modules.md); `--limit` caps results. `--scope all` searches every scope. The global portion always uses the Store selected by `--data-dir`; merged search keeps that same requested global store while agent scopes use their filesystem adapters.
 
 ### `import ARCHIVE [--force] [--full] [--json]`
-Import a `.tar.gz`/`.tgz`/`.tar` archive of skills into the global store. ZIP
-content is rejected even when the filename is misleading. Tar imports enforce
-resource budgets and a strict versioned `skills-mgr` manifest contract;
-`--force` overwrites existing names with staged per-skill recovery.
+Import a `.tar.gz`/`.tgz`/`.tar` or `.zip` archive of skills into the global
+store. Content is sniffed rather than trusted from the filename. Tar and ZIP
+imports enforce resource budgets, reject traversal/Windows/special members, and
+use a strict versioned `skills-mgr` manifest contract; `--force` overwrites
+existing names with staged per-skill recovery.
 `--full` restores trash and templates from a full export.
 
 ### `export [--dest PATH] [--full] [--json]`

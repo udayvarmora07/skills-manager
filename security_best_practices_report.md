@@ -1,10 +1,10 @@
 # Security Best Practices Report — skills-manager
 
-**Date:** 2026-09-08 · **Scope:** `skillsmgr/` (stdlib Python backend, Vue 3 vendored frontend) · **Method:** code audit plus hermetic adversarial tests; findings verified in source and live local requests.
+**Date:** 2026-09-10 (first issued 2026-09-08; archive/full-import controls refreshed for the ZIP hardening round) · **Scope:** `skillsmgr/` (stdlib Python backend, Vue 3 vendored frontend) · **Method:** code audit plus hermetic adversarial tests; findings verified in source and live local requests.
 
 ## Executive summary
 
-The project is a localhost-only tool with a small attack surface and several controls already in place: loopback-only bind enforcement, pre-handler mutation-origin checks, JSON content-type enforcement, security response headers, bounded wildcard search, bounded frontmatter parsing, allowlisted shell construction, body/upload caps, bounded tar preflight, strict manifests, staged per-skill import recovery, an XSS-safe markdown renderer, and generic 500s with stderr logging. The previously reproduced cross-origin purge, wildcard exhaustion, parser recursion, and archive-safety gaps are fixed and covered by regressions. Remaining items are hardening notes, including supply-chain execution via `/api/install` with `run:true`.
+The project is a localhost-only tool with a small attack surface and several controls already in place: loopback-only bind enforcement, pre-handler mutation-origin checks, JSON content-type enforcement, security response headers, bounded wildcard search, bounded frontmatter parsing, allowlisted shell construction, body/upload caps, bounded tar/ZIP preflight, strict manifests, staged per-skill import recovery, an XSS-safe markdown renderer, and generic 500s with stderr logging. The previously reproduced cross-origin purge, wildcard exhaustion, parser recursion, and archive-safety gaps are fixed and covered by regressions. Remaining items are hardening notes, including supply-chain execution via `/api/install` with `run:true`.
 
 ## Critical findings
 
@@ -18,8 +18,8 @@ None. No remote code execution, injection, authentication bypass, or data-loss p
 
 ## Medium findings
 
-- **M-1 — ZIP import is intentionally unsupported.** Content sniffing rejects ZIP archives before tar parsing. Adding ZIP would require a separate approval decision and the same preflight/commit guarantees.
-- **M-2 — Archive budgets are conservative by policy.** Tar input is bounded to 25 MiB compressed, 16 MiB expanded, 8 MiB per member, 200 members, 512-character paths, 16 nesting levels, and a 1000:1 compression ratio. Separate local imports can still consume disk, which is accepted local-user behavior.
+- **M-1 — ZIP import uses a manual safety policy.** ZIP has no `tarfile.data_filter` equivalent, so every member is preflighted for canonical paths, layout, types, duplicates, and resource budgets before explicit contained-path extraction. Symlink-bit entries are rejected. This avoids relying on `ZipFile.extractall` for untrusted archives.
+- **M-2 — Archive budgets are conservative by policy.** Tar and ZIP input are bounded to 25 MiB compressed, 16 MiB expanded, 8 MiB per member, 200 members, 512-character paths, 16 nesting levels, and a 1000:1 compression ratio. Separate local imports can still consume disk, which is accepted local-user behavior.
 - **M-3 — Error responses can leak absolute filesystem paths** (e.g. `StoreError` text containing data-dir paths reaches loopback JSON clients). Acceptable for a localhost tool with no remote users, but worth noting.
   - Recommendation: no change required; if the bind default ever changes, sanitize paths from API errors first.
 
@@ -41,9 +41,11 @@ None. No remote code execution, injection, authentication bypass, or data-loss p
 | Request body cap + `Content-Length` validation (400/413, oversize → 400 verified live) | `skillsmgr/webapp.py:39, 108-118` |
  | Query length and wildcard complexity caps | `skillsmgr/search.py:15-38`, `skillsmgr/webapp.py:41, 293` |
  | Frontmatter size/key/collection/scalar/nesting caps | `skillsmgr/frontmatter.py:31-121` |
- | Tar archive budgets, strict manifest, and staged import recovery | `skillsmgr/store.py:63-218, 981-1100` |
+ | Tar/ZIP archive budgets (per-member **and** total compression ratio), strict manifest, staged import recovery | `skillsmgr/archive.py:22-235`, `skillsmgr/store.py:1268-1440` |
+ | Failed staging copy never deletes the existing skill directory | `skillsmgr/archive.py:309-364` |
+ | Full-import trash/templates installed as one rolled-back transaction, malformed metadata rejected pre-mutation, restored trash reconciled in the index | `skillsmgr/archive.py:367-430`, `skillsmgr/store.py:311-360` |
 | History limit clamp (limit=99999 → ≤200 verified) | `skillsmgr/webapp.py:42, 372` |
-| Import filename traversal blocked (`../evil.tar.gz` → 400, empty → 400, zip → 400 verified) | `skillsmgr/webapp.py:709-743` |
+| Import filename traversal blocked (`../evil.tar.gz` → 400, empty → 400, ZIP valid/malformed content handled safely) | `skillsmgr/webapp.py:793-819` |
 | Multipart folder-upload part/size caps | `skillsmgr/webapp.py:741-743` |
 | Install runner/source/agent/skill allowlists, list-form exec, timeout | `skillsmgr/webapp.py:514-577` |
 | Static file jail (`is_relative_to`, `..` → 404 verified) | `skillsmgr/webapp.py:192` |
@@ -64,9 +66,10 @@ python3 smoke_web.py                              # ALL WEB SMOKE TESTS PASSED
 
 ```bash
 # REST edge matrix, all as expected:
-# traversal import→400, empty body→400, zip→400, bad archive→400,
-# oversize Content-Length→400, 300-char query→400, wildcard exhaustion→400,
-# archive budget/manifest/name mismatch/ZIP probes fail closed,
+# traversal import→400, empty body→400, ZIP content validates or fails safely,
+# bad archive→400, oversize Content-Length→400, 300-char query→400,
+# wildcard exhaustion→400, archive budget/manifest/name mismatch/ZIP probes
+# fail closed,
 # hostile Origin/Referer/Fetch-Metadata/Host→403, form mutation→415,
 # history clamp ok,
 # PATCH name ignored, disable/enable ok, static ..→404, unknown skill→404

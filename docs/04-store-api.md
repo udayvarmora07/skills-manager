@@ -2,7 +2,7 @@
 
 **Version 0.2.0**
 
-**AI manifest**: The `Store` class is the single gateway between the CLI/web UI and global skill data (filesystem + SQLite index). Facts verified against `store.py` on September 8, 2026. The UI MUST use public Store/scopes behavior — never hand-edit files or the DB. Run `python3 smoke_store.py` after any change to `store.py`.
+**AI manifest**: The `Store` class is the single gateway between the CLI/web UI and global skill data (filesystem + SQLite index). Facts verified against `store.py` on September 10, 2026. The UI MUST use public Store/scopes behavior — never hand-edit files or the DB. Run `python3 smoke_store.py` after any change to `store.py`.
 
 ## Invariants
 
@@ -50,12 +50,21 @@
 - `stats(self) -> dict` — counts and summary.
 - `export(self, dest=None, full=False) -> Path` / `backup(self, dest=None, full=False) -> Path` — slim skills-only archive by default; `full=True` adds validated trash and templates.
 - Export manifests include a SHA-256 content hash for each skill tree; imports verify hashes in staging and after commit when present. Hashes are verification metadata, not SQLite state.
-- `import_(self, archive, force=False) -> dict` — tar-only; ZIP content is
-  rejected before tar parsing. Resource-budget violations, unsafe members,
-  unsupported manifest versions/names/paths, and invalid extracted documents
-  raise `StoreError`. Each skill is staged independently before replacement;
+- `import_(self, archive, force=False, full=False) -> dict` — imports `.tar.gz`/`.tgz`/`.tar`
+  and ZIP content (sniffed by content, not only filename). Resource-budget
+  violations, unsafe traversal/Windows/special members, unsupported manifest
+  versions/names/paths, and invalid extracted documents raise `StoreError`.
+  ZIP members are manually extracted to contained paths and symlink-bit entries
+  are rejected. Each skill is staged independently before replacement;
   successful names appear in `imported`, failures/already-present names in
-  `skipped`, and failed replacements restore the previous destination.
+  `skipped`, and failed replacements restore the previous destination. A failed
+  staging copy leaves the existing skill directory untouched.
+- `full=True` requires a boolean `full` flag and plain-name `trash`/`templates`
+  entries; every payload is validated before any mutation, then installed as one
+  all-or-nothing transaction that rolls back on failure and raises
+  `StoreError`. Restored trash names are reconciled into the index so `stats()`
+  and `doctor()` agree with `trash_list()`. Existing entries are skipped unless
+  `force=True`.
 - `history(self, name=None, limit=50) -> list[dict]`; snapshot IDs are exposed
   through the module-level `list_snapshots(data_dir, scope, name)` helper and
   the CLI/REST history surfaces.

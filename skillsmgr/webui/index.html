@@ -637,7 +637,7 @@
       <h2 id="import-modal-title" class="sr-only">Import archive</h2>
       <div class="modal-head"><h2>Import archive</h2></div>
       <div class="modal-body">
-        <p>Import skills from a <code>.tar.gz</code> archive exported by Skills Manager.</p>
+        <p>Import skills from a Skills Manager <code>.tar.gz</code> export or a compatible <code>.zip</code> archive.</p>
         <div v-if="!modals.import.file" class="dropzone" @click="pickImportFile" @dragover.prevent @drop.prevent="onDropImport"
              role="button" tabindex="0" aria-label="Choose archive" @keydown.enter.prevent="pickImportFile">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>

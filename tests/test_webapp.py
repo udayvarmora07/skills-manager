@@ -1,9 +1,12 @@
 """REST API tests: serve the real WebAppServer on an ephemeral port."""
 
+import io
 import json
 import os
+import tarfile
 import tempfile
 import unittest
+import zipfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -324,6 +327,23 @@ class WebAppTestCase(unittest.TestCase):
                 self.server.httpd.store.remove("route-demo", purge=True)
             except Exception:
                 pass
+
+    def test_zip_import_route_accepts_archive_content(self):
+        payload = b"---\nname: web-zip\ndescription: Use this ZIP route test.\n---\nZIP body.\n"
+        manifest = json.dumps({"app": "skills-mgr", "version": "1.0.0", "created": "2026-09-08T00:00:00Z", "skills": [{"name": "web-zip"}]}).encode()
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.writestr("manifest.json", manifest)
+            zipped.writestr("skills/web-zip/SKILL.md", payload)
+        request = urllib.request.Request(
+            self.server.url + "api/import?filename=web-zip.zip",
+            data=archive.getvalue(),
+            method="PUT",
+        )
+        with urllib.request.urlopen(request) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.loads(response.read())["imported"], ["web-zip"])
+        self.assertIn("ZIP body.", self.server.httpd.store.get("web-zip")["body"])
 
     def test_full_import_query_flag_restores_full_archive_payload(self):
         source = Store(data_dir=Path(self._tmp.name) / "full-source")
