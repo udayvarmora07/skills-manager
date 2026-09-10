@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "skills-manager"
+name = "skill-control-plane"
 version = "1.0.1"
 description = "Local control plane for AI coding-agent skills: manage SKILL.md across agents from one CLI + web UI"
 readme = "README.md"

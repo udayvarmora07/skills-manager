@@ -2,9 +2,32 @@
 
 **Version 0.1.0**
 
+**AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
+
+## 2026-09-10 — Distribution renamed to `skill-control-plane`
+
+- **CURRENT RELEASE STATE:** Publisher registration and GitHub release
+  environments are complete. The only pending repository action is to create
+  and push tag `v1.0.1`; do not tag, push, or publish in this task.
+- Current package/release identity is now `skill-control-plane`; Python imports
+  remain `skillsmgr`, the executable remains `skills-mgr`, and the GitHub
+  repository remains `udayvarmora07/skills-manager`.
+- Release verification and README install commands use the new distribution
+  only where artifact/PyPI identity is required. Internal data paths, database
+  names, product terminology, repository URLs, and historical release facts
+  intentionally retain `skills-manager`.
+- PyPI and TestPyPI trusted publishers are registered for distribution
+  `skill-control-plane` against `release.yml`; no tag or publication was done.
+
+
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
 
 ## 2026-09-10 — `v1.0.1` prepared and release infrastructure created
+
+**HISTORICAL/SUPERSEDED release-preparation record:** This entry preserves
+pre-registration and pre-environment observations. The current active release
+instruction is maintained at the top of this append-only log: after publisher
+registration, only tag/push remains; do not tag, push, or publish in this task.
 
 - Version bumped to `1.0.1` in the four places the repository enforces:
   `pyproject.toml`, `skillsmgr/__init__.py`, `docs/01-architecture.md`, and
@@ -16,11 +39,11 @@
   `prevent_self_review: false` so a single maintainer can approve their own tag
   push instead of deadlocking the publish job. Verified by reading the
   environment back (`environments: 2`).
-- Exact artifacts built once from a clean copy of the bumped tree with the pinned
-  `build==1.2.2.post1`: wheel `skills_manager-1.0.1-py3-none-any.whl` sha256
-  `d2e65a8b7991…` (172,363 B) and sdist `skills_manager-1.0.1.tar.gz` sha256
-  `cd1d51a93bf8…` (209,373 B). `check_package_data.py --dist-dir` PASSes on both
-  (5 web UI files, Vue 157,924 B); the wheel clean-installs into a fresh venv with
+- The earlier exact artifacts remain historical `skills_manager-1.0.1` records;
+  after the distribution rename, fresh release artifacts must be named
+  `skill_control_plane-1.0.1-py3-none-any.whl` and
+  `skill_control_plane-1.0.1.tar.gz`. `check_package_data.py --dist-dir` must
+  PASS on both (5 web UI files, Vue 157,924 B); the wheel clean-installs into a fresh venv with
   `--no-index --no-deps` and reports `skills-mgr 1.0.1`; the sdist installs with
   `--no-deps --no-build-isolation` and reports the same, with the vendored Vue
   bundle and `webui/domain.js` present. Full ladder on the bump: 315 unittest OK,
@@ -40,11 +63,11 @@
   successful publish that sentence and its pinning test
   (`test_pypi_claims_are_qualified_until_publication_is_real`) must be updated
   together, or the README will assert something false while CI stays green.
-- Still blocked externally: publishing needs the PyPI **and** TestPyPI pending
-  trusted publisher registered under the maintainer's account
-  (`pypi.org/manage/account/publishing/`,
-  `test.pypi.org/manage/account/publishing/`), which is a web login no API can
-  perform. Nothing was tagged or published.
+- **HISTORICAL/SUPERSEDED external blocker:** publishing then needed the PyPI
+  **and** TestPyPI trusted publishers to be registered under the maintainer's
+  account (`pypi.org/manage/account/publishing/`,
+  `test.pypi.org/manage/account/publishing/`), which was a web login no API
+  could perform. Nothing was tagged or published in that historical state.
 
 ## 2026-09-10 — Release-pipeline rehearsal for a candidate version
 
@@ -108,6 +131,10 @@
 
 ## 2026-09-10 — Release-gate execution (fresh artifacts) + CI portability fixes
 
+**HISTORICAL/SUPERSEDED environment-blocker record:** The blocker details
+below describe the state before publisher/environment registration and remain
+append-only history. They do not describe the current release state.
+
 - L6 executed as far as the environment permits. Built once from a clean copy of
   the current tree with the pinned `build==1.2.2.post1`: wheel
   `skills_manager-1.0.0-py3-none-any.whl` (172,365 B, sha256 `8131d7ae8670…`)
@@ -119,7 +146,8 @@
   `UNAVAILABLE` offline (the pristine venv has no `setuptools` and the check
   installs with `--no-index`). The stale 2026-09-05 artifacts are preserved under
   `dist/stale-2026-09-05/`; `dist/` now holds the verified rebuild.
-- Publication is blocked by external configuration, not by code: `gh api
+- **HISTORICAL/SUPERSEDED publication blocker:** Publication was blocked by
+  external configuration, not by code: `gh api
   repos/udayvarmora07/skills-manager/environments` → `total_count: 0` (no
   `release`/`testpypi` environment); PyPI and TestPyPI both return 404 for
   `skills-manager` (no project, no registered trusted publisher); the only
@@ -280,7 +308,7 @@
   in `task.md`, `TODO.md`, `PLAN.md`, and this append-only log.
 - Scope decision: L2 ZIP, issue #12 diagnostic, and issue #13 remediation stay
   untouched; deferred/rejected roadmap items remain unchanged. The release gate
-  remains blocked only by the stale local artifact and absent authorized publish.
+  **HISTORICAL/SUPERSEDED:** remained blocked only by the stale local artifact and absent authorized publish.
 
 ## 2026-09-10 — Final-verdict loop-engineering round (maintainer-authorized; all 14 FINAL, zero code)
 

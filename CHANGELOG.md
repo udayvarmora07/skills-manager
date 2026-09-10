@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+- Rename the published distribution to `skill-control-plane` while preserving
+  the `skills-manager` repository, product/data names, `skillsmgr` import package,
+  and `skills-mgr` CLI executable.
+
 ## [1.0.1] — 2026-09-10
 
 ### Added

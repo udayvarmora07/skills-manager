@@ -182,7 +182,7 @@ jobs:
       - name: Verify PyPI install and hermetic CRUD after publication
         run: |
           python3 -m venv /tmp/pypi-verify-venv
-          /tmp/pypi-verify-venv/bin/python -m pip install --no-deps "skills-manager==${GITHUB_REF_NAME#v}"
+          /tmp/pypi-verify-venv/bin/python -m pip install --no-deps "skill-control-plane==${GITHUB_REF_NAME#v}"
           /tmp/pypi-verify-venv/bin/python -m skillsmgr --help
           /tmp/pypi-verify-venv/bin/python -c "from pathlib import Path; import skillsmgr; p = Path(skillsmgr.__file__).parent / 'webui' / 'static' / 'vendor' / 'vue.global.prod.js'; assert p.is_file() and p.stat().st_size > 0, p"
           SKILLS_MANAGER_DATA=$(mktemp -d) /tmp/pypi-verify-venv/bin/python -m skillsmgr create demo -d "Post-publish smoke check"

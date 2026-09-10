@@ -20,6 +20,35 @@ _THIRD_PARTY_PIN_RE = re.compile(
     r"^\s*-\s*uses:\s*(?!actions/|github/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^\s#]+)"
 )
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_FIXTURE_ARTIFACT_STEM = "skill_control_plane-1.0.1"
+_FIXTURE_METADATA = (
+    "Metadata-Version: 2.1\n"
+    "Name: skill-control-plane\n"
+    "Version: 1.0.1\n"
+    "\n"
+).encode("utf-8")
+
+
+def _fixture_artifacts(dist_dir: Path) -> tuple[Path, Path, str]:
+    """Return hermetic artifact paths and the matching sdist root."""
+    wheel = dist_dir / f"{_FIXTURE_ARTIFACT_STEM}-py3-none-any.whl"
+    sdist = dist_dir / f"{_FIXTURE_ARTIFACT_STEM}.tar.gz"
+    return wheel, sdist, _FIXTURE_ARTIFACT_STEM + "/"
+
+
+def _project_identity(pyproject: str) -> tuple[str, str]:
+    """Read the project name/version from the [project] table only."""
+    project = pyproject.split("[project]", 1)[1].split("\n[", 1)[0]
+    name = re.search(r'(?m)^name\s*=\s*"([^"]+)"\s*$', project)
+    version = re.search(r'(?m)^version\s*=\s*"([^"]+)"\s*$', project)
+    if name is None or version is None:
+        raise AssertionError("pyproject [project] name/version is missing")
+    return name.group(1), version.group(1)
+
+
+def _normalized_artifact_stem(project_name: str, version: str) -> str:
+    normalized_name = re.sub(r"[-_.]+", "_", project_name)
+    return f"{normalized_name}-{version}"
 
 
 def _workflow_text(name: str) -> str:
@@ -144,14 +173,13 @@ class CrossPlatformContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             dist_dir = Path(directory) / "dist"
             dist_dir.mkdir()
-            wheel = dist_dir / "skills_manager-1.0.0-py3-none-any.whl"
+            wheel, sdist, sdist_root = _fixture_artifacts(dist_dir)
             with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
                 for name, data in sorted(members.items()):
                     archive.writestr(name, data)
-            sdist = dist_dir / "skills_manager-1.0.0.tar.gz"
             with tarfile.open(sdist, "w:gz") as archive:
                 for name, data in sorted(members.items()):
-                    info = tarfile.TarInfo("skills_manager-1.0.0/" + name)
+                    info = tarfile.TarInfo(sdist_root + name)
                     info.size = len(data)
                     info.mtime = 0
                     archive.addfile(info, io.BytesIO(data))
@@ -176,14 +204,13 @@ class CrossPlatformContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             dist_dir = Path(directory) / "dist"
             dist_dir.mkdir()
-            wheel = dist_dir / "skills_manager-1.0.0-py3-none-any.whl"
+            wheel, sdist, sdist_root = _fixture_artifacts(dist_dir)
             with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
                 for name, data in sorted(members.items()):
                     archive.writestr(name, data)
-            sdist = dist_dir / "skills_manager-1.0.0.tar.gz"
             with tarfile.open(sdist, "w:gz") as archive:
                 for name, data in sorted(members.items()):
-                    info = tarfile.TarInfo("skills_manager-1.0.0/" + name)
+                    info = tarfile.TarInfo(sdist_root + name)
                     info.size = len(data)
                     info.mtime = 0
                     archive.addfile(info, io.BytesIO(data))
@@ -225,7 +252,8 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
     def test_release_creates_github_release_and_verifies_post_publish(self):
         text = _workflow_text("release.yml")
         self.assertIn("action-gh-release@", text)
-        self.assertIn("skills-manager==", text)
+        self.assertIn("skill-control-plane==", text)
+        self.assertNotIn("pip install skills-manager", text)
         self.assertIn("vue.global.prod.js", text)
         self.assertIn("SKILLS_MANAGER_DATA=$(mktemp -d)", text)
 
@@ -241,11 +269,62 @@ class ReleaseClaimContractTests(unittest.TestCase):
     def test_pypi_claims_are_qualified_until_publication_is_real(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("PyPI badge tracks a future release", readme)
-        self.assertIn("pip install skills-manager", readme)
+        self.assertIn("pip install skill-control-plane", readme)
+        self.assertIn("pipx install skill-control-plane", readme)
+        self.assertIn("Distribution name `skill-control-plane`", readme)
 
     def test_pypi_badge_is_removed(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertNotIn("img.shields.io/pypi/v/skills-manager", readme)
+        self.assertNotIn("img.shields.io/pypi/v/skill-control-plane", readme)
+
+    def test_distribution_metadata_and_artifact_identity(self):
+        import email
+        import io
+        import tarfile
+        import tempfile
+        import zipfile
+
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        project_name, project_version = _project_identity(pyproject)
+        normalized_stem = _normalized_artifact_stem(project_name, project_version)
+        self.assertEqual(project_name, "skill-control-plane")
+        self.assertEqual(project_version, "1.0.1")
+        self.assertIn("skills-mgr =", pyproject)
+        self.assertIn('include = ["skillsmgr*"]', pyproject)
+        self.assertIn('authors = [{ name = "skills-manager contributors" }]', pyproject)
+        self.assertNotIn('name = "skills-manager"', pyproject.split("[project.urls]", 1)[0])
+
+        wheel_name = f"{normalized_stem}-py3-none-any.whl"
+        sdist_name = f"{normalized_stem}.tar.gz"
+        metadata = _FIXTURE_METADATA
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = root / wheel_name
+            metadata_member = f"{normalized_stem}.dist-info/METADATA"
+            with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr(metadata_member, metadata)
+            with zipfile.ZipFile(wheel) as archive:
+                wheel_metadata = email.message_from_bytes(archive.read(metadata_member))
+            self.assertEqual(wheel_metadata["Name"], project_name)
+            self.assertEqual(wheel_metadata["Version"], project_version)
+            self.assertEqual(wheel_metadata["Name"], project_name)
+
+            sdist = root / sdist_name
+            with tarfile.open(sdist, "w:gz") as archive:
+                info = tarfile.TarInfo(f"{normalized_stem}/PKG-INFO")
+                info.size = len(metadata)
+                info.mtime = 0
+                archive.addfile(info, io.BytesIO(metadata))
+            with tarfile.open(sdist, "r:gz") as archive:
+                sdist_metadata = email.message_from_bytes(archive.extractfile(f"{normalized_stem}/PKG-INFO").read())
+            self.assertEqual(sdist_metadata["Name"], project_name)
+            self.assertEqual(sdist_metadata["Version"], project_version)
+
+    def test_historical_and_internal_skills_manager_names_are_not_mass_replaced(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("udayvarmora07/skills-manager", readme)
+        self.assertIn("~/.local/share/skills-manager/skills/", readme)
+        self.assertIn("skills-manager-threat-model.md", readme)
 
 
 if __name__ == "__main__":

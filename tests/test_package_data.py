@@ -15,14 +15,14 @@ import check_package_data
 
 class PackageDataArchiveTests(unittest.TestCase):
     def _write_wheel(self, root: Path, members: dict[str, bytes]) -> Path:
-        path = root / "skills_manager-1.0.0-py3-none-any.whl"
+        path = root / "skill_control_plane-1.0.1-py3-none-any.whl"
         with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as archive:
             for name, data in sorted(members.items()):
                 archive.writestr(name, data)
         return path
 
     def _write_sdist(self, root: Path, members: dict[str, bytes]) -> Path:
-        path = root / "skills_manager-1.0.0.tar.gz"
+        path = root / "skill_control_plane-1.0.1.tar.gz"
         with tarfile.open(path, "w:gz") as archive:
             for name, data in sorted(members.items()):
                 info = tarfile.TarInfo(name)
@@ -47,7 +47,7 @@ class PackageDataArchiveTests(unittest.TestCase):
             root = Path(directory)
             members = self._members()
             wheel = self._write_wheel(root, members)
-            sdist = self._write_sdist(root, {"skills_manager-1.0.0/" + name: data for name, data in members.items()})
+            sdist = self._write_sdist(root, {"skill_control_plane-1.0.1/" + name: data for name, data in members.items()})
 
             wheel_report = check_package_data.inspect_archive(wheel)
             sdist_report = check_package_data.inspect_archive(sdist)

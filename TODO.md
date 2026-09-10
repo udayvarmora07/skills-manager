@@ -19,8 +19,12 @@ authorization — each item now carries a **FINAL:** line with evidence.
 **Execution update (2026-09-10):** L2 ZIP import is shipped in the approved
 scoped `import` extension and hardened by an adversarial audit round (per-member
 ratio budget, staged-commit rollback, transactional full-import restore, index
-reconciliation; 315 unittest green). L6 release preparation is in progress and
-publication remains subject to the existing controlled workflow.
+reconciliation; 315 unittest green). L6 release preparation is complete for
+`skill-control-plane` 1.0.1: the PyPI and TestPyPI trusted publishers and the
+GitHub environments are registered for the existing `skills-manager`
+repository/workflow. **Current active instruction: after publisher registration,
+the only pending repository action is to create and push tag `v1.0.1`; do not
+publish or perform any other release action from this worktree.**
 
 > This is the canonical execution backlog for the next product cycle. It is
 > deliberately risk-first: protect user data and make future regressions
@@ -54,9 +58,9 @@ publication remains subject to the existing controlled workflow.
 - [x] The repository is published to GitHub with tag `v1.0.0` and green CI.
 - [!] PyPI publication is not confirmed by the repository history; publishing
   must use a clean artifact and a controlled release workflow.
-  **FINAL (2026-09-10): still unpublished — live PyPI 404, README makes no
-  install claim, release gate holds; pre-release fix required (rebuild stale
-  `dist/` missing `domain.js`). See L6.**
+  **HISTORICAL/SUPERSEDED (2026-09-10):** This pre-registration observation
+  recorded the then-current PyPI 404 and stale-artifact blocker. It is retained
+  as history; the current release state is maintained in L6 below.
 
 ### Confirmed defects on `main` — release blockers
 
@@ -549,28 +553,17 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   repo; missing endpoints get their own ASK), team sharing #11
   (design-only ADR plus threat-model delta before any bundle format).
 - [/] L6 — Release only through the existing gate (2026-09-10: fresh artifacts
-  built and verified; publication is blocked externally, not skipped):
-  package `1.0.0` ==
-  `__version__` == tag `v1.0.0`; `release.yml` tag/version gate
-  (`:36-52`) + build-once + `--dist-dir` (`:58`, `:83`) + attestation
-  (`attest-build-provenance@v2`, `:110`) + TestPyPI (`testpypi`, `:118`)
-  → protected `release` env (`:138`) → GitHub Release; README makes no
-  PyPI-install claim (":9 not on PyPI yet") and live PyPI still 404s;
-  `check_package_data.py` honestly UNAVAILABLE without `build`
-  (code-real branch, `:33-34`, `:246-250`). **FINAL (2026-09-10): GATE
-  HOLDS.** The stale-artifact defect it flagged is now fixed: the 2026-09-05
-  wheel predated `domain.js` and failed `--dist-dir`
-  (`missing=['skillsmgr/webui/domain.js']`; `pyproject.toml:43-44` `webui/*`
-  covers it once rebuilt), and `dist/` now holds artifacts rebuilt from the
-  current tree that pass the gate.
-  No version bump, tag, publish, or install claim until that pipeline
-  actually publishes: version bump, tag equal to the package version,
-  build once, `check_package_data.py --dist-dir` on the exact
-  artifacts, provenance attestation, TestPyPI then the protected
-  `release` environment, GitHub Release, and post-publish install
-  verification. Make no PyPI-install claim until that pipeline
-  actually publishes.
-  **Executed 2026-09-10 (fresh artifacts):** built once from a clean copy of the
+  built and verified; publication is intentionally not performed): package
+  `1.0.1` == `__version__`; the published distribution is
+  `skill-control-plane` while `skills-mgr`, `skillsmgr`, and the
+  `skills-manager` repository/data names remain unchanged. `release.yml`
+  validates the tag/version, builds once, checks exact artifacts, attests, then
+  publishes to TestPyPI → protected PyPI → GitHub Release. Trusted publishers
+  for `skill-control-plane` are registered for both PyPI services against owner
+  `udayvarmora07`, repository `skills-manager`, workflow `release.yml`, and
+  environments `testpypi`/`release`. No version tag, publish, or post-publish
+  install claim has been made.
+  **HISTORICAL/SUPERSEDED executed record (2026-09-10, pre-rename artifacts):** built once from a clean copy of the
   current tree with `build==1.2.2.post1`; wheel
   `skills_manager-1.0.0-py3-none-any.whl` sha256 `6e2dbac79f06…` (172 KB) and
   sdist `skills_manager-1.0.0.tar.gz` sha256 `1d1bb1fe8251…` (208 KB);
@@ -590,7 +583,7 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   Wheel members are byte-identical across rebuilds (only ZIP timestamps differ);
   the stale 2026-09-05 artifacts are preserved under `dist/stale-2026-09-05/`
   (they fail the gate: missing `domain.js`).
-  **Publication blocker (evidence, 2026-09-10):** `gh api
+  **HISTORICAL/SUPERSEDED publication blocker (evidence, 2026-09-10):** `gh api
   repos/udayvarmora07/skills-manager/environments` → `total_count: 0` (no
   `release`/`testpypi` environment, so no protected approval gate exists);
   `https://pypi.org/pypi/skills-manager/json` → 404 and
@@ -614,7 +607,7 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   `docs/01-architecture.md` and `docs/02-modules.md`, so a version bump is a
   4-line change (those two files plus `pyproject.toml` and
   `skillsmgr/__init__.py`) before rebuilding.
-  **Exact remaining steps (maintainer-gated):** (1) register a PyPI trusted
+  **HISTORICAL/SUPERSEDED exact remaining steps (maintainer-gated):** (1) register a PyPI trusted
   publisher (and TestPyPI) for this repository/workflow/environments — only the
   account owner can do this; (2) create the GitHub `testpypi` and protected
   `release` environments; (3) choose the release version and apply the 4-line

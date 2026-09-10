@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 
-> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. PyPI badge tracks a future release: `skills-manager` is not on PyPI yet, so install from source or `pip install` the CI-built wheel/sdist below. Package name `skills-manager` (`skills-mgr` entry point) is reserved for that release.
+> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. PyPI badge tracks a future release: `skill-control-plane` is not on PyPI yet, so install from source or `pip install` the CI-built wheel/sdist below. Distribution name `skill-control-plane` (`skills-mgr` entry point) is reserved for that release.
 
 ## Why this exists
 
@@ -36,9 +36,9 @@ PyPI is not published yet (see `.github/workflows/release.yml` for the
 controlled Trusted Publishing path). Until the first GitHub Release lands:
 
 ```bash
-pipx install skills-manager        # recommended (isolated)
+pipx install skill-control-plane        # recommended (isolated)
 # or
-pip install skills-manager
+pip install skill-control-plane
 ```
 
 Run without installing:

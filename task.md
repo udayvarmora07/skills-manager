@@ -6,6 +6,13 @@
 
 ## Current state — 2026-09-10 (authoritative; older milestones below are dated records)
 
+- **Distribution rename: DONE.** The published package identity is
+  `skill-control-plane`; imports remain `skillsmgr`, the CLI remains
+  `skills-mgr`, the repository remains `udayvarmora07/skills-manager`, and
+  internal `skills-manager` data/database names are unchanged. Trusted-publisher
+  release references and artifact fixtures use the new distribution identity;
+  historical notes are retained.
+
 - **L2 ZIP import: DONE.** `Store.import_` accepts ZIP or tar content (sniffed),
   applies the shared budgets (`archive.py`), rejects symlink-bit/disallowed
   members, extracts only to contained staging paths, and reuses the staged
@@ -15,14 +22,14 @@
   existing skill, `--full` trash/templates install as one rolled-back
   transaction with index reconciliation, and manifest `full`/metadata types are
   validated before mutation. 315 unittest green (2026-09-10).
-- **L6 release gate: EXECUTED AS FAR AS THE ENVIRONMENT PERMITS.** Fresh wheel +
-  sdist were built from the current tree and pass
-  `check_package_data.py --dist-dir`; the wheel clean-installs with working CLI
-  CRUD and web assets. Publication is blocked externally — no GitHub
-  `release`/`testpypi` environments, no PyPI trusted publisher registered (PyPI
-  and TestPyPI both 404), and tag `v1.0.0` already points at the earlier release
-  commit, so publishing this slice needs a maintainer version-bump/tag decision.
-  Nothing was tagged or published.
+- **L6 release gate: EXECUTED AS FAR AS THE ENVIRONMENT PERMITS.** The
+  `skill-control-plane` 1.0.1 wheel + sdist are covered by exact-artifact
+  checks; imports, CLI, and internal data/database names remain unchanged.
+  Trusted publishers are registered on PyPI and TestPyPI for the existing
+  `udayvarmora07/skills-manager` repository and `release.yml` workflow. **Current
+  active instruction: after publisher registration, the only pending repository
+  action is to create and push tag `v1.0.1`; do not tag, push, or publish in
+  this worktree.**
 - CI portability defects (Windows glob, macOS resolved-path expectation, Chrome
   DevTools port discovery) are fixed in this round; dated milestones below are
   historical records and are not rewritten.
@@ -435,7 +442,7 @@ compile, frontend, docs, complexity, diff).
   CWD-dependent project scopes + `SCHEMA_VERSION = "1"` frozen.
 - [x] F4 release/docs/worktree/encoding/signing/atomicity re-probes:
   versions/tag `1.0.0` aligned, release gate present, PyPI 404, UNAVAILABLE
-  branch code-real; **NEW: `dist/` wheel stale (missing `domain.js`,
+  branch code-real; **HISTORICAL/SUPERSEDED: `dist/` wheel stale (missing `domain.js`,
   `--dist-dir` FAILs — rebuild from clean tree before release)**; docs
   truth all green (CLI 27+7+3=37, insights 57); **worktrees: 3 merged-but-stale
   + 2 genuinely unmerged** (via `merge-base`); **#13 confirmed**
