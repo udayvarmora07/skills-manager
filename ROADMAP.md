@@ -31,9 +31,9 @@ shipped; the remaining lines below are future or rejected directions:
   vendored web assets. Publishing is tag-triggered and cannot run yet: the
   repository has no `release`/`testpypi` GitHub environments, no PyPI trusted
   publisher is registered (`pypi.org`/`test.pypi.org` both 404 for this
-  package), tag `v1.0.0` already points at the earlier release commit, and the
-  GitHub CI run for current `main` was failing on its Windows/macOS/browser legs
-  (fixed in this round; a green run is required before tagging).
+  package), and tag `v1.0.0` already points at the earlier release commit, so
+  publishing this slice needs a maintainer version-bump + tag decision. The CI
+  prerequisite is met: run 34488162920 is green across all 15 jobs.
 
 ## Ambitious (exploring)
 

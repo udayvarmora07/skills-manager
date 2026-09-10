@@ -64,6 +64,20 @@
   the workers finish and leave no residue, so `_join_all` now waits until a
   120 s deadline before reporting stuck threads, removing the timing assumption
   while keeping hang detection.
+- CI is green on `main`: run 34488162920 for `a3a055d` → **success**, all 15 jobs
+  (unit 3.10–3.14, adversarial, package + release-artifact check, docs, browser
+  smoke, and the 3 OS × 2 interpreter cross-platform matrix). This was the last
+  repository-side prerequisite for the tag-triggered release.
+- Artifacts were rebuilt from the final tree after the CI fixes and re-verified:
+  wheel sha256 `6e2dbac79f06…`, sdist sha256 `1d1bb1fe8251…`; the exact-artifact
+  package gate PASSes for both, `--dist-dir --install` clean-installs the
+  inspected wheel, and the wheel's 38 members are byte-identical to the previous
+  build (only ZIP entry timestamps differ, so wheel bytes are not reproducible
+  without `SOURCE_DATE_EPOCH` — recorded, not hidden). The remaining publication
+  blockers are external: no GitHub `release`/`testpypi` environments, no PyPI
+  trusted publisher registered (PyPI/TestPyPI 404), and tag `v1.0.0` already
+  pointing at the earlier release commit, so a version bump + tag is a
+  maintainer decision.
 
 ## 2026-09-10 — ZIP import hardening round (adversarial audit fixes)
 

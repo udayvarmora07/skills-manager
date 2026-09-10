@@ -572,14 +572,17 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   actually publishes.
   **Executed 2026-09-10 (fresh artifacts):** built once from a clean copy of the
   current tree with `build==1.2.2.post1`; wheel
-  `skills_manager-1.0.0-py3-none-any.whl` sha256 `8131d7ae8670…` (172,365 B) and
-  sdist `skills_manager-1.0.0.tar.gz` sha256 `38e43041c65a…` (208,280 B);
-  `check_package_data.py --dist-dir` PASS on both (5 web UI files, Vue 157,924 B);
-  wheel clean-install PASS (`--help`, `create demo`, vendored Vue + `domain.js`
-  present); sdist clean-install honestly UNAVAILABLE offline (fresh venv has no
-  `setuptools` and the check runs `--no-index`). The stale 2026-09-05 artifacts
-  are preserved under `dist/stale-2026-09-05/` (they fail the gate: missing
-  `domain.js`).
+  `skills_manager-1.0.0-py3-none-any.whl` sha256 `6e2dbac79f06…` (172 KB) and
+  sdist `skills_manager-1.0.0.tar.gz` sha256 `1d1bb1fe8251…` (208 KB);
+  `check_package_data.py --dist-dir` PASS on both (5 web UI files, Vue 157,924 B)
+  and `--dist-dir --install` clean-installs the inspected wheel; a separate
+  pristine venv installed the wheel with `--no-index --no-deps`, ran `--help`
+  and `create demo`, and asserted the vendored Vue bundle plus `webui/domain.js`
+  are present. The sdist clean-install reports an honest `UNAVAILABLE` offline
+  (that venv has no `setuptools` and the check installs with `--no-index`).
+  Wheel members are byte-identical across rebuilds (only ZIP timestamps differ);
+  the stale 2026-09-05 artifacts are preserved under `dist/stale-2026-09-05/`
+  (they fail the gate: missing `domain.js`).
   **Publication blocker (evidence, 2026-09-10):** `gh api
   repos/udayvarmora07/skills-manager/environments` → `total_count: 0` (no
   `release`/`testpypi` environment, so no protected approval gate exists);
@@ -588,9 +591,12 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   registered trusted publisher, so OIDC publishing would be rejected);
   `git ls-remote --tags origin` → only `v1.0.0` at `d94cc02` (an earlier release
   commit), so publishing this slice needs a maintainer-owned version bump and
-  tag decision; `gh run list` showed the latest CI run failing on the Windows,
-  macOS, and browser legs — those portability defects are fixed in this round and
-  need a green CI run before tagging. No tag was created and nothing was
+  tag decision; the CI prerequisite is now met — run 34488162920 for `a3a055d`
+  is **success** across all 15 jobs (unit 3.10–3.14, adversarial, package, docs,
+  browser, and the 3 OS × 2 interpreter cross-platform matrix), after fixing the
+  Windows compile glob, the macOS resolved-path expectation, the ZIP backslash
+  expectation on Windows, Chrome DevTools port discovery, the Node 20 WebSocket
+  gap, and a flaky fixed-timeout join. No tag was created and nothing was
   published; the release gate remains unfulfilled by external configuration.
 
 **Acceptance gate:** L1 and L4 recorded on their issues; L2 green on the
