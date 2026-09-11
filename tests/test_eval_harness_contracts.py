@@ -292,7 +292,22 @@ class ScoreAndRecordTests(unittest.TestCase):
         _write_evals(skill_dir, [{"id": 1, "prompt": "p", "expected_output": "e",
                                   "assertions": [{"type": "contains", "value": "x"}]}])
         before_skill = (skill_dir / "SKILL.md").read_bytes()
-        before_rows = store.list()
+
+        def persisted_rows():
+            """``Store.list()`` rows without their read-time stamps.
+
+            ``Store.list()`` decorates each row with observations computed at
+            read time (``observed_at`` is stamped with ``datetime.now()``), so
+            two reads that straddle a UTC second boundary differ even when
+            nothing was written. The no-mutation contract is about persisted
+            state, so drop only the read-time stamp.
+            """
+            rows = list(store.list())
+            for row in rows:
+                row.pop("observed_at", None)
+            return rows
+
+        before_rows = persisted_rows()
         before_files = sorted(
             str(path.relative_to(data_dir))
             for path in data_dir.rglob("*")
@@ -303,7 +318,7 @@ class ScoreAndRecordTests(unittest.TestCase):
             {"case": 1, "variant": "with_skill", "output": "x marks the spot"},
         ])
         self.assertEqual((skill_dir / "SKILL.md").read_bytes(), before_skill)
-        self.assertEqual(store.list(), before_rows)
+        self.assertEqual(persisted_rows(), before_rows)
         after_files = [
             str(path.relative_to(data_dir))
             for path in data_dir.rglob("*")
