@@ -103,6 +103,14 @@ skills-mgr webui --port 9000  # custom port
 
 Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, templates, tar export plus tar/ZIP import, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
 
+Want a window instead of a tab? The optional, unbundled `desktop_launcher.py` opens the same UI in a chromeless Chromium app window (zero new dependencies, loopback-only, falls back to your browser):
+
+```bash
+python3 desktop_launcher.py
+```
+
+`skills-mgr webui` stays the supported entry point; a bundled `pywebview` wrapper was evaluated and rejected (see [issue #9](https://github.com/udayvarmora07/skills-manager/issues/9)). The REST API is also the integration surface for local clients — editors, extensions, scripts — and that contract is documented in [docs/08-web-ui.md](docs/08-web-ui.md#local-client-integration-contract-non-browser-clients--issue-8).
+
 ## Registry bridge and eval harness
 
 Two advisory, offline-first workflows ship in the existing surfaces — no new

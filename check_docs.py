@@ -33,6 +33,7 @@ CURRENT_DOCS = (
     "docs/12-agent-root-discovery-2026-09-08.md",
     "docs/ADR-002-root-consumer-effective-state.md",
     "docs/ADR-003-registry-bridge-and-eval-harness.md",
+    "docs/ADR-004-team-sharing-signed-bundles.md",
     "docs/SESSION-CONTEXT.md",
 )
 REQUIRED_DOCS = (

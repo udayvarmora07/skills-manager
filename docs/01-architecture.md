@@ -42,7 +42,8 @@ skills-manager/
   smoke_web.py       # smoke test driving the REST API (hermetic fixture)
   smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers
   browser_harness.py # dev-only system-Chrome CDP viewport probe (no runtime dep)
-  tests/             # stdlib unittest regression suite (315 tests, 2026-09-10)
+  desktop_launcher.py # optional, unbundled loopback-only app-window launcher (issue #9; no runtime dep, not packaged)
+  tests/             # stdlib unittest regression suite (475 tests, 2026-09-11)
   check_docs.py      # machine-checkable docs/source consistency gate
   check_complexity.py# AST complexity ratchet (+ complexity-baseline.json)
   check_package_data.py # wheel/sdist package-data verification

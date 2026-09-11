@@ -503,5 +503,129 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
             self.assertEqual(store.doctor()["trash_count"], 0)
 
 
+class TarFallbackPolicyPins(unittest.TestCase):
+    """Issue #6 decision pins: keep capability detection, never trust the filter.
+
+    The standing verdict (2026-09-10, recorded on the issue) rejects refusing
+    archives on Python < 3.12 and keeps feature-detection plus the guarded
+    manual extractor. These pins make that decision executable: they fail if a
+    future edit ever makes the import path depend on `tarfile.data_filter`
+    being sound, or lets the no-filter fallback stop validating names.
+    """
+
+    def _archive(self, tmp: str, name: str, member) -> Path:
+        archive = Path(tmp) / name
+        manifest = json.dumps({
+            "app": "skills-mgr",
+            "version": "1.0.0",
+            "created": "2026-09-08T00:00:00Z",
+            "skills": [],
+        }).encode("utf-8")
+        with tarfile.open(archive, "w:gz") as tar:
+            manifest_info = tarfile.TarInfo("manifest.json")
+            manifest_info.size = len(manifest)
+            tar.addfile(manifest_info, io.BytesIO(manifest))
+            member(tar)
+        return archive
+
+    def test_filter_bypass_shape_is_rejected_by_our_own_validator(self):
+        """A permissive (bypassed) filter must not weaken the import path.
+
+        CVE-2025-4138 and the symlink-target/hardlink family show
+        `data_filter` itself is bypassable. This probe replaces
+        `tarfile.data_filter` with a pass-through that hands back every member
+        unmodified — the worst state the filter could degrade to — and asserts
+        the archive is still refused by our own pre-validator.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(data_dir=Path(tmp) / "manager")
+            store.init_db()
+
+            def add_symlink(tar):
+                link = tarfile.TarInfo("skills/demo/link")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "../../outside"
+                tar.addfile(link)
+
+            archive = self._archive(tmp, "escape.tar.gz", add_symlink)
+
+            def permissive_filter(member, dest_path):
+                return member, dest_path
+
+            original_filter = getattr(tarfile, "data_filter", None)
+            had_filter = hasattr(tarfile, "data_filter")
+            tarfile.data_filter = permissive_filter
+            try:
+                with self.assertRaises(StoreError) as caught:
+                    store.import_(archive)
+                self.assertIn("unsupported archive member type", str(caught.exception))
+            finally:
+                if had_filter:
+                    tarfile.data_filter = original_filter
+                else:
+                    delattr(tarfile, "data_filter")
+            # Nothing was extracted anywhere near the archive.
+            self.assertEqual(
+                sorted(path.name for path in Path(tmp).iterdir()),
+                ["escape.tar.gz", "manager"],
+            )
+
+    def test_traversal_member_is_refused_by_the_no_filter_fallback(self):
+        """The Python < 3.12 path also validates names before extracting."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(data_dir=Path(tmp) / "manager")
+            store.init_db()
+
+            def add_traversal(tar):
+                evil = tarfile.TarInfo("../escaped.txt")
+                payload = b"owned"
+                evil.size = len(payload)
+                tar.addfile(evil, io.BytesIO(payload))
+
+            archive = self._archive(tmp, "traversal.tar.gz", add_traversal)
+
+            original_filter = getattr(tarfile, "data_filter", None)
+            had_filter = hasattr(tarfile, "data_filter")
+            if had_filter:
+                delattr(tarfile, "data_filter")
+            try:
+                with self.assertRaises(StoreError) as caught:
+                    store.import_(archive)
+                self.assertIn("unsafe archive member", str(caught.exception))
+            finally:
+                if had_filter:
+                    tarfile.data_filter = original_filter
+            self.assertFalse((Path(tmp) / "escaped.txt").exists())
+            self.assertFalse((Path(tmp) / "manager" / "escaped.txt").exists())
+
+    def test_import_never_requires_the_filter_to_be_present(self):
+        """Both capability branches stay exercised: filter present and absent."""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Store(data_dir=Path(tmp) / "source")
+            source.init_db()
+            source.create("demo", "Demo skill", body="both branches")
+            archive = source.export()
+
+            original_filter = getattr(tarfile, "data_filter", None)
+            had_filter = hasattr(tarfile, "data_filter")
+            try:
+                # Branch 1: filter absent (the Python 3.10/3.11 shape).
+                if had_filter:
+                    delattr(tarfile, "data_filter")
+                without_filter = Store(data_dir=Path(tmp) / "target-a")
+                without_filter.init_db()
+                self.assertEqual(without_filter.import_(archive)["imported"], ["demo"])
+
+                # Branch 2: filter present (3.12+).
+                if had_filter:
+                    tarfile.data_filter = original_filter
+                with_filter = Store(data_dir=Path(tmp) / "target-b")
+                with_filter.init_db()
+                self.assertEqual(with_filter.import_(archive)["imported"], ["demo"])
+            finally:
+                if had_filter:
+                    tarfile.data_filter = original_filter
+
+
 if __name__ == "__main__":
     unittest.main()

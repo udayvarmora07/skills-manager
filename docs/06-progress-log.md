@@ -4,6 +4,75 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-11 — Remaining issues #6, #7, #8, #9, #11 resolved; two new findings filed (#14)
+
+- **The five remaining issues are decided and closed**, each with its verdict made
+  executable rather than restated. No locked constraint moved: filesystem still
+  the source of truth, schema and `SCHEMA_VERSION = "1"` frozen, CLI
+  stdlib-only, web UI still dependency-free and loopback-only, and no new CLI
+  command or `Store` method.
+- **#6 (Python < 3.12 tar policy) — closed as not-planned; decision pinned.**
+  `tests/test_path_safety.py::TarFallbackPolicyPins` now (a) replaces
+  `tarfile.data_filter` with a permissive pass-through — the CVE-2025-4138
+  bypass shape — and asserts the archive is still refused by our own
+  pre-validator, (b) proves the no-filter (3.10/3.11) branch rejects a traversal
+  member and writes nothing, and (c) imports successfully through both
+  capability branches. The recorded rationale (feature-detect per PEP 706;
+  refusal would break the supported matrix for zero fail-closed gain; the
+  independent validator is the real defense) is unchanged.
+- **#7 (out-of-root link severity) — closed as not-planned; decision pinned.**
+  `tests/test_link_severity_contracts.py` pins that parent-escape, absolute, and
+  legitimate sibling/monorepo-relative links warn while `valid` stays True, that
+  in-root-missing and external/anchor targets keep their own classifications,
+  and that `risk_scan()` still carries the medium finding that replaced
+  enforcement. A promotion guard asserts the issue level stays `warning`, so a
+  future severity bump fails loudly instead of silently breaking monorepo
+  layouts.
+- **#8 (VS Code extension) — closed as not-planned for this repo; contract
+  verified and documented.** `tests/test_web_client_contracts.py` empirically
+  proves backend sufficiency for an editor client: the read/edit endpoints it
+  needs answer, the header-absent extension-host mutation path is allowed by
+  design, cross-site browser requests stay 403, no CORS headers are advertised,
+  errors stay JSON, and the bind is loopback-only (a non-loopback bind raises
+  `StoreError`). `docs/08-web-ui.md` gained a "Local client integration contract"
+  section recording what a client must know. The extension itself stays a
+  separate repository.
+- **#9 (desktop wrapper) — rejected direction upheld, the one allowed artefact
+  shipped.** `desktop_launcher.py` (repo root, outside the wheel, no new
+  dependency) serves the existing stdlib UI on loopback and opens it in a
+  Chromium-family `--app=` window, falling back to the default browser when none
+  is installed, and refuses any non-loopback `--host`.
+  `tests/test_desktop_launcher_contracts.py` pins the boundary: stdlib-only
+  imports, no packaged entry point, no webview import anywhere, `webui`/`gui`
+  still canonical, plus host validation, browser preference/fallback, and the
+  serve/shutdown flow.
+- **#11 (team sharing) — design scope closed.** The required
+  design-before-code artefact now exists:
+  @docs/ADR-004-team-sharing-signed-bundles.md records that stdlib-only rules out
+  Ed25519/X.509, selects HMAC shared-secret integrity as the only available
+  option together with its honest limit (group authenticity, not individual
+  authorship), sketches the canonical-MAC bundle extension, maps
+  draft → review → publish onto existing filesystem seams with no schema change,
+  and lists the blocking decisions. The matching threat-model delta is recorded
+  (T-13, R-6, plus recommendations 4-6). No bundle format, signing code, CLI
+  surface, or `Store` method was added.
+- **Two findings from those probes were filed, not silently fixed — issue #14.**
+  (1) F-1: the pre-handler request policy runs only for state-changing methods,
+  so reads are not `Host`-validated; a DNS-rebound page whose origin *is* the
+  rebound host can read skill metadata and full document bodies (measured:
+  `GET /api/skills` and `/api/skills/<name>/raw` return 200 with
+  `Host: evil.example`, while the same `Host` gives 403 on `POST`). The no-CORS
+  reasoning covers ordinary cross-origin reads but not that shape.
+  (2) F-2: with the default `127.0.0.1` bind, `allowed_hosts` holds only
+  `127.0.0.1:<port>`, so a client configured with the equally-loopback
+  `localhost` name gets 403 on every state-changing call — a concrete
+  integration limitation for editors. Threat-model rows T-14/R-7 record F-1 as
+  **open**, and the read-path behavior is pinned in the client-contract test as
+  characterization with a pointer to #14 so a fix fails loudly until updated.
+- **Verification:** 475 `unittest` tests OK (up from 435); `smoke_store.py` and
+  `smoke_web.py` PASS; `check_docs.py` PASS; `check_complexity.py` PASS (164
+  functions).
+
 ## 2026-09-11 — Issues #3, #4, #5, #12, #13 closed out (one bug fix + one diagnostic)
 
 - **Issue #13 — non-UTF8 `SKILL.md` no longer escapes as a raw

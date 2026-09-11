@@ -685,9 +685,13 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 > approval~~ DONE 2026-09-10 (L2 shipped in the scoped `import` extension),
 > ~~effective-explain diagnostic~~ DONE 2026-09-11 (issue #12 shipped as
 > `doctor --explain`, read-only, persisting nothing — see the Milestone 4
-> entry). The remaining items below keep their stated approvals.
+> entry). **2026-09-11: every item in this section is now decided and closed** —
+> #3/#4/#5/#12/#13 in the 2026-09-11 close-out, and #6/#7/#8/#9/#11 in the
+> follow-up pass (each with its verdict pinned by a test, an artefact, or a
+> design record). New findings from those probes were filed as issue #14 rather
+> than fixed silently.
 
-- [!] Registry bridge: issue #3. Research verdict: DEFER network
+- [x] Registry bridge: issue #3. Research verdict: DEFER network
   browse/fetch. **FINAL (2026-09-10): DEFERRED — confirmed by Snyk
   ToxicSkills audit.** **OFFLINE HALF SHIPPED 2026-09-10** (approved staging
   items 1-3), design in @docs/ADR-003-registry-bridge-and-eval-harness.md:
@@ -816,7 +820,13 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   through the same preflight, private extraction, validation, and
   staged-commit pipeline. Use the Milestone 1 archive pipeline if
   approved.
-- [!] Python <3.12 tar policy: issue #6. Research verdict: REJECT refusal;
+- [x] Python <3.12 tar policy: issue #6. Research verdict: REJECT refusal;
+  **CLOSED 2026-09-11 as not-planned.** Decision pinned so the hand-rolled
+  fallback cannot rot silently: `tests/test_path_safety.py::TarFallbackPolicyPins`
+  (a) replaces `tarfile.data_filter` with a permissive pass-through and asserts
+  the archive is still refused by our own pre-validator (the CVE-2025-4138
+  bypass shape), (b) proves the no-filter branch rejects a traversal member and
+  writes nothing, and (c) exercises both capability branches end to end.
   keep feature-detect plus the guarded manual extractor. **FINAL
   (2026-09-10): REJECTED — CVE-2025-4138 proves the independent validator
   is the real defense.** Probes: this environment is Python 3.12.3
@@ -834,7 +844,14 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   Refusal would break `import` on the supported 3.10/3.11 matrix
   (`requires-python >= 3.10`) for zero fail-closed gain. Prefer capability detection and safe independent validation over
   a silent unsafe fallback — the current design already does this.
-- [!] Out-of-root link severity: issue #7. Research verdict: REJECT the
+- [x] Out-of-root link severity: issue #7. Research verdict: REJECT the
+  **CLOSED 2026-09-11 as not-planned.** The warn-not-error decision is now
+  executable: `tests/test_link_severity_contracts.py` pins that parent-escape,
+  absolute, and legitimate sibling/monorepo links all warn while `valid` stays
+  True, that in-root-missing and external/anchor targets keep their own
+  classifications, that `risk_scan()` still carries the medium finding that
+  replaced enforcement, and (as a promotion guard) that the issue level is
+  `warning`.
   warning-to-error promotion; keep the warning plus `risk_scan()`.
   **FINAL (2026-09-10): REJECTED — promotion would break 68 legitimate
   layouts (measured).** Probes: `../../../etc/shadow`, `/etc/passwd`, and `../shared/common.md`
@@ -860,7 +877,14 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   quarantine staging covers untrusted imports. Decide strictness and
   legitimate project-relative link policy — the standing answer is warn,
   not error.
-- [!] VS Code extension: issue #8. Research verdict: separate-repo spike
+- [x] VS Code extension: issue #8. Research verdict: separate-repo spike
+  **CLOSED 2026-09-11 as not-planned for this repo.** Backend sufficiency is now
+  pinned rather than asserted: `tests/test_web_client_contracts.py` covers the
+  read/edit endpoints an editor needs, the header-absent (extension-host)
+  mutation path, cross-site rejection, the loopback-only bind, and the absence
+  of CORS. Two integration limitations found by those probes are filed as issue
+  #14 (read-path `Host` validation; `Host: localhost` rejected on mutations) and
+  documented in @docs/08-web-ui.md under "Local client integration contract".
   when pursued; no backend changes here. **FINAL (2026-09-10):
   SEPARATE REPO — backend already sufficient.** The REST table in
   `docs/08-web-ui.md` already covers everything an extension needs
@@ -877,7 +901,14 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   and [publishing docs](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)).
   Keep it separate until REST contracts and local API security are
   stable; any missing endpoint gets its own ASK first.
-- [!] Native desktop wrapper: issue #9. Research verdict: REJECT as a
+- [x] Native desktop wrapper: issue #9. Research verdict: REJECT as a
+  **CLOSED 2026-09-11: rejected direction, allowed artefact shipped.**
+  `desktop_launcher.py` (repo root, outside the wheel, zero new dependencies)
+  starts the stdlib server on loopback and opens it in a Chromium-family
+  `--app=` window, falling back to the default browser; it refuses any
+  non-loopback host. `tests/test_desktop_launcher_contracts.py` pins the
+  boundary: stdlib-only imports, no packaged entry point, no webview import,
+  and `webui`/`gui` still the canonical path.
   product direction; keep the browser canonical. **FINAL (2026-09-10):
   REJECTED — pywebview adds runtimes for cosmetic gain.** The GTK4 GUI was deleted
   2026-08-14 in favor of the web UI, which `browser_harness.py` verifies
@@ -890,7 +921,15 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   cosmetic gain. Optional only, never replacing the dependency-free
   browser path; an unbundled loopback-only launcher script is the most
   that should ever exist.
-- [!] Team sharing/signatures: issue #11. Research verdict: correctly
+- [x] Team sharing/signatures: issue #11. Research verdict: correctly
+  **CLOSED 2026-09-11 for the design scope.** The required design-before-code
+  artefact exists: @docs/ADR-004-team-sharing-signed-bundles.md records why
+  stdlib-only forbids Ed25519/X.509, prefers HMAC shared-secret integrity with
+  its honest limits (group authenticity, not individual identity), sketches the
+  canonical-MAC bundle extension, maps draft → review → publish onto existing
+  filesystem seams with no schema change, and lists the blocking decisions.
+  Threat-model delta added (T-13, R-6). No bundle format, signing code, or CLI
+  surface was implemented.
   DEFERRED; design-before-code with honest stdlib limits. **FINAL
   (2026-09-10): DEFERRED — HMAC cannot sign for a team (NIST), Ed25519
   is not stdlib.** Probes: HMAC-SHA256 sign/verify plus tamper detection
@@ -917,6 +956,11 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   persisted provenance/hashes — today observation-only — verified
   recovery). Requires a trust/key-distribution design and a new
   threat-model review — no bundle format code until that ADR lands.
+  **2026-09-11:** that ADR now exists (@docs/ADR-004-team-sharing-signed-bundles.md)
+  and the threat-model delta is recorded (T-13, R-6). It selects HMAC shared-secret
+  integrity as the only stdlib-available option, states its honest limit (group
+  authenticity, not individual identity), and lists the blocking decisions; no format
+  or signing code was written, so this entry stays a design record.
 
 ## Error-prevention protocol
 

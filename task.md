@@ -920,3 +920,20 @@ items verified end to end before closing. No locked constraint changed.
 - [x] T11 docs truth: `docs/01-architecture.md`, `docs/02-modules.md`, `docs/03-cli-surface.md`, `docs/08-web-ui.md`, `docs/06-progress-log.md`, `docs/SESSION-CONTEXT.md`, `ROADMAP.md`, `TODO.md` (Milestone 4 + Milestone 11 L3 + deferred intro), `task.md`.
 - [x] T12 final ladder (435 unittest, smokes, docs, complexity, help) then commit, push, and close each issue with file/line evidence.
 - [x] T13 CI flake fix: `test_record_runs_never_touches_skill_files_or_the_index` dropped the read-time `observed_at` stamp (py3.10 failure); test 20/20, suite 3/3, CI green on HEAD.
+
+## Milestone 51 — Remaining issue close-out (#6, #7, #8, #9, #11) (2026-09-11, 9 tasks)
+
+Every remaining open issue resolved: rejected directions pinned by executable
+tests, the one allowed desktop artefact shipped, the required team-sharing
+design ADR written, and two findings from the probes filed as a new issue (#14)
+instead of being changed silently. No locked constraint changed.
+
+- [x] T1 baseline ladder green before editing (435 unittest, both smokes, docs, complexity).
+- [x] T2 #6 closed as not-planned with `TarFallbackPolicyPins` (permissive-filter bypass, no-filter traversal, both capability branches).
+- [x] T3 #7 closed as not-planned with `tests/test_link_severity_contracts.py` (warning stays warning, valid stays True, risk_scan signal, promotion guard).
+- [x] T4 #8 closed as not-planned for this repo with `tests/test_web_client_contracts.py` (extension-host mutations, cross-site 403, no CORS, loopback bind) + the "Local client integration contract" section in `docs/08-web-ui.md`.
+- [x] T5 #9 shipped the allowed artefact: `desktop_launcher.py` (unbundled, loopback-only, app-window with browser fallback) + `tests/test_desktop_launcher_contracts.py`.
+- [x] T6 #11 design scope closed: `docs/ADR-004-team-sharing-signed-bundles.md` + threat-model delta (T-13, T-14, R-6, R-7, recommendations 4-6).
+- [x] T7 New issue #14 filed for the read-path Host gap (F-1) and the `localhost` Host alias rejection (F-2), with measured evidence and three options.
+- [x] T8 docs truth: `docs/README.md` (ADR-004 index), `docs/01-architecture.md` (launcher + test count), `docs/08-web-ui.md`, `docs/06-progress-log.md`, `docs/SESSION-CONTEXT.md`, `ROADMAP.md`, `TODO.md` (five entries + deferred intro/tail), `check_docs.py` CURRENT_DOCS, `task.md`.
+- [x] T9 final ladder (475 unittest, smokes, docs, complexity, launcher help) then commit, push, and close #6/#7/#8/#9/#11 with evidence.

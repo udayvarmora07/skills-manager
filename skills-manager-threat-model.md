@@ -1,6 +1,6 @@
 # Threat Model — skills-manager
 
-**Date:** 2026-09-10 · **Version:** 1.1 · **Scope:** `skills-mgr` CLI + local web UI (`skillsmgr/webapp.py`, `skillsmgr/webui/`), `Store` + `scopes` data layer. Updated for approved ZIP import support.
+**Date:** 2026-09-11 · **Version:** 1.2 · **Scope:** `skills-mgr` CLI + local web UI (`skillsmgr/webapp.py`, `skillsmgr/webui/`), `Store` + `scopes` data layer. Updated for the read-path Host finding (issue #14) and the prospective team-bundle design (ADR-004).
 
 ## 1. System overview
 
@@ -56,6 +56,8 @@ Out of scope: TLS/HSTS/`Secure` cookies (localhost tool), CSRF tokens (no sessio
 | T-10 Accidental data loss (purge, remove) | Trash-by-default; purge requires explicit flag; UI undo toast for trash | Purge is irreversible by design; confirm dialogs cover it |
 | T-11 Cross-origin browser mutation | Loopback-only bind plus pre-handler Host, `Sec-Fetch-Site`, Origin, Referer, and content-type checks; security headers | Any local process can still call the API directly; OS trust boundary remains |
 | T-12 Archive manifest/content mismatch or partial replacement | Strict versioned manifest, canonical name/path/frontmatter checks, staged per-skill commit, rollback of replaced destination, explicit imported/skipped report | Filesystem-first resync remains the recovery path after a process failure |
+| T-13 Forged or tampered team bundle accepted as reviewed (prospective — ADR-004) | **Design only; no code exists.** The design requires an explicit verification gate (a bundle that declares a signature and fails verification is refused before staging, never silently downgraded to unsigned), a canonical MAC input covering member names *and* contents, and a key stored outside the data dir so `export --full`/backup cannot carry it | Not mitigated today because nothing reads a signature; a future implementation must not let "verified" imply "safe to run" (ADR-004 §5) |
+| T-14 Read-path DNS rebinding: a page whose host resolves to loopback can read skill data (issue #14 F-1) | Pre-handler `Host`/`Sec-Fetch-Site`/Origin/Referer validation runs only for state-changing methods (`webapp.py:240-262`); reads stay unauthenticated. No CORS headers are served, so an ordinary cross-origin response is not readable | **OPEN — tracked as issue #14** with three options (validate Host on every request, or record the rebound-browser case as accepted, or add a token); not mitigated by choice, pending that decision |
 
 ## 6. Risk register
 
@@ -66,11 +68,18 @@ Out of scope: TLS/HSTS/`Secure` cookies (localhost tool), CSRF tokens (no sessio
 | R-3 | Port rebound to LAN/forwarded, exposing unauthenticated API | Low | Medium (local data + skill writes) | Rejected by default; document "never expose" |
 | R-4 | Link-escape warning ignored (T-8) | Low | Low | Consider blocking |
 | R-5 | Path disclosure in errors (T-9) | Low | Low | Fix only if bind changes |
+| R-6 | Team bundle signed with a shared secret is mistaken for individual authorship (T-13, prospective) | Medium (wording drift is easy) | Low | Blocked on ADR-004 §6; the ADR forbids claiming individual identity and requires the group-authenticity limit in any UI/doc text |
+| R-7 | Rebound browser page reads local skill corpus through the unvalidated read path (T-14) | Low (needs a visited page plus a rebinding-capable setup) | Medium (discloses skill metadata and full document bodies) | **Open** — issue #14; decide Host-on-reads vs. accepted risk. Mutation paths are already rejected (403) |
 
 ## 7. Recommendations (ordered)
 
 1. Keep archive budgets and the strict manifest/content contract synchronized with any future full-library migration work.
 2. Keep the install confirm gate and show the exact command (already returned by the API) in the dialog; document that running install trusts the source.
 3. Keep the loopback-only bind and pre-handler browser request checks; never expose/reverse-proxy without adding auth.
-4. Optionally promote the out-of-root link warning to a validation error.
-5. Re-run this model when: a new network listener is added, auth is introduced, or import accepts a new format.
+4. Keep the out-of-root link warning a warning (issue #7 verdict, now pinned by
+   `tests/test_link_severity_contracts.py`); promotion would hard-fail legitimate
+   monorepo/sibling-skill links and needs an allowlist key first.
+5. Decide issue #14 (R-7): validate `Host` on reads — together with the `localhost`
+   alias question (F-2) — or record the rebound-browser case as an accepted risk.
+6. Re-run this model when: a new network listener is added, auth is introduced, or
+   import accepts a new format (including the prospective signed bundle, ADR-004).

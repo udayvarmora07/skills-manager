@@ -38,6 +38,23 @@ python3 -m skillsmgr webui --port 9000
 
 `gui` remains as an alias of `webui` so old muscle memory and scripts keep working.
 
+**Optional desktop window (issue #9):** the recorded verdict rejects bundling a
+third-party webview (`pywebview`) — it would add an install plus OS webview
+runtimes and native failure modes to a deliberately dependency-free UI. The most
+that may exist is an *unbundled, loopback-only launcher*, and that is
+`desktop_launcher.py` (repo root, **not** in the wheel, no new dependency): it
+starts the same stdlib server and opens the page in a Chromium-family
+`--app=` window, falling back to the default browser when none is installed.
+
+```bash
+python3 desktop_launcher.py                 # chromeless app window on 127.0.0.1:8765
+python3 desktop_launcher.py --plain         # force the default browser
+python3 desktop_launcher.py --print-only    # show what would happen, exit
+```
+
+It refuses any non-loopback `--host`, and `skills-mgr webui` stays the supported
+entry point; the launcher never replaces it.
+
 ## Scopes (tracking other agents' skills)
 
 **[SPEC]** The web UI tracks skills across agent scopes — the same scopes the CLI exposes (`--scope`). Scope ids: `global` (the manager's own store), `claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`, plus project-local scopes. `cursor` maps to `~/.cursor/skills`; `agents` maps to `~/.agents/skills`. Aggregate scope views deduplicate aliases by resolved physical path, while direct scope ids remain compatible. See @docs/ADR-002-root-consumer-effective-state.md and @docs/12-agent-root-discovery-2026-09-08.md.
@@ -119,6 +136,37 @@ mutate an outside directory.
 | GET | `/api/export[?full=1]` | downloads slim or full gzip archive (attachment; global scope only) |
 | PUT | `/api/import?filename=&force=&full=` | raw tar or ZIP archive bytes → Store.import_; `full=1` restores trash/templates from a full archive |
 | PUT | `/api/import` (multipart/form-data) | webkitdirectory folder upload → Store.add per SKILL.md |
+
+### Local client integration contract (non-browser clients — issue #8)
+
+The REST API is the product surface for local integrations (an editor/VS Code
+extension, a script, another tool). Everything such a client needs already
+exists — reads, CRUD, toggle, trash/snapshots, search, scopes, sync, install,
+validate, doctor, stats, tokens, templates, export/import — so an extension is a
+separate repository with **no backend change here** (`tests/test_web_client_contracts.py`
+pins the contract). What a client must know:
+
+- **Address it at `127.0.0.1`.** The server binds loopback only and rejects a
+  non-loopback bind host. With the default bind, its `Host` allowlist holds only
+  `127.0.0.1:<port>`; a client configured with the equally-loopback name
+  `localhost` gets **403 on every state-changing call** (`GET` is unaffected).
+  Using the same host for bind and link keeps the header valid — which is why
+  `desktop_launcher.py` does exactly that. Tracked as issue #14 F-2.
+- **Call from the extension host (Node), not a webview origin.** No CORS headers
+  are served on purpose: the server has no authentication, so a cross-origin
+  browser request must stay rejectable. Requests carrying `Origin`/`Referer`
+  outside the loopback origin set, or `Sec-Fetch-Site: cross-site`, get 403 on
+  state-changing methods; header-absent local clients are allowed by design,
+  which is exactly the extension-host path.
+- **Errors are JSON and machine-readable** (`{"error": "..."}` with 400/403/404/409/415),
+  and mutations require `Content-Type: application/json`.
+- **There is no health endpoint** (adding one would be a new surface). A client
+  confirms it reached this tool by reading `/api/stats` (counts, sizes,
+  categories) at the loopback URL it started or discovered.
+- **Reads are not Host-validated today.** That is a known, tracked gap for a
+  DNS-rebound page whose origin *is* the rebound host; issue #14 records the
+  options and the current behavior is pinned as characterization in the test
+  file, not as an endorsement. Mutation paths are already rejected.
 
 ## Frontend map (app.js)
 
