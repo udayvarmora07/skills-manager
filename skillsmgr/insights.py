@@ -26,21 +26,48 @@ from .validator import validate_skill_name
 
 __all__ = [
     "MAX_BODY_DIFF_LINES",
+    "MAX_REGISTRY_SEGMENT",
+    "REGISTRY_AUDIT_PROVIDERS",
+    "REGISTRY_BASE_URL",
+    "REGISTRY_PREVIEW_POLICY",
     "consumer_view",
     "diff_skills",
     "diff_three_way",
+    "install_argv",
+    "install_command_line",
     "ownership_states",
     "provenance_summary",
     "update_preview",
     "quarantine_plan",
     "risk_scan",
+    "registry_bridge_plan",
     "registry_preview",
+    "registry_reference",
     "eval_plan",
     "eval_score",
     "bundle_policy",
 ]
 
 MAX_BODY_DIFF_LINES = 200
+
+# Registry bridge (offline half only).  The skills.sh catalog API needs a
+# Vercel OIDC bearer token, so no product code performs a registry request;
+# these helpers turn a registry reference into an offline preview plus the
+# exact ecosystem-runner command the existing ``install`` surface would run.
+REGISTRY_BASE_URL = "https://skills.sh"
+# Documented partner slugs on the per-skill security page
+# (``/owner/repo/skill/security/{slug}``).
+REGISTRY_AUDIT_PROVIDERS = ("agent-trust-hub", "socket", "snyk")
+REGISTRY_PREVIEW_POLICY = (
+    "offline-only: no registry request, cache write, or credential use; "
+    "install stays delegated to the ecosystem runner (npx skills add)"
+)
+MAX_REGISTRY_SEGMENT = 96
+
+_REGISTRY_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_REGISTRY_HOSTS = ("skills.sh", "www.skills.sh")
+_INSTALL_VALUE_RE = re.compile(r"[A-Za-z0-9_@./:+-]+")
+_INSTALL_RUNNERS = ("npx", "pnpm", "yarn", "bunx", "bun")
 
 _QUARANTINE_SCOPE = "quarantine"
 _RESOLUTION_NOTE = "unresolved-precedence-approval-gated"
@@ -432,6 +459,186 @@ def registry_preview(entry: dict, trust_confirmed: bool = False) -> dict:
         "dry_run": steps,
         "may_install": not blockers,
         "blockers": blockers,
+    }
+
+
+def _registry_segment(value: str, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} segment must be a non-empty string")
+    if len(value) > MAX_REGISTRY_SEGMENT:
+        raise ValueError(f"{label} segment is too long (max {MAX_REGISTRY_SEGMENT})")
+    if not _REGISTRY_SEGMENT_RE.fullmatch(value):
+        raise ValueError(f"unsafe {label} segment: {value!r}")
+    return value
+
+
+def _registry_segments(path_text: str, label: str) -> list[str]:
+    if not path_text or path_text.startswith("/") or path_text.endswith("/") or "//" in path_text:
+        raise ValueError(f"unsupported registry reference: {path_text!r}")
+    return [_registry_segment(part, label) for part in path_text.split("/")]
+
+
+def registry_audit_links(source: str, slug: str | None,
+                         providers=REGISTRY_AUDIT_PROVIDERS) -> list[dict]:
+    """Linkable per-skill audit pages (never fetched by this tool)."""
+    if not slug:
+        return []
+    base = f"{REGISTRY_BASE_URL}/{source}/{slug}/security"
+    return [{"provider": _registry_segment(provider, "provider"),
+             "url": f"{base}/{provider}"} for provider in providers]
+
+
+def _registry_result(source: str, slug: str | None, spec: str) -> dict:
+    registry_id = f"{source}/{slug}" if slug else None
+    return {
+        "spec": spec,
+        "form": "skill" if slug else "source",
+        "source": source,
+        "slug": slug,
+        "registry_id": registry_id,
+        "page_url": f"{REGISTRY_BASE_URL}/{registry_id}" if registry_id else None,
+        "audit_links": registry_audit_links(source, slug),
+    }
+
+
+def _registry_from_url(spec: str) -> dict:
+    match = re.match(r"https?://([^/\s?#]+)([^\s?#]*)", spec)
+    if match is None:
+        raise ValueError(f"unsupported registry URL: {spec!r}")
+    host = match.group(1).lower()
+    # A URL path always carries a leading separator; the bare-reference form
+    # must not, so strip it here instead of loosening the shared rule.
+    path_text = match.group(2)[1:] if match.group(2).startswith("/") else match.group(2)
+    if host in ("github.com", "www.github.com"):
+        segments = _registry_segments(path_text, "source")
+        if len(segments) < 2:
+            raise ValueError(f"unsupported GitHub URL: {spec!r}")
+        return _registry_result("/".join(segments[:2]), None, spec)
+    if host not in _REGISTRY_HOSTS:
+        raise ValueError(f"unsupported registry host: {host!r}")
+    segments = _registry_segments(path_text, "registry")
+    if len(segments) == 1:
+        return _registry_result(segments[0], None, spec)
+    # A skills.sh page path is always ``{source}/{slug}``, so the final
+    # segment is the skill slug (``mintlify.com/mintlify`` = well-known
+    # source, ``vercel-labs/skills/find-skills`` = GitHub source + slug).
+    return _registry_result("/".join(segments[:-1]), segments[-1], spec)
+
+
+def registry_reference(spec: str) -> dict:
+    """Parse a registry reference offline (no request, no cache, no token).
+
+    Accepted forms: ``owner/repo`` (a source), ``owner/repo/slug`` (a skill id
+    in ``{source}/{slug}`` form), ``https://skills.sh/{source}/{slug}``, and
+    ``https://github.com/owner/repo`` (the documented ``installUrl`` form).
+    """
+    if not isinstance(spec, str) or not spec.strip():
+        raise ValueError("registry reference must be a non-empty string")
+    raw = spec.strip()
+    if len(raw) > 512:
+        raise ValueError("registry reference is too long (max 512 characters)")
+    if "://" in raw:
+        return _registry_from_url(raw)
+    segments = _registry_segments(raw, "registry")
+    if len(segments) <= 2:
+        return _registry_result("/".join(segments), None, raw)
+    if len(segments) == 3:
+        return _registry_result("/".join(segments[:2]), segments[2], raw)
+    raise ValueError(f"unsupported registry reference: {raw!r}")
+
+
+def install_argv(source: str, runner: str = "npx", scope: str = "global",
+                 agents=None, skills=None, copy: bool = False,
+                 list_only: bool = False) -> list[str]:
+    """Render the ecosystem-runner argv for one install request."""
+    if not isinstance(source, str) or not _INSTALL_VALUE_RE.fullmatch(source) \
+            or source.startswith("-"):
+        raise ValueError(f"invalid install source {source!r}")
+    if runner not in _INSTALL_RUNNERS:
+        raise ValueError(f"unsupported runner {runner!r}")
+    parts = {
+        "npx": ["npx", "skills", "add", source],
+        "pnpm": ["pnpm", "dlx", "skills", "add", source],
+        "yarn": ["yarn", "dlx", "skills", "add", source],
+    }.get(runner, ["bunx", "skills", "add", source])
+    if scope == "global":
+        parts.append("-g")
+    for label, values, flag in (("agent", agents, "-a"), ("skill", skills, "-s")):
+        for value in values or []:
+            if not isinstance(value, str) or not _INSTALL_VALUE_RE.fullmatch(value) \
+                    or value.startswith("-"):
+                raise ValueError(f"invalid {label} value {value!r}")
+            parts.extend([flag, value])
+    if copy:
+        parts.append("--copy")
+    if list_only:
+        parts.append("-l")
+    return parts
+
+
+def install_command_line(source: str, runner: str = "npx", scope: str = "global",
+                         agents=None, skills=None, copy: bool = False,
+                         list_only: bool = False) -> str:
+    """Render one install request as the printed command line."""
+    return " ".join(install_argv(source, runner, scope, agents, skills, copy,
+                                 list_only))
+
+
+def registry_bridge_plan(spec: str, runner: str = "npx", scope: str = "global",
+                         agents=None, skills=None, copy: bool = False,
+                         list_only: bool = False, trust_confirmed: bool = False,
+                         description: str | None = None,
+                         content_hash: str | None = None) -> dict:
+    """Offline registry→install bridge plan (no network, no execution).
+
+    Maps a registry reference to the command the existing ``install`` surface
+    would run, and surfaces the audit links plus registry hash used to review
+    provenance and to detect upstream change without re-fetching files.
+    """
+    reference = registry_reference(spec)
+    scope = _require_optional_str(scope, "scope") or "global"
+    content_hash = _require_optional_str(content_hash, "content_hash")
+    targets = list(skills or []) or ([reference["slug"]] if reference["slug"] else [])
+    command = install_command_line(reference["source"], runner, scope, agents,
+                                   targets, copy, list_only)
+    blockers: list[str] = []
+    if not trust_confirmed:
+        blockers.append("trust not confirmed: review the source and audit "
+                        "links, then confirm explicitly")
+    has_description = isinstance(description, str) and bool(description.strip())
+    return {
+        "spec": reference["spec"],
+        "form": reference["form"],
+        "source": reference["source"],
+        "slug": reference["slug"],
+        "registry_id": reference["registry_id"],
+        "page_url": reference["page_url"],
+        "audit_links": reference["audit_links"],
+        "description": description if has_description else "",
+        "description_status": "provided" if has_description else "not-provided",
+        "provenance_note": "registry metadata (description, installs) needs an "
+                           "authenticated catalog read; supply it manually when "
+                           "you have it, otherwise provenance stays incomplete",
+        "content_hash": content_hash,
+        "hash_status": "provided" if content_hash else "not-provided",
+        "hash_use": "compare the registry hash with a stored value to detect "
+                    "upstream change without re-fetching files",
+        "target_scope": scope,
+        "runner": runner,
+        "install_command": command,
+        "steps": [
+            "preview (offline): reference parsed, audit links and hash shown",
+            f"dry-run: {command}",
+            "confirm trust explicitly (advisory gate)",
+            f"run: {command} (set DISABLE_TELEMETRY=1 to opt out of runner telemetry)",
+            "validate the installed copy with `validate`",
+            "store the registry hash to detect later upstream change",
+        ],
+        "may_install": not blockers,
+        "trust_confirmed": bool(trust_confirmed),
+        "blockers": blockers,
+        "network": "deferred: no registry API request, cache, or credential is used",
+        "policy": REGISTRY_PREVIEW_POLICY,
     }
 
 

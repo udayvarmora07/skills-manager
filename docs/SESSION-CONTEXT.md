@@ -1,9 +1,12 @@
 # Session Context — Skills Manager
 
-**Version 0.3.0** (2026-09-10: ZIP import shipped in the approved scoped
-`import` extension; split CLI/web policy modules, `insights.py` + 57-test
-contracts, smoke fixtures, harness, package-data gate; CLI counts re-verified;
-Milestone 11 L1/L2/L3/L4 done.)
+**Version 0.4.0** (2026-09-10: registry bridge offline half (`install --preview`)
++ file-based advisory eval harness (`validate --evals`/`--evals-run`,
+`skillsmgr/evals.py`) shipped by extending existing surfaces only — see
+@docs/ADR-003-registry-bridge-and-eval-harness.md; ZIP import shipped earlier in
+the approved scoped `import` extension; split CLI/web policy modules,
+`insights.py` contracts, smoke fixtures, harness, package-data gate; CLI counts
+re-verified; Milestone 11 L1/L2/L3/L4 done.)
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
@@ -18,9 +21,11 @@ Milestone 11 L1/L2/L3/L4 done.)
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
- - **Tests**: stdlib `unittest` regression/contract suite — 315 tests green 2026-09-10 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (157 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
-- **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Locked by 57 red-first hermetic tests in `tests/test_insights_contracts.py`.
-- **Milestone 11 queue (2026-09-10)**: L1/L2/L3/L4 done; L2 ZIP import is shipped as an `import`-only extension with bounded preflight and guarded extraction. L5 remains deferred (#3/#4/#8/#11 untouched), and L6 release remains gated on a fresh exact artifact build and authorized publication.
+ - **Tests**: stdlib `unittest` regression/contract suite — 376 tests green 2026-09-10 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (159 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
+- **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, `registry_reference`/`registry_bridge_plan` + the shared `install_argv`/`install_command_line` renderer, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Locked by hermetic tests in `tests/test_insights_contracts.py` and `tests/test_registry_bridge_contracts.py`.
+- **Registry bridge (offline half, 2026-09-10)**: `install --preview [--trust-confirmed] [--registry-hash HEX]` / `POST /api/install {preview: true}` parse a registry reference (`owner/repo`, `owner/repo/slug`, skills.sh page URL, GitHub URL), gate on explicit trust, surface linkable `/security/{provider}` audit pages plus the hash slot, and map a skill id onto `npx skills add … -s <slug>`. No request, cache, or credential exists; network browse/fetch is still deferred (#3, @docs/ADR-003-registry-bridge-and-eval-harness.md).
+- **Eval harness (file-based, advisory, 2026-09-10)**: `skillsmgr/evals.py` reads `evals/evals.json` from a skill dir and records `iteration-N/eval-<slug>/{with_skill,without_skill}/{outputs/output.txt,grading.json,timing.json}` plus a per-iteration `benchmark.json` (per-variant case pass rate and the `with_skill` − `without_skill` delta). Surfaces: `validate --evals`, `validate --evals-run FILE [--workspace DIR]`, `POST /api/validate {evals|runs}`. Workspaces default to `<data>/evals/<name>-workspace` (outside `skills/`; `--path` uses beside-the-skill only outside the store's `skills/` tree). Scores never change `valid`, never gate installs/edits, never enter SQLite (#4).
+- **Milestone 11 queue (2026-09-10)**: L1/L2/L3/L4 done; L2 ZIP import is shipped as an `import`-only extension with bounded preflight and guarded extraction, and L5's offline/file-based halves are now shipped (#3/#4 partially closed; their network/backend halves stay deferred). L6 release remains gated on a fresh exact artifact build and authorized publication.
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
 
 ## Common tasks (router)

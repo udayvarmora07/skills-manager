@@ -103,11 +103,41 @@ skills-mgr webui --port 9000  # custom port
 
 Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, templates, tar export plus tar/ZIP import, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
 
+## Registry bridge and eval harness
+
+Two advisory, offline-first workflows ship in the existing surfaces — no new
+command, no runtime dependency, no network access (see
+[ADR-003](docs/ADR-003-registry-bridge-and-eval-harness.md)):
+
+```bash
+# Registry bridge: preview a registry skill offline, then install it explicitly
+skills-mgr install --preview vercel-labs/skills/find-skills
+skills-mgr install vercel-labs/skills --skill find-skills   # executes (dry-run first with --dry-run)
+
+# Eval harness: author evals/evals.json inside a skill, then report or record runs
+skills-mgr validate my-workflow --evals
+skills-mgr validate my-workflow --evals-run runs.json
+```
+
+`--preview` parses `owner/repo`, `owner/repo/slug`, a `https://skills.sh/{source}/{slug}`
+page URL, or a GitHub URL, links the per-skill audit pages, shows the `--registry-hash`
+slot used to detect upstream change, and prints the exact `npx skills add … -s <slug>`
+command — without any registry request, cache, or credential. Browsing the catalog,
+fetching files, and provenance persistence remain deferred (issue #3).
+
+The eval harness follows the official [`evals/evals.json`](https://agentskills.io/skill-creation/evaluating-skills)
+contract with deterministic assertions (`equals`, `contains`, `not_contains`,
+`regex`, `is_json`) and records `iteration-N/eval-<slug>/{with_skill,without_skill}/`
+with `outputs/`, `grading.json`, `timing.json`, and a `benchmark.json` delta under
+`<data>/evals/`. Scores are advisory: they never change `valid`, never gate an
+install or edit, and are never written to SQLite.
+
 ## Data model
 
 - **Filesystem is the source of truth**: `<data>/skills/<name>/SKILL.md`.
 - **SQLite is a rebuildable index only** (`db rebuild` / `db resync` repair any drift; never hand-edit it).
 - Data dir: `$SKILLS_MANAGER_DATA` → `$XDG_DATA_HOME` → `~/.local/share`, then `/skills-manager`.
+- Eval run workspaces live in `<data>/evals/` (outside `skills/`, so scans, `doctor`, exports, and the index never see them).
 
 ## CLI reference
 

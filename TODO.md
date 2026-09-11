@@ -82,15 +82,18 @@ performed here.
 
 ### Important integration facts
 
-- [!] `/home/uday-varmora/skills-manager.worktrees/todo-plan-implementation`
-  contains approved rollback/full-migration work plus adversarial fixes and
-  tests; it is not part of `main`. **FINAL (2026-09-10): still unmerged
-  (2 commits ahead) — selective replay only, never wholesale merge.**
-- [!] `/home/uday-varmora/skills-manager.worktrees/milestone5-research-user-needs`
-  contains a different archive hardening/ZIP/UX implementation; it is not part
-  of `main` and must not be merged wholesale. **FINAL (2026-09-10): still
-  unmerged (1 commit ahead) — selective replay only. (The other 3 worktree
-  dirs are merged-but-stale leftovers with 0 unique commits.)**
+- [x] Historical worktree `/home/uday-varmora/skills-manager.worktrees/todo-plan-implementation`
+  was reviewed and archived at local tag
+  `archive/todo-plan-implementation-2bb7280`; its 2 commits were not merged
+  wholesale because their substantive behavior is already present in the
+  stronger current `main` implementation.
+- [x] Historical worktree `/home/uday-varmora/skills-manager.worktrees/milestone5-research-user-needs`
+  was reviewed and archived at local tag
+  `archive/milestone5-research-user-needs-c5a7161`; its 1 commit was not merged
+  wholesale because its ZIP/UX behavior is already present or superseded on
+  current `main`. Both clean worktrees and local branches were removed; the
+  remaining three historical worktrees were left untouched because they are
+  dirty and/or may still carry active work.
 - [x] GitHub issues #1 and #2 are closed as approved design decisions, but their
   code must still be selectively integrated and re-reviewed on `main`.
 - [!] `docs/01-architecture.md`, `docs/05-gui-plan.md`,
@@ -654,7 +657,24 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 
 - [!] Registry bridge: issue #3. Research verdict: DEFER network
   browse/fetch. **FINAL (2026-09-10): DEFERRED — confirmed by Snyk
-  ToxicSkills audit.** `skills.sh` exposes a real catalog API (`GET
+  ToxicSkills audit.** **OFFLINE HALF SHIPPED 2026-09-10** (approved staging
+  items 1-3), design in @docs/ADR-003-registry-bridge-and-eval-harness.md:
+  `insights.registry_reference()` parses `owner/repo`, `owner/repo/slug`,
+  `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo`
+  offline; `insights.registry_bridge_plan()` keeps the explicit-trust gate
+  (`blockers`/`may_install`), maps a registry skill id onto the exact
+  `npx skills add … -s <slug>` command through the shared
+  `insights.install_argv()` renderer used by the real install path, and
+  surfaces the linkable `/security/{provider}` audit pages plus the
+  `hash` slot for change detection. Surfaces are extensions of existing ones
+  only: `install --preview [--trust-confirmed] [--registry-hash HEX]` and
+  `POST /api/install {preview: true}`; `install` behavior (runner allowlist,
+  dry-run-first, delegation) is unchanged, no network request, cache, or
+  credential exists anywhere in the product, and one test pins that the bridge
+  modules import no network client. Contract tests:
+  `tests/test_registry_bridge_contracts.py` (21). Remaining for this item:
+  network browse/fetch, caching, auth, and provenance persistence still need
+  their own ADR. Historical research verdict follows. `skills.sh` exposes a real catalog API (`GET
   /api/v1/skills|search|curated|{source}/{skill}|audit/{source}/{skill}`
   with file contents plus a SHA-256 `hash`, per
   `https://www.skills.sh/docs/api`), but authenticated reads require a
@@ -672,9 +692,8 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
   dry-run-first plus allowlist validation (threat-model H-1 posture).
   Install itself is `npx skills add owner/repo` (per
   `https://www.skills.sh/docs/cli`); the third-party audit surface
-  (Socket/Snyk/Trust-Hub verdicts) is linkable, not proxyable. The
-  offline half is already shipped (`insights.registry_preview()`:
-  dry-run steps, explicit-trust gate, blockers). Approved staging: (1)
+  (Socket/Snyk/Trust-Hub verdicts) is linkable, not proxyable. Approved
+  staging: (1)
   keep the preview gate, (2) map registry ids to `npx skills add`
   through the existing `install` dry-run machinery, (3) surface the audit
   link plus `hash` for invalidation. Network fetch, caching, auth, and
@@ -684,6 +703,27 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 - [!] Eval harness: issue #4. Research verdict: ADVISORY-ONLY stays;
   defer any runtime backend indefinitely. **FINAL (2026-09-10):
   ADVISORY-ONLY — confirmed by promptfoo + LLM-judge-bias literature.**
+  **FILE CONTRACT SHIPPED 2026-09-10**, design in
+  @docs/ADR-003-registry-bridge-and-eval-harness.md: `skillsmgr/evals.py`
+  implements the official layout — `evals/evals.json` cases
+  (`id`/`prompt`/`expected_output`/`files` plus optional `slug` and optional
+  deterministic `assertions`), `iteration-N/eval-<slug>/{with_skill,without_skill}/`
+  holding `outputs/output.txt`, `grading.json`, and `timing.json`, and a
+  per-iteration `benchmark.json` with per-variant case pass rates and the
+  `with_skill` − `without_skill` delta. Surfaces extend existing ones only:
+  `validate --evals` (read-only report) and `validate --evals-run FILE`
+  (explicit opt-in recording, single target), plus
+  `POST /api/validate {evals: true}` / `{runs: […]}`. Workspaces default to
+  `<data>/evals/<name>-workspace` (outside `skills/`, so scans, `doctor`
+  orphans, exports, and the index never see run data) or `<DIR>-workspace`
+  with `--path`; `--workspace` is CLI-only so REST cannot choose a write
+  location. Assertion set is the deterministic subset (`equals`, `contains`,
+  `not_contains`, `regex`, `is_json`); a case with no assertions is recorded
+  `graded: false`, never as a pass; scores never change `valid`, never gate
+  installs or edits, and never touch SQLite. Contract tests:
+  `tests/test_eval_harness_contracts.py` (38). Remaining for this item: a
+  provider abstraction, credentials, isolation model, and persisted
+  cross-machine results — the standing answer stays advisory-only. Historical research verdict follows.
   The official evaluating-skills guide prescribes `evals/evals.json`
   (prompt/expected/files), with-skill versus without-skill (or
   previous-version) baselines, and

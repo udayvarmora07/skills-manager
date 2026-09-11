@@ -89,12 +89,12 @@ mutate an outside directory.
 | GET | `/api/doctor[?scope=all]` | Store.doctor (global), including filesystem/index drift and transaction-artifact diagnostics; `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`) |
 | GET | `/api/history?name=&limit=` | Store.history (name optional) |
 | GET | `/api/history?name=NAME&scope=SCOPE&snapshots=1` | retained snapshot IDs for a skill |
-| POST | `/api/validate` | body `{name}` → `{valid, issues: [{level, key, message}]}` |
+| POST | `/api/validate` | body `{name}` → `{valid, issues: [{level, key, message}]}`; `{evals: true}` adds the advisory eval report for `evals/evals.json` (read-only); `{runs: [...], iteration?}` scores and records results inside the store's `evals/` workspace |
 | POST | `/api/rebuild` | Store.db_rebuild |
 | POST | `/api/resync` | Store.resync |
 | GET | `/api/scopes` | `list_scopes()`: id/label/path/kind/writable/availability/recursive/supported/consumer/exists/count/tokens |
 | POST | `/api/sync` | body `{name, from_scope, to_scopes[], force}` → `{synced[], skipped[]}` |
-| POST | `/api/install` | body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` → built `skills add` command, or runs it when `run:true` |
+| POST | `/api/install` | body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` → built `skills add` command, or runs it when `run:true`; `{preview: true, trust_confirmed?, registry_hash?, description?}` adds the offline registry bridge plan under `registry` and makes `command` the recommended `skills add` mapping (no request, no execution) |
 
 ### Trash
 

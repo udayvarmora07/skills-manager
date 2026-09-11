@@ -74,8 +74,17 @@ explicitly unresolved per ADR-002), `diff_skills()`/`diff_three_way()`
 `quarantine_plan()` (stage-only plan validated by `validate_skill_name`),
 `risk_scan()` (explainable script/link/tool/pattern findings with why +
 evidence), `registry_preview()` (offline dry-run gated on explicit trust),
-`eval_plan()`/`eval_score()` (provider-neutral deterministic cases, advisory
-only), `bundle_policy()` (signatures deferred pending issue #11 review).
+`registry_reference()` (offline parse of `owner/repo`, `owner/repo/slug`,
+`https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo` into
+`{form, source, slug, registry_id, page_url, audit_links}` — no request, cache,
+or credential), `registry_bridge_plan()` (that reference mapped onto the exact
+`npx skills add` command via `install_argv()`, with the explicit trust gate as
+`blockers`/`may_install`, linkable `/security/{provider}` audit pages, and a
+`content_hash` slot for change detection), `install_argv()`/
+`install_command_line()` (single renderer behind both the printed dry-run text
+and the executed argv), `eval_plan()`/`eval_score()` (provider-neutral
+deterministic cases, advisory only), `bundle_policy()` (signatures deferred
+pending issue #11 review).
 Fail-closed input policy: non-dict records raise `ValueError` (never raw
 `AttributeError`/`TypeError`); `consumer_view()` skips non-dict list items;
 `update_preview()` coerces tokens safely (`None` for non-numeric) and
@@ -91,7 +100,39 @@ revalidated as a document); `consumer_view()` deep-copies records;
 `eval_score()` requires a callable scorer; snapshot items and
 quarantine sources must be strings; non-string registry descriptions
 become install blockers; registry source/scope/hash must be strings
-when present.
+when present; registry reference segments are length-capped
+(`MAX_REGISTRY_SEGMENT = 96`) and reject traversal, separators, absolute
+paths, and any host outside `skills.sh`/`github.com`; install sources and
+`-a`/`-s` values must match the ecosystem value allowlist and must not start
+with `-`.
+
+## `evals.py`
+
+File-based, advisory-only eval harness implementing the official
+evaluating-skills contract with the standard library only (no network, no SDK,
+no SQLite, no `Store` method). `evals_file()` locates `evals/evals.json` inside
+a skill directory; `load_cases()` reads and normalizes it (`skill_name`, cases
+with `id`/`prompt`/`expected_output`/`files`, plus optional `slug` and optional
+deterministic `assertions`), reporting malformed content as `issues` instead of
+raising, and warning (never failing) on missing input files; `normalize_case()`
+validates one case; `case_slugs()` derives the guide's `eval-<slug>` directory
+name; `workspace_for()`/`workspace_beside()` resolve the run workspace
+(`<data>/evals/<name>-workspace` for installed skills — deliberately outside
+`skills/` — or `<skill-dir>-workspace` in authoring layout);
+`iteration_dir()`/`case_dir()`/`variant_dir()` compose the contained
+`iteration-N/eval-<slug>/{with_skill,without_skill}` paths;
+`grade_output()` evaluates the deterministic assertion subset (`equals`,
+`contains`, `not_contains`, `regex`, `is_json`) and marks a case with no
+assertions `graded: false` rather than passed; `normalize_runs()`/
+`score_runs()`/`benchmark()` grade caller-supplied runs and aggregate a
+per-variant case pass rate plus the `with_skill` − `without_skill` delta;
+`record_runs()` writes `outputs/output.txt`, `grading.json`, `timing.json` per
+variant and a per-iteration `benchmark.json` through atomic sibling-temp
+writes. Bounds: `MAX_CASES = 100`, `MAX_EVALS_FILE_BYTES = 1_000_000`,
+`MAX_CASE_TEXT = 20000`, `MAX_OUTPUT_TEXT = 200000`, `MAX_RUNS = 400`,
+`MAX_PATTERN_LENGTH = 200`, `MAX_REGEX_INPUT = 50000`. `EVAL_POLICY` records
+the standing rule: results are workspace files, never SQLite rows, and never
+gate installs or edits.
 sort deterministically; `risk_scan()` is six single-purpose scanners.
 Operates on records the existing `scopes`/`loader`/`Store.history` seams
 already return; no new CLI/Store surfaces, no schema change.

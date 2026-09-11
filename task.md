@@ -107,6 +107,9 @@
 - [x] Capture reproducible baseline command output in `docs/09-baseline-evidence-2026-09-07.md` (compile, 47 unit tests, both smoke suites, frontend syntax, CLI help, package-build result, Git state)
 - [x] Record exact current-`main` behavior for P0-SEC-001 through P0-SEC-005 in `docs/09-baseline-evidence-2026-09-07.md` using isolated temporary data and no product-code changes
 - [x] Compare both unmerged worktrees file-by-file against `main`; record the overlap/conflict map and safe replay order in `docs/10-worktree-integration-comparison-2026-09-08.md`
+- [x] Resolve the two reviewed historical worktrees without wholesale merging:
+  archive their exact tips as local tags, remove their clean worktrees and local
+  branches, and preserve the three dirty/active historical worktrees.
 
 ## Milestone 9 — Selective replay and path safety (2026-09-08)
 
@@ -158,6 +161,25 @@
 - [x] Verify: compile PASS, **76 unittest PASS**, `smoke_store.py` PASS,
   `smoke_web.py` PASS, `node --check` PASS, CLI help PASS, focused REST probes
   PASS, and `git diff --check` PASS.
+
+## Milestone 48 — Registry bridge (offline) + eval harness (file-based), 2026-09-10
+
+Decision record: @docs/ADR-003-registry-bridge-and-eval-harness.md. No new CLI
+command, no new `Store` method, no schema change, no network access, and no
+runtime dependency: both items extend existing surfaces only.
+
+- [x] `insights.registry_reference()` parses a registry reference offline (`owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, `https://github.com/owner/repo`), length-caps and validates every segment, and rejects traversal, separators, absolute paths, and non-registry hosts.
+- [x] `insights.registry_bridge_plan()` maps a skill id onto the exact `npx skills add … -s <slug>` command, keeps the explicit-trust gate (`blockers`, `may_install`), surfaces the linkable `/security/{provider}` audit pages, and carries the `content_hash` slot for change detection.
+- [x] `insights.install_argv()`/`install_command_line()` became the single renderer behind the printed dry-run text, the executed argv, and the bridge plan; `install_command_for_display()` delegates to it and one test pins the historical output.
+- [x] Surfaces: `install --preview [--trust-confirmed] [--registry-hash HEX]` and `POST /api/install {preview: true, …}`; `install` behavior, the runner allowlist, dry-run-first, and the REST legacy payload shape are unchanged.
+- [x] `skillsmgr/evals.py` implements the official file contract: `evals/evals.json` cases (optional `slug`/`assertions`), `iteration-N/eval-<slug>/{with_skill,without_skill}/{outputs/output.txt,grading.json,timing.json}`, and a per-iteration `benchmark.json` with per-variant case pass rates and the `with_skill` − `without_skill` delta.
+- [x] Deterministic assertion subset only (`equals`, `contains`, `not_contains`, `regex`, `is_json`); a case without assertions is recorded `graded: false` instead of passing or failing; bounds on cases, file size, case text, output length, run count, pattern length, and regex input.
+- [x] Surfaces: `validate --evals` (read-only report), `validate --evals-run FILE` (explicit recording, single target), `--workspace DIR` (CLI-only), and `POST /api/validate {evals: true}` / `{runs: […], iteration?}` with the historical read-only response shape preserved when neither is sent.
+- [x] Workspaces default to `<data>/evals/<name>-workspace` (outside `skills/`, so scans, `doctor` orphans, exports, and the index never see run data); with `--path` the beside-the-skill layout is used only when the directory is outside the store's `skills/` tree, otherwise it falls back to the store workspace; recording writes atomically and never touches skill files or SQLite.
+- [x] Advisory by construction: eval findings never change `valid` or the exit code, scores never gate installs or edits, and no registry value is cached or fetched.
+- [x] Tests: `tests/test_registry_bridge_contracts.py` (21) and `tests/test_eval_harness_contracts.py` (38), including a no-network-import pin and no-mutation assertions.
+- [x] Verify: compile PASS, **376 unittest PASS**, both smokes PASS, `node --check` PASS, `check_docs.py` PASS, `check_complexity.py` PASS (159 functions), CLI help PASS, `git diff --check` PASS.
+- [!] Still open on both items and requiring their own ADR: registry browse/fetch, caching, auth, and provenance persistence (#3); eval provider abstraction, credentials, isolation, and persisted cross-machine results (#4).
 
 ## Milestone 5 — Proposed ideas (research verdicts 2026-09-09, see Milestone 31)
 

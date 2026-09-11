@@ -74,6 +74,12 @@
 - `doctor(self) -> dict` — health check; lists FS/DB inconsistencies, content drift, incomplete transaction artifacts, temporary files, stale snapshots, and repair guidance via `db resync`.
 - `db_rebuild(self)` / `db_resync(self)` — rebuild: drop + re-create index from FS; resync: sync without dropping. FS untouched.
 
+**[SPEC]** Eval harness results are **not** Store data: `skillsmgr/evals.py`
+reads `evals/evals.json` from a skill directory and writes run results under
+`<data>/evals/<name>-workspace/iteration-N/…` as files. No `Store` method,
+SQLite table, or `SCHEMA_VERSION` change was added for it, and a score never
+gates an install or an edit. See @docs/ADR-003-registry-bridge-and-eval-harness.md.
+
 ## SQLite schema (index only)
 
 **[SPEC]** `_SCHEMA` (store.py ~28-53):

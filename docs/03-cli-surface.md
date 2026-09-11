@@ -68,8 +68,22 @@ Delete a skill from the global store. Default moves to trash; `--purge` deletes 
 ### `disable NAME [--json]` / `enable NAME [--json]`
 Toggle enabled state in the global store (renames `SKILL.md` <-> `SKILL.md.disabled`).
 
-### `validate [NAMES...] [--all] [--path DIR] [--json]`
+### `validate [NAMES...] [--all] [--path DIR] [--evals] [--evals-run FILE] [--workspace DIR] [--json]`
 Validate skills by name, all (`--all`), or a directory (`--path`). Prints issues.
+
+`--evals` also reports the advisory eval harness status per target
+(`evals/evals.json` case count, malformed-content errors, missing input files,
+and the run workspace path). Eval findings never change `valid` or the exit
+code. `--evals-run FILE` scores runs from a JSON file
+(`{iteration, runs:[{case, variant, output, duration_ms?, tokens?}]}`, or a bare
+run list) and records `outputs/output.txt`, `grading.json`, `timing.json`, and
+`benchmark.json` in the iteration workspace; it requires exactly one target and
+a valid case file. `--workspace DIR` overrides the workspace location (default
+`<data>/evals/<name>-workspace`; with `--path`, `<DIR>-workspace` only when
+`DIR` is outside the store's `skills/` tree, since a sibling workspace inside
+`skills/` would be scanned as skill data). Eval
+results are workspace files only — never SQLite rows — and never gate installs
+or edits. See @docs/ADR-003-registry-bridge-and-eval-harness.md.
 
 ### `search TERM [--limit N] [--json] [--scope SCOPE]`
 Search with scoring (see @docs/02-modules.md); `--limit` caps results. `--scope all` searches every scope. The global portion always uses the Store selected by `--data-dir`; merged search keeps that same requested global store while agent scopes use their filesystem adapters.
@@ -120,8 +134,10 @@ List known skill scopes and their counts (id, label, path, kind, exists, count, 
 ### `tokens [NAME] [--scope SCOPE] [--text TEXT] [--window WINDOW] [--json]`
 Estimate token/context usage. `NAME` = a skill; omit to aggregate over `--scope` (default `all`). `--text` estimates raw text instead (`@path` reads a file). `--window` selects the context window (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M). Uses tiktoken when installed, else chars/4 heuristic.
 
-### `install SOURCE [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--json]`
+### `install SOURCE [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--json]`
 Install skills from the open skills ecosystem via the `skills` npm package (npx/pnpm/yarn/bunx). `SOURCE` like `vercel-labs/agent-skills` or `owner/repo@skill`. `--scope global` passes `-g`; `--agent` targets agent install dirs; `--skill` filters names; `--copy` copies instead of symlinking; `--list-only` lists available skills; `--dry-run` prints the command without running. `uvx` is rejected (it's an npm package).
+
+`--preview` prints the offline registry bridge preview instead of installing: the parsed registry reference, linkable per-skill audit pages, the `--registry-hash` slot used to detect upstream change, and the exact command this surface would run (`-s <slug>` is added for a registry skill id). It performs no registry request, no cache write, and no execution; without `--trust-confirmed` the plan reports a trust blocker. Registry references accept `owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo`; a bare two-segment value is always read as a source (`owner/repo`), so use the skills.sh page URL for a well-known source's skill. Network browse/fetch stays deferred (issue #3). See @docs/ADR-003-registry-bridge-and-eval-harness.md.
 
 ### `webui [--host H] [--port P] [--no-browser]` (alias: `gui`)
 Launch the local web UI (see @docs/08-web-ui.md). Defaults: `127.0.0.1:8765`, opens browser unless `--no-browser`.

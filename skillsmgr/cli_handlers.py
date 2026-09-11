@@ -8,6 +8,7 @@ as compatibility adapters so existing callers keep working.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -342,6 +343,11 @@ def cmd_validate(args, store: Store) -> int:
             targets.append((name, Path(record["path"]) if record["path"] else None))
     if not targets:
         raise StoreError("no skills to validate; pass NAMES, --all, or --path")
+    evals_run = getattr(args, "evals_run", None)
+    want_evals = bool(getattr(args, "evals", False) or evals_run)
+    if evals_run and len(targets) != 1:
+        raise StoreError("--evals-run applies to exactly one skill; pass a single NAME or --path")
+    runs_document = _load_eval_runs(evals_run) if evals_run else None
     results = []
     any_errors = False
     for name, root in targets:
@@ -357,14 +363,15 @@ def cmd_validate(args, store: Store) -> int:
             any_errors = True
             continue
         result = validate_skill(name, root)
-        results.append(
-            {
-                "name": name,
-                "valid": result.valid,
-                "errors": [issue.message for issue in result.errors],
-                "warnings": [issue.message for issue in result.warnings],
-            }
-        )
+        entry = {
+            "name": name,
+            "valid": result.valid,
+            "errors": [issue.message for issue in result.errors],
+            "warnings": [issue.message for issue in result.warnings],
+        }
+        if want_evals:
+            entry["evals"] = _eval_report(name, root, store, args, runs_document)
+        results.append(entry)
         if not result.valid:
             any_errors = True
     if args.json:
@@ -377,7 +384,96 @@ def cmd_validate(args, store: Store) -> int:
             print(f"  {colors.COLORS.yellow('warn')}  {message}")
         for message in entry["errors"]:
             print(f"  {colors.COLORS.red('error')} {message}")
+        _print_eval_report(entry.get("evals"))
     return EXIT_OK if not any_errors else EXIT_ERROR
+
+
+def _load_eval_runs(path_text: str) -> dict:
+    """Read an eval runs document (``{iteration, runs}`` or a bare run list)."""
+    path = Path(path_text).expanduser()
+    if not path.is_file():
+        raise StoreError(f"eval runs file not found: {path}")
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError) as exc:
+        raise StoreError(f"eval runs file is not valid JSON: {exc}") from exc
+    if isinstance(document, list):
+        return {"iteration": 1, "runs": document}
+    if not isinstance(document, dict):
+        raise StoreError("eval runs file must contain an object or a list")
+    iteration = document.get("iteration", 1)
+    if isinstance(iteration, bool) or not isinstance(iteration, int) or iteration < 1:
+        raise StoreError("eval runs iteration must be a positive integer")
+    return {"iteration": iteration, "runs": document.get("runs")}
+
+
+def _eval_workspace(name: str, root: Path, store: Store, args) -> Path:
+    """Resolve the eval workspace: explicit override, store default, or beside."""
+    from . import evals as evals_mod
+
+    override = getattr(args, "workspace", None)
+    if override:
+        return Path(override).expanduser()
+    if getattr(args, "path", None):
+        return evals_mod.workspace_for_dir(root, store.data_dir, name)
+    return evals_mod.workspace_for(store.data_dir, name)
+
+
+def _eval_report(name: str, root: Path, store: Store, args, runs_document) -> dict:
+    """Build the advisory eval report for one validated skill directory."""
+    from . import evals as evals_mod
+
+    report = evals_mod.load_cases(root)
+    report["workspace"] = str(_eval_workspace(name, root, store, args))
+    report["workspace_override"] = bool(getattr(args, "workspace", None))
+    if runs_document is None:
+        return report
+    blocking = [issue for issue in report["issues"] if issue["level"] == "error"]
+    if blocking:
+        raise StoreError(
+            f"cannot record eval runs for '{name}': {blocking[0]['message']}"
+        )
+    if not report["cases"]:
+        raise StoreError(f"cannot record eval runs for '{name}': no eval cases found")
+    workspace = Path(report["workspace"])
+    report["recording"] = evals_mod.record_runs(
+        workspace, runs_document["iteration"], report["cases"],
+        runs_document["runs"],
+    )
+    return report
+
+
+def _print_eval_report(report: dict | None) -> None:
+    """Print the advisory eval harness block for one skill."""
+    if not report:
+        return
+    if not report.get("present"):
+        print("  evals         no evals/evals.json (advisory; add one to grade this skill)")
+        return
+    print(f"  evals         {len(report['cases'])} case(s) in evals/evals.json (advisory-only)")
+    for issue in report["issues"]:
+        level = issue["level"]
+        label = colors.COLORS.red("error") if level == "error" else colors.COLORS.yellow("warn")
+        print(f"  {label}{' ' * (13 - len(level))} {issue['message']}")
+    recording = report.get("recording")
+    if recording:
+        variants = recording["benchmark"]["variants"]
+        summary = ", ".join(
+            f"{variant} {bucket['cases_passed']}/{bucket['graded']} case(s) "
+            f"({bucket['assertions_passed']}/{bucket['assertions_total']} assertions)"
+            for variant, bucket in sorted(variants.items())
+        ) or "no graded runs"
+        print(f"  eval runs     {summary} (advisory; scores never block installs)")
+        ungraded = recording["benchmark"]["ungraded_cases"]
+        if ungraded:
+            warn = colors.COLORS.yellow("warn")
+            print(f"  {warn}{' ' * 9} {ungraded} case(s) have no assertions yet; add them after the first run")
+        delta = recording["benchmark"]["delta"]
+        if delta is not None:
+            print(f"  eval delta    with_skill - without_skill = {delta:+.4f} (case pass rate)")
+        print(f"  workspace     {recording['workspace']} ({len(recording['written'])} file(s) written)")
+    else:
+        print(f"  workspace     {report['workspace']}/iteration-N/eval-<slug>/with_skill|without_skill")
 
 
 def search_output_row(match: dict, scope: str) -> dict:
@@ -792,30 +888,48 @@ def cmd_tokens(args, store: Store) -> int:
 
 def install_command_for_display(source: str, runner: str, scope: str, agents, skills_filter, copy_mode: bool, list_only: bool) -> str:
     """Render the ecosystem runner command shown in ``--dry-run`` output."""
-    parts: list[str] = []
-    if runner == "npx":
-        parts = ["npx", "skills", "add", source]
-    elif runner == "pnpm":
-        parts = ["pnpm", "dlx", "skills", "add", source]
-    elif runner == "yarn":
-        parts = ["yarn", "dlx", "skills", "add", source]
-    elif runner in ("bunx", "bun"):
-        parts = ["bunx", "skills", "add", source]
-    else:
-        parts = ["npx", "skills", "add", source]
-    if scope == "global":
-        parts.append("-g")
-    if agents:
-        for a in agents:
-            parts.extend(["-a", str(a)])
-    if skills_filter:
-        for s in skills_filter:
-            parts.extend(["-s", str(s)])
-    if copy_mode:
-        parts.append("--copy")
-    if list_only:
-        parts.append("-l")
-    return " ".join(parts)
+    from .insights import install_command_line
+
+    return install_command_line(source, runner, scope, agents, skills_filter, copy_mode, list_only)
+
+
+def _install_preview_output(args, source, runner, scope, agents, skills_filter,
+                            copied, list_flag) -> int:
+    """Print the offline registry bridge preview (no network, no execution)."""
+    from .insights import registry_bridge_plan
+
+    plan = registry_bridge_plan(
+        source,
+        runner=runner,
+        scope=scope,
+        agents=agents,
+        skills=skills_filter,
+        copy=copied,
+        list_only=list_flag,
+        trust_confirmed=bool(getattr(args, "trust_confirmed", False)),
+        content_hash=getattr(args, "registry_hash", None),
+    )
+    if args.json:
+        _print_json(plan)
+        return EXIT_OK
+    print("registry preview (offline — no registry request, no execution)")
+    print(f"  spec          {plan['spec']}")
+    if plan["registry_id"]:
+        print(f"  registry id   {plan['registry_id']}")
+    if plan["page_url"]:
+        print(f"  page          {plan['page_url']}")
+    for index, link in enumerate(plan["audit_links"]):
+        label = "audit" if index == 0 else ""
+        print(f"  {label:<13} {link['url']}")
+    print(f"  target scope  {plan['target_scope']}")
+    print(f"  install       {plan['install_command']}")
+    print(f"  hash          {plan['content_hash'] or 'not provided (registry reads need a Vercel OIDC token; deferred)'}")
+    print(f"  trust         {'confirmed' if plan['trust_confirmed'] else 'not confirmed'}")
+    for index, blocker in enumerate(plan["blockers"]):
+        label = "blocker" if index == 0 else ""
+        print(f"  {label:<13} {blocker}")
+    print(f"  policy        {plan['policy']}")
+    return EXIT_OK
 
 
 def validated_install_runner(runner: str | None) -> str:
@@ -863,31 +977,19 @@ def cmd_install(args, store: Store) -> int:
         for value in values or []:
             validated_install_value(label, value)
     cmd_str = install_command_for_display(source, runner, scope, agents, skills_filter, copied, list_flag)
+    if getattr(args, "preview", False):
+        return _install_preview_output(args, source, runner, scope, agents, skills_filter, copied, list_flag)
     if getattr(args, "dry_run", False) or getattr(args, "list_only", False):
         if args.json:
             _print_json({"command": cmd_str, "runner": runner, "source": args.source, "executed": False})
         else:
             print(cmd_str)
         return EXIT_OK
-    # Build subprocess command.
-    if runner == "npx":
-        cmd = ["npx", "skills", "add", args.source]
-    elif runner == "pnpm":
-        cmd = ["pnpm", "dlx", "skills", "add", args.source]
-    elif runner == "yarn":
-        cmd = ["yarn", "dlx", "skills", "add", args.source]
-    else:
-        cmd = ["bunx", "skills", "add", args.source]
-    if scope == "global":
-        cmd.append("-g")
-    if agents:
-        for a in agents:
-            cmd.extend(["-a", str(a)])
-    if skills_filter:
-        for s in skills_filter:
-            cmd.extend(["-s", str(s)])
-    if getattr(args, "copy", False):
-        cmd.append("--copy")
+    # Build subprocess command through the same shared renderer, so the printed
+    # dry-run text and the executed argv can never drift apart.
+    from .insights import install_argv
+
+    cmd = install_argv(source, runner, scope, agents, skills_filter, copied, False)
     if not args.json:
         print(f"running: {cmd_str}")
 

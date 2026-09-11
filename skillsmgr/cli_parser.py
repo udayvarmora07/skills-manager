@@ -133,6 +133,9 @@ def build_parser(commands) -> argparse.ArgumentParser:
     p.add_argument("names", nargs="*", metavar="NAME")
     p.add_argument("--all", action="store_true", help="validate every installed skill")
     p.add_argument("--path", metavar="DIR", help="validate a skill directory")
+    p.add_argument("--evals", action="store_true", help="also report the advisory eval harness status (evals/evals.json)")
+    p.add_argument("--evals-run", metavar="FILE", help="score eval runs from FILE and record results in the iteration workspace (advisory)")
+    p.add_argument("--workspace", metavar="DIR", help="override the eval run workspace directory")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_validate"])
 
@@ -253,6 +256,9 @@ def build_parser(commands) -> argparse.ArgumentParser:
     p.add_argument("--copy", action="store_true", help="copy files instead of symlinking")
     p.add_argument("--list-only", action="store_true", help="list available skills without installing (-l)")
     p.add_argument("--dry-run", action="store_true", help="print command without executing")
+    p.add_argument("--preview", action="store_true", help="offline registry bridge preview: audit links, registry hash, and the exact install command (no network, no execution)")
+    p.add_argument("--trust-confirmed", action="store_true", help="with --preview: record that the source and audit links were reviewed")
+    p.add_argument("--registry-hash", metavar="HEX", help="with --preview: registry content hash stored for change detection")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_install"])
 

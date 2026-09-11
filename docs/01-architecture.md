@@ -60,7 +60,9 @@ skills-manager/
 
 ## Data-dir resolution
 
-**[SPEC]** `data_dir()` = `$SKILLS_MANAGER_DATA` -> `$XDG_DATA_HOME` -> `~/.local/share`, then appends `skills-manager`. Subdirs: `skills/`, `trash/`, `templates/`, `backups/`, and `snapshots/`; `db_path()` = `data_dir()/skills-manager.db`.
+**[SPEC]** `data_dir()` = `$SKILLS_MANAGER_DATA` -> `$XDG_DATA_HOME` -> `~/.local/share`, then appends `skills-manager`. Subdirs: `skills/`, `trash/`, `templates/`, `backups/`, `snapshots/`, and `evals/` (created lazily only when eval run results are recorded); `db_path()` = `data_dir()/skills-manager.db`.
+
+**[NOTE]** Eval run workspaces live at `evals/<name>-workspace/iteration-N/…`, deliberately outside `skills/`, so the skill scan, `doctor` orphan detection, archive export, and the SQLite index never treat run data as skill data. See @docs/ADR-003-registry-bridge-and-eval-harness.md.
 
 ## Data flow
 

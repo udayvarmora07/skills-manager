@@ -4,6 +4,77 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-10 — Registry bridge (offline) + eval harness (file-based) shipped
+
+- **Scope decision recorded in @docs/ADR-003-registry-bridge-and-eval-harness.md**:
+  both TODO items shipped their approved offline/file-based halves by extending
+  existing surfaces only. No new CLI command, no new `Store` method, no SQLite
+  change, no runtime dependency, no network access. Network browse/fetch for the
+  registry (issue #3) and any eval runtime backend/provider (issue #4) remain
+  deferred, exactly as their verdicts require.
+- **Registry bridge (offline half)**: `insights.registry_reference()` parses
+  `owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, and
+  `https://github.com/owner/repo` offline with per-segment length caps and
+  rejection of traversal/separators/absolute paths/foreign hosts;
+  `insights.registry_bridge_plan()` maps a registry skill id onto the exact
+  `npx skills add … -s <slug>` command, keeps the explicit-trust gate
+  (`blockers`/`may_install`), surfaces the linkable
+  `/owner/repo/skill/security/{provider}` audit pages, and carries the
+  `content_hash` slot for change detection. `insights.install_argv()`/
+  `install_command_line()` are now the single renderer for the printed dry-run
+  text, the executed argv, and the plan, so preview and reality cannot drift.
+  Surfaces: `install --preview [--trust-confirmed] [--registry-hash HEX]` and
+  `POST /api/install {preview: true, …}`; the executed install path, runner
+  allowlist, dry-run-first posture, and the legacy REST payload shape are
+  unchanged. Absent registry metadata is reported as `description_status`/
+  `provenance_note` instead of being invented (an authenticated catalog read is
+  still deferred).
+- **Eval harness (file contract)**: new stdlib-only `skillsmgr/evals.py`
+  implements the official evaluating-skills layout — `evals/evals.json` cases
+  (`id`/`prompt`/`expected_output`/`files`, optional `slug`, optional
+  deterministic `assertions`), `iteration-N/eval-<slug>/{with_skill,without_skill}/`
+  with `outputs/output.txt`, `grading.json`, and `timing.json`, plus a
+  per-iteration `benchmark.json` carrying per-variant case pass rates and the
+  `with_skill` − `without_skill` delta. Assertions are the deterministic subset
+  (`equals`, `contains`, `not_contains`, `regex`, `is_json`); a case with no
+  assertions is recorded `graded: false`, never as a pass. Surfaces:
+  `validate --evals` (read-only), `validate --evals-run FILE` (explicit
+  recording, single target), `--workspace DIR` (CLI-only), and
+  `POST /api/validate {evals: true}` / `{runs: […], iteration?}`. Workspaces
+  default to `<data>/evals/<name>-workspace` — deliberately outside `skills/`,
+  so the skill scan, `doctor` orphan detection, export, and the SQLite index
+  never see run data. With `--path`, the beside-the-skill layout is used only
+  when that directory is outside the store's `skills/` tree (otherwise it falls
+  back to the store workspace — a sibling workspace inside `skills/` would be
+  scanned as skill data). Recording uses atomic
+  sibling-temp writes and provably leaves skill files and the index untouched.
+- **Advisory invariants held**: eval findings never change `valid` or the exit
+  code, scores never gate installs or edits, no score or registry value is
+  persisted in SQLite, and one test pins that the bridge modules import no
+  network client (`urllib.request`, `http.client`, `socket`, `ssl`).
+- **Bug found and fixed while wiring**: the first bridge plan made a missing
+  registry `description` a hard install blocker, which made `may_install`
+  unreachable from the CLI (there is no way to supply registry metadata without
+  the deferred API read). Description is now reported as provenance state, and
+  trust remains the only blocker.
+- **Verification**: `python3 -m py_compile skillsmgr/*.py` PASS;
+  `python3 -m unittest discover -s tests` → **376 OK** (317 prior + 21 registry
+  + 38 eval); `smoke_store.py` PASS; `smoke_web.py` PASS;
+  `node --check skillsmgr/webui/app.js` PASS; `check_docs.py` PASS (ADR-003
+  added to the enforced current-doc set); `check_complexity.py` PASS
+  (**159 functions**, new functions ≤ 15; moving the `/api/install` and
+  `/api/validate` payload construction into helpers lowered `_route_post`
+  complexity from 88 to 81);
+  `--help` PASS; `git diff --check` PASS.
+- **Docs**: new `docs/ADR-003-registry-bridge-and-eval-harness.md` (plus the
+  `docs/README.md` map entry and the `check_docs.py` current-doc set),
+  `docs/02-modules.md` (insights additions + new `evals.py` row),
+  `docs/03-cli-surface.md` (`install` and `validate` flags),
+  `docs/08-web-ui.md` (`/api/install` preview and `/api/validate` eval fields),
+  `docs/01-architecture.md` (`evals/` subdir and workspace placement),
+  `ROADMAP.md`, `TODO.md` (#3/#4 shipped halves vs remaining deferrals),
+  `task.md` (Milestone 48), and `docs/SESSION-CONTEXT.md`.
+
 ## 2026-09-10 — `skill-control-plane` 1.0.1 published successfully
 
 - The release workflow completed successfully through TestPyPI, PyPI, GitHub
@@ -34,7 +105,26 @@ publication successfully, as recorded in the newer entry above.
   occurred.
 
 
-**AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top. Facts flagged stale here are corrected in the owning doc.
+**AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Newest entry on top.
+
+## 2026-09-10 — Historical worktree cleanup (unmerged branches archived)
+
+- Inspected the two genuinely unmerged historical worktrees against current `main`:
+  `agents/todo-plan-implementation` (2 commits) and
+  `agents/milestone5-research-user-needs` (1 commit), both based at `667fabb`.
+- Confirmed their substantive recovery, archive, ZIP, parser, search, and UI work
+  is already present on `main` in the stronger evolved implementations; neither
+  branch was merged wholesale or cherry-picked. Current verification remains
+  **317 unittest OK**, both smoke suites PASS, frontend syntax PASS, and diff
+  checks PASS.
+- Archived the exact historical tips as local tags
+  `archive/todo-plan-implementation-2bb7280` and
+  `archive/milestone5-research-user-needs-c5a7161`, then removed only those two
+  clean worktrees and local branches. The three other historical worktrees remain
+  untouched because they are dirty and/or may still carry active work.
+- `.autogit` remains unmodified and untracked by policy. No product behavior or
+  SQLite schema changed in this cleanup.
+ Facts flagged stale here are corrected in the owning doc.
 
 ## 2026-09-10 — `v1.0.1` prepared and release infrastructure created
 

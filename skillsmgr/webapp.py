@@ -39,6 +39,73 @@ _STATIC_TYPES = {
 _SKILL_FIELDS = ("description", "license", "category", "compatibility", "version", "allowed_tools", "body")
 
 
+def _install_preview_payload(store: Store, data: dict, source: str, cmd_str: str,
+                             runner: str) -> dict:
+    """Build the non-executing ``/api/install`` payload.
+
+    Without ``preview`` this is the historical ``{command, runner, source,
+    executed}`` shape.  With ``preview: true`` it adds the offline registry
+    bridge plan (audit links, registry hash slot, blockers) and still performs
+    no registry request and no execution.
+    """
+    payload = {"command": cmd_str, "runner": runner, "source": source, "executed": False}
+    if not data.get("preview"):
+        return payload
+    from .insights import registry_bridge_plan
+
+    raw_agents = data.get("agents")
+    raw_skills = data.get("skills")
+    agents = [raw_agents] if isinstance(raw_agents, str) else raw_agents
+    skills = [raw_skills] if isinstance(raw_skills, str) else raw_skills
+    description = data.get("description")
+    payload["registry"] = registry_bridge_plan(
+        source,
+        runner=runner,
+        scope=str(data.get("scope", "global") or "global"),
+        agents=agents,
+        skills=skills,
+        copy=bool(data.get("copy")),
+        list_only=bool(data.get("list_only")),
+        trust_confirmed=bool(data.get("trust_confirmed")),
+        description=description if isinstance(description, str) else None,
+        content_hash=data.get("registry_hash") if isinstance(data.get("registry_hash"), str) else None,
+    )
+    # A registry skill id installs that skill from its source, so the previewed
+    # command is the bridge plan's mapping rather than the bare source command.
+    payload["command"] = payload["registry"]["install_command"]
+    return payload
+
+
+def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
+                      payload: dict) -> dict:
+    """Add the advisory eval harness block to ``/api/validate`` on request.
+
+    Recording is opt-in (``runs``) and only ever writes inside the store's
+    ``evals/`` workspace, so the default request keeps its read-only contract.
+    """
+    if not (data.get("evals") or data.get("runs")):
+        return payload
+    from . import evals as evals_mod
+
+    report = evals_mod.load_cases(skill_dir)
+    workspace = evals_mod.workspace_for(store.data_dir, name)
+    report["workspace"] = str(workspace)
+    if data.get("runs"):
+        blocking = [issue for issue in report["issues"] if issue["level"] == "error"]
+        if blocking:
+            raise StoreError(f"cannot record eval runs for '{name}': {blocking[0]['message']}")
+        if not report["cases"]:
+            raise StoreError(f"cannot record eval runs for '{name}': no eval cases found")
+        iteration = data.get("iteration", 1)
+        if isinstance(iteration, bool) or not isinstance(iteration, int) or iteration < 1:
+            raise StoreError("iteration must be a positive integer")
+        report["recording"] = evals_mod.record_runs(
+            workspace, iteration, report["cases"], data.get("runs")
+        )
+    payload["evals"] = report
+    return payload
+
+
 def _validated_skill_fields(data: dict) -> dict:
     """Select skill fields while enforcing the Store/scopes string contract."""
     fields = {}
@@ -630,7 +697,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 cmd_parts.append("-l")
             cmd_str = " ".join(cmd_parts)
             if not data.get("run"):
-                self._send_json({"command": cmd_str, "runner": runner, "source": source, "executed": False})
+                self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
                 return
             try:
                 proc = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=120)
@@ -725,13 +792,19 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 raise StoreError(f"skill '{name}' has no directory on disk")
             result = validate_skill(name, Path(record["path"]))
             self._send_json(
-                {
-                    "valid": result.valid,
-                    "issues": [
-                        {"level": issue.level, "key": issue.key, "message": issue.message}
-                        for issue in result.issues
-                    ],
-                }
+                _validate_payload(
+                    self.store,
+                    data,
+                    name,
+                    Path(record["path"]),
+                    {
+                        "valid": result.valid,
+                        "issues": [
+                            {"level": issue.level, "key": issue.key, "message": issue.message}
+                            for issue in result.issues
+                        ],
+                    },
+                )
             )
         elif parts == ["api", "rebuild"]:
             self._send_json(self.store.db_rebuild())

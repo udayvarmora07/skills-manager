@@ -20,6 +20,7 @@
 | @docs/ADR-001-localhost-mutation-token.md | Decision not to add a per-process mutation token | Any localhost request-boundary change |
 | @docs/12-agent-root-discovery-2026-09-08.md | Official discovery-root inventory, precedence/reload notes, and explicit uncertainties | Before changing supported consumer roots |
 | @docs/ADR-002-root-consumer-effective-state.md | Proposed root/consumer/instance/effective-state vocabulary and approval boundary | Any scope architecture or discovery-model change |
+| @docs/ADR-003-registry-bridge-and-eval-harness.md | Offline registry bridge + file-based eval harness: decisions, surfaces, deferred halves | Any registry, install-preview, or eval-harness change |
 | @docs/06-progress-log.md | Dated log of changes, decisions, bugs | Before/after any session; keep updated |
 | @docs/07-context-strategy.md | Hot/warm/cold loading model, compaction anchors | Long sessions, context management |
 | @docs/SESSION-CONTEXT.md | Fast re-anchor cache: current state, common tasks, gotchas | Start of any session (preferred over re-reading source) |
