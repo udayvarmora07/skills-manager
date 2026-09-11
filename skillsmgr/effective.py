@@ -31,7 +31,8 @@ from pathlib import Path
 
 from .loader import scan_dir
 
-#: Bounds: a diagnostic must never walk an unbounded tree.
+#: Bounds: a diagnostic must never walk an unbounded tree. ``MAX_ROOTS`` caps
+#: the nested-root search and ``MAX_INSTANCES`` the instances read overall.
 MAX_ROOTS = 32
 MAX_INSTANCES = 500
 
@@ -385,13 +386,8 @@ def _build_tier(tier_spec: dict, project: Path | None, budget: dict) -> dict:
 
 
 def _build_tiers(spec: dict, project: Path | None, budget: dict) -> list[dict]:
-    tiers = []
-    for index, tier_spec in enumerate(spec["tiers"]):
-        if index >= MAX_ROOTS:
-            budget["truncated"] = True
-            break
-        tiers.append(_build_tier(tier_spec, project, budget))
-    return tiers
+    """Read every documented tier in order (highest precedence first)."""
+    return [_build_tier(tier_spec, project, budget) for tier_spec in spec["tiers"]]
 
 
 def _skipped_names(tiers: list[dict]) -> set[str]:
@@ -623,9 +619,7 @@ def explain(consumer: str, project: str | Path | None = None, *,
                 "facade; a lower-tier winner may be provisional"
             )
     if budget["truncated"]:
-        warnings.append(
-            f"read truncated at {MAX_INSTANCES} instances / {MAX_ROOTS} roots"
-        )
+        warnings.append(f"read truncated at {MAX_INSTANCES} instances")
 
     return _result(
         _overall(policy, skills),
