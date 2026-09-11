@@ -13,7 +13,6 @@ import ast
 import contextlib
 import io
 import sys
-import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -167,6 +166,32 @@ class RunFlowTests(unittest.TestCase):
 class UnbundledBoundaryTests(unittest.TestCase):
     """The launcher must stay optional: no dependency, no packaged entry point."""
 
+    @staticmethod
+    def pyproject_text() -> str:
+        return (Path(launcher.__file__).parent / "pyproject.toml").read_text(
+            encoding="utf-8"
+        )
+
+    @classmethod
+    def section(cls, name: str) -> list[str]:
+        """Return the raw lines of one TOML section.
+
+        Read as text on purpose: ``tomllib`` is Python 3.11+, and the project
+        supports 3.10 (``requires-python >= 3.10``), so a parsed-TOML assertion
+        here would break the oldest supported interpreter.
+        """
+        lines = cls.pyproject_text().splitlines()
+        collected: list[str] = []
+        inside = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                inside = stripped == f"[{name}]"
+                continue
+            if inside:
+                collected.append(stripped)
+        return collected
+
     def test_launcher_module_imports_only_the_standard_library(self):
         tree = ast.parse(Path(launcher.__file__).read_text(encoding="utf-8"))
         imported: set[str] = set()
@@ -179,25 +204,32 @@ class UnbundledBoundaryTests(unittest.TestCase):
         # ``skillsmgr`` is the product itself, imported lazily inside run().
         self.assertEqual(third_party, {"skillsmgr"}, sorted(third_party))
 
-    def test_launcher_is_not_packaged_and_adds_no_console_script(self):
-        pyproject = tomllib.loads(
-            (Path(launcher.__file__).parent / "pyproject.toml").read_text(encoding="utf-8")
-        )
-        self.assertEqual(
-            pyproject["tool"]["setuptools"]["packages"]["find"]["include"],
-            ["skillsmgr*"],
+    def test_launcher_is_not_packaged(self):
+        packages = self.section("tool.setuptools.packages.find")
+        self.assertIn(
+            'include = ["skillsmgr*"]',
+            packages,
             "the launcher must stay outside the wheel (issue #9 verdict)",
         )
+
+    def test_no_new_console_script_is_added(self):
+        scripts = [line for line in self.section("project.scripts") if "=" in line]
         self.assertEqual(
-            list(pyproject["project"]["scripts"]), ["skills-mgr"],
+            scripts,
+            ['skills-mgr = "skillsmgr.cli:main"'],
             "no new console entry point: `skills-mgr webui` remains canonical",
         )
 
+    def test_project_declares_no_runtime_dependencies(self):
+        project = self.section("project")
+        for line in project:
+            self.assertFalse(
+                line.startswith(("dependencies", "optional-dependencies")),
+                f"the launcher must add no dependency, found: {line!r}",
+            )
+
     def test_no_webview_dependency_or_import_exists(self):
         root = Path(launcher.__file__).parent
-        pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-        self.assertNotIn("dependencies", pyproject["project"])
-        self.assertNotIn("optional-dependencies", pyproject["project"])
         for path in sorted((root / "skillsmgr").glob("*.py")):
             text = path.read_text(encoding="utf-8")
             with self.subTest(module=path.name):
