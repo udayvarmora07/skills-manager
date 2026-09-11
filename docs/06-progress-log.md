@@ -60,6 +60,15 @@
   ZIP import (issue #5) was already on `main`; re-verified hermetic parity with
   tar plus a hostile-zip probe (traversal member rejected, nothing written
   outside staging).
+- **CI flake found and fixed.** The second CI run on this work failed on
+  `py3.10` in `test_record_runs_never_touches_skill_files_or_the_index`:
+  `Store.list()` decorates rows with observations computed at read time and
+  `observed_at` is stamped with `datetime.now()`, so comparing rows before and
+  after a recording run straddles a UTC second boundary and fails even though
+  nothing was written. The test now drops the read-time stamp before comparing
+  persisted state (the same fix `tests/test_webapp.py` already applies in its
+  `_persisted()` helper); the test passes 20/20 in isolation and the full suite
+  3/3. CI is green on the fixing commit.
 - **Verification:** 435 `unittest` tests OK; `smoke_store.py` and
   `smoke_web.py` PASS; `check_docs.py` PASS; `check_complexity.py` PASS. No
   locked constraint changed: filesystem still the source of truth, schema and

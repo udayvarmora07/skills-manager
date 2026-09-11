@@ -919,3 +919,4 @@ items verified end to end before closing. No locked constraint changed.
 - [x] T10 #12 tests: `tests/test_effective_explain_contracts.py` (36) incl. six-way/no-merge/triple+both-load/ambiguous/unknown/missing-project and read-only tree-hash + no-DB proofs.
 - [x] T11 docs truth: `docs/01-architecture.md`, `docs/02-modules.md`, `docs/03-cli-surface.md`, `docs/08-web-ui.md`, `docs/06-progress-log.md`, `docs/SESSION-CONTEXT.md`, `ROADMAP.md`, `TODO.md` (Milestone 4 + Milestone 11 L3 + deferred intro), `task.md`.
 - [x] T12 final ladder (435 unittest, smokes, docs, complexity, help) then commit, push, and close each issue with file/line evidence.
+- [x] T13 CI flake fix: `test_record_runs_never_touches_skill_files_or_the_index` dropped the read-time `observed_at` stamp (py3.10 failure); test 20/20, suite 3/3, CI green on HEAD.
