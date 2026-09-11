@@ -174,6 +174,9 @@ def build_parser(commands) -> argparse.ArgumentParser:
 
     p = sub.add_parser("doctor", help="check filesystem/database consistency")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--explain", metavar="CONSUMER", help="read-only effective-resolution diagnostic: derive which instance of a skill a consumer would load for --project (derived at read time; writes nothing)")
+    p.add_argument("--project", metavar="DIR", help="with --explain: the project directory the consumer resolves from (default: the current directory)")
+    p.add_argument("--skill", metavar="NAME", help="with --explain: explain one skill name only")
     add_scope_arg(p)
     p.set_defaults(func=commands["cmd_doctor"])
 

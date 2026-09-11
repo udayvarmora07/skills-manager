@@ -23,6 +23,7 @@ skills-manager/
     atomic_io.py     # atomic text writes, mutation locks, tree hashes
     observations.py  # non-persisted hashes, provenance, frontmatter partitions
     root_discovery.py# physical-root and observed-scope policy
+    effective.py     # read-only effective-resolution diagnostic (doctor --explain)
     paths.py         # data_dir(), db_path(), subdirs (containment adapter)
     path_safety.py   # resolved root-containment and canonical skill-path policy
     diagnostics.py   # stderr-only recovery/optional-enrichment diagnostics

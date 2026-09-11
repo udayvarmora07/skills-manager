@@ -591,6 +591,9 @@ def cmd_restore(args, store: Store) -> int:
 
 
 def cmd_doctor(args, store: Store) -> int:
+    explain_consumer = getattr(args, "explain", None)
+    if explain_consumer:
+        return _cmd_doctor_explain(args, explain_consumer)
     report = store.doctor()
     scope = getattr(args, "scope", None)
     if args.json:
@@ -638,6 +641,62 @@ def cmd_doctor(args, store: Store) -> int:
         except Exception:
             pass
     return EXIT_OK if report.get("ok") else EXIT_ERROR
+
+
+def _print_explain(report: dict) -> None:
+    """Human-readable effective-resolution report (read-only)."""
+    print(
+        f"effective resolution for consumer {colors.COLORS.green(report['label'])} "
+        f"({report['consumer']}) in {report['project'] or '-'}"
+    )
+    print(f"  policy: {report['policy']}  resolution: {report['resolution']}")
+    print(f"  source: {report['source']}")
+    for name, entry in sorted(report["skills"].items()):
+        winner = entry.get("winner")
+        if winner:
+            print(
+                f"  {name}: {entry['resolution']} -> {winner['tier']} "
+                f"({winner['path']})"
+            )
+        else:
+            print(f"  {name}: {entry['resolution']} - {entry['reason']}")
+        for shadowed in entry.get("shadowed", []):
+            print(f"      shadowed by {entry['winner_tier']}: {shadowed['path']}")
+        for loaded in entry.get("also_loads", []):
+            print(
+                f"      also loads ({entry.get('also_loads_reason')}): "
+                f"{loaded['path']}"
+            )
+    for note in report.get("notes", []):
+        print(f"  note: {note}")
+    for warning in report.get("warnings", []):
+        print(f"  {colors.COLORS.yellow('warning:')} {warning}")
+
+
+def _cmd_doctor_explain(args, consumer: str) -> int:
+    """``doctor --explain CONSUMER [--project DIR] [--skill NAME]`` (issue #12)."""
+    from . import effective
+
+    project = getattr(args, "project", None) or None
+    if project is None and consumer.strip().lower() in effective.CONSUMERS:
+        project = "."
+    report = effective.explain(
+        consumer, project, skill=getattr(args, "skill", None) or None
+    )
+    if getattr(args, "json", False):
+        _print_json(report)
+    elif report["resolution"] in ("unknown-consumer", "missing-project"):
+        print(f"error: {report['reason']}", file=sys.stderr)
+        if report.get("known_consumers"):
+            print(
+                "known consumers: " + ", ".join(report["known_consumers"]),
+                file=sys.stderr,
+            )
+    else:
+        _print_explain(report)
+    if report["resolution"] in ("unknown-consumer", "missing-project"):
+        return EXIT_ERROR
+    return EXIT_OK
 
 
 def cmd_stats(args, store: Store) -> int:

@@ -110,8 +110,25 @@ Restore a skill from the trash, or roll back to a retained snapshot.
 Show recent history. When `NAME` is supplied, JSON output includes retained
 snapshot IDs and text output lists them after the history table.
 
-### `doctor [--json] [--scope SCOPE]`
+### `doctor [--json] [--scope SCOPE] [--explain CONSUMER [--project DIR] [--skill NAME]]`
 Health check: data dir, DB, skill files, consistency between FS and index, content drift, incomplete transaction artifacts, temporary files, and stale snapshots. With a scope, checks that scope's dir. With `--scope all`, also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.
+
+`--explain CONSUMER` switches to the read-only effective-resolution diagnostic
+(issue #12): it derives, at read time, which instance of a skill that consumer
+would load for `--project DIR` (default: the current directory), reporting the
+winner plus the instances it shadows and the primary source behind the decision.
+It writes nothing — no file, no SQLite row, no cache — and `effective_state`
+stays `unresolved`. Consumers with a recorded precedence row: `commandcode`
+(six-way order), `codex` (explicit no-merge, so no winner is elected),
+`claude-code` (personal > project for the conflict pair, with nested copies
+reported under `also_loads` because they both load), `gemini` (built-in <
+extension < user < workspace, same-tier ties reported as `ambiguous`), plus
+`cursor`/`opencode`, which document no same-name order and therefore return
+`undocumented-precedence` instead of a guess. An unknown consumer returns
+`unknown-consumer` and exit 1; a missing `--project` directory returns
+`missing-project` and exit 1. Diagnostics that legitimately resolve nothing
+(`no-merge`, `undocumented-precedence`, `no-instances`) exit 0. `--skill NAME`
+narrows the report to one name. See `effective.py` in @docs/02-modules.md.
 
 ### `stats [--json] [--scope SCOPE]`
 Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts.

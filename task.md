@@ -4,7 +4,23 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
-## Current state — 2026-09-10 (authoritative; older milestones below are dated records)
+## Current state — 2026-09-11 (authoritative; older milestones below are dated records)
+
+- **Five issues closed out: DONE (#3, #4, #5, #12, #13).** Issue #13 (non-UTF8
+  `SKILL.md` raising a raw `UnicodeDecodeError`) is fixed with the
+  *read/report paths tolerate, write paths fail closed* contract: the loader
+  marks the row `malformed` with an actionable `decode_error`, `Store.doctor`
+  reports `undecodable_documents` as drift, and every rewrite path uses
+  `read_skill_text_strict()` so lossy replacement characters can never reach a
+  write. Issue #12 shipped as the read-only
+  `doctor --explain CONSUMER [--project DIR] [--skill NAME]` diagnostic
+  (`skillsmgr/effective.py`, also `GET /api/doctor?explain=…`), which derives
+  the winner per consumer at read time from cited rules, persists nothing, and
+  keeps `effective_state: unresolved`. Issues #3/#4 (offline registry bridge,
+  file-based eval harness) and #5 (ZIP import) were re-verified end to end and
+  committed. New tests: `tests/test_encoding_contracts.py` (23) and
+  `tests/test_effective_explain_contracts.py` (36); suite total 435 OK, both
+  smokes PASS, docs and complexity gates PASS.
 
 - **Distribution rename: DONE.** The published package identity is
   `skill-control-plane`; imports remain `skillsmgr`, the CLI remains
@@ -884,3 +900,22 @@ Hermetic probes (stdlib only, inline heredocs, no product-code changes) over sui
 - [x] T8 minimal fixes (docs truth only; zero product-code changes needed).
 - [x] T9 full ladder + harness + fresh-tmp recorded here and in the progress log.
 - [x] T10 per-group commits plus push (this entry, then push step).
+
+## Milestone 50 — GitHub issue close-out (#3, #4, #5, #12, #13) (2026-09-11, 12 tasks)
+
+Delivered against the five maintainer-selected issues with `gh` as the surface:
+one real bug fix, one approved read-only diagnostic, and three already-built
+items verified end to end before closing. No locked constraint changed.
+
+- [x] T1 baseline ladder green before any edit (376 unittest, both smokes, docs, complexity).
+- [x] T2 #13 red-first: 20 failing assertions reproducing the raw `UnicodeDecodeError` contract gap (scan_dir/resync/doctor/list + write paths).
+- [x] T3 #13 fix: `loader.read_skill_text()`/`read_skill_text_strict()`; rows marked `malformed` + `decode_error`; `doctor.undecodable_documents` drift class (in `ok`) + CLI line; `Store.list`/`get` surface the flags; validator reuses the message.
+- [x] T4 #13 write paths fail closed (`Store.edit`/`restore`, `read_snapshot`, `scopes.get_raw`/`edit_skill`/`restore_snapshot`/sync overwrite) and leave files byte-identical.
+- [x] T5 #13 complexity ratchet: `doctor` artifact discovery extracted into `_doctor_artifacts`/`_stale_snapshots`/`_is_*` so the new drift class adds no hotspot growth.
+- [x] T6 #13 tests: `tests/test_encoding_contracts.py` (23) incl. REST list/detail/doctor drift reporting and clean CLI exit codes.
+- [x] T7 #3/#4 verification: registry preview (audit links, trust gate, hash slot) and eval harness (`--evals`, `--evals-run` recording `iteration-N/eval-*/` + benchmark delta, no SQLite rows) re-run hermetically, then committed.
+- [x] T8 #5 verification: hermetic zip import parity with tar plus a hostile-zip probe (traversal member rejected, nothing outside staging).
+- [x] T9 #12 implementation: `skillsmgr/effective.py` (cited per-consumer rows, ordered/no-merge/undocumented policies, skipped disabled-invalid instances, bounded reads) + `doctor --explain` + `GET /api/doctor?explain=`.
+- [x] T10 #12 tests: `tests/test_effective_explain_contracts.py` (36) incl. six-way/no-merge/triple+both-load/ambiguous/unknown/missing-project and read-only tree-hash + no-DB proofs.
+- [x] T11 docs truth: `docs/01-architecture.md`, `docs/02-modules.md`, `docs/03-cli-surface.md`, `docs/08-web-ui.md`, `docs/06-progress-log.md`, `docs/SESSION-CONTEXT.md`, `ROADMAP.md`, `TODO.md` (Milestone 4 + Milestone 11 L3 + deferred intro), `task.md`.
+- [x] T12 final ladder (435 unittest, smokes, docs, complexity, help) then commit, push, and close each issue with file/line evidence.

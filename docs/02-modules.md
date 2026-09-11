@@ -62,6 +62,39 @@ commit behavior, resolved root-containment, and physical-root/capability/
 instance-state observations. `paths.py` remains a compatibility adapter for the
 existing containment function names.
 
+## `effective.py`
+
+Read-only effective-resolution diagnostic behind `doctor --explain CONSUMER
+[--project DIR] [--skill NAME]` and `GET /api/doctor?explain=…` (issue #12).
+`explain()` derives, at read time, which instance of a skill a consumer would
+load for one `(consumer, project-CWD, skill)` triple, and returns a
+JSON-serialisable report: `resolution`, `policy`, per-skill `winner`,
+`shadowed` (with the winning tier as `shadowed_by`), `also_loads`, the `tiers`
+actually read with their `instances`/`skipped` detail, `warnings`,
+`unobservable_tiers`, and the cited `source` URL. Every precedence row lives in
+`CONSUMERS` and is sourced from
+@docs/12-agent-root-discovery-2026-09-08.md: `commandcode` documents a six-way
+order (project `.commandcode/` > project `.agents/` > user `~/.commandcode/` >
+user `~/.agents/` > extras > bundled), `codex` documents an explicit no-merge
+policy (so `policy: "no-merge"` elects no winner and reports every copy),
+`claude-code` documents personal > project for the conflict pair with
+project-root/nested copies both loading, `gemini` documents built-in <
+extension < user < workspace, and `cursor`/`opencode` document no same-name
+order at all. Consumers therefore never get an invented winner: an unrecorded
+order yields `undocumented-precedence`, and an unknown consumer yields
+`unknown-consumer` with the known list. A missing project directory yields
+`missing-project`; a documented tier whose path this tool cannot read
+(`path_known: False`, e.g. Claude's enterprise tier, Codex `SYSTEM`, Command
+Code `extras`/`bundled`) is reported as unobservable with a warning that a
+lower-tier win is provisional. Observed-state vocabulary is reused: `disabled`
+(`SKILL.md.disabled` is not loadable as `SKILL.md`) and `invalid` (malformed or
+undecodable) instances are reported under `skipped` with a reason and can never
+win; a skill with only skipped copies resolves to `no-instances`. Nothing is
+persisted — no filesystem write, no SQLite access, no cache, no `Store` method
+— and `effective_state` stays `unresolved` (ADR-002). Reads are bounded by
+`MAX_ROOTS`/`MAX_INSTANCES`, and the report always carries
+`read_only`/`persists_nothing`.
+
 ## `insights.py`
 
 Read-only Milestone 9 insight helpers (pure, stdlib-only, zero disk

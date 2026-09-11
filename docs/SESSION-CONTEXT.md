@@ -1,19 +1,25 @@
 # Session Context — Skills Manager
 
-**Version 0.4.0** (2026-09-10: registry bridge offline half (`install --preview`)
-+ file-based advisory eval harness (`validate --evals`/`--evals-run`,
-`skillsmgr/evals.py`) shipped by extending existing surfaces only — see
+**Version 0.5.0** (2026-09-11: read-only effective-resolution diagnostic shipped
+(`doctor --explain CONSUMER [--project DIR] [--skill NAME]`, `skillsmgr/effective.py`,
+also `GET /api/doctor?explain=…`) plus the non-UTF8 `SKILL.md` fix (the loader marks
+the row `malformed` with `decode_error`; rewrite paths fail closed through
+`read_skill_text_strict`); issues #3/#4/#5 re-verified and closed. Prior:
+2026-09-10 registry bridge offline half (`install --preview`) + file-based advisory
+eval harness (`validate --evals`/`--evals-run`, `skillsmgr/evals.py`) shipped by
+extending existing surfaces only — see
 @docs/ADR-003-registry-bridge-and-eval-harness.md; ZIP import shipped earlier in
 the approved scoped `import` extension; split CLI/web policy modules,
 `insights.py` contracts, smoke fixtures, harness, package-data gate; CLI counts
-re-verified; Milestone 11 L1/L2/L3/L4 done.)
+re-verified.)
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
 ## What exists today (2026-09-10)
 
 - **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
-- **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.1.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only; a read-only `doctor --explain` diagnostic needs its own issue/ADR approval). See @docs/03-cli-surface.md.
+- **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.1.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only). The read-only `doctor --explain` diagnostic shipped 2026-09-11 (`skillsmgr/effective.py`; per-consumer rules cited from that doc, `unknown-consumer`/`undocumented-precedence` instead of a guess, nothing persisted). See @docs/03-cli-surface.md.
+- **Effective-resolution diagnostic (2026-09-11, #12)**: `python3 -m skillsmgr doctor --explain commandcode --project DIR [--skill NAME] [--json]` (also `GET /api/doctor?explain=…&project=…&skill=…`). Policies: `commandcode` six-way order, `codex` no-merge (no winner elected), `claude-code` personal > project with nested copies in `also_loads`, `gemini` built-in < extension < user < workspace (`ambiguous` on same-tier ties), `cursor`/`opencode` `undocumented-precedence`. `unknown-consumer`/`missing-project` → exit 1, everything else → exit 0. `skillsmgr/effective.py`.
 - **Store**: `skillsmgr/store.py` — FS source of truth + SQLite index. Public API in @docs/04-store-api.md. **Signatures that surprise people** (docs used to lie about these, fixed on 2026-08-14):
   - `export()` / `backup()` return a **Path**, not a dict.
   - `db_rebuild()` returns `{"added", "updated", "removed"}` (no `"skills"` key).
@@ -21,7 +27,7 @@ re-verified; Milestone 11 L1/L2/L3/L4 done.)
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
- - **Tests**: stdlib `unittest` regression/contract suite — 376 tests green 2026-09-10 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (159 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
+ - **Tests**: stdlib `unittest` regression/contract suite — 435 tests green 2026-09-11 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (164 functions, budget ≤ 15), and `python3 check_package_data.py` (reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP, 320/400/640/900/1280px) is green.
 - **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, `registry_reference`/`registry_bridge_plan` + the shared `install_argv`/`install_command_line` renderer, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Locked by hermetic tests in `tests/test_insights_contracts.py` and `tests/test_registry_bridge_contracts.py`.
 - **Registry bridge (offline half, 2026-09-10)**: `install --preview [--trust-confirmed] [--registry-hash HEX]` / `POST /api/install {preview: true}` parse a registry reference (`owner/repo`, `owner/repo/slug`, skills.sh page URL, GitHub URL), gate on explicit trust, surface linkable `/security/{provider}` audit pages plus the hash slot, and map a skill id onto `npx skills add … -s <slug>`. No request, cache, or credential exists; network browse/fetch is still deferred (#3, @docs/ADR-003-registry-bridge-and-eval-harness.md).
 - **Eval harness (file-based, advisory, 2026-09-10)**: `skillsmgr/evals.py` reads `evals/evals.json` from a skill dir and records `iteration-N/eval-<slug>/{with_skill,without_skill}/{outputs/output.txt,grading.json,timing.json}` plus a per-iteration `benchmark.json` (per-variant case pass rate and the `with_skill` − `without_skill` delta). Surfaces: `validate --evals`, `validate --evals-run FILE [--workspace DIR]`, `POST /api/validate {evals|runs}`. Workspaces default to `<data>/evals/<name>-workspace` (outside `skills/`; `--path` uses beside-the-skill only outside the store's `skills/` tree). Scores never change `valid`, never gate installs/edits, never enter SQLite (#4).
@@ -41,6 +47,7 @@ re-verified; Milestone 11 L1/L2/L3/L4 done.)
 | Change a screen/behavior | `skillsmgr/webui/app.js` (Vue methods) / `index.html` (templates) / `styles.css` (design tokens in `:root`) |
 | Add a field to create/edit form | app.js `_SKILL_FIELDS`-equivalent list in saveSkill payload + form in index.html + webapp.py `_SKILL_FIELDS` |
 | Anything touching store.py | @docs/04-store-api.md + `python3 smoke_store.py` |
+| Explain which skill copy an agent actually loads | `python3 -m skillsmgr doctor --explain <consumer> --project DIR [--skill NAME]` (`skillsmgr/effective.py`) |
 | CLI surface question | @docs/03-cli-surface.md |
 
 ## Design system (short form)
@@ -61,6 +68,8 @@ re-verified; Milestone 11 L1/L2/L3/L4 done.)
 7. **Mobile topbar** overflowed at 400px before the `max-width: 640px` rules; keep brand text/stat-pill hidden there.
 8. Vue is **vendored** — bump it by replacing `skillsmgr/webui/static/vendor/vue.global.prod.js`, not by adding a CDN script.
 9. **Agent-scope writes go straight to the agent dir** (no DB): disable/enable renames `SKILL.md` <-> `SKILL.md.disabled` in place; remove trashes to `<scope-base>/../trash` (e.g. `~/.agents/trash`), NOT the global store trash. Export is global-only.
+10. **A non-UTF8 `SKILL.md` must never raise a raw `UnicodeDecodeError`** (#13). Read/report paths go through `loader.read_skill_text()` (U+FFFD text + a message) and mark the row `malformed` with `decode_error`; `doctor` reports it under `undecodable_documents` and `ok` is False. Any path that rewrites a document must call `loader.read_skill_text_strict()` so lossy replacement characters can never be written back — never use a bare `read_text(encoding="utf-8")` on a skill document.
+11. **`doctor --explain` never elects a winner it cannot cite** (#12). Add a consumer only with a primary-source row in @docs/12-agent-root-discovery-2026-09-08.md; an unrecorded order must stay `undocumented-precedence`, and `skill_count`/`effective_state` contracts (`unresolved`) must not be bent into a runtime resolver — the `EffectiveSkill` model is still approval-gated (ADR-002).
 
 ## Verification loop (run all, all must pass)
 

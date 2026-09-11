@@ -300,8 +300,38 @@ them.
   approval-gated ADR and discovery inventory; runtime entities remain deferred.
 - [x] Support recursive discovery only where the consumer actually does so.
 - [x] Represent read-only, writable, missing, and unsupported roots distinctly.
-- [!] Calculate effective resolution for a selected consumer and project.
-  **FINAL (2026-09-10): KEEP BLOCKED — `unresolved` is the correct contract.**
+- [x] Calculate effective resolution for a selected consumer and project.
+  **SHIPPED 2026-09-11 AS THE NARROW READ-ONLY DIAGNOSTIC (issue #12).** The
+  runtime `EffectiveSkill`/winner model stays blocked exactly as recorded
+  below; what landed is the derived-at-read-time diagnostic the entry's own
+  "Next:" line called for, with no persistence and no locked-constraint
+  change. `skillsmgr/effective.py` (`effective.explain(consumer, project,
+  skill=None)`), surfaced as `doctor --explain CONSUMER [--project DIR]
+  [--skill NAME]` and `GET /api/doctor?explain=…[&project=…][&skill=…]`.
+  Per-consumer precedence rows are cited to
+  @docs/12-agent-root-discovery-2026-09-08.md and never invented:
+  `commandcode` six-way order (project `.commandcode/` > project `.agents/` >
+  user `~/.commandcode/` > user `~/.agents/` > extras > bundled), `codex`
+  explicit no-merge (no winner elected; every copy reported), `claude-code`
+  personal > project for the conflict pair with project-root and nested copies
+  both loading (`also_loads`), `gemini` built-in < extension < user <
+  workspace with same-tier ties reported as `ambiguous`, and
+  `cursor`/`opencode` as `undocumented-precedence` (their order is not
+  documented). An unknown consumer returns `unknown-consumer` (CLI exit 1) and
+  a missing project returns `missing-project` (exit 1); nothing that resolves
+  nothing (`no-merge`, `undocumented-precedence`, `no-instances`) is an error.
+  Observable tiers whose path this facade cannot read (Claude enterprise,
+  Codex `SYSTEM`, Command Code `extras`/`bundled`, Gemini extension/built-in)
+  are listed in `unobservable_tiers` with a warning that a lower-tier win is
+  provisional; the `codex` facade id is warned as compatibility-only and
+  reported as facade-only observations. Disabled (`SKILL.md.disabled`) and
+  invalid (malformed/undecodable) instances are reported under `skipped` and
+  can never win. Writes nothing (no file, no SQLite row, no cache; proven by
+  tree-hash and no-DB assertions), `SCHEMA_VERSION = "1"` untouched,
+  `effective_state: unresolved` everywhere else, and no new `Store` method.
+  Contract tests: `tests/test_effective_explain_contracts.py` (36).
+  **FINAL (2026-09-10) — historical entry that scoped this diagnostic:**
+  **KEEP BLOCKED — `unresolved` is the correct contract.**
   Re-probes (hermetic loopback + isolated-HOME probes, zero code): project
   scopes require live project-CWD input (`scopes.py` appends project roots
   only `if cand.is_dir()` under CWD — absent in `/tmp`, present in a project
@@ -532,8 +562,9 @@ here changes a locked constraint; each `[!]` keeps its stated approval.
   read-only diagnostic (`doctor --explain CONSUMER --project DIR`,
   derived at read time, cites source per winner, persists nothing, keeps
   `effective_state: unresolved`) — filed as issue #12 on 2026-09-09;
-  awaiting maintainer approval before any implementation
-  (locked constraint 5).
+  **IMPLEMENTED 2026-09-11** (constraint-5 approval given for the read-only
+  `doctor --explain` flag; see the Milestone 4 entry and
+  `tests/test_effective_explain_contracts.py`).
 - [x] L4 — Recorded the three rejections 2026-09-09 (no code): commented
   issue #6 (keep feature-detect plus guarded manual extractor in
   `skillsmgr/archive.py:133-158`; refusal breaks the supported 3.10/3.11
@@ -652,8 +683,9 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 > `[!]` until its stated approval lands. New sessions implement in the
 > order given here: ~~close #10~~ DONE 2026-09-09 (#10 CLOSED), ~~ZIP on
 > approval~~ DONE 2026-09-10 (L2 shipped in the scoped `import` extension),
-> then the effective-explain diagnostic proposal — filed as issue #12,
-> awaiting maintainer approval (no code until then).
+> ~~effective-explain diagnostic~~ DONE 2026-09-11 (issue #12 shipped as
+> `doctor --explain`, read-only, persisting nothing — see the Milestone 4
+> entry). The remaining items below keep their stated approvals.
 
 - [!] Registry bridge: issue #3. Research verdict: DEFER network
   browse/fetch. **FINAL (2026-09-10): DEFERRED — confirmed by Snyk

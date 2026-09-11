@@ -87,6 +87,7 @@ mutate an outside directory.
 | GET | `/api/search?q=term[&scope=SCOPE]` | search over name/description/body (scope-aware); bounded wildcard failures return the standard JSON `StoreError` 400 |
 | GET | `/api/stats` | Store.stats |
 | GET | `/api/doctor[?scope=all]` | Store.doctor (global), including filesystem/index drift and transaction-artifact diagnostics; `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`) |
+| GET | `/api/doctor?explain=CONSUMER[&project=DIR][&skill=NAME]` | adds the read-only effective-resolution report (issue #12, `effective.explain`) under `explain`; derived at read time, writes nothing, and reports `unknown-consumer`/`missing-project` as explicit results |
 | GET | `/api/history?name=&limit=` | Store.history (name optional) |
 | GET | `/api/history?name=NAME&scope=SCOPE&snapshots=1` | retained snapshot IDs for a skill |
 | POST | `/api/validate` | body `{name}` → `{valid, issues: [{level, key, message}]}`; `{evals: true}` adds the advisory eval report for `evals/evals.json` (read-only); `{runs: [...], iteration?}` scores and records results inside the store's `evals/` workspace |

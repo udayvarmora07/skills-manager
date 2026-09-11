@@ -106,6 +106,35 @@ def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
     return payload
 
 
+def _doctor_payload(store: Store, qs: dict) -> dict:
+    """Build the ``/api/doctor`` payload, optionally with the #12 explain block.
+
+    ``explain=CONSUMER`` adds the read-only effective-resolution diagnostic; it
+    derives from the filesystem at read time and writes nothing.
+    """
+    scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+    report = store.doctor()
+    if scope == "all":
+        try:
+            from .scopes import find_duplicates as _dupes
+            from .scopes import list_scopes as _lscopes
+
+            report["scopes"] = _lscopes()
+            report["duplicates"] = _dupes()
+        except Exception:
+            pass
+    consumer = (qs.get("explain", [""])[0] or "").strip()
+    if consumer:
+        from . import effective
+
+        report["explain"] = effective.explain(
+            consumer,
+            (qs.get("project", [""])[0] or "").strip() or None,
+            skill=(qs.get("skill", [""])[0] or "").strip() or None,
+        )
+    return report
+
+
 def _validated_skill_fields(data: dict) -> dict:
     """Select skill fields while enforcing the Store/scopes string contract."""
     fields = {}
@@ -583,18 +612,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(agg)
             return
         elif parts == ["api", "doctor"]:
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            report = self.store.doctor()
-            if scope == "all":
-                try:
-                    from .scopes import find_duplicates as _dupes
-                    from .scopes import list_scopes as _lscopes
-
-                    report["scopes"] = _lscopes()
-                    report["duplicates"] = _dupes()
-                except Exception:
-                    pass
-            self._send_json(report)
+            self._send_json(_doctor_payload(self.store, qs))
         elif parts == ["api", "export"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             if scope != "global":

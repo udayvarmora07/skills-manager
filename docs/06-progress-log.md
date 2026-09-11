@@ -4,6 +4,68 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-11 — Issues #3, #4, #5, #12, #13 closed out (one bug fix + one diagnostic)
+
+- **Issue #13 — non-UTF8 `SKILL.md` no longer escapes as a raw
+  `UnicodeDecodeError`.** Contract decided and pinned: *read/report paths
+  tolerate, write paths fail closed*. `loader.read_skill_text()` decodes UTF-8
+  and, on failure, keeps the document readable with U+FFFD while returning an
+  actionable message (file, offending byte, offset, fix); `load_skill()` marks
+  the row `malformed` and adds `decode_error`, so the directory stays visible
+  (filesystem is the source of truth) and `root_discovery`/`insights` classify
+  it `invalid` as before. `Store.doctor()` gained the explicit
+  `undecodable_documents` drift class (included in `ok`; the CLI names the
+  skills and the fix), and `Store.list`/`get` now surface
+  `malformed`/`decode_error` for global rows. Mutation paths that would rewrite
+  a document from text read back (`Store.edit`, `Store.restore`,
+  `read_snapshot`, `scopes.get_raw`, `scopes.edit_skill`,
+  `scopes.restore_snapshot`, `scopes.sync_skill` overwrite) use
+  `loader.read_skill_text_strict()` and raise a clean `StoreError` naming the
+  skill and the fix, leaving the file byte-identical — lossy replacement
+  characters can never reach a write. The validator reuses the same message
+  instead of a bare codec error. Answering the issue's second question: the
+  agent-scope readers get the same treatment (the reporting readers were
+  already inside broad `except Exception` guards; the text-returning and
+  editing readers now fail closed cleanly). `Store.doctor`'s artifact discovery
+  was extracted into `_doctor_artifacts`/`_stale_snapshots`/`_is_*` helpers so
+  the new drift class does not grow a baselined hotspot (complexity ratchet
+  satisfied without a baseline update). Tests:
+  `tests/test_encoding_contracts.py` (23).
+- **Issue #12 — read-only effective-resolution diagnostic shipped.** New
+  stdlib-only `skillsmgr/effective.py` derives, at read time, which instance of
+  a skill a consumer would load for a `(consumer, project-CWD, skill)` triple,
+  surfaced as `doctor --explain CONSUMER [--project DIR] [--skill NAME]` and
+  `GET /api/doctor?explain=…`. The locked constraints are untouched: no new CLI
+  command (an approved flag on `doctor`), no new `Store` method, no SQLite
+  access or schema change, no persistence, and `effective_state` stays
+  `unresolved` (ADR-002). Per-consumer rows are cited to
+  @docs/12-agent-root-discovery-2026-09-08.md and never invented — Command Code
+  six-way order, Codex no-merge (no winner elected), Claude personal > project
+  with nested copies reported under `also_loads` because they both load,
+  Gemini built-in < extension < user < workspace with same-tier ties reported
+  `ambiguous`, and Cursor/Opencode `undocumented-precedence`. Unknown consumer
+  → `unknown-consumer` (exit 1), missing project → `missing-project` (exit 1),
+  and a diagnostic that legitimately resolves nothing exits 0. Unobservable
+  documented tiers are listed with a provisional-win warning; the `codex`
+  facade id is warned as compatibility-only; disabled/invalid instances are
+  reported under `skipped` and can never win. Read-only proof: tree-hash
+  equality across every consumer plus a no-database assertion. Tests:
+  `tests/test_effective_explain_contracts.py` (36).
+- **Issues #3, #4, #5 — verified and closed.** The offline registry bridge
+  (issue #3) and the file-based eval harness (issue #4) landed as
+  @docs/ADR-003-registry-bridge-and-eval-harness.md describes; this session
+  re-verified both end to end (registry preview with audit links and the trust
+  gate; `validate --evals`/`--evals-run` recording `iteration-N/eval-*/`
+  workspaces with a benchmark delta and no SQLite rows) and committed them.
+  ZIP import (issue #5) was already on `main`; re-verified hermetic parity with
+  tar plus a hostile-zip probe (traversal member rejected, nothing written
+  outside staging).
+- **Verification:** 435 `unittest` tests OK; `smoke_store.py` and
+  `smoke_web.py` PASS; `check_docs.py` PASS; `check_complexity.py` PASS. No
+  locked constraint changed: filesystem still the source of truth, schema and
+  `SCHEMA_VERSION = "1"` frozen, CLI stdlib-only, web UI still dependency-free
+  and loopback-only.
+
 ## 2026-09-10 — Registry bridge (offline) + eval harness (file-based) shipped
 
 - **Scope decision recorded in @docs/ADR-003-registry-bridge-and-eval-harness.md**:
