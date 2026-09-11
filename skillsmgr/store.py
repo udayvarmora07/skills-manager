@@ -222,7 +222,9 @@ def read_snapshot(data_dir: Path, scope: str, name: str, snapshot: str) -> str:
     path = paths.contained_path(Path(data_dir) / "snapshots", scope, name, f"{snapshot}.md")
     if not path.is_file():
         raise StoreError(f"no snapshot {snapshot!r} for '{name}' in scope '{scope}'")
-    return path.read_text(encoding="utf-8")
+    from .loader import read_skill_text_strict
+
+    return read_skill_text_strict(path, subject=f"snapshot {snapshot!r} for '{name}'")
 
 
 def _coerce_str(value) -> str:
@@ -245,6 +247,68 @@ def _trash_entry_name(path: Path) -> str | None:
         return validate_skill_name(name)
     except ValueError:
         return None
+
+
+def _is_transaction_artifact(name: str) -> bool:
+    return (
+        name.endswith((".skillsmgr-stage", ".skillsmgr-backup"))
+        or ".skillsmgr-stage." in name
+        or ".skillsmgr-backup." in name
+    )
+
+
+def _is_temporary_file(name: str) -> bool:
+    return (
+        ".skillsmgr-tmp" in name
+        or name.endswith((".tmp", ".temp"))
+        or name in {".skillsmgr-stage", ".skillsmgr-backup"}
+        or ".skillsmgr-stage" in name
+        or ".skillsmgr-backup" in name
+    )
+
+
+def _stale_snapshots(data_dir: Path) -> list[str]:
+    snapshots_root = data_dir / "snapshots"
+    if not snapshots_root.is_dir():
+        return []
+    return sorted(
+        str(path.relative_to(data_dir))
+        for path in snapshots_root.rglob("*")
+        if path.is_file()
+        and (
+            path.suffix != ".md"
+            or not _SNAPSHOT_ID_RE.fullmatch(path.stem)
+            or len(path.relative_to(snapshots_root).parts) != 3
+        )
+    )
+
+
+def _doctor_artifacts(data_dir: Path, trash_dir: Path, templates_dir: Path) -> dict:
+    """Return leftover transaction/temp/snapshot artifacts and directory counts."""
+    paths = list(data_dir.rglob("*"))
+    trash_names = (
+        {name for path in trash_dir.iterdir() if (name := _trash_entry_name(path))}
+        if trash_dir.is_dir()
+        else set()
+    )
+    return {
+        "transaction_artifacts": sorted(
+            str(path.relative_to(data_dir))
+            for path in paths
+            if _is_transaction_artifact(path.name)
+        ),
+        "temporary_files": sorted(
+            str(path.relative_to(data_dir))
+            for path in paths
+            if _is_temporary_file(path.name)
+        ),
+        "stale_snapshots": _stale_snapshots(data_dir),
+        "trash_names": trash_names,
+        "trash_count": len(trash_names),
+        "templates_count": (
+            len(list(templates_dir.glob("*.md"))) if templates_dir.is_dir() else 0
+        ),
+    }
 
 
 def _normalize_archive_member_name(name: str) -> str:
@@ -601,7 +665,7 @@ class Store:
                 skill_dir = _safe_skill_path(self.skills_dir, record["name"])
                 try:
                     observed = load_skill(skill_dir)
-                except (OSError, SkillNotFound):
+                except (OSError, SkillNotFound, UnicodeError):
                     continue
                 for key in (
                     "content_hash",
@@ -610,6 +674,8 @@ class Store:
                     "provenance",
                     "portable_frontmatter",
                     "frontmatter_extensions",
+                    "malformed",
+                    "decode_error",
                 ):
                     if key in observed:
                         record[key] = observed[key]
@@ -643,6 +709,8 @@ class Store:
                     "provenance",
                     "portable_frontmatter",
                     "frontmatter_extensions",
+                    "malformed",
+                    "decode_error",
                 ):
                     if key in observed:
                         result[key] = observed[key]
@@ -879,7 +947,9 @@ class Store:
             if (skill_dir / "SKILL.md.disabled").is_file():
                 raise StoreError(f"skill '{name}' is disabled; enable it first")
             raise SkillNotFound(f"skill '{name}' has no SKILL.md")
-        text = md_file.read_text(encoding="utf-8")
+        from .loader import read_skill_text_strict
+
+        text = read_skill_text_strict(md_file, subject=f"skill '{name}'")
         try:
             data, original_body = parse_frontmatter(text)
         except FrontmatterError:
@@ -1030,7 +1100,9 @@ class Store:
                     raise StoreError(f"skill '{name}' is disabled; enable it first")
                 raise SkillNotFound(f"skill '{name}' has no SKILL.md")
             with _mutation_lock(md_file):
-                current = md_file.read_text(encoding="utf-8")
+                from .loader import read_skill_text_strict
+
+                current = read_skill_text_strict(md_file, subject=f"skill '{name}'")
                 write_snapshot(self.data_dir, "global", name, current)
                 try:
                     _atomic_write_text(md_file, content)
@@ -1474,6 +1546,13 @@ class Store:
             conn.close()
         orphan_dirs = sorted(set(scanned) - active_names)
         stale_rows = sorted(active_names - set(scanned))
+        # Documents that are not valid UTF-8 are reported as their own drift
+        # class (issue #13): the loader keeps the row readable with replacement
+        # characters, so it can match the index byte-for-replacement and would
+        # otherwise be invisible to the body comparison below.
+        undecodable_documents = sorted(
+            name for name, entry in scanned.items() if entry.get("decode_error")
+        )
         filesystem_index_drift = sorted(
             name
             for name in set(scanned) & active_names
@@ -1482,59 +1561,22 @@ class Store:
                 for key in ("description", "body", "category", "license", "version", "disabled")
             )
         )
-        transaction_artifacts = sorted(
-            str(path.relative_to(self.data_dir))
-            for path in self.data_dir.rglob("*")
-            if path.name.endswith((".skillsmgr-stage", ".skillsmgr-backup"))
-            or ".skillsmgr-stage." in path.name
-            or ".skillsmgr-backup." in path.name
-        )
-        temporary_files = sorted(
-            str(path.relative_to(self.data_dir))
-            for path in self.data_dir.rglob("*")
-            if ".skillsmgr-tmp" in path.name
-            or path.name.endswith((".tmp", ".temp"))
-            or path.name in {".skillsmgr-stage", ".skillsmgr-backup"}
-            or ".skillsmgr-stage" in path.name
-            or ".skillsmgr-backup" in path.name
-        )
-        snapshots_root = self.data_dir / "snapshots"
-        stale_snapshots = sorted(
-            str(path.relative_to(self.data_dir))
-            for path in snapshots_root.rglob("*")
-            if path.is_file()
-            and (
-                path.suffix != ".md"
-                or not _SNAPSHOT_ID_RE.fullmatch(path.stem)
-                or len(path.relative_to(snapshots_root).parts) != 3
-            )
-        ) if snapshots_root.is_dir() else []
-        trash_count = (
-            len([p for p in self.trash_dir.iterdir() if _trash_entry_name(p)])
-            if self.trash_dir.is_dir()
-            else 0
-        )
-        templates_count = (
-            len(list(self.templates_dir.glob("*.md")))
-            if self.templates_dir.is_dir()
-            else 0
-        )
+        artifacts = _doctor_artifacts(self.data_dir, self.trash_dir, self.templates_dir)
+        transaction_artifacts = artifacts["transaction_artifacts"]
+        temporary_files = artifacts["temporary_files"]
+        stale_snapshots = artifacts["stale_snapshots"]
+        trash_count = artifacts["trash_count"]
+        templates_count = artifacts["templates_count"]
         ok = (
             integrity == "ok"
             and not orphan_dirs
             and not stale_rows
             and not filesystem_index_drift
+            and not undecodable_documents
             and not transaction_artifacts
             and not temporary_files
             and not stale_snapshots
-            and not (
-                trashed_names
-                - {
-                    name
-                    for p in (self.trash_dir.iterdir() if self.trash_dir.is_dir() else ())
-                    if (name := _trash_entry_name(p)) is not None
-                }
-            )
+            and not (trashed_names - artifacts["trash_names"])
         )
         return {
             "data_dir": str(self.data_dir),
@@ -1551,6 +1593,7 @@ class Store:
             "orphan_dirs": orphan_dirs,
             "stale_rows": stale_rows,
             "filesystem_index_drift": filesystem_index_drift,
+            "undecodable_documents": undecodable_documents,
             "transaction_artifacts": transaction_artifacts,
             "temporary_files": temporary_files,
             "incomplete_transactions": transaction_artifacts,

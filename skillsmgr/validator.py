@@ -379,9 +379,17 @@ def validate_skill(name: str, skill_dir: Path) -> ValidationResult:
             return result
 
     try:
-        text = skill_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
+        from .loader import read_skill_text
+
+        text, decode_error = read_skill_text(skill_file)
+    except OSError as exc:
         result.add("error", f"cannot read SKILL.md: {exc}")
+        return result
+    if decode_error is not None:
+        # Same message the loader marks rows with (issue #13): name the file,
+        # the offending byte, and the recovery step instead of a bare codec
+        # error.
+        result.add("error", decode_error)
         return result
 
     result = validate_text(text, name=name, skill_dir=skill_dir)

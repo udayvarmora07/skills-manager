@@ -15,7 +15,7 @@ from pathlib import Path
 
 from . import paths
 from .frontmatter import dump_frontmatter, parse_frontmatter
-from .loader import load_skill, scan_dir
+from .loader import load_skill, read_skill_text_strict, scan_dir
 from . import root_discovery as _root_discovery
 from .store import (
     SkillNotFound,
@@ -355,7 +355,7 @@ def get_raw(scope_id: str, name: str) -> str:
         p = _safe_scope_skill_path(scope, name)
     for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
         if cand.is_file():
-            return cand.read_text(encoding="utf-8")
+            return read_skill_text_strict(cand, subject=f"skill '{name}'")
     raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
 
 
@@ -463,7 +463,7 @@ def edit_skill(
         if (skill_dir / "SKILL.md.disabled").is_file():
             raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
         raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
-    text = md.read_text(encoding="utf-8")
+    text = read_skill_text_strict(md, subject=f"skill '{name}'")
     try:
         data, orig_body = parse_frontmatter(text)
     except Exception:
@@ -612,7 +612,9 @@ def sync_skill(
             if not old_md.is_file():
                 old_md = dest / "SKILL.md.disabled"
             if old_md.is_file():
-                previous_content = old_md.read_text(encoding="utf-8")
+                previous_content = read_skill_text_strict(
+                    old_md, subject=f"skill '{name}' in scope '{sid}'"
+                )
         if dest.exists() and not force:
             skipped.append({"scope": sid, "reason": "already exists (use force)"})
             continue
@@ -674,7 +676,7 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
             raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
         raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
     with _mutation_lock(md):
-        current = md.read_text(encoding="utf-8")
+        current = read_skill_text_strict(md, subject=f"skill '{name}' in scope '{scope_id}'")
         _write_snapshot(_global_store().data_dir, scope_id, name, current)
         try:
             _atomic_write_text(md, content)

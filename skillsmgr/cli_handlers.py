@@ -611,6 +611,14 @@ def cmd_doctor(args, store: Store) -> int:
         print(f"  {len(report['orphan_dirs'])} unindexed skill directories")
     if report.get("stale_rows"):
         print(f"  {len(report['stale_rows'])} database rows without files")
+    if report.get("undecodable_documents"):
+        names = ", ".join(report["undecodable_documents"][:5])
+        more = len(report["undecodable_documents"]) - 5
+        suffix = f" (+{more} more)" if more > 0 else ""
+        print(
+            f"  {len(report['undecodable_documents'])} skill document(s) not valid UTF-8: "
+            f"{names}{suffix} - re-save as UTF-8"
+        )
     if report.get("db_integrity") and report["db_integrity"] != "ok":
         print(f"  database integrity check failed: {report['db_integrity']}")
     # Also show scope summary when --scope all.
