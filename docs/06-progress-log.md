@@ -69,9 +69,10 @@
   integration limitation for editors. Threat-model rows T-14/R-7 record F-1 as
   **open**, and the read-path behavior is pinned in the client-contract test as
   characterization with a pointer to #14 so a fix fails loudly until updated.
-- **Verification:** 475 `unittest` tests OK (up from 435); `smoke_store.py` and
+- **Verification:** 477 `unittest` tests OK (up from 435); `smoke_store.py` and
   `smoke_web.py` PASS; `check_docs.py` PASS; `check_complexity.py` PASS (164
-  functions).
+  functions); the launcher was also run for real against a temp data dir
+  (`GET /`, `/api/stats`, `/api/skills` all 200).
 
 ## 2026-09-11 — Issues #3, #4, #5, #12, #13 closed out (one bug fix + one diagnostic)
 
@@ -138,6 +139,17 @@
   persisted state (the same fix `tests/test_webapp.py` already applies in its
   `_persisted()` helper); the test passes 20/20 in isolation and the full suite
   3/3. CI is green on the fixing commit.
+- **Second CI failure on `py3.10`, found and fixed the same way.** The launcher
+  boundary pins imported `tomllib`, which is Python 3.11+ while the project
+  declares `requires-python >= 3.10` and CI runs 3.10 as its floor
+  (`ModuleNotFoundError: No module named 'tomllib'`). The packaging pins now read
+  `pyproject.toml` as text through a small `section()` helper, so the
+  outside-the-wheel / no-extra-console-script / no-dependency assertions hold on
+  every supported interpreter, and the three assertions were split so a failure
+  names its own boundary. An AST scan confirms no 3.11+-only stdlib import
+  remains in `tests/` or `desktop_launcher.py`. Suite is 477 tests; CI green on
+  the fixing commit. Lesson recorded: local 3.12 cannot vouch for the 3.10 floor,
+  so a new test file's imports deserve the same 3.10 check as product code.
 - **Verification:** 435 `unittest` tests OK; `smoke_store.py` and
   `smoke_web.py` PASS; `check_docs.py` PASS; `check_complexity.py` PASS. No
   locked constraint changed: filesystem still the source of truth, schema and

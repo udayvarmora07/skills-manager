@@ -936,4 +936,5 @@ instead of being changed silently. No locked constraint changed.
 - [x] T6 #11 design scope closed: `docs/ADR-004-team-sharing-signed-bundles.md` + threat-model delta (T-13, T-14, R-6, R-7, recommendations 4-6).
 - [x] T7 New issue #14 filed for the read-path Host gap (F-1) and the `localhost` Host alias rejection (F-2), with measured evidence and three options.
 - [x] T8 docs truth: `docs/README.md` (ADR-004 index), `docs/01-architecture.md` (launcher + test count), `docs/08-web-ui.md`, `docs/06-progress-log.md`, `docs/SESSION-CONTEXT.md`, `ROADMAP.md`, `TODO.md` (five entries + deferred intro/tail), `check_docs.py` CURRENT_DOCS, `task.md`.
-- [x] T9 final ladder (475 unittest, smokes, docs, complexity, launcher help) then commit, push, and close #6/#7/#8/#9/#11 with evidence.
+- [x] T9 final ladder (477 unittest, smokes, docs, complexity, launcher help + a real launcher run) then commit, push, and close #6/#7/#8/#9/#11 with evidence.
+- [x] T10 CI follow-up: the launcher pins imported `tomllib` (3.11+) and failed the py3.10 job, so `pyproject.toml` is read as text instead; no 3.11+-only stdlib import remains in `tests/` or `desktop_launcher.py`. CI green on the fixing commit (`256f6b1`).
