@@ -35,19 +35,44 @@ python3 -m skillsmgr create demo -d "Demo skill"
 python3 -m skillsmgr webui --no-browser
 ```
 
+The manager validates environment-selected roots before use. Keep
+`SKILLS_MANAGER_DATA`/`XDG_DATA_HOME` on a private, user-owned directory (the
+`mktemp -d` example is appropriate); shared or group/world-writable roots are
+rejected.
+
 ## Checks (all must pass)
 
 ```bash
 python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py check_complexity.py check_docs.py
 python3 check_complexity.py
 python3 check_docs.py
-python3 check_package_data.py   # reports UNAVAILABLE when optional build tooling is absent
+python3 check_package_data.py   # verifies the vendored Vue hash, then reports UNAVAILABLE when build tooling is absent
 python3 check_package_data.py --dist-dir dist   # build-once check on CI-built artifacts
 python3 -m unittest discover -s tests
 python3 smoke_store.py
 python3 smoke_web.py
 node --check skillsmgr/webui/app.js   # if node is available
 ```
+
+Building distributions locally must use the pinned, hash-verified toolchain
+(SEC-8) so your artifacts are the ones CI and the release job would produce:
+
+```bash
+python3 -m venv /tmp/sm-build
+/tmp/sm-build/bin/python -m pip install --require-hashes -r requirements-build.txt
+/tmp/sm-build/bin/python -m build --no-isolation --wheel --sdist --outdir dist
+python3 check_package_data.py --dist-dir dist
+```
+
+The vendored `webui/static/vendor/vue.global.prod.js` is pinned by sha256 in
+`check_package_data.py`; a Vue bump updates `VUE_VERSION`, `VUE_UPSTREAM_URL`,
+`VUE_SHA256` and `VUE_SIZE` in one commit, or the gate fails.
+
+The dev-only `browser_harness.py` and optional `desktop_launcher.py` use the
+shared trusted executable resolver. It skips unsafe PATH matches, keeps the
+Chrome sandbox enabled, and confines the harness's ephemeral CDP endpoint to
+loopback. When testing launcher discovery, use hermetic executable fixtures;
+do not weaken the trust checks to accommodate a local PATH layout.
 
 ## Style
 

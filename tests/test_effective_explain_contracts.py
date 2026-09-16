@@ -24,6 +24,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from pathlib import Path
@@ -173,7 +174,7 @@ class TestCodexNoMerge(ExplainCase):
         report = self.explain("codex")
         warnings = " ".join(report["warnings"])
         self.assertIn("compatibility-only", warnings)
-        self.assertIn(str(facade.parent), warnings)
+        self.assertIn("codex", warnings)
         self.assertIn("deploy", warnings)
         candidates = {item["path"] for item in report["skills"]["deploy"]["candidates"]}
         self.assertNotIn(str(facade), candidates)
@@ -266,6 +267,114 @@ class TestGeminiTieAndUndocumentedConsumers(ExplainCase):
         report = effective.explain("codex", str(self.base / "nope"))
         self.assertEqual(report["resolution"], "missing-project")
         self.assertIn("does not exist", report["reason"])
+
+
+class TestOverallResolutionHonesty(ExplainCase):
+    """SCOPE-6: the top-level verdict must not contradict the entries under it."""
+
+    def test_a_report_whose_only_skill_has_no_instance_is_not_resolved(self):
+        target = self.project_skill(".claude/skills")
+        (target / "SKILL.md").rename(target / "SKILL.md.disabled")
+
+        report = self.explain("claude-code")
+
+        self.assertEqual(report["skills"]["deploy"]["resolution"], "no-instances")
+        self.assertEqual(report["resolution"], "no-instances")
+
+    def test_no_instances_anywhere_is_reported_as_such(self):
+        report = self.explain("claude-code")
+
+        self.assertEqual(report["skills"], {})
+        self.assertEqual(report["resolution"], "no-instances")
+
+    def test_a_mix_of_resolved_and_empty_skills_is_partially_resolved(self):
+        self.project_skill(".claude/skills", name="deploy", description="resolvable")
+        target = self.project_skill(".claude/skills", name="review", description="disabled")
+        (target / "SKILL.md").rename(target / "SKILL.md.disabled")
+
+        report = self.explain("claude-code")
+
+        self.assertEqual(report["skills"]["deploy"]["resolution"], "resolved")
+        self.assertEqual(report["skills"]["review"]["resolution"], "no-instances")
+        self.assertEqual(report["resolution"], "partially-resolved")
+
+    def test_a_nested_only_copy_is_loadable_not_no_instances(self):
+        # The reason used to read "no loadable instance of 'review' in any
+        # documented root" while the entry's own also_loads list held that very
+        # loadable instance.
+        self.project_skill(
+            "apps/web/.claude/skills", name="review", description="nested only"
+        )
+
+        report = self.explain("claude-code")
+
+        entry = report["skills"]["review"]
+        self.assertEqual(len(entry["also_loads"]), 1)
+        self.assertEqual(entry["resolution"], "both-load-only")
+        self.assertEqual(entry["candidates"], entry["also_loads"])
+        self.assertNotIn("no loadable instance", entry["reason"])
+        self.assertEqual(report["resolution"], "both-load-only")
+
+    def test_nested_only_alongside_an_ordered_winner_is_partially_resolved(self):
+        self.project_skill(".claude/skills", name="deploy", description="ordered")
+        self.project_skill(
+            "apps/web/.claude/skills", name="review", description="nested only"
+        )
+
+        report = self.explain("claude-code")
+
+        self.assertEqual(report["skills"]["deploy"]["resolution"], "resolved")
+        self.assertEqual(report["skills"]["review"]["resolution"], "both-load-only")
+        self.assertEqual(report["resolution"], "partially-resolved")
+
+
+class TestPhysicalRootDeduplication(ExplainCase):
+    """SCOPE-7: an alias is not a second root (ADR-002 invariant 1)."""
+
+    def test_aliased_roots_in_one_tier_are_not_a_false_ambiguity(self):
+        self.project_skill(".agents/skills", name="deploy", description="the one file")
+        (self.project / ".gemini").mkdir(parents=True)
+        (self.project / ".gemini/skills").symlink_to(
+            self.project / ".agents/skills", target_is_directory=True
+        )
+
+        report = self.explain("gemini")
+
+        entry = report["skills"]["deploy"]
+        self.assertEqual(len(entry["candidates"]), 1)
+        self.assertEqual(entry["resolution"], "resolved")
+
+    def test_a_winner_is_never_reported_as_its_own_shadowed_copy(self):
+        personal = self.home_skill(".claude/skills", description="personal")
+        (self.project / ".claude").mkdir(parents=True)
+        (self.project / ".claude/skills").symlink_to(
+            self.home / ".claude/skills", target_is_directory=True
+        )
+        self.assertTrue(personal.is_dir())
+
+        report = self.explain("claude-code")
+
+        entry = report["skills"]["deploy"]
+        self.assertEqual(entry["winner_tier"], "personal")
+        self.assertEqual(entry["shadowed"], [])
+        self.assertEqual(
+            os.path.realpath(self.winner_path(report)), os.path.realpath(str(personal))
+        )
+
+    def test_an_aliased_root_is_recorded_rather_than_silently_dropped(self):
+        self.project_skill(".agents/skills", name="deploy")
+        (self.project / ".gemini").mkdir(parents=True)
+        (self.project / ".gemini/skills").symlink_to(
+            self.project / ".agents/skills", target_is_directory=True
+        )
+
+        report = self.explain("gemini")
+
+        aliased = [
+            alias for tier in report["tiers"] for alias in tier["aliases"]
+        ]
+        self.assertEqual(len(aliased), 1)
+        self.assertTrue(os.path.samefile(aliased[0], self.project / ".agents/skills"))
 
 
 class TestInstanceStatesAndSkips(ExplainCase):
@@ -436,17 +545,74 @@ class TestRestExplainSurface(unittest.TestCase):
         with urllib.request.urlopen(cls.base_url + path, timeout=10) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
 
-    def test_doctor_explain_query_adds_the_report(self):
+    def test_doctor_explain_query_refuses_a_project_outside_the_managed_roots(self):
+        # SEC-2/SEC-3: ``project`` comes from the query string.  Without a
+        # confinement boundary one unauthenticated GET walked a caller-chosen
+        # directory to completion and returned the user's real home directory,
+        # data_dir, and the inventory of skills installed for other tools.
         status, payload = self.get(
             f"/api/doctor?explain=commandcode&project={self.project}"
         )
         self.assertEqual(status, 200)
         report = payload["explain"]
         self.assertEqual(report["consumer"], "commandcode")
+        self.assertEqual(report["resolution"], "project-outside-managed-roots")
+        self.assertNotIn(str(self.project), json.dumps(report))
+        self.assertNotIn(str(self.home), json.dumps(report))
+        self.assertNotIn(str(self.server.httpd.store.data_dir), json.dumps(report))
+        self.assertTrue(report["paths_redacted"])
+
+    def test_doctor_explain_confines_work_for_an_arbitrary_project(self):
+        # SEC-2: the walk must be bounded by work, not by result count.  The
+        # response for a huge unmanaged tree must not scan it at all.
+        big = self.base / "big"
+        for index in range(60):
+            (big / f"d{index}" / "nested").mkdir(parents=True, exist_ok=True)
+        started = time.monotonic()
+        status, payload = self.get(f"/api/doctor?explain=cursor&project={big}")
+        elapsed = time.monotonic() - started
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["explain"]["resolution"], "project-outside-managed-roots")
+        self.assertLess(elapsed, 2.0)
+
+    def test_doctor_explain_redacts_paths_below_the_data_directory(self):
+        # Inside the boundary the diagnostic still works, but the real
+        # agent-scope roots below $HOME are redacted rather than disclosed.
+        managed = self.server.httpd.store.data_dir / "project"
+        skill(managed / ".commandcode/skills", "deploy", "winner")
+        status, payload = self.get(f"/api/doctor?explain=commandcode&project={managed}")
+        self.assertEqual(status, 200)
+        report = payload["explain"]
         self.assertEqual(report["resolution"], "resolved")
         self.assertEqual(
             report["skills"]["deploy"]["winner_tier"], "project-commandcode"
         )
+        self.assertIn(str(managed), report["project"])
+        text = json.dumps(report)
+        self.assertNotIn(str(self.home), text)
+        self.assertNotIn("<redacted>", report["project"])
+
+    def test_doctor_explain_redacts_the_real_agent_inventory(self):
+        # SEC-3: the user-tier root is the *real* ``~/.agents/skills``.  Its
+        # absolute path and the absolute paths of everything below it must not
+        # reach an unauthenticated caller, and the real agent-scope roots must
+        # never be walked for a project the caller chose.
+        skill(self.home / ".agents" / "skills", "deploy", "private workflow detail")
+        managed = self.server.httpd.store.data_dir / "project2"
+        managed.mkdir(parents=True, exist_ok=True)
+        status, payload = self.get(f"/api/doctor?explain=codex&project={managed}")
+        self.assertEqual(status, 200)
+        report = payload["explain"]
+        text = json.dumps(report)
+        self.assertNotIn(str(self.home), text)
+        # The caller-declared project is echoed back; nothing else is leaked.
+        self.assertEqual(report["project"], str(managed))
+        tiers = {tier["id"]: tier for tier in report["tiers"]}
+        self.assertEqual(tiers["user"]["roots"], ["<redacted>"])
+        self.assertEqual(tiers["admin"]["roots"], ["<redacted>"])
+        # Nothing outside the boundary is disclosed, in the report or the tree.
+        for root in report["tiers"][1]["roots"]:
+            self.assertTrue(root.startswith("<redacted"))
 
     def test_doctor_without_explain_keeps_its_shape(self):
         status, payload = self.get("/api/doctor")

@@ -338,8 +338,17 @@ def commit_staged_skill(
         upsert(dest.name)
         if backup.exists():
             rmtree(backup)
+        # The original is gone (replaced by the staged copy and deleted once
+        # the commit succeeded), so there is nothing left to move back: any
+        # later failure -- including an interrupt -- must not try.
+        moved_original = False
         return True, None
-    except Exception as exc:
+    except BaseException as exc:
+        # BaseException, not Exception: an interrupt (Ctrl-C, SIGTERM-driven
+        # SystemExit) landing in the window where the user's original sits in
+        # *backup* used to escape this handler, and the caller's staged-root
+        # cleanup then deleted the only remaining copy of the skill.  The
+        # rollback must run for interrupts too.
         if moved_original:
             # dest now holds (at most) the staged copy we moved in; the user's
             # original lives in backup, so any partial dest may be discarded
@@ -359,8 +368,12 @@ def commit_staged_skill(
             if not dest_existed:
                 rmtree(dest, ignore_errors=True)
             rmtree(staged, ignore_errors=True)
+            if not isinstance(exc, Exception):
+                raise
             return False, str(exc)
         rmtree(staged, ignore_errors=True)
+        if not isinstance(exc, Exception):
+            raise
         return False, str(exc)
 
 
@@ -371,8 +384,16 @@ def _rollback_full_install(installed: list[tuple[Path, Path | None]], staged: li
         if previous is not None and previous.exists():
             try:
                 move(str(previous), str(dest))
-            except OSError:
-                pass
+            except OSError as exc:
+                # STORE-14: this used to be a bare ``except OSError: pass``, so a
+                # failed rollback left the user's payload only under a dotted
+                # backup name with nothing said about it.  Every other rollback
+                # in the codebase reports through _diagnose().
+                _diagnose(
+                    f"full-import rollback failed; the previous {dest.name!r} "
+                    f"is still at {previous}",
+                    exc,
+                )
     for stage in staged:
         rmtree(stage, ignore_errors=True)
 

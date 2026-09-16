@@ -29,6 +29,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote
 
 from . import frontmatter
 from .tokens import count_tokens
@@ -59,8 +60,9 @@ _LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 _HEADING_RE = re.compile(r"^#{1,6}\s")
 _LAYOUT_DIRS = ("scripts", "references", "assets")
 _MENTION_RE = re.compile(r"(?:scripts|references|assets)/[^\s)`\"']*")
+_REFERENCE_TRAILING_PUNCTUATION = ".,;:!?"
 _USE_CONTEXT_RE = re.compile(
-    r"(?i)\buse\b.{0,80}\bwhen\b|\bwhen you\b|^\s*use\b|^\s*when\b"
+    r"(?i)\buse[sd]?\b.{0,80}\bwhen\b|\bwhen you\b|^\s*use\b|^\s*when\b"
 )
 _FILLER_RE = re.compile(
     r"(?i)\b(various|miscellaneous|etc\.|stuff|things|"
@@ -82,6 +84,15 @@ def validate_skill_name(name: str) -> str:
             f"invalid skill name {name!r}: must match {NAME_RE.pattern} "
             f"(1-{MAX_NAME} chars)"
         )
+    if name.casefold() in {
+        "con",
+        "nul",
+        "aux",
+        "prn",
+        *(f"com{number}" for number in range(1, 10)),
+        *(f"lpt{number}" for number in range(1, 10)),
+    }:
+        raise ValueError(f"invalid skill name {name!r}: reserved Windows device name")
     return name
 
 
@@ -155,7 +166,7 @@ def validate_text(
                     f"name must be at most {MAX_NAME} characters",
                     "name",
                 )
-            if not NAME_RE.match(name):
+            if not NAME_RE.fullmatch(name):
                 result.add(
                     "error",
                     "name must match lowercase pattern "
@@ -164,6 +175,18 @@ def validate_text(
                 )
 
     _check_scalar(result, data, "name", required=True, max_len=MAX_NAME)
+    frontmatter_name = data.get("name")
+    if (
+        isinstance(frontmatter_name, str)
+        and frontmatter_name
+        and not NAME_RE.fullmatch(frontmatter_name)
+    ):
+        result.add(
+            "error",
+            "name must match lowercase pattern "
+            "'word1-word2' (letters, digits, hyphens)",
+            "name",
+        )
     _check_scalar(
         result, data, "description", required=True, max_len=MAX_DESCRIPTION
     )
@@ -272,18 +295,45 @@ def _check_layout(result: ValidationResult, body: str, skill_dir: Path) -> None:
     """
     try:
         root = skill_dir.resolve()
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
         return
     for mention in sorted(set(_MENTION_RE.findall(body))):
         if mention.split("/", 1)[0] not in _LAYOUT_DIRS:
             continue
-        try:
-            inside = (root / mention).resolve().is_relative_to(root)
-        except AttributeError:
-            inside = str((root / mention).resolve()).startswith(str(root) + "/")
-        if not inside:
-            continue  # _check_links already flags escapes
-        if not (root / mention).exists():
+        candidates = _reference_candidates(mention)
+        if not candidates:
+            continue
+        exists = False
+        suppress_missing = False
+        for candidate in candidates:
+            try:
+                target = (root / candidate).resolve()
+                try:
+                    inside = target.is_relative_to(root)
+                except AttributeError:
+                    inside = str(target).startswith(str(root) + "/")
+            except (OSError, RuntimeError, ValueError):
+                if candidate == candidates[0]:
+                    result.add(
+                        "warning",
+                        f"layout mention {mention!r} cannot be resolved",
+                        "body",
+                    )
+                    suppress_missing = True
+                    break
+                continue
+            if not inside:
+                if candidate == candidates[0]:
+                    suppress_missing = True
+                    break  # _check_links already flags escapes
+                continue
+            try:
+                if target.exists():
+                    exists = True
+                    break
+            except OSError:
+                pass
+        if not exists and not suppress_missing:
             result.add(
                 "warning",
                 f"body mentions {mention!r} but it does not exist",
@@ -323,6 +373,7 @@ def _check_scalar(
 def _check_links(result: ValidationResult, body: str, skill_dir: Path) -> None:
     """Warn about relative links whose target file does not exist."""
     seen: set[str] = set()
+    root: Path | None = None
     for match in _LINK_RE.finditer(body):
         target = match.group(1).strip()
         if target in seen:
@@ -336,28 +387,76 @@ def _check_links(result: ValidationResult, body: str, skill_dir: Path) -> None:
             continue
         if target.startswith("<") and target.endswith(">"):
             continue
-        target_path = (skill_dir / target).resolve()
-        try:
-            inside = target_path.is_relative_to(skill_dir.resolve())
-        except AttributeError:
-            inside = str(target_path).startswith(str(skill_dir.resolve()) + "/")
-        if not inside:
-            result.add(
-                "warning",
-                f"link target {target!r} escapes the skill directory",
-                "body",
-            )
+        candidates = _reference_candidates(target)
+        if not candidates:
             continue
-        try:
-            exists = target_path.exists()
-        except OSError:
-            exists = False
-        if not exists:
+        if root is None:
+            try:
+                root = skill_dir.resolve()
+            except (OSError, RuntimeError, ValueError):
+                result.add("warning", "link targets cannot be resolved", "body")
+                return
+        exists = False
+        suppress_missing = False
+        for candidate in candidates:
+            try:
+                target_path = (root / candidate).resolve()
+                try:
+                    inside = target_path.is_relative_to(root)
+                except AttributeError:
+                    inside = str(target_path).startswith(str(root) + "/")
+            except (OSError, RuntimeError, ValueError):
+                if candidate == candidates[0]:
+                    result.add(
+                        "warning",
+                        f"link target {target!r} cannot be resolved",
+                        "body",
+                    )
+                    suppress_missing = True
+                    break
+                continue
+            if not inside:
+                if candidate == candidates[0]:
+                    result.add(
+                        "warning",
+                        f"link target {target!r} escapes the skill directory",
+                        "body",
+                    )
+                    suppress_missing = True
+                    break
+                continue
+            try:
+                if target_path.exists():
+                    exists = True
+                    break
+            except OSError:
+                pass
+        if not exists and not suppress_missing:
             result.add(
                 "warning",
                 f"link target {target!r} does not exist in the skill directory",
                 "body",
             )
+
+
+def _reference_candidates(reference: str) -> tuple[str, ...]:
+    """Return filesystem candidates for a Markdown/layout reference.
+
+    URL query and fragment components are not part of the target path. Decode
+    the remaining URL path before containment checks so encoded traversal is
+    still rejected. A second candidate without sentence punctuation handles
+    prose mentions such as ``scripts/run.py.`` without masking a real file
+    whose name includes that punctuation.
+    """
+    path = reference.split("#", 1)[0].split("?", 1)[0]
+    if not path:
+        return ()
+    decoded = unquote(path)
+    candidates = [decoded]
+    stripped = decoded.rstrip(_REFERENCE_TRAILING_PUNCTUATION)
+    if stripped and stripped != decoded:
+        candidates.append(stripped)
+    return tuple(candidates)
 
 
 def validate_skill(name: str, skill_dir: Path) -> ValidationResult:
@@ -395,10 +494,20 @@ def validate_skill(name: str, skill_dir: Path) -> ValidationResult:
     result = validate_text(text, name=name, skill_dir=skill_dir)
 
     fm_name = result.data.get("name")
-    if isinstance(fm_name, str) and fm_name and fm_name != name:
+    # Use the physical basename so symlinked scope roots/skill aliases do not
+    # create a false frontmatter mismatch.  A malformed symlink can make
+    # ``resolve()`` raise instead of returning a basename; report that through
+    # the validator contract rather than leaking the filesystem exception.
+    try:
+        directory_name = skill_dir.resolve().name
+    except (OSError, RuntimeError, ValueError) as exc:
+        result.add("error", f"cannot resolve skill directory: {exc}", "name")
+        return result
+    if isinstance(fm_name, str) and fm_name and fm_name != directory_name:
         result.add(
             "error",
-            f"frontmatter name {fm_name!r} does not match directory name {name!r}",
+            f"frontmatter name {fm_name!r} does not match directory name "
+            f"{directory_name!r}",
             "name",
         )
     return result

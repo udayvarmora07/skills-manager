@@ -36,6 +36,8 @@ import threading
 import webbrowser
 from pathlib import Path
 
+from skillsmgr.launcher_security import trusted_executable
+
 #: Chromium-family launchers, in preference order. ``--app=`` is what turns the
 #: page into a chromeless window; browsers without it fall back to a normal tab
 #: through :mod:`webbrowser`.
@@ -73,9 +75,9 @@ def validate_host(host: str) -> str:
 
 
 def find_chromium(which=shutil.which) -> str | None:
-    """Return the first installed Chromium-family launcher, or ``None``."""
+    """Return the first trusted Chromium-family launcher, or ``None``."""
     for name in CHROMIUM_CANDIDATES:
-        path = which(name)
+        path = trusted_executable(name, which=which)
         if path:
             return path
     return None

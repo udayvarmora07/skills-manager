@@ -65,7 +65,18 @@ class TestContainedPath(unittest.TestCase):
                 "---\nname: outside\ndescription: outside\n---\nbody\n",
                 encoding="utf-8",
             )
-            self.assertEqual(scan_dir(root), [])
+            # SCOPE-2: an escaping link is *reported* as drift rather than
+            # silently dropped -- it used to be invisible to every read view
+            # while blocking every write, so the tool could neither list nor
+            # repair skills its own install workflow had created.
+            rows = scan_dir(root)
+            self.assertEqual([row["name"] for row in rows], ["link"])
+            self.assertTrue(rows[0]["malformed"])
+            self.assertTrue(rows[0]["link_escape"])
+            self.assertIn("escapes managed root", rows[0]["decode_error"])
+            # The linked-out content is never read into the view.
+            self.assertEqual(rows[0]["body"], "")
+            self.assertNotIn("outside", rows[0]["description"])
 
 
 class TestStoreAndEntryPointGuards(unittest.TestCase):

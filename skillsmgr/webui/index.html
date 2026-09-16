@@ -89,7 +89,7 @@
         <button v-for="s in scopes" :key="s.id" class="chip" :class="{ active: activeScope === s.id }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens'" @click="activeScope = s.id" :aria-pressed="activeScope === s.id">{{ s.label }} <span class="chip-count">{{ s.count }} · {{ formatTokens(s.tokens) }}</span></button>
       </div>
 
-      <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + budget.window_tokens.toLocaleString() + ' tok)'">
+      <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + formatTokens(budget.window_tokens) + ' tok)'">
         <div class="budgetbar-head">
           <span class="budgetbar-label">Context budget</span>
           <select v-model="budgetWindow" class="budgetbar-select" aria-label="Context window">
@@ -437,6 +437,10 @@
           <div class="form-field full" style="margin-bottom:12px;">
             <label for="v-name">Skill name</label>
             <input id="v-name" v-model.trim="modals.validate.name" placeholder="my-skill-name" spellcheck="false">
+          </div>
+          <div v-if="modals.validate.error" class="banner banner-error" style="margin:0 0 12px;" role="alert">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            {{ modals.validate.error }}
           </div>
           <div v-if="modals.validate.result">
             <div v-if="modals.validate.result.valid" class="banner banner-ok" style="margin:0 0 12px;">

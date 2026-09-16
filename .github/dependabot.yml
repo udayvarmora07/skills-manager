@@ -1,0 +1,8 @@
+# SEC-17: keep GitHub Actions revisions current while every update still goes
+# through CODEOWNERS review and the release environment gate.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

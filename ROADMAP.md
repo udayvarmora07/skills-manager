@@ -1,6 +1,6 @@
 # Roadmap
 
-Public direction for `skills-manager`. Items move from Proposed → Accepted → Building → Shipped. Anything touching the [locked constraints](README.md#contributing) needs maintainer approval first.
+Public direction for `skills-manager`. Items move from Proposed → Accepted → Building → Shipped. Anything touching the [locked constraints](README.md#contributing) needs maintainer approval first. The dated competitive/product/business rationale and implementation-ready proposal live in [docs/14-competitive-product-business-strategy-2026-09-15.md](docs/14-competitive-product-business-strategy-2026-09-15.md) and [docs/15-product-ux-delivery-plan-2026-09-15.md](docs/15-product-ux-delivery-plan-2026-09-15.md); neither marks a proposal shipped.
 
 ## Next (v1.1)
 

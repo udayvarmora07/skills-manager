@@ -1,8 +1,8 @@
 # CLI Surface — Skills Manager
 
-**Version 0.3.0**
+**Version 0.4.0**
 
-**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against `cli.py` and import behavior on 2026-09-10. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
+**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against the parser/handler modules (`cli_parser.py`, `cli_handlers.py`, `cli_output.py` behind the stable `cli.py` adapter) plus live invocations on 2026-09-16. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
 
 **[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
 
@@ -43,7 +43,7 @@ or mutating the data directory.
 Create the data directory layout and initialize the SQLite index.
 
 ### `list` / `ls [--json] [--disabled] [--category CAT] [--scope SCOPE]`
-List skills in the scope (default global) with a STATUS column (`active`/`disabled`); disabled skills are shown marked and `--disabled` narrows the list to disabled skills only. `--category` filters; `--scope all` merges every scope and adds a SCOPE column.
+List skills in the scope (default global) with a STATUS column (`active`/`disabled`); disabled skills are shown marked and `--disabled` narrows the list to disabled skills only. `--category` filters; `--scope all` merges every scope and adds a SCOPE column. DESCRIPTION/CATEGORY cells are sanitized before printing (see *Untrusted display text*).
 
 ### `create NAME [-d/--description TEXT] [--license LIC] [--category CAT] [--compatibility SPEC] [--version VER] [--allowed-tools TOOLS] [--body TEXT] [--body-file PATH] [--json]`
 Create a skill in the global store. Name must match `NAME_RE`; description required. `--body` and `--body-file` are mutually exclusive.
@@ -54,10 +54,14 @@ Create a skill in the global store. Name must match `NAME_RE`; description requi
 Add an existing skill directory (or SKILL.md file) from `PATH` (optional `--name` override) to the global store.
 
 ### `view NAME [--raw|--json] [--scope SCOPE]`
-Print a skill. `--raw` prints the full `SKILL.md` file (frontmatter + body, not body-only); `--json` shows structured data (incl. `tokens` estimate and scope fields).
+Print a skill. `--raw` prints the full `SKILL.md` file (frontmatter + body, not body-only, and verbatim — `--raw` is deliberately unsanitized); `--json` shows structured data (incl. `tokens` estimate and scope fields). The output modes are incompatible: passing both `--raw` and `--json` is rejected with a clean exit-1 `StoreError`; neither mode silently overrides the other. In the default text form every field value is sanitized (see *Untrusted display text*); `--json` and `--raw` emit the stored bytes unchanged, so pipe JSON through a formatter rather than to a raw terminal.
 
 ### `edit NAME [-d TEXT] [--license LIC] [--category CAT] [--compatibility SPEC] [--version VER] [--allowed-tools TOOLS] [--metadata KEY=VALUE] [--body TEXT] [--body-file PATH] [--json]`
 Edit a skill in the global store. All fields optional; partial update. Repeated `--metadata` appends.
+
+**[SPEC]** `--metadata` **rejects a key containing a control character** (a newline above all) with `error: metadata key must not contain a control character, got '...'` and exit 1, before anything is written. It used to write a `SKILL.md` the tool could not parse, exit 0, and let a later `edit` append a *second* frontmatter block (CLI-2). The dumper's own guard (`frontmatter.dump_frontmatter`) independently raises on a key it cannot render, so a bad key fails loudly rather than emitting junk (FM-9, partial).
+
+**[SPEC]** `edit` also **fails closed on an unparseable document**: when the existing frontmatter is malformed the command prints `error: cannot safely edit skill '<name>': its frontmatter is malformed (<reason>); repair it by hand first` and exits 1 with the file left byte-for-byte untouched. It no longer treats "no frontmatter parsed" as "no frontmatter present" and rewrite the document into a second block, which had silently discarded the original metadata (CLI-2, SCOPE-12). The same guard protects agent-scope edits through `scopes.edit_skill`.
 
 ### `open NAME`
 Open the skill file in `$EDITOR` (falls back if unset). Global store only.
@@ -70,6 +74,9 @@ Toggle enabled state in the global store (renames `SKILL.md` <-> `SKILL.md.disab
 
 ### `validate [NAMES...] [--all] [--path DIR] [--evals] [--evals-run FILE] [--workspace DIR] [--json]`
 Validate skills by name, all (`--all`), or a directory (`--path`). Prints issues.
+Target selectors are mutually exclusive; `--workspace` is valid only with
+`--evals` or `--evals-run`, and ignored combinations fail with a clean exit-1
+error rather than silently discarding an argument.
 
 `--evals` also reports the advisory eval harness status per target
 (`evals/evals.json` case count, malformed-content errors, missing input files,
@@ -111,7 +118,7 @@ Show recent history. When `NAME` is supplied, JSON output includes retained
 snapshot IDs and text output lists them after the history table.
 
 ### `doctor [--json] [--scope SCOPE] [--explain CONSUMER [--project DIR] [--skill NAME]]`
-Health check: data dir, DB, skill files, consistency between FS and index, content drift, incomplete transaction artifacts, temporary files, and stale snapshots. With a scope, checks that scope's dir. With `--scope all`, also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.
+Health check: data dir, DB, skill files, consistency between FS and index, content drift, incomplete transaction artifacts, temporary files, and stale snapshots. `global` (the default) runs the Store/DB doctor; an agent scope scans that scope's filesystem directly and reports malformed documents; unknown scope ids are clean errors with exit 1. With `--scope all`, the global Store report also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.
 
 `--explain CONSUMER` switches to the read-only effective-resolution diagnostic
 (issue #12): it derives, at read time, which instance of a skill that consumer
@@ -131,10 +138,11 @@ extension < user < workspace, same-tier ties reported as `ambiguous`), plus
 narrows the report to one name. See `effective.py` in @docs/02-modules.md.
 
 ### `stats [--json] [--scope SCOPE]`
-Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts.
+Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts. Category names are sanitized before printing (see *Untrusted display text*).
 
 ### `trash list [--json] | trash restore NAME [--json] | trash purge [--json]`
-Manage the trash: list, restore one, purge all.
+Manage the trash: list, restore one, purge all. Human `trash purge` reports the
+number of purged skills; `--json` preserves the structured `purged` name list.
 
 ### `templates list [--json] | templates new NAME [--body TEXT] [--json]`
 List templates; create a skill from a template.
@@ -152,9 +160,9 @@ List known skill scopes and their counts (id, label, path, kind, exists, count, 
 Estimate token/context usage. `NAME` = a skill; omit to aggregate over `--scope` (default `all`). `--text` estimates raw text instead (`@path` reads a file). `--window` selects the context window (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M). Uses tiktoken when installed, else chars/4 heuristic.
 
 ### `install SOURCE [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--json]`
-Install skills from the open skills ecosystem via the `skills` npm package (npx/pnpm/yarn/bunx). `SOURCE` like `vercel-labs/agent-skills` or `owner/repo@skill`. `--scope global` passes `-g`; `--agent` targets agent install dirs; `--skill` filters names; `--copy` copies instead of symlinking; `--list-only` lists available skills; `--dry-run` prints the command without running. `uvx` is rejected (it's an npm package).
+Install skills from the open skills ecosystem via the `skills` npm package (npx/pnpm/yarn/bunx). `SOURCE` like `vercel-labs/agent-skills` or `owner/repo@skill`. `--scope global` passes `-g`; `--agent` targets agent install dirs; `--skill` filters names; `--copy` copies instead of symlinking; `--list-only` executes the runner's list mode and reports its output/exit status; `--dry-run` prints the command without running. Source, agent, and skill values must be non-empty, at most 256 characters, and may not be option-like, traversal-shaped, absolute, or Windows drive-prefixed. `uvx` is rejected (it's an npm package).
 
-`--preview` prints the offline registry bridge preview instead of installing: the parsed registry reference, linkable per-skill audit pages, the `--registry-hash` slot used to detect upstream change, and the exact command this surface would run (`-s <slug>` is added for a registry skill id). It performs no registry request, no cache write, and no execution; without `--trust-confirmed` the plan reports a trust blocker. Registry references accept `owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo`; a bare two-segment value is always read as a source (`owner/repo`), so use the skills.sh page URL for a well-known source's skill. Network browse/fetch stays deferred (issue #3). See @docs/ADR-003-registry-bridge-and-eval-harness.md.
+`--preview` prints the offline registry bridge preview instead of installing: the parsed registry reference, linkable per-skill audit pages, the `--registry-hash` slot used to detect upstream change, and the exact command this surface would run (`-s <slug>` is added for a registry skill id). It performs no registry request, no cache write, and no execution. `--trust-confirmed` records caller review intent only; the offline plan still reports `trust_verified: false`, `eligibility_status: "unverified-offline"`, `hash_verified: false`, and `may_install: false` (a supplied hash is `unverified-provided` until an authenticated read and comparison). Registry references accept `owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo`; a bare two-segment value is always read as a source (`owner/repo`), so use the skills.sh page URL for a well-known source's skill. Network browse/fetch stays deferred (issue #3). See @docs/ADR-003-registry-bridge-and-eval-harness.md.
 
 ### `webui [--host H] [--port P] [--no-browser]` (alias: `gui`)
 Launch the local web UI (see @docs/08-web-ui.md). Defaults: `127.0.0.1:8765`, opens browser unless `--no-browser`.
@@ -162,6 +170,27 @@ Launch the local web UI (see @docs/08-web-ui.md). Defaults: `127.0.0.1:8765`, op
 ## Flags cheat sheet
 
 **[NOTE]** Multi-word values (descriptions, bodies, metadata) must be quoted or passed via `--body-file`/`--metadata KEY=VALUE`. All mutation commands print human-readable confirmation unless `--json`. Scope ids are lowercase; `--scope all` merges scopes for list/search/stats/tokens.
+
+## Untrusted display text
+
+**[SPEC]** `list`, `view`, and `stats` print strings that an attacker can influence:
+a description or category can arrive from an imported archive or from a scope
+directory another tool wrote. Every printed cell therefore passes through
+`cli_output.sanitize_text()` first — C0 controls, DEL, and C1 controls (ESC
+included, so `ESC[2K` is covered), the Unicode line/paragraph separators, Unicode
+format characters (a bidi override can reorder a whole line), and lone surrogates
+are each replaced with `?`.
+
+The consequence is the contract worth remembering: a hostile `ESC`/CR payload can
+no longer erase the real row and print a convincing "verified" one, and can no
+longer corrupt column widths, because the escape stops counting towards `len()`.
+`render_table()` and `truncate()` sanitize as well, so a value cannot reach the
+terminal through a path that skips the seam, and the colors this tool emits itself
+are applied *after* sanitizing, so they are unaffected.
+
+The guards cover the `list`, `view`, `stats`, `search`, and `history` text output.
+`--json` and `view --raw` are exempt **by design** — they are data, not a rendered
+view — so do not pipe either to a live terminal. (CLI-3.)
 
 ## Stale-fact note
 

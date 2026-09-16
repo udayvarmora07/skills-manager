@@ -47,6 +47,11 @@ def annotate_instance_states(records: list[dict]) -> list[dict]:
             states.append("invalid")
         if record.get("disabled"):
             states.append("disabled")
+        if record.get("addressable") is False:
+            # SCOPE-14: this name fails the canonical rule, so no name-addressed
+            # operation can reach it.  Say so instead of letting the UI offer a
+            # row that errors the moment it is clicked.
+            states.append("unaddressable")
         if len(group) > 1:
             states.append("duplicated")
             descriptions = {(item.get("description") or "").strip() for item in group}

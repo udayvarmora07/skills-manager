@@ -19,7 +19,13 @@ from pathlib import Path
 from . import colors
 from . import search as search_mod
 from . import templates as templates_mod
-from .cli_output import err as _output_err, print_json as _output_print_json, render_table as _output_render_table, truncate as _output_truncate
+from .cli_output import (
+    err as _output_err,
+    print_json as _output_print_json,
+    render_table as _output_render_table,
+    sanitize_text as _output_sanitize_text,
+    truncate as _output_truncate,
+)
 from .store import Store, StoreError
 from .validator import validate_skill, validate_skill_name
 
@@ -31,14 +37,23 @@ EXIT_INTERRUPT = 130
 # Character class shared with the REST /api/install route for ecosystem
 # source/agent/skill values that are forwarded into runner commands.
 _SAFE_SOURCE_RE = re.compile(r"[A-Za-z0-9_@./:+-]+")
+_MAX_INSTALL_VALUE = 256
 
 
 _print_json = _output_print_json
 _err = _output_err
 _truncate = _output_truncate
 _render_table = _output_render_table
+#: CLI-3: untrusted skill fields (description, category, notes) come from
+#: imported archives and from directories other tools wrote.  They are printed
+#: through this seam so an ESC payload can never spoof or re-align output.
+_display = _output_sanitize_text
 
 
+#: A metadata key is emitted as a bare frontmatter mapping key, so it may not
+#: carry a control character (CLI-2: a key containing a newline wrote a document
+#: this tool cannot parse, and the next edit then emitted a second frontmatter
+#: block -- exit 0 throughout, with ``doctor`` reporting ok).
 def parse_metadata(pairs: list[str] | None) -> dict | None:
     """Parse repeated ``KEY=VALUE`` CLI metadata flags."""
     if not pairs:
@@ -48,7 +63,14 @@ def parse_metadata(pairs: list[str] | None) -> dict | None:
         if "=" not in pair:
             raise ValueError(f"metadata must be KEY=VALUE, got {pair!r}")
         key, value = pair.split("=", 1)
-        data[key.strip()] = value
+        key = key.strip()
+        if not key:
+            raise ValueError(f"metadata key must not be empty, got {pair!r}")
+        if any(ord(char) < 0x20 or ord(char) == 0x7F for char in key):
+            raise ValueError(
+                f"metadata key must not contain a control character, got {key!r}"
+            )
+        data[key] = value
     return data
 
 
@@ -112,6 +134,35 @@ def validate_cli_names(args) -> None:
             validate_skill_name(str(raw_name).strip())
         except ValueError as exc:
             raise StoreError(str(exc)) from exc
+
+
+def validate_cli_combinations(args) -> None:
+    """Reject parsed flag combinations whose values would otherwise be ignored."""
+    command = getattr(args, "command", "")
+    if command == "validate":
+        names = getattr(args, "names", []) or []
+        path = getattr(args, "path", None)
+        if names and getattr(args, "all", False):
+            message = "validate NAME arguments cannot be combined with --all"
+            if getattr(args, "evals_run", None):
+                message += "; --evals-run applies to exactly one skill"
+            raise StoreError(message)
+        if names and path is not None:
+            raise StoreError("validate NAME arguments cannot be combined with --path")
+        if getattr(args, "all", False) and path is not None:
+            raise StoreError("validate --all cannot be combined with --path")
+        if getattr(args, "workspace", None) and not (
+            getattr(args, "evals", False) or getattr(args, "evals_run", None)
+        ):
+            raise StoreError("validate --workspace requires --evals or --evals-run")
+    elif command == "tokens":
+        if getattr(args, "name", None) and getattr(args, "text", None) is not None:
+            raise StoreError("tokens NAME cannot be combined with --text")
+    elif command == "install" and not getattr(args, "preview", False):
+        if getattr(args, "trust_confirmed", False):
+            raise StoreError("install --trust-confirmed requires --preview")
+        if getattr(args, "registry_hash", None) is not None:
+            raise StoreError("install --registry-hash requires --preview")
 
 
 def make_store(args) -> Store:
@@ -211,6 +262,8 @@ def cmd_add(args, store: Store) -> int:
 
 
 def cmd_view(args, store: Store) -> int:
+    if args.raw and args.json:
+        raise StoreError("cannot combine --raw and --json")
     scope = scope_from_args(args)
     if scope != "global":
         from .scopes import get_raw as _get_raw, get_skill as _get_skill
@@ -233,7 +286,7 @@ def cmd_view(args, store: Store) -> int:
             ("path", record["path"] or "-"),
         ]
         for key, value in fields:
-            print(f"{colors.COLORS.bold(key + ':')} {value}")
+            print(f"{colors.COLORS.bold(key + ':')} {_display(str(value))}")
         return EXIT_OK
     record = store.get(args.name)
     if args.raw:
@@ -253,7 +306,7 @@ def cmd_view(args, store: Store) -> int:
         ("updated", record["updated_at"] or "-"),
     ]
     for key, value in fields:
-        print(f"{colors.COLORS.bold(key + ':')} {value}")
+        print(f"{colors.COLORS.bold(key + ':')} {_display(str(value))}")
     return EXIT_OK
 
 
@@ -413,10 +466,17 @@ def _eval_workspace(name: str, root: Path, store: Store, args) -> Path:
 
     override = getattr(args, "workspace", None)
     if override:
-        return Path(override).expanduser()
+        workspace = Path(override).expanduser()
+        if evals_mod._workspace_is_managed(workspace, store.data_dir):
+            raise StoreError("eval workspace must not be inside the managed skills tree")
+        return workspace
     if getattr(args, "path", None):
-        return evals_mod.workspace_for_dir(root, store.data_dir, name)
-    return evals_mod.workspace_for(store.data_dir, name)
+        workspace = evals_mod.workspace_for_dir(root, store.data_dir, name)
+    else:
+        workspace = evals_mod.workspace_for(store.data_dir, name)
+    if evals_mod._workspace_is_managed(workspace, store.data_dir):
+        raise StoreError("eval workspace must not be inside the managed skills tree")
+    return workspace
 
 
 def _eval_report(name: str, root: Path, store: Store, args, runs_document) -> dict:
@@ -590,12 +650,61 @@ def cmd_restore(args, store: Store) -> int:
     return EXIT_OK
 
 
+def _doctor_scope_report(scope_id: str) -> dict:
+    """Audit one non-global scope directly from its filesystem tree.
+
+    Agent scopes have no Store/index to compare, so the shared loader scan is
+    the source of truth.  In particular, malformed documents must remain
+    visible to this command instead of being hidden behind ``store.doctor()``.
+    """
+    from . import scopes
+    from .loader import scan_dir
+
+    scope = next(item for item in scopes.known_scopes() if item.id == scope_id)
+    entries = scan_dir(scope.base, recursive=scope.recursive, include_husks=True)
+    malformed = sorted(
+        str(entry["name"])
+        for entry in entries
+        if entry.get("malformed")
+    )
+    undecodable = sorted(
+        str(entry["name"])
+        for entry in entries
+        if entry.get("decode_error")
+    )
+    conflicting = sorted(
+        str(entry["name"])
+        for entry in entries
+        if entry.get("document_conflict")
+    )
+    return {
+        "scope": scope_id,
+        "path": str(scope.base),
+        "skills_on_disk": len(entries),
+        "malformed_documents": malformed,
+        "undecodable_documents": undecodable,
+        "conflicting_documents": conflicting,
+        "ok": not malformed,
+    }
+
+
 def cmd_doctor(args, store: Store) -> int:
+    scope = scope_from_args(args)
+    from . import scopes
+
+    known = {item.id: item for item in scopes.known_scopes()}
+    if scope != "all" and scope not in known:
+        raise StoreError(f"unknown scope {scope!r}")
     explain_consumer = getattr(args, "explain", None)
     if explain_consumer:
         return _cmd_doctor_explain(args, explain_consumer)
-    report = store.doctor()
-    scope = getattr(args, "scope", None)
+    report = (
+        store.doctor()
+        if scope == "global"
+        else _doctor_scope_report(scope)
+        if scope != "all"
+        else store.doctor()
+    )
     if args.json:
         if scope == "all":
             try:
@@ -607,13 +716,21 @@ def cmd_doctor(args, store: Store) -> int:
         _print_json(report)
         return EXIT_OK
     if report.get("ok"):
-        print(f"{colors.COLORS.green('ok:')} filesystem and database are consistent")
+        if scope != "global":
+            print(f"{colors.COLORS.green('ok:')} {scope} filesystem is healthy")
+        else:
+            print(f"{colors.COLORS.green('ok:')} filesystem and database are consistent")
     else:
-        print(f"{colors.COLORS.yellow('issues found:')}")
+        print(f"{colors.COLORS.yellow('issues found:')}" + (f" ({scope})" if scope != "global" else ""))
     if report.get("orphan_dirs"):
         print(f"  {len(report['orphan_dirs'])} unindexed skill directories")
     if report.get("stale_rows"):
         print(f"  {len(report['stale_rows'])} database rows without files")
+    if report.get("malformed_documents"):
+        names = ", ".join(report["malformed_documents"][:5])
+        more = len(report["malformed_documents"]) - 5
+        suffix = f" (+{more} more)" if more > 0 else ""
+        print(f"  {len(report['malformed_documents'])} malformed skill document(s): {names}{suffix}")
     if report.get("undecodable_documents"):
         names = ", ".join(report["undecodable_documents"][:5])
         more = len(report["undecodable_documents"]) - 5
@@ -739,7 +856,7 @@ def cmd_stats(args, store: Store) -> int:
     if stats["categories"]:
         print(colors.COLORS.bold("categories:"))
         for category, count in stats["categories"].items():
-            print(f"  {category or '(none)'}: {count}")
+            print(f"  {_display(str(category or '(none)'))}: {count}")
     return EXIT_OK
 
 
@@ -765,7 +882,7 @@ def cmd_trash_purge(args, store: Store) -> int:
     if args.json:
         _print_json(result)
     else:
-        print(f"purged {result['purged']} trashed skills")
+        print(f"purged {len(result['purged'])} trashed skills")
     return EXIT_OK
 
 
@@ -1016,8 +1133,19 @@ def validated_install_value(label: str, value: str) -> str:
     Mirrors the REST /api/install route: only the shared character class is
     accepted and leading dashes are rejected either way.
     """
-    value = str(value)
-    if not _SAFE_SOURCE_RE.fullmatch(value) or value.startswith("-"):
+    value = str(value).strip()
+    invalid_path = (
+        not value
+        or len(value) > _MAX_INSTALL_VALUE
+        or not _SAFE_SOURCE_RE.fullmatch(value)
+        or value.startswith("-")
+        or value.startswith(("/", "\\"))
+        or "/../" in f"/{value}/"
+        or value in {".", ".."}
+        or any(segment in {".", ".."} for segment in value.replace("\\", "/").split("/"))
+        or (len(value) >= 2 and value[1] == ":")
+    )
+    if invalid_path:
         if label == "source":
             raise StoreError("invalid source value")
         raise StoreError(f"invalid {label} value {value!r}")
@@ -1046,17 +1174,18 @@ def cmd_install(args, store: Store) -> int:
     cmd_str = install_command_for_display(source, runner, scope, agents, skills_filter, copied, list_flag)
     if getattr(args, "preview", False):
         return _install_preview_output(args, source, runner, scope, agents, skills_filter, copied, list_flag)
-    if getattr(args, "dry_run", False) or getattr(args, "list_only", False):
+    if getattr(args, "dry_run", False):
         if args.json:
             _print_json({"command": cmd_str, "runner": runner, "source": args.source, "executed": False})
         else:
             print(cmd_str)
         return EXIT_OK
     # Build subprocess command through the same shared renderer, so the printed
-    # dry-run text and the executed argv can never drift apart.
+    # dry-run text and the executed argv can never drift apart.  List-only is an
+    # executing mode: the runner's ``-l`` output is the requested inventory.
     from .insights import install_argv
 
-    cmd = install_argv(source, runner, scope, agents, skills_filter, copied, False)
+    cmd = install_argv(source, runner, scope, agents, skills_filter, copied, list_flag)
     if not args.json:
         print(f"running: {cmd_str}")
 

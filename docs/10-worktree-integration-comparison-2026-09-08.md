@@ -170,7 +170,7 @@ existing export/import/backup surfaces:
 - full import/export smoke tests.
 
 It intentionally does not include agent scopes or snapshots according to issue
-#2’s approved scope. This is the preferred starting point for migration, but its
+\#2’s approved scope. This is the preferred starting point for migration, but its
 archive format must be routed through the final hardened archive pipeline.
 
 ### 4.4 ZIP import and tar fallback

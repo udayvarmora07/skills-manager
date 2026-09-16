@@ -179,6 +179,45 @@ class TestScopeDiscoveryContracts(IsolatedScopeTestCase):
         self.assertIn("invalid", rows["broken"]["instance_states"])
         self.assertTrue(scopes.get_skill("agents", "broken")["malformed"])
 
+    def test_the_loader_and_the_validator_agree_about_an_invalid_document(self):
+        # BUG-2: a document with no frontmatter at all (so both required fields
+        # are missing) was reported `loadable` by the loader while
+        # `validate_skill` reported two *errors*, so `doctor --explain`
+        # confidently called an invalid skill effective and shadowing a valid
+        # one.  The two halves of the tool must agree about the same file.
+        from skillsmgr.loader import load_skill
+        from skillsmgr.validator import validate_skill
+
+        no_frontmatter = Path(self._tmp.name) / ".agents" / "skills" / "nofm"
+        no_frontmatter.mkdir(parents=True)
+        (no_frontmatter / "SKILL.md").write_text("# just a heading\n", encoding="utf-8")
+
+        entry = load_skill(no_frontmatter)
+        verdict = validate_skill("nofm", no_frontmatter)
+
+        self.assertEqual(entry["missing_required"], ["name", "description"])
+        self.assertTrue(entry["malformed"], "the loader called an invalid document loadable")
+        self.assertFalse(verdict.valid)
+        self.assertEqual(entry["malformed"], not verdict.valid)
+
+    def test_effective_does_not_offer_an_invalid_document_as_a_candidate(self):
+        # The same BUG-2 defect one layer up: the diagnostic must skip a
+        # document the validator rejects instead of electing it.
+        from skillsmgr import effective
+
+        target = Path(self._tmp.name) / ".cursor" / "skills" / "broken"
+        target.mkdir(parents=True)
+        (target / "SKILL.md").write_text("# no frontmatter here\n", encoding="utf-8")
+
+        report = effective.explain("cursor", Path(self._tmp.name))
+
+        entry = report["skills"].get("broken")
+        self.assertIsNotNone(entry, "the invalid document vanished from the report")
+        self.assertNotIn(entry["resolution"], ("resolved", "both-load-only"))
+        tiers = {tier["id"]: tier for tier in report["tiers"]}
+        skipped = [row for tier in tiers.values() for row in tier["skipped"]]
+        self.assertIn("broken", [row["name"] for row in skipped])
+
     def test_recursive_and_flat_discovery_are_distinct(self):
         flat_root = Path(self._tmp.name) / ".codex" / "skills"
         flat_nested = flat_root / "category" / "nested-flat"
@@ -237,6 +276,96 @@ class TestScopeDiscoveryContracts(IsolatedScopeTestCase):
         shared = [row for row in merged if row["name"] == "shared"]
         self.assertEqual(len(shared), 1)
         self.assertEqual(shared[0]["scope"], "cursor")
+
+    def test_unreadable_document_is_reported_instead_of_aborting_the_scope(self):
+        # SCOPE-4: one unreadable SKILL.md used to abort *every* scope view
+        # with a raw PermissionError (-> /api/scopes, /api/skills?scope=all and
+        # /api/tokens all answered HTTP 500).
+        import stat
+
+        self._create("agents", "good", description="A readable skill")
+        self._create("agents", "locked", description="A skill about to be locked")
+        locked = self._root("agents") / "locked" / "SKILL.md"
+        locked.chmod(0o000)
+        self.addCleanup(lambda: locked.chmod(0o644))
+        if os.access(locked, os.R_OK):  # pragma: no cover - running as root
+            self.skipTest("permission bits are not enforced for this user")
+        self.assertTrue(stat.S_ISREG(locked.stat().st_mode))
+
+        rows = scopes.scan_scope("agents")
+
+        by_name = {row["name"]: row for row in rows}
+        self.assertEqual(sorted(by_name), ["good", "locked"])
+        self.assertFalse(by_name["good"]["malformed"])
+        self.assertTrue(by_name["locked"]["malformed"])
+        self.assertIn("cannot be read", by_name["locked"]["decode_error"])
+
+        # The aggregate view must survive too.
+        self.assertEqual(
+            sorted({row["name"] for row in scopes.list_all() if row["scope"] == "agents"}),
+            ["good", "locked"],
+        )
+
+    def test_global_scope_has_one_identity_across_every_view(self):
+        # SCOPE-9: known_scopes() derived the global root from the environment
+        # while scan_scope("global") derived it from the injected Store, so a
+        # sync to "global" reported success while creating a destination that
+        # list()/scan_scope/get_skill could never see.
+        other = Path(self._tmp.name) / "other-data"
+        injected = scopes.Store(data_dir=other)
+        injected.init_db()
+        scopes.set_global_store(injected)
+        self._create("agents", "deploy", "An agent skill")
+
+        result = scopes.sync_skill("deploy", "agents", ["global"])
+
+        self.assertEqual(result["synced"], ["global"])
+        env_root = Path(os.environ["SKILLS_MANAGER_DATA"]) / "skills-manager" / "skills"
+        self.assertFalse((env_root / "deploy").is_dir(), "wrote to the env root")
+        self.assertTrue((other / "skills" / "deploy").is_dir())
+        self.assertEqual([row["name"] for row in injected.list()], ["deploy"])
+        self.assertEqual(
+            [row["name"] for row in scopes.scan_scope("global")], ["deploy"]
+        )
+        global_descriptor = next(
+            item for item in scopes.list_scopes() if item["id"] == "global"
+        )
+        self.assertEqual(
+            Path(global_descriptor["path"]).resolve(), injected.skills_dir.resolve()
+        )
+        self.assertEqual(scopes.get_skill("global", "deploy")["name"], "deploy")
+
+    def test_same_name_instances_in_one_recursive_scope_are_all_listed(self):
+        # SCOPE-11: list_all() collapsed them, re-annotated the survivor as
+        # ['active'] and made the All view disagree with scan_scope and with
+        # the summed /api/stats counts.
+        root = Path(self._tmp.name) / ".cursor" / "skills"
+        for sub, description in (
+            ("apps/api/docs", "api docs skill"),
+            ("apps/web/docs", "web docs skill"),
+            ("apps/web/web-only", "unique skill"),
+        ):
+            target = root / sub
+            target.mkdir(parents=True)
+            (target / "SKILL.md").write_text(
+                f"---\nname: {Path(sub).name}\ndescription: {description}\n---\nbody\n",
+                encoding="utf-8",
+            )
+
+        scanned = scopes.scan_scope("cursor")
+        merged = scopes.list_all()
+
+        self.assertEqual(len(scanned), 3)
+        self.assertEqual(len(merged), 3)
+        docs = [row for row in merged if row["name"] == "docs"]
+        self.assertEqual(len(docs), 2)
+        for row in docs:
+            self.assertIn("duplicated", row["instance_states"])
+            self.assertIn("divergent", row["instance_states"])
+        self.assertEqual(
+            len(merged),
+            sum(item["count"] for item in scopes.list_scopes() if item["id"] == "cursor"),
+        )
 
 
 if __name__ == "__main__":

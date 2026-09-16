@@ -4,6 +4,195 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Final audit tail
+
+The final five low/info audit findings are closed: frontmatter dumping now
+rejects over-depth/cyclic programmatic containers (`FM-20`), template names use
+canonical bounded/reserved-name validation (`FM-21`), script-risk matches are
+explicitly advisory heuristics (`INS-1`), offline registry previews never
+self-assert trust/hash/eligibility (`INS-2`), and the `cmd_open` report is a
+verified false positive (`INFO-1`). The current suite is **721 tests** with
+**219 complexity-tracked functions**. No command, Store method, schema,
+dependency, or bind changed.
+
+The remaining partial frontmatter finding (`FM-9`) is now fixed: control-bearing
+keys round-trip through escaped double-quoted output, and serialized-key
+collisions fail before duplicate-key documents are emitted. The current suite
+is **722 tests** with **221 complexity-tracked functions**.
+
+### Security hardening
+
+The next six low/info audit findings are addressed. First-party GitHub Actions
+are pinned to reviewed commit SHAs; the browser harness keeps Chrome's sandbox
+enabled and binds its ephemeral CDP listener to loopback; and both developer
+launchers skip unsafe PATH matches through a shared ownership/permission check
+(`SEC-14`…`SEC-16`). Environment-selected data roots are canonicalized and
+validated before use (`SEC-19`). `CODEOWNERS`, GitHub Actions Dependabot updates, and the
+protected `release` environment strengthen release governance (`SEC-17`), while
+`.gitignore` covers local configuration, databases, credentials, and private
+keys (`SEC-18`). No product command, Store method, schema, runtime dependency,
+or public bind changed.
+
+### Frontmatter and validation
+
+The frontmatter validator follow-up closes five low-severity audit findings:
+folded `>` scalars preserve line breaks around more-indented content (`FM-13`),
+Windows device names are rejected before they become paths (`FM-15`), NUL-byte
+link/layout references become validation warnings instead of raw path errors
+(`FM-16`), frontmatter names are checked even when no caller name is supplied
+(`FM-17`), and passive "should be used when" descriptions satisfy the
+use-context check (`FM-18`). The audit tracker now reads **88 fixed, 1 partial,
+1 accepted, 12 open** of 102.
+
+The follow-up also normalizes URL-decoded link and layout references so existing
+targets with fragments, queries, encoded spaces, or sentence punctuation do not
+produce false warnings (`FM-19`).
+
+### Security
+
+Batch 5 of the 2026-09-11 deep-audit remediation: the last Medium findings
+(`SEC-5`…`SEC-9`) plus `SEC-13`, whose open question a real build settled. The
+tracker now reads **67 fixed, 1 partial, 1 accepted, 33 open** of 102; the
+remaining 33 are 3 Medium (`STORE-11`, `SCOPE-5`, `SCOPE-8`) and 30 Low/Info.
+No locked constraint moved — no new CLI command,
+no `Store` method, no schema change, no runtime dependency, no build step in the
+web UI.
+
+- **CSP.** `form-action 'none'` is now sent, because `form-action` does not fall
+  back to `default-src`, so an injected `<form action="https://…">` can no longer
+  submit (`SEC-5`). `script-src 'unsafe-eval'` stays: the vendored bundle is the
+  runtime+compiler build and removing it needs precompiled render functions, i.e.
+  a build step, which the locked constraints forbid. That trade-off, its cost and
+  the condition that would revisit it are now documented in `docs/08-web-ui.md`
+  and pinned by a test instead of being left implicit (`SEC-4`, recorded as
+  *accepted*).
+- **Malicious or merely unlucky uploads returned HTTP 500 with the exception
+  text in the server log.** A multipart folder upload containing both `a` (a
+  file) and `a/b/SKILL.md` (a directory) failed with a raw `IsADirectoryError`,
+  and a NUL byte in a filename returned the interpreter's own `embedded null
+  byte` message. Both are now a plain `400` naming the conflict
+  (`a file and a directory share the name 'a'`), and no raw exception text
+  reaches the client (`SEC-6`).
+- **Release supply chain.** The `contents: write` release job no longer installs
+  or executes a distribution fetched from public PyPI: every install there is
+  `--no-index` against the artifacts that workflow built and attested, and the
+  post-publish PyPI verification moved to a new job with `contents: read` only
+  (`SEC-7`). The build backend is exactly pinned (`setuptools==84.0.0`) and the
+  outer toolchain is locked and hash-verified in `requirements-build.txt`,
+  installed with `--require-hashes` and used with `--no-isolation`, in both CI
+  and the release workflow — so the attested bytes no longer depend on whatever
+  PyPI serves on release day (`SEC-8`).
+- **Vendored frontend dependency.** `check_package_data.py` records and verifies
+  the vendored `vue.global.prod.js` upstream version, URL, sha256 and size, in the
+  source tree and inside both built artifacts, before the optional build step —
+  previously a PR could replace a 158 KB minified file that runs same-origin with
+  access to every mutation endpoint with nothing to notice it (`SEC-9`).
+  `.gitattributes` marks the file `-text` so line-ending translation cannot break
+  the recorded hash.
+- **Published sdist contents.** The sdist shipped `tests/test*.py`, and the gate
+  could not see it: sdist members outside `skillsmgr/` were dropped before the
+  "must never ship" policy ran, so its own regression test only ever covered a
+  wheel fixture. Members are now inspected and `MANIFEST.in` prunes `tests`
+  (73 → 45 members) (`SEC-13`, now fully closed).
+
+### Fixed
+
+Remediation of the 2026-09-11 deep audit (`DEEP-AUDIT-2026-09-11.md`), run as
+four batches in the audit's own severity order: **61 finding IDs closed and 3
+partially closed, out of 102** (`FM-9`; plus `SEC-5` and `SEC-13`, whose closed
+halves came from `BUG-9` and `BUG-13`). Per-finding disposition is recorded in
+`docs/13-audit-remediation-status-2026-09-11.md`. (The batches set out to close
+46 agenda items; they closed more IDs than that, because several items covered
+more than one finding.)
+
+- **Data loss.** An indented `---` inside a multi-line frontmatter value silently
+  truncated the value and promoted the remainder into the body on every write.
+  An interrupt during `import`'s commit move could destroy the user's only copy of
+  a skill. A skill directory holding both `SKILL.md` and `SKILL.md.disabled` was
+  installed by `add` and then silently destroyed one document on the next toggle.
+  A force-import could discard an already-committed `edit`. `restore`/`purge_trash`
+  raced and could leave an index row `resync` could never repair.
+- **Crashes on one bad document.** A sequence frontmatter root, an out-of-range
+  `\U` escape, a lone surrogate, an unreadable `SKILL.md`, and a raw
+  `sqlite3.OperationalError` from `create()` on a fresh data dir all failed
+  loudly-but-raw or aborted whole views; each is now a clean error or a reported
+  drift row.
+- **Security.** `GET` routes now pass the same Host/Origin/Fetch-Metadata policy as
+  mutations (closing the tracked DNS-rebinding read gap), the
+  `doctor?explain=` diagnostic no longer discloses the real agent-skill inventory
+  or `data_dir` and is confined to the manager's data directory, and its
+  directory walk is bounded by work rather than result count.
+- **Untrusted input.** A hostile `evals.json` regex could hang the CLI and freeze
+  the web-UI process GIL-wide; regex assertions now run under a wall-clock budget.
+  Control characters in `--metadata` keys are rejected, and both edit paths fail
+  closed on a malformed document instead of emitting a second frontmatter block.
+  ANSI/control characters are stripped from untrusted display fields.
+- **Round-trip fidelity.** Multi-line frontmatter values now survive
+  dump → parse exactly (indentation, whitespace-only lines, CR content, tabs
+  before `#`, newline-only values, YAML chomping indicators).
+- **Store integrity.** `purge_trash` no longer holds one write transaction across
+  every directory removal; `remove(purge=True)` displaces the tree before deleting
+  it, so a partial purge can never advertise a skill whose document is already
+  gone; `export()` is atomic, collision-free within a second, and leaves no
+  truncated archive; `export`/`tree_content_hash` no longer follow symlinks (an
+  archive containing one used to be rejected by the importer); reads and `stats`
+  reflect filesystem truth instead of index residue; `resync`/`db_rebuild` take
+  the shared library lock; and `doctor` reports document-less directories as drift.
+- **Web-app hardening.** All nine silent `except Exception: pass` blocks now
+  report through the diagnostics channel and mark the affected payload as
+  degraded; `HEAD` answers like `GET`; `OPTIONS`/`TRACE` return a JSON 405 with
+  the standard security headers instead of a header-less HTML 501.
+- **Loader and scope consistency.** Names that fail the canonical rule are listed
+  but flagged unaddressable rather than erroring on click; an undecodable
+  document no longer publishes replacement characters as its description; one
+  rogue index row can no longer abort every global aggregate; `HOME=""` no longer
+  relocates agent scopes to `/`; and a grouping directory sharing a skill's name
+  no longer hides the skill beneath it.
+- **Gate and hygiene.** The package-data check now refuses artifacts shipping
+  tests, docs, environment files, databases or bytecode; the CI SHA-pin contract
+  now covers reusable-workflow references; the mutation-lock table is bounded;
+  and dead frontend/frontmatter helpers were removed.
+- **Documentation truth.** `docs/04-store-api.md` now matches the implementation
+  for the constructor, `list`, `create`, `edit` and the trash-timestamp regex.
+- **Diagnostics and UI.** The effective-resolution diagnostic no longer over-claims
+  its top-level verdict, no longer reports one file as two candidates or as its own
+  shadowed copy, and shares one identity for the global scope. Two in-process web
+  servers on different data dirs can no longer read or write each other's data.
+  The All-skills view no longer hides same-name instances inside one recursive
+  scope. The frontend remove dialog is bound to the skill it was opened for.
+
+### Docs
+
+- Documentation truth pass after the deep-audit remediation (no product change):
+  `docs/SESSION-CONTEXT.md` no longer claims reads are not `Host`-validated
+  (`SEC-1` closed that; the request policy guards `GET`/`HEAD` too) and its gate
+  counts now match a real run (607 tests, 216 functions);
+  `docs/03-cli-surface.md` documents the `--metadata` control-character
+  rejection, the fail-closed `edit`, and the terminal-output sanitization seam;
+  `docs/08-web-ui.md` documents the all-method request policy,
+  `HEAD`/`OPTIONS`/`TRACE`, the `degraded` arrays, the `doctor?explain` disclosure
+  boundary and `addressable: false`; `docs/01-architecture.md` records the symlink
+  policy and the locking model; the security docs mark the read-path and terminal
+  threats as mitigated and the remainder as open; and every `file.py:line`
+  citation in the threat model, the security report and `docs/04-store-api.md` was
+  replaced with a symbol name because all of them had drifted.
+- The documentation gate (`check_docs.py`) now also checks HADS headers for every
+  `docs/*.md`, local link **anchors**, markdown table integrity, single trailing
+  newlines, `Store`/REST/CLI surface parity and the session-context file
+  inventory; each new check is pinned by a regression test. Three real defects it
+  found are fixed: an unescaped `|` that gave a table an extra column, a line
+  starting with `#2` that rendered as a spurious H1, and eleven files that did not
+  end with a newline.
+
+### Changed
+
+- `Store.edit` / `scopes.edit_skill` now **refuse** a document whose frontmatter is
+  unparseable, instead of rewriting it (which produced a second frontmatter block).
+- `sync_skill` now **refuses** to copy a skill holding a symlink that points outside
+  it, and copies in-scope symlinks as links rather than following them.
+- A skill cluster addressed by name now resolves to the *named* entry, so an in-root
+  symlink alias no longer makes a write mutate its target.
+
 ## [1.0.1] — 2026-09-10
 
 ### Added

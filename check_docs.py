@@ -31,6 +31,7 @@ CURRENT_DOCS = (
     "docs/07-context-strategy.md",
     "docs/08-web-ui.md",
     "docs/12-agent-root-discovery-2026-09-08.md",
+    "docs/13-audit-remediation-status-2026-09-11.md",
     "docs/ADR-002-root-consumer-effective-state.md",
     "docs/ADR-003-registry-bridge-and-eval-harness.md",
     "docs/ADR-004-team-sharing-signed-bundles.md",
@@ -296,6 +297,208 @@ def check_version_alignment(root: Path = ROOT) -> list[str]:
     return errors
 
 
+def check_house_style(root: Path = ROOT) -> list[str]:
+    """Check HADS conformance and markdown integrity for every markdown file.
+
+    ``check_required_docs`` only inspects the ``REQUIRED_DOCS`` subset; this
+    covers the rest of the ``docs/`` tree and repairs three defects that
+    silently change how a page renders (2026-09-11 docs truth pass):
+
+    * an unescaped ``|`` inside a table cell adds a column,
+    * a missing final newline makes git report the file as unterminated,
+    * a heading marker that is not surrounded as HADS requires.
+    """
+    errors: list[str] = []
+    for path in sorted((root / "docs").glob("*.md")):
+        rel = _relative(path, root)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if not lines or not lines[0].startswith("# "):
+            errors.append(f"{rel}: missing H1 title")
+        head = lines[:20]
+        if not any(line.startswith("**Version") for line in head):
+            errors.append(f"{rel}: version line not within the first 20 lines")
+        if not any("AI manifest" in line for line in head):
+            errors.append(f"{rel}: AI manifest not within the first 20 lines")
+
+    for path in _all_markdown(root):
+        rel = _relative(path, root)
+        raw = path.read_bytes()
+        if raw and not raw.endswith(b"\n"):
+            errors.append(f"{rel}: file does not end with a newline")
+        block: list[str] = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("|") and stripped.endswith("|"):
+                cells = len(re.split(r"(?<!\\)\|", stripped.strip("|")))
+                block.append(cells)
+                continue
+            if len(block) > 1 and len(set(block)) > 1:
+                errors.append(f"{rel}: table ending at line {number - 1} has inconsistent cell counts {sorted(set(block))}")
+            block = []
+            if name := re.match(r"^(\s*)(`{3,}|~{3,})(.*)$", line):
+                if name.group(3).strip() and not name.group(3).lstrip().startswith(("text", "python", "yaml", "json", "js", "html", "css", "bash", "sh", "toml", "diff")):
+                    pass  # unknown but non-empty info string: nothing to check here
+        if len(block) > 1 and len(set(block)) > 1:
+            errors.append(f"{rel}: final table has inconsistent cell counts {sorted(set(block))}")
+    return errors
+
+
+def check_markdown_anchors(root: Path = ROOT) -> list[str]:
+    """Check every local markdown link target and ``#anchor`` resolves."""
+    errors: list[str] = []
+    anchors: dict[Path, set[str]] = {}
+    markdown = _all_markdown(root)
+    for path in markdown:
+        found: set[str] = set()
+        fenced = False
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            heading = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
+            if heading:
+                text = re.sub(r"[`*_]", "", heading.group(1).lower())
+                text = re.sub(r"[^\w\s-]", "", text)
+                found.add(text.replace(" ", "-"))
+        anchors[path] = found
+
+    for path in markdown:
+        rel = _relative(path, root)
+        for match in re.finditer(r"\[[^\]]+\]\(([^)\s]+)\)", path.read_text(encoding="utf-8")):
+            target = match.group(1)
+            if target.startswith(("http://", "https://", "mailto:")):
+                continue
+            name, _, fragment = target.partition("#")
+            resolved = path if not name else (path.parent / name).resolve()
+            if not resolved.exists():
+                errors.append(f"{rel}: dead markdown link -> {target}")
+            elif fragment and resolved.suffix == ".md" and fragment not in anchors.get(resolved, set()):
+                errors.append(f"{rel}: dead markdown anchor -> {target}")
+    return errors
+
+
+def check_surface_parity(root: Path = ROOT) -> list[str]:
+    """Check the documented surfaces against the source, in both directions.
+
+    Each of these caught real drift on 2026-09-11: ``/api/tokens`` was
+    implemented but absent from the endpoint tables, ``Store.resync`` was
+    undocumented while a nonexistent ``Store.db_resync`` was documented, and a
+    file listed in the session-context inventory no longer existed.
+    """
+    errors: list[str] = []
+
+    # -- REST routes -------------------------------------------------------
+    webapp = root / "skillsmgr" / "webapp.py"
+    web_doc = root / "docs" / "08-web-ui.md"
+    if webapp.is_file() and web_doc.is_file():
+        tree = ast.parse(webapp.read_text(encoding="utf-8"), filename=str(webapp))
+        implemented: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.List) or not node.elts:
+                continue
+            if not all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.elts):
+                continue
+            values = [e.value for e in node.elts]
+            if values[0] == "api" and len(values) > 1:
+                implemented.add(values[1])
+        text = web_doc.read_text(encoding="utf-8")
+        documented = set(re.findall(r"/api/([a-z][a-z0-9-]*)", text))
+        for name in sorted(implemented - documented):
+            errors.append(f"docs/08-web-ui.md: /api/{name} is implemented but undocumented")
+        for name in sorted(documented - implemented):
+            errors.append(f"docs/08-web-ui.md: /api/{name} is documented but not implemented")
+
+    # -- Store public methods ---------------------------------------------
+    store_path = root / "skillsmgr" / "store.py"
+    store_doc = root / "docs" / "04-store-api.md"
+    if store_path.is_file() and store_doc.is_file():
+        tree = ast.parse(store_path.read_text(encoding="utf-8"), filename=str(store_path))
+        store_class = next((n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Store"), None)
+        public = {
+            n.name for n in (store_class.body if store_class else [])
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and not n.name.startswith("_")
+        }
+        text = store_doc.read_text(encoding="utf-8")
+        for name in sorted(public):
+            if not re.search(rf"`{re.escape(name)}\b", text):
+                errors.append(f"docs/04-store-api.md: public Store.{name} is undocumented")
+        section = text.split("## Public methods", 1)[-1].split("## SQLite schema", 1)[0]
+        for name in sorted(set(re.findall(r"`([a-z_][a-z0-9_]*)\(self", section))):
+            if name not in public:
+                errors.append(f"docs/04-store-api.md: documents Store.{name}() which does not exist")
+
+    # -- CLI commands ------------------------------------------------------
+    cli_path = root / "skillsmgr" / "cli_parser.py"
+    cli_doc = root / "docs" / "03-cli-surface.md"
+    if cli_path.is_file() and cli_doc.is_file():
+        tree = ast.parse(cli_path.read_text(encoding="utf-8"), filename=str(cli_path))
+        text = cli_doc.read_text(encoding="utf-8")
+        # A heading documents commands as backticked spans, optionally
+        # slash-separated and repeated ("`list` / `ls [--json]`", "`webui ...`
+        # (alias: `gui`)").  Take the leading token of every span so a rename
+        # such as `init` -> `init-DISABLED` cannot pass on a word boundary.
+        documented_commands: set[str] = set()
+        for line in text.splitlines():
+            if not line.startswith("### "):
+                continue
+            for span in re.findall(r"`([^`]+)`", line):
+                for part in span.split("/"):
+                    words = part.strip().split()
+                    if not words:
+                        continue
+                    token = re.sub(r"[^A-Za-z0-9_-]+$", "", words[0])
+                    if token:
+                        documented_commands.add(token)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "add_parser" or not node.args:
+                continue
+            first = node.args[0]
+            if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+                continue
+            names = [first.value]
+            for keyword in node.keywords:
+                if keyword.arg == "aliases" and isinstance(keyword.value, (ast.List, ast.Tuple)):
+                    names += [e.value for e in keyword.value.elts
+                              if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+            receiver = node.func.value
+            receiver_name = receiver.id if isinstance(receiver, ast.Name) else ""
+            for name in names:
+                if receiver_name.endswith("_sub"):
+                    # A nested action is documented as "<parent> <action>".
+                    parent = receiver_name[: -len("_sub")]
+                    if f"{parent} {name}" not in text:
+                        errors.append(f"docs/03-cli-surface.md: CLI command '{parent} {name}' is undocumented")
+                elif name not in documented_commands:
+                    errors.append(f"docs/03-cli-surface.md: CLI command '{name}' has no documented heading")
+
+    # -- session-context file inventory ------------------------------------
+    sc = root / "docs" / "SESSION-CONTEXT.md"
+    if sc.is_file():
+        text = sc.read_text(encoding="utf-8")
+        if "## File inventory" in text:
+            block = text.split("## File inventory", 1)[1].split("```")[1]
+            stack: list[tuple[int, Path]] = []
+            for line in block.splitlines():
+                if not line.strip() or line.strip().startswith("#"):
+                    continue
+                indent = len(line) - len(line.lstrip())
+                body = line.split("#")[0].strip()
+                while stack and stack[-1][0] >= indent:
+                    stack.pop()
+                parent = stack[-1][1] if stack else root
+                for token in re.findall(r"[A-Za-z0-9_./-]+\.(?:py|js|html|css|md)", body):
+                    if not (parent / token).exists():
+                        errors.append(f"docs/SESSION-CONTEXT.md: inventory lists missing file {token}")
+                directory = re.match(r"^([A-Za-z0-9_./-]+/)\s*$", body)
+                if directory:
+                    stack.append((indent, parent / directory.group(1).rstrip("/")))
+    return errors
+
+
 def _errors(root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     errors.extend(check_required_docs(root))
@@ -303,6 +506,9 @@ def _errors(root: Path = ROOT) -> list[str]:
     errors.extend(check_documented_source_symbols(root))
     errors.extend(check_current_claims(root))
     errors.extend(check_version_alignment(root))
+    errors.extend(check_house_style(root))
+    errors.extend(check_markdown_anchors(root))
+    errors.extend(check_surface_parity(root))
 
     settings = root / ".commandcode/settings.json"
     if settings.is_file() and "skillsmgr/gui.py" in settings.read_text(encoding="utf-8"):

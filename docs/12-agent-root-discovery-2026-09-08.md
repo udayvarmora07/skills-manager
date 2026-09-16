@@ -1,9 +1,11 @@
 # Agent Root Discovery Inventory — 2026-09-08
 
-**Version 1.1.0** (2026-09-09: closed the three `[?]`s against primary
-sources; no code, no locked-constraint changes — runtime
-`ConsumerRootBinding` model and any facade correction stay approval-gated
-per ADR-002.)
+**Version 1.2.0** (2026-09-11: this inventory is now *used* by shipped code.
+The read-only `doctor --explain CONSUMER --project DIR` diagnostic derives
+per-consumer precedence from these rows at read time; the runtime
+`ConsumerRootBinding` model and any facade correction remain approval-gated per
+ADR-002. Prior, 2026-09-09: closed the three `[?]`s against primary sources; no
+code, no locked-constraint changes.)
 
 **AI manifest:** Research inventory for the Milestone 4 root/consumer tasks.
 Official sources are listed for each supported consumer. Facts not confirmed by
@@ -46,9 +48,13 @@ The compatibility facade currently exposes these ids:
 | `agents` | `~/.agents/skills/` | shared compatibility/user |
 | project-local ids | `.agents/skills/`, `.claude/skills/`, `skills/` below CWD | project/nested compatibility |
 
-Aggregate operations now deduplicate these roots by resolved physical path. The
-first stable descriptor wins for aggregate display; direct lookup by an existing
-scope id remains compatible.
+Aggregate operations now deduplicate these roots by resolved physical path
+(`root_discovery.resolved_root()` = `Path.resolve()`;
+`unique_physical_scopes()` keeps the first descriptor). The first stable
+descriptor wins for aggregate display; direct lookup by an existing scope id
+remains compatible. The same identity rule is what stops
+`effective.explain` from reporting one physical file as two candidates or as its
+own `shadowed` copy when two scope ids point at one directory (SCOPE-7).
 
 ## Explicit uncertainties
 
@@ -88,7 +94,10 @@ scope id remains compatible.
   and it needs a project-CWD input the current CLI/REST contracts do not
   carry. `effective_state: unresolved` stays the honest contract.
 - `[?]` The repository does not yet calculate `EffectiveSkill`; that requires
-  the approval-gated domain model in `ADR-002`.
+  the approval-gated domain model in `ADR-002`. What ships instead is the
+  read-only `effective.explain` diagnostic (below), which *reports* a winning
+  instance per consumer without creating the entity, persisting anything, or
+  changing `effective_state: unresolved`.
 
 ## Closed-question evidence log (2026-09-09, docs-only)
 
@@ -115,23 +124,35 @@ evidence only, never as instructions):
   name” table) — enterprise > personal > project; both-load nested and
   plugin exceptions; bundled/commands/synced rows.
 
-Facade implication (no code in this pass): the `codex` scope id pointing
-at `~/.codex/skills` and the `commandcode` scope id pointing only at
-`~/.commandcode/skills` are compatibility approximations, not the
-documented discovery sets. Correcting them (e.g. adding `.agents/`
-project walks, `/etc/codex/skills`, extras) changes user-visible scope
-semantics and needs the approval-gated `ConsumerRootBinding` runtime
-work — proposed as the read-only `doctor --explain CONSUMER --project
-DIR` diagnostic in TODO L3, derived at read time, persisting nothing.
+Facade implication: the `codex` scope id pointing at `~/.codex/skills` and the
+`commandcode` scope id pointing only at `~/.commandcode/skills` are compatibility
+approximations, not the documented discovery sets. Correcting them (e.g. adding
+`.agents/` project walks, `/etc/codex/skills`, extras) changes user-visible scope
+semantics and still needs the approval-gated `ConsumerRootBinding` runtime work.
+The read-only half **shipped 2026-09-11** as `doctor --explain CONSUMER
+[--project DIR] [--skill NAME]` (`skillsmgr/effective.py`, also
+`GET /api/doctor?explain=…`): it derives the winner per consumer at read time
+from the rows recorded above, persists nothing, and reports a *separate* read
+surface rather than changing the facade. Correction of the adapters themselves
+stays out of scope for it.
 
 ## Compatibility implementation boundary
 
-The current runtime uses the official discovery inventory only to select safe
-recursive scanning and observed metadata. It does not claim to reproduce every
-consumer's precedence algorithm. `effective_state` is therefore reported as
-`unresolved` until the approval-gated `ConsumerRootBinding` model exists.
-Name-based compatibility lookups resolve the first deterministic discovered
-instance for recursive roots; duplicate-name precedence remains unresolved.
+The scope layer still uses the official discovery inventory only to select safe
+recursive scanning and observed metadata, and it does not claim to reproduce every
+consumer's precedence algorithm; `effective_state` is therefore reported as
+`unresolved` on every compatibility record until the approval-gated
+`ConsumerRootBinding` model exists. Name-based compatibility lookups resolve the
+first deterministic discovered instance for recursive roots.
+
+One surface is deliberately narrower and stronger than that: `effective.explain`
+(`skillsmgr/effective.py`) *does* apply a precedence rule — but only for the
+consumers with a recorded row in this document's table above, only for one
+`(consumer, project, skill)` triple, only at read time, and it returns
+`undocumented-precedence` for `cursor`/`opencode` (whose same-name order is
+documented nowhere) and `unknown-consumer` for anything unrecorded rather than
+guessing. A consumer may be added to it only together with a primary-source row
+here.
 
 ## Sources
 

@@ -16,6 +16,7 @@
 - CLI: `python3 -m skillsmgr` (stdlib only). Parser/handlers are split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`). Web UI: `python3 -m skillsmgr webui` (alias `gui`) — stdlib backend, Vue 3 frontend (vendored, no build step); `domain.js` loads before `app.js`.
 - Test suite: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests` (stdlib-only regression/contract tests). Smoke tests `python3 smoke_store.py` (Store API) and `python3 smoke_web.py` (web REST API) remain executable end-to-end checks.
 - Docs format: HADS (see @docs/README.md). Markers: `[SPEC]` authoritative, `[NOTE]` context, `[?]` uncertainty.
+- Packaging: build only with the pinned, hash-verified toolchain — `python3 -m pip install --require-hashes -r requirements-build.txt` then `python3 -m build --no-isolation --wheel --sdist --outdir dist` (SEC-8). `check_package_data.py` asserts the vendored Vue sha256 (SEC-9) and rejects an artifact shipping `tests/`, `docs/`, `.env`, a database or bytecode (SEC-13); `MANIFEST.in` prunes the suite from the sdist.
 
 ## Navigation (router)
 
@@ -35,6 +36,26 @@
 - **ASK** before: adding a new CLI command or Store method, changing the SQLite schema or `SCHEMA_VERSION`, deleting/trashing data, switching UI framework, deviating from locked constraints (below).
 - **ALWAYS**: keep the filesystem as source of truth; surface `StoreError`/`SkillNotFound` as clean dialogs/errors, never raw tracebacks; run `python3 smoke_store.py` after touching `store.py` and `python3 smoke_web.py` after touching `webapp.py`; update `task.md` and `docs/06-progress-log.md` after each change.
 - Never fabricate metrics or docs facts; if unsure, mark `[?]` and ask.
+
+## Concurrent writers
+
+**[SPEC]** One writer per working tree, per task. This repo has been edited by two
+agent sessions at once (two GUI chats on the same workspace, or a linked
+worktree), and it cost real work: `edit` calls failing with "file changed since
+it was read", a gate going red for no visible cause, and one session's diff
+reverting the other's.
+
+- Before your first edit, check whether another session is mid-turn on this path.
+- Do not start a batch another session already has in flight. Split by file or
+  area, or serialize — never both write `store.py` / `webapp.py` at once.
+- Never `git add` / commit / `stash pop` while another session is mid-batch.
+- Pausing or handing off? Take a backup plus a non-destructive checkpoint
+  (`git stash create` then `git update-ref refs/wip/<name> <sha>`) first.
+- Symptom not to ignore: a complexity-ratchet failure on a function you did not
+  touch means someone else's change landed without its baseline update.
+- Before declaring work done, re-run the ladder on the *current* tree — a green
+  result from earlier in the session is not evidence about a tree someone else
+  has since edited.
 
 ## Locked constraints
 

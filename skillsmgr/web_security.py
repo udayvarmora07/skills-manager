@@ -21,17 +21,25 @@ class RequestError(StoreError):
         self.status = status
 
 
-def validate_mutation_request(
+def validate_request(
     headers: Mapping[str, str],
     allowed_hosts: set[str],
     allowed_origins: set[str],
 ) -> None:
-    """Validate the pre-handler policy for state-changing HTTP requests.
+    """Validate the pre-handler policy for **every** request.
 
     Header-absent local CLI/test clients remain valid.  When browser-oriented
     headers are present, their values must match the loopback server configured
     by :class:`WebAppServer`.  This function does not inspect routes or bodies;
     callers remain responsible for JSON/content-type checks where applicable.
+
+    SEC-1: this policy is not about *mutations*.  Applying it only to
+    POST/PATCH/PUT/DELETE left every read route open to a hostile web page --
+    an attacker-controlled ``Host`` plus cross-site Fetch Metadata still
+    returned GET /api/skills and the full GET /api/export archive, and the
+    response was readable because the browser only enforces CORS on reads that
+    are not "simple".  Reads leak the user's whole skill library, so they need
+    exactly the same gate.
     """
 
     host_header = headers.get("Host", "")
@@ -54,3 +62,8 @@ def validate_mutation_request(
             actual = value.rstrip("/")
         if not parsed.scheme or actual.rstrip("/") not in allowed_origins:
             raise RequestError(403, "cross-origin request rejected")
+
+
+# Kept for callers written before the policy covered reads; the name is now a
+# misnomer because the same check guards GET too (SEC-1).
+validate_mutation_request = validate_request

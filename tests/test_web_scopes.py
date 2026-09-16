@@ -46,6 +46,78 @@ class ScopedHomeTestCase(unittest.TestCase):
             os.environ["SKILLS_MANAGER_DATA"] = self._old_data
 
 
+class TestTwoServersDoNotCrossTalk(ScopedHomeTestCase):
+    """SCOPE-10: one process, two servers, two data dirs -- no shared state."""
+
+    def _server(self, data_name: str, skill_name: str, description: str):
+        import threading
+
+        from skillsmgr.webapp import WebAppServer
+
+        store = scopes.Store(data_dir=Path(self._tmp.name) / data_name)
+        store.init_db()
+        store.create(skill_name, description)
+        server = WebAppServer(store, port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.addCleanup(server.shutdown)
+        return server, store
+
+    @staticmethod
+    def _names(server, path: str) -> list[str]:
+        import json
+        import urllib.request
+
+        url = f"http://127.0.0.1:{server.port}{path}"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            return sorted(row["name"] for row in json.loads(response.read()))
+
+    def test_each_server_answers_from_its_own_store(self):
+        # As a module global the last set_global_store won, so server A's
+        # ?scope=all answered with server B's skill while its ?scope=global
+        # answered with its own.
+        server_a, _store_a = self._server("data-a", "a-only", "in data-a")
+        server_b, _store_b = self._server("data-b", "b-only", "in data-b")
+
+        self.assertEqual(self._names(server_a, "/api/skills?scope=global"), ["a-only"])
+        self.assertEqual(self._names(server_b, "/api/skills?scope=global"), ["b-only"])
+        # The All view goes through the injected global store; it must agree
+        # with the same server's Global view.
+        self.assertEqual(self._names(server_a, "/api/skills?scope=all"), ["a-only"])
+        self.assertEqual(self._names(server_b, "/api/skills?scope=all"), ["b-only"])
+
+    def test_agent_scope_snapshots_stay_in_the_requesting_servers_data_dir(self):
+        server_a, store_a = self._server("data-a", "a-only", "in data-a")
+        _server_b, store_b = self._server("data-b", "b-only", "in data-b")
+        scopes.create_skill("agents", "cursorless", "Agent-scope skill")
+
+        # Server A edits an agent-scope skill, which writes a snapshot through
+        # the injected store; it must land in A's data dir, not B's.
+        import json
+        import urllib.request
+
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server_a.port}/api/skills/cursorless?scope=agents",
+            data=json.dumps({"description": "Edited via server A"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PATCH",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            self.assertEqual(response.status, 200)
+
+        self.assertEqual(
+            len(list((store_a.data_dir / "snapshots").rglob("*.md"))),
+            1,
+            "snapshot did not land in A's data dir",
+        )
+        self.assertEqual(
+            list((store_b.data_dir / "snapshots").rglob("*.md")),
+            [],
+            "server A wrote into server B's data dir",
+        )
+
+
 class TestListScopes(ScopedHomeTestCase):
     def test_all_eight_tier1_ids_known(self):
         ids = {s.id for s in scopes.known_scopes()}
@@ -126,6 +198,92 @@ class TestListScopes(ScopedHomeTestCase):
         self.assertEqual(descriptors["readonly-test"]["availability"], "read-only")
 
 
+class TestSymlinkPolicy(ScopedHomeTestCase):
+    """SCOPE-1/2/3: one policy for symlinks -- reads and writes must agree."""
+
+    def _skill(self, root: Path, name: str, description: str = "A skill") -> Path:
+        target = root / name
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: {description} for tests.\n---\nbody\n",
+            encoding="utf-8",
+        )
+        return target
+
+    def test_sync_refuses_a_link_that_points_outside_the_skill(self):
+        # SCOPE-1: copytree followed links, so an 88-byte skill produced 65 KB
+        # of files that lived outside it, materialized into another agent scope.
+        outside = Path(self._tmp.name) / "outside"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("SECRET-TOKEN-1234\n", encoding="utf-8")
+        root = Path(self._tmp.name) / ".agents" / "skills"
+        src = self._skill(root, "shared")
+        (src / "big.bin").symlink_to(outside / "secret.txt")
+
+        with self.assertRaises(StoreError) as ctx:
+            scopes.sync_skill("shared", "agents", ["gemini"])
+
+        self.assertIn("symlinks that point outside it", str(ctx.exception))
+        dest = Path(self._tmp.name) / ".gemini" / "skills" / "shared"
+        self.assertFalse(dest.exists())
+        self.assertFalse((dest / "big.bin").exists())
+
+    def test_sync_copies_an_in_root_link_as_a_link(self):
+        root = Path(self._tmp.name) / ".agents" / "skills"
+        src = self._skill(root, "linked")
+        (src / "notes.md").write_text("notes\n", encoding="utf-8")
+        (src / "alias.md").symlink_to(src / "notes.md")
+
+        result = scopes.sync_skill("linked", "agents", ["gemini"])
+
+        self.assertEqual(result["synced"], ["gemini"])
+        copied = Path(self._tmp.name) / ".gemini" / "skills" / "linked" / "alias.md"
+        self.assertTrue(copied.is_symlink())
+
+    def test_escaping_link_is_visible_as_drift_instead_of_hidden(self):
+        # SCOPE-2: the escape was invisible to every read view while blocking
+        # every write, exactly the shape `skills-mgr install` produces.
+        outside = Path(self._tmp.name) / "npm-cache"
+        self._skill(outside, "myskill", "Installed elsewhere")
+        root = Path(self._tmp.name) / ".claude" / "skills"
+        root.mkdir(parents=True)
+        (root / "myskill").symlink_to(outside / "myskill", target_is_directory=True)
+
+        rows = scopes.scan_scope("claude-code")
+
+        self.assertEqual([row["name"] for row in rows], ["myskill"])
+        self.assertTrue(rows[0]["malformed"])
+        self.assertIn("escapes managed root", rows[0]["decode_error"])
+        self.assertIn("myskill", {row["name"] for row in scopes.list_all()})
+
+    def test_in_root_alias_addresses_the_named_entry(self):
+        # SCOPE-3: get_skill('alias') reported 'real', a write through the alias
+        # mutated 'real', and remove('alias') deleted 'real' and left a
+        # dangling link while the physical skill was listed twice.
+        root = Path(self._tmp.name) / ".claude" / "skills"
+        real = self._skill(root, "real", "The real skill")
+        (root / "alias").symlink_to(real, target_is_directory=True)
+
+        rows = scopes.scan_scope("claude-code")
+        self.assertEqual(sorted(row["name"] for row in rows), ["alias", "real"])
+        self.assertEqual(scopes.get_skill("claude-code", "alias")["name"], "alias")
+        self.assertEqual(
+            Path(scopes.get_skill("claude-code", "alias")["path"]).name, "alias"
+        )
+
+        # Removing the alias must move the *link*, never the real directory:
+        # the old code resolved the alias to its target and trashed that,
+        # leaving a dangling link and destroying the skill.
+        scopes.remove_skill("claude-code", "alias")
+
+        self.assertTrue(real.is_dir())
+        self.assertTrue((real / "SKILL.md").is_file())
+        self.assertFalse((root / "alias").exists())
+        self.assertEqual(
+            [row["name"] for row in scopes.scan_scope("claude-code")], ["real"]
+        )
+
+
 class TestAgentScopeCrud(ScopedHomeTestCase):
     def test_create_scan_get(self):
         scopes.create_skill("agents", "ademo", "Agent demo skill")
@@ -143,6 +301,26 @@ class TestAgentScopeCrud(ScopedHomeTestCase):
         self.assertEqual(
             scopes.get_skill("agents", "ademo")["description"], "New desc"
         )
+
+    def test_toggle_refuses_a_mixed_document_state(self):
+        # SCOPE-13: the scope-side twin of STORE-3.  With both SKILL.md and
+        # SKILL.md.disabled present, the rename landed on top of the other
+        # document and destroyed it with no snapshot.  The scope adapter must
+        # refuse instead of guessing which document the user meant.
+        scopes.create_skill("agents", "mixed", "Agent mixed skill")
+        base = Path(self._tmp.name) / ".agents" / "skills" / "mixed"
+        (base / "SKILL.md.disabled").write_text(
+            "---\nname: mixed\ndescription: The disabled copy.\n---\nDISABLED\n",
+            encoding="utf-8",
+        )
+
+        for enable in (True, False):
+            with self.subTest(enable=enable):
+                with self.assertRaises(StoreError) as ctx:
+                    scopes.toggle_skill("agents", "mixed", enable=enable)
+                self.assertIn("both SKILL.md and SKILL.md.disabled", str(ctx.exception))
+                self.assertTrue((base / "SKILL.md").is_file())
+                self.assertTrue((base / "SKILL.md.disabled").is_file())
 
     def test_toggle_disable_enable(self):
         scopes.create_skill("agents", "ademo", "Agent demo skill")
@@ -203,7 +381,7 @@ class TestSyncAndSearch(ScopedHomeTestCase):
         scopes._global_store().create("shared", "Global version", body="global")
         scopes.create_skill("agents", "shared", "Agent version", body="agent")
         with mock.patch("skillsmgr.scopes.shutil.copytree", side_effect=OSError("copy failed")):
-            with self.assertRaises(OSError):
+            with self.assertRaises(StoreError):
                 scopes.sync_skill("shared", "global", ["agents"], force=True)
         self.assertEqual(scopes.get_skill("agents", "shared")["description"], "Agent version")
 

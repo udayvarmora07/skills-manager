@@ -15,8 +15,9 @@ signing remain deferred under issues #3, #4, and #11.
 
 ## Context
 
-Both items already existed as pure helpers with **no reachable surface**: no CLI
-command, flag, REST route, or UI path called `skillsmgr/insights.py`.
+Both items already existed as pure helpers. They are now reachable only through
+the approved existing CLI/REST preview and validation seams; there is still no
+direct network API or new Store surface for them.
 
 Their research verdicts are unchanged and still binding:
 
@@ -53,8 +54,13 @@ test pins that the bridge modules import no network client.
 the existing `install` surface would run (adding `-s <slug>` for a skill id),
 plus the linkable per-skill audit pages (`/owner/repo/skill/security/{provider}`)
 and a `content_hash` slot whose documented use is detecting upstream change
-without re-fetching files. Trust is an explicit gate: without
-`trust_confirmed`, the plan reports a blocker and `may_install: false`.
+without re-fetching files. The `--trust-confirmed`/payload flag records caller
+intent only. Because this offline half performs no authenticated catalog read
+or content comparison, the plan always reports `trust_confirmed: false`,
+`trust_verified: false`, `eligibility_status: "unverified-offline"`, and
+`may_install: false`. `trust_requested` makes the caller's attestation
+visible. A supplied `content_hash` is `hash_status: "unverified-provided"`
+with `hash_verified: false`; it is a comparison input, not evidence.
 
 Absent registry metadata is reported honestly rather than invented:
 `description_status` and `provenance_note` say that description/installs need an
@@ -114,6 +120,10 @@ preview and the real command cannot drift.
 
 - Both TODO items are now usable end to end without network access, a
   third-party runtime, a schema change, or a new command.
+- Registry preview trust is intentionally not self-attesting: offline output
+  records caller intent and supplied hash material while leaving trust,
+  eligibility, and hash verification false until an authenticated read and
+  comparison are performed.
 - Eval scores are advisory by construction: no code path reads them before an
   install or an edit, and no score is persisted in SQLite.
 - Registry provenance stays incomplete until an authenticated read or manual

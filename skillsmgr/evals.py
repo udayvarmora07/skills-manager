@@ -14,11 +14,17 @@ method.  Results are advisory — a score never gates an install or an edit.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import signal
+import tempfile
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .atomic_io import atomic_write_text
+from .atomic_io import atomic_write_text, mutation_lock
 from .path_safety import contained_path
 from .validator import validate_skill_name
 
@@ -47,6 +53,19 @@ MAX_EVALS_FILE_BYTES = 1_000_000
 MAX_PATTERN_LENGTH = 200
 MAX_REGEX_INPUT = 50_000
 MAX_SLUG_LENGTH = 48
+#: CLI-1: a regex assertion in a hostile ``evals.json`` is caller-supplied code
+#: for Python's backtracking engine, and ``re`` cannot be interrupted from
+#: outside -- a catastrophic pattern pinned the whole process (GIL-wide, so the
+#: Web UI froze with it and Ctrl-C could not run). ``re.compile`` succeeding is
+#: not a safety check, so every pattern evaluation runs under a wall-clock
+#: alarm and aborts as a failed assertion.
+REGEX_TIMEOUT_SECONDS = 2.0
+#: Only the main thread of the main interpreter can take a signal; anywhere
+#: else (a Web UI request thread) the pattern is refused outright.
+REGEX_UNSAFE_THREAD_REASON = (
+    "regex assertions are only evaluated on the main thread: this process "
+    "cannot time out a backtracking pattern safely"
+)
 
 EVAL_POLICY = (
     "advisory-only: results are files in the run workspace, never SQLite rows, "
@@ -68,7 +87,8 @@ def workspace_for(data_dir: Path, name: str) -> Path:
     The workspace lives beside ``skills/`` (never inside it) so the skill scan,
     ``doctor`` orphan detection, and export never see eval run data.
     """
-    return Path(data_dir) / EVALS_DIRNAME / f"{validate_skill_name(name)}{WORKSPACE_SUFFIX}"
+    workspace = Path(data_dir) / EVALS_DIRNAME / f"{validate_skill_name(name)}{WORKSPACE_SUFFIX}"
+    return _ensure_workspace_outside(workspace, data_dir)
 
 
 def workspace_beside(skill_dir: Path) -> Path:
@@ -78,13 +98,17 @@ def workspace_beside(skill_dir: Path) -> Path:
 
 
 def _is_within(path: Path, root: Path) -> bool:
-    """Return True when *path* resolves inside *root*."""
-    candidate = Path(path).resolve()
+    """Return True when lexical or resolved *path* is inside *root*."""
+    lexical = Path(os.path.abspath(os.fspath(path)))
+    lexical_root = Path(os.path.abspath(os.fspath(root)))
+    resolved = Path(path).resolve()
     resolved_root = Path(root).resolve()
-    try:
-        return candidate.is_relative_to(resolved_root)
-    except AttributeError:  # Python < 3.9 fallback
-        return candidate == resolved_root or str(candidate).startswith(str(resolved_root) + "/")
+    return _path_is_within(lexical, lexical_root) or _path_is_within(resolved, resolved_root)
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    """Return whether already-normalized paths have a parent/root relation."""
+    return path == root or root in path.parents
 
 
 def workspace_for_dir(skill_dir: Path, data_dir: Path, name: str) -> Path:
@@ -99,7 +123,19 @@ def workspace_for_dir(skill_dir: Path, data_dir: Path, name: str) -> Path:
     skill_dir = Path(skill_dir)
     if _is_within(skill_dir, Path(data_dir) / "skills"):
         return workspace_for(data_dir, name)
-    return workspace_beside(skill_dir)
+    return _ensure_workspace_outside(workspace_beside(skill_dir), data_dir)
+
+
+def _workspace_is_managed(workspace: Path, data_dir: Path) -> bool:
+    """Return whether a workspace is lexically or resolved inside skills."""
+    return _is_within(Path(workspace), Path(data_dir) / "skills")
+
+
+def _ensure_workspace_outside(workspace: Path, data_dir: Path) -> Path:
+    """Reject a workspace alias that could place eval output in managed skills."""
+    if _workspace_is_managed(workspace, data_dir):
+        raise ValueError("eval workspace must not be inside the managed skills tree")
+    return Path(workspace)
 
 
 def iteration_dir(workspace: Path, iteration: int = 1) -> Path:
@@ -127,7 +163,14 @@ def _case_files(value: object, label: str) -> list[str]:
         if not isinstance(item, str) or not item.strip():
             raise ValueError(f"eval case {label} entries must be non-empty strings")
         text = item.strip()
-        if text.startswith(("/", "\\")) or ".." in Path(text).parts or "\\" in text:
+        # pathlib treats ``C:/...`` as relative on POSIX, so reject drive
+        # prefixes explicitly just as the archive path validator does.
+        if (
+            text.startswith(("/", "\\"))
+            or ".." in Path(text).parts
+            or "\\" in text
+            or (len(text) >= 2 and text[0].isalpha() and text[1] == ":")
+        ):
             raise ValueError(f"eval case {label} entry must stay inside the skill directory: {item!r}")
         files.append(text)
     return files
@@ -281,6 +324,58 @@ def _normalize_output(text: str) -> str:
     return _WHITESPACE_RE.sub(" ", text).strip()
 
 
+class RegexTimeout(Exception):
+    """Raised internally when a regex assertion exceeds its wall-clock budget."""
+
+
+@contextmanager
+def _regex_deadline(seconds: float = REGEX_TIMEOUT_SECONDS):
+    """Abort a runaway regex search instead of hanging the process (CLI-1).
+
+    SIGALRM is the only way to stop CPython's backtracking engine mid-search,
+    so this is deliberately narrow: the alarm is armed around one ``re`` call
+    and always disarmed afterwards, and the previous handler is restored.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        raise RegexUnavailable(REGEX_UNSAFE_THREAD_REASON)
+
+    def _expired(signum, frame):
+        raise RegexTimeout(f"regex assertion exceeded {seconds:g}s")
+
+    previous = signal.signal(signal.SIGALRM, _expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+class RegexUnavailable(Exception):
+    """Raised when a regex cannot be evaluated safely in this process."""
+
+
+def _regex_search(pattern: str, output: str) -> tuple[bool, str | None]:
+    """Search *output* for *pattern* under a wall-clock budget.
+
+    Returns ``(matched, failure_reason)``.  ``re.error`` is re-raised because
+    ``_assertions`` has already rejected invalid patterns; a timeout or an
+    unsafe thread is reported as a failed assertion with the reason.
+    """
+    haystack = output[:MAX_REGEX_INPUT]
+    try:
+        compiled = re.compile(pattern)
+    except re.error:
+        raise
+    try:
+        with _regex_deadline():
+            return compiled.search(haystack) is not None, None
+    except RegexTimeout as exc:
+        return False, str(exc)
+    except RegexUnavailable as exc:
+        return False, str(exc)
+
+
 def _assertion_result(assertion: dict, output: str) -> dict:
     kind = assertion["type"]
     case_sensitive = assertion.get("case_sensitive") is True
@@ -297,12 +392,17 @@ def _assertion_result(assertion: dict, output: str) -> dict:
         return {"type": kind, "passed": True, "detail": "output parses as JSON"}
     needle = str(assertion.get("value", ""))
     if kind == "regex":
+        if len(needle) > MAX_PATTERN_LENGTH:
+            return {"type": kind, "passed": False,
+                    "detail": f"pattern exceeds {MAX_PATTERN_LENGTH} characters"}
         try:
-            match = re.search(needle, output[:MAX_REGEX_INPUT])
+            matched, failure = _regex_search(needle, output)
         except re.error as exc:  # pragma: no cover - patterns are pre-validated
             return {"type": kind, "passed": False, "detail": f"invalid pattern: {exc}"}
-        return {"type": kind, "passed": match is not None,
-                "detail": "pattern matched" if match else "pattern not found"}
+        if failure is not None:
+            return {"type": kind, "passed": False, "detail": failure}
+        return {"type": kind, "passed": matched,
+                "detail": "pattern matched" if matched else "pattern not found"}
     if not case_sensitive:
         needle = needle.lower()
     if kind == "equals":
@@ -344,6 +444,7 @@ def normalize_runs(cases: list[dict], runs: object) -> list[dict]:
         raise ValueError(f"runs exceeds {MAX_RUNS} entries")
     known = {case.get("id"): case for case in cases}
     normalized: list[dict] = []
+    seen_pairs: set[tuple[object, str]] = set()
     for index, run in enumerate(runs):
         if not isinstance(run, dict):
             raise ValueError(f"run {index + 1} must be an object")
@@ -353,6 +454,10 @@ def normalize_runs(cases: list[dict], runs: object) -> list[dict]:
         variant = run.get("variant", DEFAULT_VARIANT)
         if variant not in VARIANTS:
             raise ValueError(f"run {index + 1} has unsupported variant {variant!r} (use one of {', '.join(VARIANTS)})")
+        pair = (case_id, variant)
+        if pair in seen_pairs:
+            raise ValueError(f"run {index + 1} has duplicate (case, variant) pair {pair!r}")
+        seen_pairs.add(pair)
         output = run.get("output")
         if not isinstance(output, str):
             raise ValueError(f"run {index + 1} output must be a string")
@@ -436,45 +541,108 @@ def _write_json(path: Path, payload: dict) -> None:
     atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def _entry_exists(path: Path) -> bool:
+    """Return whether a directory entry exists, including dangling links."""
+    return path.exists() or path.is_symlink()
+
+
+def _restore_backup_if_needed(backup_iteration: Path | None, final_iteration: Path) -> bool:
+    """Restore a moved iteration, returning whether its backup must be preserved."""
+    if backup_iteration is None or not _entry_exists(backup_iteration):
+        return False
+    if _entry_exists(final_iteration):
+        return True
+    try:
+        os.replace(backup_iteration, final_iteration)
+    except BaseException:
+        return True
+    return False
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def record_runs(workspace: Path, iteration: int, cases: list[dict], runs: object) -> dict:
-    """Write outputs, grading, timing, and the benchmark into the workspace.
+    """Write one complete iteration, replacing any previous contents atomically.
 
     Only the run workspace is written: skill files, the SQLite index, and the
-    trash are untouched, so a score can never block or alter an install.
+    trash are untouched, so a score can never block or alter an install.  The
+    complete iteration is built in a sibling staging directory first; a failed
+    write therefore leaves the previous iteration intact and never leaves a
+    partial replacement behind.
     """
     normalized = normalize_runs(cases, runs)
     slugs = case_slugs(cases)
     slug_by_id = {case.get("id"): slugs[index] for index, case in enumerate(cases)}
     scored = score_runs(cases, runs)
+    workspace = Path(workspace)
+    final_iteration = iteration_dir(workspace, iteration)
     written: list[str] = []
-    for result, run in zip(scored["runs"], normalized):
-        slug = slug_by_id.get(run["case"])
-        target = variant_dir(workspace, iteration, slug, run["variant"])
-        output_path = target / OUTPUTS_DIRNAME / OUTPUT_FILENAME
-        atomic_write_text(output_path, run["output"])
-        written.append(str(output_path))
-        _write_json(target / GRADING_FILENAME, {
-            "case": run["case"], "variant": run["variant"],
-            "graded": result["graded"], "passed": result["passed"],
-            "total": result["total"], "assertions": result["assertions"],
-            "policy": EVAL_POLICY,
-        })
-        written.append(str(target / GRADING_FILENAME))
-        _write_json(target / TIMING_FILENAME, {
-            "duration_ms": run["duration_ms"], "tokens": run["tokens"],
-            "recorded_at": _now_iso(),
-        })
-        written.append(str(target / TIMING_FILENAME))
-    benchmark_path = iteration_dir(workspace, iteration) / BENCHMARK_FILENAME
-    _write_json(benchmark_path, scored["benchmark"])
-    written.append(str(benchmark_path))
+    with mutation_lock(workspace):
+        workspace.mkdir(parents=True, exist_ok=True)
+        stage_root = Path(tempfile.mkdtemp(
+            prefix=f".{final_iteration.name}-",
+            suffix=".skillsmgr-staging",
+            dir=workspace,
+        ))
+        backup_root = None
+        backup_iteration = None
+        preserve_backup = False
+        try:
+            for result, run in zip(scored["runs"], normalized):
+                slug = slug_by_id.get(run["case"])
+                target = variant_dir(stage_root, iteration, slug, run["variant"])
+                output_path = target / OUTPUTS_DIRNAME / OUTPUT_FILENAME
+                atomic_write_text(output_path, run["output"])
+                # Keep API paths lexical: resolving this against an existing
+                # iteration symlink would report the external target instead of
+                # the workspace-relative path that was committed.
+                final_target = final_iteration / slug / run["variant"]
+                written.append(str(final_target / OUTPUTS_DIRNAME / OUTPUT_FILENAME))
+                _write_json(target / GRADING_FILENAME, {
+                    "case": run["case"], "variant": run["variant"],
+                    "graded": result["graded"], "passed": result["passed"],
+                    "total": result["total"], "assertions": result["assertions"],
+                    "policy": EVAL_POLICY,
+                })
+                written.append(str(final_target / GRADING_FILENAME))
+                _write_json(target / TIMING_FILENAME, {
+                    "duration_ms": run["duration_ms"], "tokens": run["tokens"],
+                    "recorded_at": _now_iso(),
+                })
+                written.append(str(final_target / TIMING_FILENAME))
+            benchmark_path = iteration_dir(stage_root, iteration) / BENCHMARK_FILENAME
+            _write_json(benchmark_path, scored["benchmark"])
+            written.append(str(final_iteration / BENCHMARK_FILENAME))
+
+            stage_iteration = iteration_dir(stage_root, iteration)
+            try:
+                if final_iteration.exists() or final_iteration.is_symlink():
+                    backup_root = Path(tempfile.mkdtemp(
+                        prefix=f".{final_iteration.name}-",
+                        suffix=".skillsmgr-backup",
+                        dir=workspace,
+                    ))
+                    backup_iteration = backup_root / final_iteration.name
+                    os.replace(final_iteration, backup_iteration)
+                    os.replace(stage_iteration, final_iteration)
+                else:
+                    os.replace(stage_iteration, final_iteration)
+            except BaseException:
+                if _restore_backup_if_needed(backup_iteration, final_iteration):
+                    preserve_backup = True
+                    raise OSError(
+                        f"could not replace eval iteration; previous iteration is staged at {backup_iteration}"
+                    )
+                raise
+        finally:
+            shutil.rmtree(stage_root, ignore_errors=True)
+            if backup_root is not None and not preserve_backup:
+                shutil.rmtree(backup_root, ignore_errors=True)
     return {
         "iteration": iteration,
-        "workspace": str(iteration_dir(workspace, iteration)),
+        "workspace": str(final_iteration),
         "written": written,
         "benchmark": scored["benchmark"],
         "runs": scored["runs"],

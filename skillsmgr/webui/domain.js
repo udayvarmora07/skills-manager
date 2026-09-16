@@ -148,7 +148,6 @@ function formatTools(v) {
 
 window.SkillManagerDomain = Object.freeze({
   api,
-  esc,
   formatBytes,
   formatTokens,
   tokenPctClass,

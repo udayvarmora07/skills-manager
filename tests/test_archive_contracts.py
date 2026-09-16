@@ -495,6 +495,77 @@ class ArchiveContractTests(unittest.TestCase):
         self.assertIn("old second body", target.get("second")["body"])
         self.assertFalse((target.skills_dir / "second.skillsmgr-stage").exists())
 
+    def test_import_waits_for_the_destination_skill_lock(self):
+        # STORE-4: import_ must take the same per-skill lock as create/edit, or
+        # a force-import displaces and replaces a document while a concurrent
+        # edit() is mid-write -- silently discarding a committed edit while
+        # doctor() still reports healthy.
+        import threading
+
+        from skillsmgr.atomic_io import mutation_lock
+
+        source = self._store("source")
+        source.create("shared", "Archive version", body="archive body")
+        archive = source.export(self.root / "lock.tar.gz")
+
+        target = self._store("target")
+        target.create("shared", "Edited version", body="edited body")
+
+        lock = mutation_lock(target.skills_dir / "shared" / "SKILL.md")
+        lock.acquire()
+        try:
+            done = threading.Event()
+
+            def run_import():
+                target.import_(archive, force=True)
+                done.set()
+
+            worker = threading.Thread(target=run_import)
+            worker.start()
+            # The importer must block on the lock we hold, not race past it.
+            self.assertFalse(done.wait(0.5), "import ignored the per-skill lock")
+        finally:
+            lock.release()
+        worker.join(timeout=10)
+        self.assertTrue(done.is_set(), "import never completed after the lock was released")
+        self.assertEqual(target.get("shared")["description"], "Archive version")
+
+    def test_interrupt_during_commit_move_keeps_the_displaced_original(self):
+        # STORE-1: the window in which the user's original lives in the
+        # staging ``.backup`` directory must survive an interrupt. The
+        # rollback used to be ``except Exception``, so a KeyboardInterrupt
+        # escaped it and the caller's staged-root cleanup deleted the only
+        # remaining copy of the skill.
+        from skillsmgr import archive as archive_mod
+
+        source = self._store("source")
+        source.create("keepme", "Archived copy", body="archived body")
+        archive = source.export(self.root / "interrupt.tar.gz")
+
+        target = self._store("target")
+        target.create("keepme", "Original copy", body="original body")
+        destination = target.skills_dir / "keepme"
+
+        real_move = archive_mod.shutil.move
+        calls: list[tuple[str, str]] = []
+
+        def interrupting_move(src, dst, *args, **kwargs):
+            calls.append((str(src), str(dst)))
+            # 1st move: original -> backup.  2nd move: staged -> destination
+            # (the point at which the original exists only in ``backup``).
+            if len(calls) == 2:
+                raise KeyboardInterrupt("injected interrupt during commit")
+            return real_move(src, dst, *args, **kwargs)
+
+        with mock.patch.object(archive_mod.shutil, "move", interrupting_move):
+            with self.assertRaises(KeyboardInterrupt):
+                target.import_(archive, force=True)
+
+        self.assertGreaterEqual(len(calls), 2, calls)
+        self.assertTrue(destination.is_dir(), "the skill directory was destroyed")
+        self.assertEqual(target.get("keepme")["description"], "Original copy")
+        self.assertIn("original body", target.get("keepme")["body"])
+
 
 if __name__ == "__main__":
     unittest.main()

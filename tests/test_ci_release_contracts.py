@@ -14,10 +14,19 @@ import check_package_data
 
 ROOT = Path(__file__).resolve().parent.parent
 
+#: The packaging gate pins the exact upstream Vue payload (SEC-9), so hermetic
+#: archive fixtures must carry the real bytes rather than a placeholder.
+_VENDORED_VUE = (ROOT / check_package_data.VUE_MEMBER).read_bytes()
+
 # Full-length commit SHAs are the only acceptable pin for third-party actions;
 # first-party actions/* and github/* on moving tags are out of the pin policy.
+# BUG-14: the ref may also be a *reusable workflow* path
+# (``owner/repo/.github/workflows/x.yml@ref``).  The old pattern required
+# ``owner/repo@`` immediately, so every reusable-workflow reference escaped the
+# pin check entirely.
 _THIRD_PARTY_PIN_RE = re.compile(
-    r"^\s*-\s*uses:\s*(?!actions/|github/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^\s#]+)"
+    r"^\s*-\s*uses:\s*(?!actions/|github/)"
+    r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[^\s@#]+)?)@([^\s#]+)"
 )
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _FIXTURE_ARTIFACT_STEM = "skill_control_plane-1.0.1"
@@ -167,7 +176,7 @@ class CrossPlatformContractTests(unittest.TestCase):
         import zipfile
 
         members = {
-            name: (b"vue payload" if name == check_package_data.VUE_MEMBER else b"asset")
+            name: (_VENDORED_VUE if name == check_package_data.VUE_MEMBER else b"asset")
             for name in check_package_data.expected_webui_members()
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -198,7 +207,7 @@ class CrossPlatformContractTests(unittest.TestCase):
         from unittest import mock
 
         members = {
-            name: (b"vue payload" if name == check_package_data.VUE_MEMBER else b"asset")
+            name: (_VENDORED_VUE if name == check_package_data.VUE_MEMBER else b"asset")
             for name in check_package_data.expected_webui_members()
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -244,7 +253,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 
     def test_release_builds_once_tests_exact_artifacts_and_attests(self):
         text = _workflow_text("release.yml")
-        self.assertIn("python3 -m build --wheel --sdist --outdir dist", text)
+        self.assertIn("python3 -m build --no-isolation --wheel --sdist --outdir dist", text)
         self.assertIn("check_package_data.py --dist-dir dist", text)
         self.assertIn("attest-build-provenance", text)
         self.assertIn("test.pypi.org/legacy", text)

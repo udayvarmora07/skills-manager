@@ -1,0 +1,9 @@
+# Source-distribution contents (SEC-13).
+#
+# setuptools' default sdist file list includes `tests/`, so published sdists
+# carried all 29 test modules — and `check_package_data.py` could not see them
+# until it started canonicalizing every sdist member rather than only the
+# `skillsmgr/` ones. The suite is developed and run from the repository (and
+# from the released wheel's own verification job), never from an sdist, so it is
+# pruned here. `tests/` is also on that gate's must-never-ship list.
+prune tests

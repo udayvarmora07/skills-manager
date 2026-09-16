@@ -13,21 +13,62 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .path_safety import contained_path, safe_skill_path
+from .path_safety import (
+    contained_entry,
+    contained_entry_under,
+    contained_path,
+    mkdir_private,
+    safe_skill_path,
+    trusted_root,
+)
+
+
+def home_dir() -> Path:
+    """Return the user's home directory, treating an empty ``$HOME`` as unset.
+
+    SCOPE-17: ``HOME=""`` makes ``Path.home()`` return ``/``, so every agent
+    scope became ``/.claude/skills``, ``/.codex/skills``, … -- roots this tool
+    both reads *and writes*.  An empty or whitespace-only value is a broken
+    environment, not a request to use the filesystem root, so it falls back to
+    the passwd entry the same way an unset variable does.
+    """
+    raw = os.environ.get("HOME")
+    if raw is not None and raw.strip():
+        return Path(raw).expanduser()
+    try:
+        import pwd
+
+        return Path(pwd.getpwuid(os.getuid()).pw_dir)
+    except (ImportError, KeyError, OSError):  # pragma: no cover - non-POSIX
+        return Path.home()
+
+
+def _absolute(base: Path) -> Path:
+    """Anchor a possibly-relative root so its meaning cannot drift with the CWD.
+
+    SCOPE-17: a relative ``SKILLS_MANAGER_DATA``/``XDG_DATA_HOME`` resolved
+    against whatever directory the process happened to start in, so the same
+    environment pointed at different data depending on where the tool was run.
+    """
+    return base if base.is_absolute() else (Path.cwd() / base)
 
 
 def data_dir() -> Path:
-    """Return the root data directory, creating it if needed."""
+    """Return the validated root data directory, creating it if needed."""
     override = os.environ.get("SKILLS_MANAGER_DATA")
-    if override:
-        base = Path(override).expanduser()
+    if override and override.strip():
+        base = _absolute(Path(override).expanduser())
     else:
         xdg = os.environ.get("XDG_DATA_HOME")
-        if xdg:
-            base = Path(xdg).expanduser()
+        if xdg and xdg.strip():
+            base = _absolute(Path(xdg).expanduser())
         else:
-            base = Path.home() / ".local" / "share"
-    return base / "skills-manager"
+            base = home_dir() / ".local" / "share"
+    # Validate the selected base itself before appending the manager-owned
+    # subtree.  This rejects broad/shared overrides such as ``/`` or ``/tmp``
+    # even when the final ``skills-manager`` directory does not exist yet.
+    selected = trusted_root(base)
+    return trusted_root(selected / "skills-manager")
 
 
 def skills_dir() -> Path:
@@ -58,7 +99,7 @@ def db_path() -> Path:
 def ensure_dirs() -> None:
     """Create all data directories if they do not exist."""
     for path in (data_dir(), skills_dir(), trash_dir(), templates_dir(), backups_dir()):
-        path.mkdir(parents=True, exist_ok=True)
+        mkdir_private(path)
 
 
 def find_skill_dir(name: str) -> Path | None:

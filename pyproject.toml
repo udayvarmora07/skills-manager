@@ -1,5 +1,11 @@
 [build-system]
-requires = ["setuptools>=61"]
+# SEC-8: an exact pin, not `setuptools>=61`. The release pipeline attests the
+# bytes this backend produces, and reproducibility is the premise of that
+# attestation — a floating backend lets whatever PyPI serves at build time
+# decide those bytes. `requirements-build.txt` pins and hashes the outer
+# toolchain that drives this backend. PEP 518 cannot carry hashes for the
+# isolated build backend itself, so it is pinned by exact version here.
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]

@@ -29,6 +29,15 @@ import re
 __all__ = ["FrontmatterError", "parse_frontmatter", "dump_frontmatter"]
 
 _DOC_MARKER = re.compile(r"^---(?:\s+#.*)?$")
+# ``key:`` optionally followed by a block-scalar header (``|``/``>`` plus
+# optional indentation/chomping indicators) and an optional trailing comment.
+_BLOCK_SCALAR_KEY = re.compile(r"^[^#]*:[ \t]+[|>][0-9+-]*[ \t]*(?:#.*)?$")
+#: A '#' that the parser reads as the start of an inline comment (FM-8).
+_INLINE_COMMENT_RE = re.compile(r"(?:^|[ \t])#")
+#: A ':' that the parser reads as a mapping-key separator -- followed by
+#: whitespace or end of line (see ``_split_key``).  The dumper used to quote
+#: only for ": ", so a value containing ":\t" was re-parsed as a mapping.
+_KEY_SEPARATOR_RE = re.compile(r":(?:[ \t]|$)")
 
 MAX_DOCUMENT_CHARS = 512 * 1024
 MAX_KEYS = 200
@@ -41,6 +50,13 @@ class FrontmatterError(ValueError):
     """Raised when frontmatter text cannot be parsed."""
 
 
+def _fold_separator(previous: str, current: str) -> str:
+    """Return the YAML folded-scalar separator for adjacent content lines."""
+    if previous.startswith((" ", "\t")) or current.startswith((" ", "\t")):
+        return "\n"
+    return " "
+
+
 # --------------------------------------------------------------------------
 # Parsing
 # --------------------------------------------------------------------------
@@ -48,6 +64,82 @@ class FrontmatterError(ValueError):
 _TRUE_WORDS = {"true", "yes", "on"}
 _FALSE_WORDS = {"false", "no", "off"}
 _NULL_WORDS = {"null", "~"}
+
+
+def _indent_of(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _block_scalar_content_indent(header: str, parent_indent: int) -> int:
+    """Indentation of a block scalar's content, per its header.
+
+    YAML resolves an explicit indentation indicator relative to the parent
+    node; without one the content indent is not known until the first
+    non-blank content line is seen (signalled by ``-1``).
+    """
+    info = header[1:].strip()
+    if info and info[0] in "123456789":
+        return parent_indent + int(info[0])
+    return -1
+
+
+def _find_closing_marker(lines: list[str]) -> int | None:
+    """Return the index of the frontmatter block's closing ``---`` marker.
+
+    The split happens *before* YAML parsing, so the scan has to know about
+    block scalars: a line like ``---`` inside a ``|``/``>`` value is content,
+    not a document marker.  Treating it as a marker truncates the value
+    silently *and* promotes the rest of the value into the document body --
+    which every write path then persists.  A bare ``---`` at column zero
+    still closes the block, which is what the emitted documents rely on.
+    """
+    i = 1
+    n = len(lines)
+    while i < n:
+        raw = lines[i]
+        indent = _indent_of(raw)
+        if _DOC_MARKER.match(raw.strip()):
+            if indent == 0:
+                return i
+            i += 1
+            continue
+        if _BLOCK_SCALAR_KEY.match(raw.rstrip()):
+            content_indent = _block_scalar_content_indent(
+                raw.strip().split(":", 1)[1].lstrip(), indent
+            )
+            i += 1
+            while i < n:
+                body = lines[i]
+                if body.strip() == "":
+                    i += 1
+                    continue
+                body_indent = _indent_of(body)
+                if body_indent <= indent:
+                    break
+                if content_indent < 0:
+                    content_indent = body_indent
+                if body_indent < content_indent:
+                    break
+                i += 1
+            continue
+        i += 1
+    return None
+
+
+def _normalize_crlf(text: str) -> str:
+    """Normalize a document that uses CRLF line endings throughout.
+
+    FM-7: the old code did ``rstrip("\\r")`` on every line, which cannot tell a
+    CRLF terminator from a CR that is genuine *content* -- so a value holding
+    ``line1\\r\\nline2`` lost its CR on the next round trip.  Only a document
+    whose every line terminator is CRLF is treated as a CRLF document; a lone
+    CR inside a line (or a mixed file) is left alone as content.
+    """
+    lines = text.split("\n")
+    body = lines[:-1] if lines and lines[-1] == "" else lines
+    if body and all(line.endswith("\r") for line in body):
+        return text.replace("\r\n", "\n")
+    return text
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -59,6 +151,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     """
     if text.startswith("\ufeff"):
         text = text[1:]
+    text = _normalize_crlf(text)
     if len(text) > MAX_DOCUMENT_CHARS:
         raise FrontmatterError(
             f"frontmatter document is too large (max {MAX_DOCUMENT_CHARS} characters)"
@@ -66,16 +159,12 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     lines = text.split("\n")
     if not lines or not _DOC_MARKER.match(lines[0].strip()):
         return {}, text
-    end = None
-    for i in range(1, len(lines)):
-        if _DOC_MARKER.match(lines[i].strip()):
-            end = i
-            break
+    end = _find_closing_marker(lines)
     if end is None:
         raise FrontmatterError(
             "frontmatter block is missing its closing '---' marker"
         )
-    yaml_lines = [ln.rstrip("\r") for ln in lines[1:end]]
+    yaml_lines = lines[1:end]
     if sum(len(line) + 1 for line in yaml_lines) > MAX_DOCUMENT_CHARS:
         raise FrontmatterError(
             f"frontmatter block is too large (max {MAX_DOCUMENT_CHARS} characters)"
@@ -118,6 +207,7 @@ class _Parser:
             raise FrontmatterError(
                 f"frontmatter scalar is too long (max {MAX_SCALAR_LENGTH} characters)"
             )
+        _reject_surrogates(value)
         return value
 
     # -- helpers -----------------------------------------------------------
@@ -156,8 +246,13 @@ class _Parser:
             return {}
         stripped = self.lines[idx].strip()
         if self._is_list_marker(stripped):
-            items, _ = self._parse_block_list(idx, self._indent(self.lines[idx]))
-            return items
+            # FM-2: this parser's contract is ``-> dict``.  Returning the list
+            # made every consumer die with a raw AttributeError (``.get`` on a
+            # list) from doctor/resync/db_rebuild/validate/scan.  A document
+            # whose frontmatter root is a sequence is malformed here.
+            raise FrontmatterError(
+                "frontmatter root must be a mapping of keys, not a sequence"
+            )
         data, _ = self._parse_mapping(idx, 0, 0)
         return data
 
@@ -263,14 +358,27 @@ class _Parser:
             rest = stripped[1:].lstrip()
             idx += 1
             self._check_item()
-            if rest == "":
-                item, idx = self._parse_nested(idx, indent, depth + 1)
-            elif self._looks_like_key(rest):
-                item, idx = self._parse_inline_mapping(idx, indent + 2, rest, depth + 1)
-            else:
-                item = self._parse_inline(rest)
+            item, idx = self._parse_list_item(idx, indent, rest, depth)
             items.append(item)
         return items, idx
+
+    def _parse_list_item(
+        self, idx: int, indent: int, rest: str, depth: int
+    ) -> tuple[object, int]:
+        """Parse the value of one ``- `` sequence element."""
+        if rest == "":
+            return self._parse_nested(idx, indent, depth + 1)
+        if rest[0] in "|>":
+            # A block scalar as a bare sequence element (``- |``): without this
+            # the marker was read as the plain scalar "|" and the scalar's own
+            # lines then tripped the indentation guard, so a value the dumper
+            # emitted could not be read back at all.
+            return self._parse_block_scalar(
+                idx, indent, self._strip_inline_comment(rest)
+            )
+        if self._looks_like_key(rest):
+            return self._parse_inline_mapping(idx, indent + 2, rest, depth + 1)
+        return self._parse_inline(rest), idx
 
     # -- values ------------------------------------------------------------
 
@@ -324,7 +432,10 @@ class _Parser:
         while i < self.n:
             line = self.lines[i]
             if self._is_blank(line):
-                raw.append("")
+                # FM-6: a whitespace-only line is content, not a blank line --
+                # collapsing it to "" silently ate the whitespace.  Only a
+                # genuinely empty line becomes the empty string.
+                raw.append("" if line == "" else line)
                 i += 1
                 continue
             if self._indent(line) <= parent_indent:
@@ -333,9 +444,10 @@ class _Parser:
             i += 1
 
         if explicit_indent is not None:
-            content_indent = explicit_indent
+            # FM-14: an indentation indicator is *parent-relative*, not absolute.
+            content_indent = parent_indent + explicit_indent
         else:
-            non_blank = [self._indent(l) for l in raw if l != ""]
+            non_blank = [self._indent(l) for l in raw if l.strip() != ""]
             content_indent = min(non_blank) if non_blank else parent_indent + 1
 
         parts = []
@@ -350,37 +462,37 @@ class _Parser:
         else:  # folded ">"
             result = self._fold(parts)
 
+        # FM-12: chomping follows YAML.  ``joined`` has no trailing newline of
+        # its own, so the number of trailing empty lines is exactly the number
+        # of trailing newlines the content carries beyond the final line's
+        # terminator.  The old code added a newline only when one was missing,
+        # so clip kept too many trailing blank lines and keep dropped one.
         if chomp == "strip":
             result = result.rstrip("\n")
         elif chomp == "clip":
-            if result and not result.endswith("\n"):
-                result += "\n"
+            stripped = result.rstrip("\n")
+            result = stripped + "\n" if stripped else ""
         else:  # keep
-            if result and not result.endswith("\n"):
-                result += "\n"
+            result = result + "\n" if raw else ""
         return self._check_scalar(result), i
 
     @staticmethod
     def _fold(parts: list[str]) -> str:
-        """Apply YAML folding: single newlines become spaces, blank lines
-        become newlines."""
-        result = ""
-        i = 0
-        while i < len(parts):
-            part = parts[i]
-            if part == "":
-                j = i
-                while j < len(parts) and parts[j] == "":
-                    j += 1
-                result += "\n" * (j - i)
-                i = j
-            else:
-                if result and not result.endswith("\n"):
-                    result += " "
-                result += part
-                i += 1
-        return result
+        """Apply YAML folding while preserving more-indented lines.
 
+        A newline between ordinary content lines folds to a space. A line
+        that retains leading whitespace after the common block indentation is
+        more-indented content, so YAML keeps the line break around it.
+        """
+        result = ""
+        for index, part in enumerate(parts):
+            if part == "":
+                result += "\n"
+                continue
+            if index > 0 and parts[index - 1] != "":
+                result += _fold_separator(parts[index - 1], part)
+            result += part
+        return result
     # -- inline scalars ----------------------------------------------------
 
     def _parse_inline(self, s: str) -> object:
@@ -599,7 +711,7 @@ class _Parser:
                     else:
                         width, digits = 8, s[i + 2 : i + 10]
                     if len(digits) == width and _is_hex(digits):
-                        result.append(chr(int(digits, 16)))
+                        result.append(_decode_escape(digits))
                         i += 2 + width
                         continue
                 if e in self._ESCAPES:
@@ -723,6 +835,41 @@ def _is_hex(s: str) -> bool:
     return all(c in "0123456789abcdefABCDEF" for c in s)
 
 
+def _reject_surrogates(value: str) -> None:
+    """Reject lone surrogates that only fail later, at write time.
+
+    FM-4: `\\uD800` parsed cleanly and passed validation, and then *every*
+    write path died with a raw UnicodeEncodeError.  The value is not
+    representable in UTF-8, so it has to be refused where it enters.
+    """
+    for char in value:
+        if 0xD800 <= ord(char) <= 0xDFFF:
+            raise FrontmatterError(
+                f"frontmatter contains an unpaired surrogate (U+{ord(char):04X}), "
+                "which cannot be written as UTF-8"
+            )
+
+
+def _decode_escape(digits: str) -> str:
+    """Decode one ``\\x``/``\\u``/``\\U`` escape, rejecting invalid ranges.
+
+    FM-3: ``chr()`` raised a raw ValueError for out-of-range values and
+    ``\\uD800`` produced a string every write path then failed to encode.
+    Both bypassed every FrontmatterError guard, so they are translated here.
+    """
+    code = int(digits, 16)
+    if 0xD800 <= code <= 0xDFFF:
+        raise FrontmatterError(
+            f"escape U+{code:04X} is an unpaired surrogate and cannot be written "
+            "as UTF-8"
+        )
+    if code > 0x10FFFF:
+        raise FrontmatterError(
+            f"escape U+{code:04X} is outside the Unicode range (max U+10FFFF)"
+        )
+    return chr(code)
+
+
 # --------------------------------------------------------------------------
 # Dumping
 # --------------------------------------------------------------------------
@@ -740,6 +887,7 @@ def dump_frontmatter(data: dict, /, *, key_order: list[str] | None = None) -> st
     """
     if not isinstance(data, dict):
         raise TypeError("frontmatter must be a mapping")
+    _check_dump_nesting(data)
 
     keys = list(data.keys())
     if key_order is not None:
@@ -748,11 +896,43 @@ def dump_frontmatter(data: dict, /, *, key_order: list[str] | None = None) -> st
         known.sort(key=lambda k: order[k])
         keys = known + [k for k in keys if k not in order]
 
+    _check_serialized_key_collisions(keys)
     lines = ["---"]
     for k in keys:
         _dump_kv(lines, k, data[k], 0)
     lines.append("---")
     return "\n".join(lines) + "\n"
+
+
+def _check_dump_nesting(data: dict) -> None:
+    """Reject container graphs deeper than the parser can represent.
+
+    Programmatic callers can construct structures that could never be read
+    from frontmatter text.  Validate those structures iteratively so the
+    dumper reports its bounded public error before its recursive renderers
+    approach Python's recursion limit.
+    """
+    stack = [(data, 0, False)]
+    active: set[int] = set()
+    while stack:
+        value, depth, leaving = stack.pop()
+        if not isinstance(value, (dict, list)):
+            continue
+        identity = id(value)
+        if leaving:
+            active.remove(identity)
+            continue
+        if depth > MAX_NESTING_DEPTH:
+            raise TypeError(
+                "frontmatter nesting is too deep "
+                f"(max {MAX_NESTING_DEPTH} levels)"
+            )
+        if identity in active:
+            raise TypeError("frontmatter contains a cyclic mapping or list")
+        active.add(identity)
+        stack.append((value, depth, True))
+        children = list(value.values()) if isinstance(value, dict) else value
+        stack.extend((child, depth + 1, False) for child in reversed(children))
 
 
 def _dump_kv(lines: list[str], key, value, indent: int) -> None:
@@ -771,6 +951,7 @@ def _dump_mapping_tail(lines: list[str], prefix: str, key_str: str, value: dict,
     if not value:
         lines.append(f"{prefix}{key_str}: {{}}")
         return
+    _check_serialized_key_collisions(value.keys())
     lines.append(f"{prefix}{key_str}:")
     for key, item in value.items():
         _dump_kv(lines, key, item, indent + 2)
@@ -786,11 +967,6 @@ def _dump_sequence_tail(lines: list[str], prefix: str, key_str: str, value: list
         _dump_list_item(lines, item, indent + 2)
 
 
-def _dump_scalar_value(value, indent: int) -> str:
-    """Render one leaf scalar for a mapping value."""
-    return _dump_scalar(value, indent)
-
-
 def _dump_sequence_element_value(item, indent: int) -> list[str]:
     """Render one block sequence element as lines (no ``- `` marker)."""
     if not isinstance(item, dict):
@@ -799,6 +975,7 @@ def _dump_sequence_element_value(item, indent: int) -> list[str]:
         return ["{}"]
     parts: list[str] = []
     items = list(item.items())
+    _check_serialized_key_collisions(key for key, _ in items)
     first_key, first_value = items[0]
     parts.append(f"{_format_key(first_key)}: {_dump_scalar_value_nested(first_value, indent + 2)}")
     for key, value in items[1:]:
@@ -837,14 +1014,8 @@ def _dump_scalar_value_nested(value, indent: int) -> str:
 
 
 def _dump_list_item(lines: list[str], item, indent: int) -> None:
-    prefix = " " * indent
-    _dump_block_item(lines, item, indent, is_first=True)
-
-
-def _dump_block_item(lines: list[str], item, indent: int, *, is_first: bool) -> None:
-    """Append one block item; top-level items start on the ``- `` line."""
-    marker = "- " if is_first else "- "
-    _dump_sequence_element(lines, marker, item, indent)
+    """Append one block sequence item; the marker starts on the ``- `` line."""
+    _dump_sequence_element(lines, "- ", item, indent)
 
 
 def _dump_sequence_element(lines: list[str], marker: str, item, indent: int) -> None:
@@ -905,6 +1076,12 @@ def _render_block_scalar(value, indent: int) -> str:
         )
     s = str(value)
     if "\n" in s:
+        if s.strip() == "":
+            # FM-6/FM-10: a value made only of whitespace and newlines cannot
+            # survive a block scalar -- the dumper's pad and the parser's
+            # indent detection both erase it (``"\\n"`` re-parsed as ``""`` and
+            # ``" \\n "`` as ``""``).  A quoted scalar round-trips it exactly.
+            return _double_quote(s)
         return _block_scalar(s, indent)
     return _quote_if_needed(s)
 
@@ -965,22 +1142,92 @@ def _format_flow_item(item, depth: int) -> str:
     return _dump_flow_scalar(item)
 
 
+def _needs_indent_indicator(lines: list[str]) -> bool:
+    """True when the parser's min-indent heuristic would eat real indentation.
+
+    FM-5: the padded content of a value whose every line already begins with
+    whitespace has a *higher* minimum indentation than the pad, so the parser's
+    ``min(non-blank indents)`` strips the value's own indentation.  An explicit
+    indentation indicator removes the guesswork.
+    """
+    content = [line for line in lines if line.strip() != ""]
+    return bool(content) and all(line[:1] in (" ", "\t") for line in content)
+
+
+def _block_scalar_header(s: str) -> tuple[str, str]:
+    """Return ``(style, chomp)`` for *s* under YAML chomping rules."""
+    if not s.endswith("\n"):
+        return "|", "-"
+    if s == s.rstrip("\n") + "\n":
+        return "|", ""
+    return "|", "+"
+
+
+def _block_scalar_lines(s: str, chomp: str) -> list[str]:
+    """Return the content lines a block scalar needs to reproduce *s*.
+
+    A trailing newline is carried by a trailing empty line, because that is
+    what a line terminator is inside a block scalar.
+    """
+    content = s.rstrip("\n") if chomp else s
+    lines = content.split("\n") if content != "" else []
+    if chomp == "+":
+        lines += [""] * (len(s) - len(s.rstrip("\n")) - 1)
+    return lines
+
+
 def _block_scalar(s: str, indent: int) -> str:
-    """Return a multi-line block-scalar representation for *s*."""
+    """Return a block-scalar representation that re-parses to exactly *s*.
+
+    Header choice follows YAML chomping (FM-12): ``|-`` for a value with no
+    trailing newline, ``|`` for exactly one, and ``|+`` for more.
+    """
     pad = " " * (indent + 2)
-    if s.endswith("\n"):
-        stripped = s.rstrip("\n")
-        if s == stripped + "\n":
-            header = "|"
-            content = stripped
-        else:
-            header = "|+"
-            content = s
-    else:
-        header = "|-"
-        content = s
-    body = "\n".join(pad + line for line in content.split("\n"))
+    style, chomp = _block_scalar_header(s)
+    lines = _block_scalar_lines(s, chomp)
+    # The indentation indicator precedes the chomping indicator (``|2-``): the
+    # parser reads the digit first.  It is parent-relative and the content is
+    # always padded exactly two columns past the key, so it is always 2.
+    indicator = "2" if _needs_indent_indicator(lines) else ""
+    header = f"{style}{indicator}{chomp}"
+    # An empty content line stays genuinely empty: padding it would turn it
+    # into a whitespace-only line, which the parser preserves as content
+    # (FM-6) and would then round-trip as spaces.
+    body = "\n".join((pad + line) if line != "" else "" for line in lines)
     return f"{header}\n{body}"
+
+
+_DOUBLE_QUOTE_ESCAPES = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+    "\x85": "\\N",
+    "\xa0": "\\_",
+    "\u2028": "\\L",
+    "\u2029": "\\P",
+}
+
+
+def _double_quote(s: str) -> str:
+    """Render *s* as a double-quoted scalar with escapes.
+
+    Used for values a block scalar cannot express -- a value that is nothing
+    but whitespace and newlines (FM-6, FM-10), where the dumper's own
+    indentation and chomping rules would destroy it.
+    """
+    out = ['"']
+    for char in s:
+        escaped = _DOUBLE_QUOTE_ESCAPES.get(char)
+        if escaped is not None:
+            out.append(escaped)
+        elif ord(char) < 0x20 or ord(char) == 0x7F:
+            out.append(f"\\x{ord(char):02x}")
+        else:
+            out.append(char)
+    out.append('"')
+    return "".join(out)
 
 
 def _quote_if_needed(s: str) -> str:
@@ -990,9 +1237,12 @@ def _quote_if_needed(s: str) -> str:
         return _single_quote(s)
     if s != s.strip():
         return _single_quote(s)
-    if ": " in s or s.endswith(":"):
+    if _KEY_SEPARATOR_RE.search(s):
         return _single_quote(s)
-    if " #" in s:
+    # FM-8: the parser starts an inline comment at '#' preceded by a space *or
+    # a tab*, so quoting only for " #" truncated any value containing "a\t#b"
+    # to "a" with nothing reporting it.
+    if _INLINE_COMMENT_RE.search(s):
         return _single_quote(s)
     if s.startswith(("#", "-", "?", "!", "&", "*", "[", "]", "{", "}",
                      ",", "`", "%", "@", "'", '"', "|", ">", ": ", ":",
@@ -1007,8 +1257,35 @@ def _quote_if_needed(s: str) -> str:
 _QUOTE_KEY_CHARS = ("'", '"', "[", "]", "{", "}", "(", ")")
 
 
+def _reject_unwritable_key(k: str) -> None:
+    """Reject a mapping key this parser could never read back (FM-9).
+
+    Escaped double-quoted keys can represent the control characters that the
+    line-based parser accepts in quoted input.  Unicode surrogate code points
+    are the exception: they cannot be encoded as UTF-8, even when escaped, so
+    reject them before the writer can leak a raw encoding failure.
+    """
+    if any(0xD800 <= ord(char) <= 0xDFFF for char in k):
+        raise ValueError(
+            f"frontmatter key {k!r} contains a surrogate and cannot be "
+            "written as a mapping key"
+        )
+
+
 def _format_key(key) -> str:
     k = str(key)
+    _reject_unwritable_key(k)
+    return _format_key_text(k)
+
+
+def _format_key_text(k: str) -> str:
+    """Choose an escaped, quoted, or bare representation for a key."""
+    if (any(ord(char) < 0x20 or ord(char) == 0x7F for char in k)
+            or any(char in "\u0085\u00a0\u2028\u2029" for char in k)):
+        # FM-9: the parser already decodes escaped double-quoted keys.  Keep
+        # the physical mapping entry on one line while preserving newlines,
+        # tabs, and other representable control characters in the key value.
+        return _double_quote(k)
     needs_quotes = (
         k == ""
         or k != k.strip()
@@ -1016,6 +1293,19 @@ def _format_key(key) -> str:
         or any(marker in k for marker in (":", "#", *_QUOTE_KEY_CHARS))
     )
     return _single_quote(k) if needs_quotes else k
+
+
+def _check_serialized_key_collisions(keys) -> None:
+    """Reject distinct mapping keys that would render to the same key text."""
+    rendered: dict[str, object] = {}
+    for key in keys:
+        key_text = _format_key(key)
+        if key_text in rendered:
+            raise ValueError(
+                "duplicate frontmatter key after serialization: "
+                f"{rendered[key_text]!r} and {key!r} both render as {key_text!r}"
+            )
+        rendered[key_text] = key
 
 
 def _single_quote(s: str) -> str:

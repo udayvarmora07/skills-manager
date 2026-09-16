@@ -1,6 +1,6 @@
 # ADR-002 — Physical Roots, Consumers, and Effective Skill State
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest:** Proposed domain vocabulary and discovery policy for separating
 physical skill roots from the agents that consume them. This ADR deliberately
@@ -10,6 +10,15 @@ does not add runtime entities, SQLite columns, CLI commands, or Store methods.
 
 Accepted as a design constraint and research baseline — September 8, 2026.
 Runtime data-model introduction remains approval-gated under `AGENTS.md`.
+
+**Implementation note (2026-09-11).** Invariant 1 is no longer aspirational: root
+identity is `Path.resolve()` in `skillsmgr/root_discovery.py` (aggregate listings
+and sync planning collapse aliases to one physical root, keeping the first stable
+descriptor), and the read-only `effective.explain` diagnostic applies the same
+dedup when it elects a winner, so one physical file can no longer appear as two
+candidates or as its own `shadowed` copy (SCOPE-7). Invariants 2–6 remain
+design-only; the `EffectiveSkill` entity does not exist and `effective_state`
+stays `unresolved`.
 
 ## Context
 
@@ -84,8 +93,17 @@ the public API. The safe subset implemented now is:
 - Global, user, project, and nested-project semantics are documented but not
   exposed as new runtime entities.
 - Compatibility records expose observed instance states (`active`, `disabled`,
-  `invalid`, `duplicated`, `divergent`, `unmanaged`) and explicitly return
+  `invalid`, `duplicated`, `divergent`, `unmanaged`, and — since SCOPE-14 —
+  `unaddressable` for an on-disk name that fails the canonical rule, paired with
+  `addressable: false` on the row) and explicitly return
   `effective_state: unresolved`; `shadowed` is not inferred without precedence.
+- The read-only `doctor --explain CONSUMER [--project DIR] [--skill NAME]`
+  diagnostic (`skillsmgr/effective.py`, 2026-09-11) reports the winning instance
+  per consumer for one triple, derived at read time from the primary sources in
+  @docs/12-agent-root-discovery-2026-09-08.md. It persists nothing, adds no
+  `Store` method, no SQLite state and no new CLI command; it returns
+  `undocumented-precedence`/`unknown-consumer` rather than guessing, and its
+  report is *not* the `EffectiveSkill` entity this ADR proposes.
 
 ## Approval required before runtime expansion
 

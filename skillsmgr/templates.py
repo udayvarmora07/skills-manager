@@ -6,10 +6,10 @@ template's body is the starting point for ``create``.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from .store import _atomic_write_text, _mutation_lock
+from .validator import NAME_RE, validate_skill_name
 
 __all__ = [
     "TEMPLATE_NAME_RE",
@@ -20,7 +20,9 @@ __all__ = [
     "create_template",
 ]
 
-TEMPLATE_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# Keep the historical public export while making the validator the one source
+# of truth for template names too.
+TEMPLATE_NAME_RE = NAME_RE
 
 DEFAULT_TEMPLATE = """---
 name: {name}
@@ -48,10 +50,7 @@ def list_templates(templates_dir: Path) -> list[str]:
 
 def template_path(templates_dir: Path, name: str) -> Path:
     """Return the path for template *name*, rejecting unsafe names."""
-    if not TEMPLATE_NAME_RE.fullmatch(name):
-        raise ValueError(
-            f"invalid template name {name!r}: must match {TEMPLATE_NAME_RE.pattern}"
-        )
+    validate_skill_name(name)
     return templates_dir / f"{name}.md"
 
 
@@ -65,10 +64,15 @@ def create_template(
 ) -> Path:
     """Create template *name* with default content and return its path."""
     path = template_path(templates_dir, name)
+    # BUG-11: the directory must exist before the lock is taken.  Today
+    # ``_mutation_lock`` is a pure in-memory lookup so the old ordering could not
+    # fail, but it read as though the lock guarded the mkdir -- and any future
+    # file-backed lock would have created its lock file inside a directory that
+    # did not exist yet.
+    templates_dir.mkdir(parents=True, exist_ok=True)
     with _mutation_lock(path):
         if path.exists():
             raise FileExistsError(f"template '{name}' already exists")
-        templates_dir.mkdir(parents=True, exist_ok=True)
         content = body if body is not None else DEFAULT_TEMPLATE.format(name=name)
         _atomic_write_text(path, content)
     return path

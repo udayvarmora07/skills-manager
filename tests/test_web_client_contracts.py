@@ -168,18 +168,17 @@ class LocalClientContractTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn("invalid Host header", payload["error"])
 
-    def test_read_path_host_validation_is_a_tracked_gap(self):
-        """Characterization only: reads are not Host-validated (issue #14).
+    def test_read_path_host_validation_closes_the_dns_rebinding_gap(self):
+        """SEC-1: reads are Host-validated too (issue #14, now fixed).
 
-        The pre-handler policy deliberately covers state-changing methods, and
-        no CORS headers are served, so a browser cannot read a cross-origin
-        response. A DNS-rebound page whose origin *is* the rebound host is not
-        covered by that reasoning; that path is recorded in issue #14 rather
-        than changed here.
+        The policy used to cover state-changing methods only. A DNS-rebound
+        page whose origin *is* the rebound host could therefore read the whole
+        skill library through GET, because the browser cannot distinguish that
+        origin from the real one. The gate now runs for every request.
         """
         status, payload = self._raw_request("GET", "/api/skills", {"Host": "evil.example"})
-        self.assertEqual(status, 200)  # current behavior, tracked in #14
-        self.assertTrue(any(row["name"] == "demo" for row in payload))
+        self.assertEqual(status, 403)
+        self.assertIn("invalid Host header", payload["error"])
 
     def test_cross_site_browser_request_is_still_rejected(self):
         """No CORS relaxation: loopback-only + no auth must stay fail-closed."""

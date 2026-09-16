@@ -160,6 +160,35 @@ class WebAppTestCase(unittest.TestCase):
                 urllib.request.urlopen(request)
             self.assertEqual(ctx.exception.code, 403, (method, path))
 
+    def test_cross_site_get_is_rejected_for_every_read_route(self):
+        # SEC-1: the Host/Origin/Fetch-Metadata policy used to run only for
+        # mutating methods, so a hostile web page could read the whole skill
+        # library (and the full export archive) through GET.
+        for path in ("/api/skills", "/api/skills/demo", "/api/doctor", "/api/export?full=1"):
+            for headers in (
+                {"Host": f"attacker.example:{self.port}"},
+                {"Sec-Fetch-Site": "cross-site"},
+                {"Origin": "http://attacker.example"},
+                {"Referer": "http://attacker.example/landing"},
+            ):
+                with self.subTest(path=path, headers=headers):
+                    with self.assertRaises(urllib.error.HTTPError) as ctx:
+                        self._request("GET", path, headers=headers)
+                    self.assertEqual(ctx.exception.code, 403)
+
+    def test_same_origin_get_remains_allowed(self):
+        status, body, _ = self._request(
+            "GET",
+            "/api/skills",
+            headers={
+                "Origin": f"http://127.0.0.1:{self.port}",
+                "Sec-Fetch-Site": "same-origin",
+                "Host": f"127.0.0.1:{self.port}",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body))
+
     def test_json_mutation_rejects_browser_form_content_type(self):
         request = urllib.request.Request(
             f"http://127.0.0.1:{self.port}/api/skills",
@@ -196,6 +225,26 @@ class WebAppTestCase(unittest.TestCase):
             self.assertEqual(json.loads(ctx.exception.read()), {"error": message})
         self.assertEqual({row["name"] for row in store.list()}, initial_names)
         self.assertEqual(set(store.templates_dir.glob("*.md")), initial_templates)
+
+    def test_install_rejects_traversal_absolute_and_oversized_values(self):
+        for payload in (
+            {"source": "../../tmp/pwn"},
+            {"source": "/etc/passwd"},
+            {"source": "C:/Windows"},
+            {"source": "owner/repo", "agents": ["../tmp"]},
+            {"source": "owner/repo", "skills": ["/etc/passwd"]},
+            {"source": "owner/repo", "agents": ["x" * 257]},
+        ):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/install",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request)
+            self.assertEqual(ctx.exception.code, 400, payload)
+            self.assertIn("invalid", json.loads(ctx.exception.read())["error"])
 
     def test_install_scalar_types_return_json_400(self):
         cases = (

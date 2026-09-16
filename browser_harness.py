@@ -23,6 +23,7 @@ import urllib.request
 from pathlib import Path
 from threading import Thread
 
+from skillsmgr.launcher_security import trusted_executable
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
 
@@ -32,10 +33,18 @@ VIEWPORTS = ((320, 700), (400, 800), (640, 900), (900, 800), (1280, 900))
 
 def _chrome() -> str:
     for name in ("google-chrome", "chromium", "chromium-browser"):
-        path = shutil.which(name)
+        path = trusted_executable(name, which=shutil.which)
         if path:
             return path
     raise RuntimeError("Chrome/Chromium is required for browser_harness.py")
+
+
+def _node() -> str:
+    """Return a trusted Node executable for the small CDP client."""
+    path = trusted_executable("node", which=shutil.which)
+    if path:
+        return path
+    raise RuntimeError("a trusted Node executable is required for browser_harness.py")
 
 
 def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float = 30.0) -> int:
@@ -91,7 +100,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   ws.close(); console.log(JSON.stringify({width,height,document:JSON.parse(value.result.result.value),errors,warnings,failed}));
 })().catch(e=>{ console.error(e.stack||String(e)); process.exit(1); });
 """
-    result = subprocess.run(["node", "-e", script, url, str(width), str(height), str(port)], capture_output=True, text=True, timeout=20)
+    result = subprocess.run([_node(), "-e", script, url, str(width), str(height), str(port)], capture_output=True, text=True, timeout=20)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     lines = [line for line in result.stdout.splitlines() if line.strip()]
@@ -111,7 +120,7 @@ def run() -> int:
         server_thread = Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         profile = Path(directory) / "chrome"
-        chrome = subprocess.Popen([_chrome(), "--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        chrome = subprocess.Popen([_chrome(), "--headless=new", "--disable-gpu", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
         try:
             port = _devtools_port(chrome, profile)
             results = [_run_probe(server.url, width, height, port) for width, height in VIEWPORTS]

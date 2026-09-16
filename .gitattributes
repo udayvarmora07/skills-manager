@@ -1,0 +1,4 @@
+# The vendored Vue bundle is verified by sha256 (SEC-9, check_package_data.py).
+# End-of-line translation must never rewrite those bytes, or the recorded hash
+# would only hold on the platform that last vendored it.
+skillsmgr/webui/static/vendor/vue.global.prod.js -text

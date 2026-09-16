@@ -111,6 +111,53 @@ class TestEditToggle(IsolatedStoreTestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["disabled"], 0)
 
+    def test_disable_refuses_a_directory_holding_both_documents(self):
+        # STORE-3: with both documents present the rename used to land on top
+        # of the other one, destroying it silently (no snapshot either).
+        self.store.create("demo", "Demo skill", body="Enabled body")
+        skill_dir = self.store.skills_dir / "demo"
+        (skill_dir / "SKILL.md.disabled").write_text(
+            _skill_body(name="demo", description="Disabled copy"), encoding="utf-8"
+        )
+
+        with self.assertRaises(StoreError) as ctx:
+            self.store.disable("demo")
+        self.assertIn("both SKILL.md and SKILL.md.disabled", str(ctx.exception))
+
+        self.assertTrue((skill_dir / "SKILL.md").is_file())
+        self.assertTrue((skill_dir / "SKILL.md.disabled").is_file())
+
+        with self.assertRaises(StoreError):
+            self.store.enable("demo")
+        self.assertTrue((skill_dir / "SKILL.md").is_file())
+        self.assertTrue((skill_dir / "SKILL.md.disabled").is_file())
+
+    def test_doctor_reports_a_directory_holding_both_documents(self):
+        self.store.create("demo", "Demo skill")
+        (self.store.skills_dir / "demo" / "SKILL.md.disabled").write_text(
+            _skill_body(name="demo", description="Second copy"), encoding="utf-8"
+        )
+
+        report = self.store.doctor()
+
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["conflicting_documents"], ["demo"])
+
+    def test_add_refuses_a_source_holding_both_documents(self):
+        source = Path(self._tmp.name) / "mixed-source"
+        source.mkdir(parents=True)
+        (source / "SKILL.md").write_text(
+            _skill_body(name="mixed", description="Enabled"), encoding="utf-8"
+        )
+        (source / "SKILL.md.disabled").write_text(
+            _skill_body(name="mixed", description="Disabled"), encoding="utf-8"
+        )
+
+        with self.assertRaises(StoreError) as ctx:
+            self.store.add(source, name="mixed")
+        self.assertIn("both SKILL.md and SKILL.md.disabled", str(ctx.exception))
+        self.assertFalse((self.store.skills_dir / "mixed").exists())
+
     def test_edit_preserves_original_when_atomic_replacement_fails(self):
         self.store.create("demo", "Demo skill", body="Original body")
         original = (self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8")
@@ -164,6 +211,68 @@ class TestEditToggle(IsolatedStoreTestCase):
         self.assertTrue((self.store.skills_dir / "demo" / "SKILL.md").read_text(encoding="utf-8").endswith("\n"))
 
 
+    def test_add_and_remove_are_mutually_exclusive(self):
+        # STORE-2: add() used to copy straight into the live tree with no lock,
+        # so a concurrent remove() could carry the half-copied directory to the
+        # trash and leave a husk that doctor() still called healthy.
+        #
+        # The property asserted is *mutual exclusion*, not a particular lock
+        # key: add() and remove() must acquire at least one lock in common.
+        # The library-wide index lock (STORE-12) also satisfies this, so this
+        # test survives a locking redesign instead of pinning an implementation
+        # detail that a stronger design is free to change.
+        from skillsmgr import store as store_mod
+
+        source = Path(self._tmp.name) / "racing"
+        source.mkdir(parents=True)
+        (source / "SKILL.md").write_text(_skill_body("racing"), encoding="utf-8")
+        self.store.create("racing", "Placeholder")
+        self.store.remove("racing")
+
+        real_lock = store_mod._mutation_lock
+        seen: list[int] = []
+
+        def spy(path):
+            lock = real_lock(path)
+            seen.append(id(lock))
+            return lock
+
+        with mock.patch.object(store_mod, "_mutation_lock", spy):
+            seen.clear()
+            self.store.add(source, name="racing")
+            add_locks = set(seen)
+        installed = self.store.get("racing")
+        self.assertEqual(installed["name"], "racing")
+
+        with mock.patch.object(store_mod, "_mutation_lock", spy):
+            seen.clear()
+            self.store.remove("racing")
+            remove_locks = set(seen)
+
+        self.assertTrue(add_locks, "add() took no lock at all")
+        self.assertTrue(remove_locks, "remove() took no lock at all")
+        self.assertTrue(
+            add_locks & remove_locks,
+            "add() and remove() share no lock, so they can interleave",
+        )
+        self.assertTrue(self.store.doctor()["ok"])
+
+    def test_add_leaves_no_staging_directory_and_fails_cleanly(self):
+        source = Path(self._tmp.name) / "incoming"
+        source.mkdir(parents=True)
+        (source / "SKILL.md").write_text(_skill_body("staged"), encoding="utf-8")
+
+        with mock.patch("skillsmgr.store.os.replace", side_effect=OSError("replace failed")):
+            with self.assertRaises(StoreError) as ctx:
+                self.store.add(source, name="staged")
+        self.assertIn("could not install skill 'staged'", str(ctx.exception))
+        self.assertFalse((self.store.skills_dir / "staged").exists())
+        self.assertEqual(
+            sorted(p.name for p in self.store.skills_dir.iterdir()), []
+        )
+        self.assertTrue(self.store.doctor()["ok"])
+
+
 class TestTrash(IsolatedStoreTestCase):
     def test_remove_trash_restore_purge(self):
         self.store.create("demo", "Demo skill")
@@ -184,6 +293,64 @@ class TestTrash(IsolatedStoreTestCase):
         self.store.restore("demo")
         self.assertEqual(self.store.get("demo")["description"], "Demo skill")
         self.assertEqual(len(self.store.trash_list()), 1)
+
+
+    def test_restore_reports_a_lost_trash_copy_as_a_store_error(self):
+        # STORE-5: when the trash copy disappears between listing and moving,
+        # a raw FileNotFoundError used to escape to callers (REST answered
+        # 500 instead of a clean dialog).
+        self.store.create("demo", "Demo skill")
+        self.store.remove("demo")
+        source = next(p for p in self.store.trash_dir.iterdir() if p.is_dir())
+
+        with mock.patch("skillsmgr.store.shutil.move", side_effect=OSError("gone")):
+            with self.assertRaises(StoreError) as ctx:
+                self.store.restore("demo")
+        self.assertIn("cannot restore 'demo'", str(ctx.exception))
+        self.assertTrue(source.exists())
+
+    def test_resync_repairs_a_trashed_row_with_no_trash_copy(self):
+        # STORE-5: a lost race creates a 'trashed' row with no trash directory
+        # that no resync could ever repair, leaving doctor() permanently
+        # unhealthy.
+        import shutil
+
+        self.store.create("demo", "Demo skill")
+        self.store.remove("demo")
+        shutil.rmtree(self.store.trash_dir)
+
+        report = self.store.resync()
+
+        self.assertEqual(report["removed"], 1)
+        self.assertEqual(self.store.trash_list(), [])
+        self.assertTrue(self.store.doctor()["ok"])
+
+    def test_purge_trash_and_restore_share_one_lock(self):
+        # STORE-5: both consume the same trash entries, so they must not run
+        # concurrently.
+        import threading
+
+        from skillsmgr.atomic_io import mutation_lock
+
+        self.store.create("demo", "Demo skill")
+        self.store.remove("demo")
+        lock = mutation_lock(self.store.trash_dir / ".trash-lock")
+        lock.acquire()
+        try:
+            done = threading.Event()
+
+            def purge():
+                self.store.purge_trash()
+                done.set()
+
+            worker = threading.Thread(target=purge)
+            worker.start()
+            self.assertFalse(done.wait(0.4), "purge_trash ignored the trash lock")
+        finally:
+            lock.release()
+        worker.join(timeout=10)
+        self.assertTrue(done.is_set())
+        self.assertEqual(self.store.trash_list(), [])
 
 
 class TestSearchStatsHistoryDoctor(IsolatedStoreTestCase):
@@ -279,13 +446,50 @@ class TestExportImport(IsolatedStoreTestCase):
 
         self.assertFalse((self.store.skills_dir / "demo").exists())
 
-    def test_create_rolls_back_when_history_write_fails(self):
-        with mock.patch.object(self.store, "_history", side_effect=sqlite3.Error("history failed")):
-            with self.assertRaises(sqlite3.Error):
+    def test_create_rolls_back_on_a_driver_failure_as_a_clean_error(self):
+        # BUG-1: a sqlite3 driver failure must surface through the Store error
+        # contract, never as a raw sqlite3 exception (cli.py catches StoreError/
+        # ValueError/OSError, so a raw driver error became "unexpected error").
+        real_connect = self.store._connect
+
+        class _FailingHistory:
+            """Real connection that fails only on the history write."""
+
+            def __init__(self, conn):
+                self._conn = conn
+
+            def __getattr__(self, item):
+                return getattr(self._conn, item)
+
+            def execute(self, sql, *args):
+                if "INSERT INTO history" in sql:
+                    raise sqlite3.OperationalError("history failed")
+                return self._conn.execute(sql, *args)
+
+        with mock.patch.object(
+            self.store, "_connect", side_effect=lambda: _FailingHistory(real_connect())
+        ):
+            with self.assertRaises(StoreError) as ctx:
                 self.store.create("demo", "Demo skill")
+        self.assertIn("could not record history for 'demo'", str(ctx.exception))
 
         self.assertFalse((self.store.skills_dir / "demo").exists())
         self.assertEqual(self.store.list(), [])
+
+    def test_create_works_on_a_fresh_data_dir_without_init_db(self):
+        # BUG-1: create() was the only public entry point that never called
+        # _init_db(), so the first mutation on a fresh data dir raised a raw
+        # sqlite3.OperationalError('no such table: skills') and left a skill
+        # directory behind.
+        fresh = Store(data_dir=Path(self._tmp.name) / "fresh")
+
+        created = fresh.create("alpha", "A skill made on a fresh store")
+
+        self.assertEqual(created["name"], "alpha")
+        self.assertTrue((fresh.skills_dir / "alpha" / "SKILL.md").is_file())
+        self.assertEqual([row["name"] for row in fresh.list()], ["alpha"])
+        self.assertEqual([row["action"] for row in fresh.history("alpha")], ["create"])
+        self.assertTrue(fresh.doctor()["ok"])
 
     def test_doctor_reports_transaction_artifacts_snapshot_issues_and_drift(self):
         self.store.create("demo", "Demo skill", body="Original body")

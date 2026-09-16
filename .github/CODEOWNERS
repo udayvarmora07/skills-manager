@@ -1,0 +1,4 @@
+# SEC-17: require maintainer review for every change, with explicit workflow
+# ownership so release and CI policy changes cannot bypass the owner.
+* @udayvarmora07
+/.github/workflows/ @udayvarmora07

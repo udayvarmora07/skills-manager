@@ -13,6 +13,13 @@ from unittest import mock
 import check_package_data
 
 
+#: The packaging gate pins the exact upstream Vue payload (SEC-9), so hermetic
+#: archive fixtures must carry the real bytes rather than a placeholder.
+_VENDORED_VUE = (
+    Path(__file__).resolve().parent.parent / check_package_data.VUE_MEMBER
+).read_bytes()
+
+
 class PackageDataArchiveTests(unittest.TestCase):
     def _write_wheel(self, root: Path, members: dict[str, bytes]) -> Path:
         path = root / "skill_control_plane-1.0.1-py3-none-any.whl"
@@ -33,7 +40,7 @@ class PackageDataArchiveTests(unittest.TestCase):
 
     def _members(self) -> dict[str, bytes]:
         expected = check_package_data.expected_webui_members()
-        return {name: (b"vue payload" if name == check_package_data.VUE_MEMBER else b"asset") for name in expected}
+        return {name: (_VENDORED_VUE if name == check_package_data.VUE_MEMBER else b"asset") for name in expected}
 
     def test_expected_webui_members_are_sorted_and_include_vendored_vue(self):
         members = check_package_data.expected_webui_members()
@@ -55,8 +62,8 @@ class PackageDataArchiveTests(unittest.TestCase):
             expected = check_package_data.expected_webui_members()
             self.assertEqual(wheel_report.webui_members, expected)
             self.assertEqual(sdist_report.webui_members, expected)
-            self.assertEqual(wheel_report.vue_size, len(b"vue payload"))
-            self.assertEqual(sdist_report.vue_size, len(b"vue payload"))
+            self.assertEqual(wheel_report.vue_size, len(_VENDORED_VUE))
+            self.assertEqual(sdist_report.vue_size, len(_VENDORED_VUE))
 
     def test_missing_package_data_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

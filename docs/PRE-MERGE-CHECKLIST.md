@@ -1,6 +1,6 @@
 # Pre-Merge Checklist — Skills Manager
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest:** Maintainer checklist for selective worktree replay and local
 changes. A change is not ready to merge merely because its branch tests pass.
@@ -44,11 +44,22 @@ changes. A change is not ready to merge merely because its branch tests pass.
 
 ## Verification ladder
 
-- [ ] `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py`
+- [ ] `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py check_*.py`
 - [ ] `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests`
 - [ ] `PYTHONDONTWRITEBYTECODE=1 python3 smoke_store.py`
 - [ ] `PYTHONDONTWRITEBYTECODE=1 python3 smoke_web.py`
-- [ ] `node --check skillsmgr/webui/app.js` when frontend code or package data changed.
+- [ ] `PYTHONDONTWRITEBYTECODE=1 python3 check_docs.py` (header facts for every
+      `docs/*.md`, valid local links **and anchors**, table cell counts, and
+      CLI/REST/`Store` surface parity, so an undocumented command, endpoint,
+      method or file cannot land)
+- [ ] `PYTHONDONTWRITEBYTECODE=1 python3 check_complexity.py` (ratchet flat; a
+      failure on a function the change did not touch means the tree is shared —
+      see `AGENTS.md`, *Concurrent writers*)
+- [ ] `PYTHONDONTWRITEBYTECODE=1 python3 check_package_data.py`
+      (`UNAVAILABLE` when the optional `build` tooling is absent is standing
+      behaviour, not a regression)
+- [ ] `node --check skillsmgr/webui/app.js` **and** `node --check
+      skillsmgr/webui/domain.js` when frontend code or package data changed.
 - [ ] `PYTHONDONTWRITEBYTECODE=1 python3 -m skillsmgr --help`
 - [ ] Hermetic temporary-data and temporary-HOME runs cover changed destructive
       paths; no test relies on real user skills.
@@ -65,3 +76,8 @@ changes. A change is not ready to merge merely because its branch tests pass.
 - [ ] `docs/06-progress-log.md` receives a newest-first dated entry.
 - [ ] Historical evidence files remain append-only; current truth is corrected in
       the owning document instead of rewriting history.
+- [ ] Published counts (tests, complexity functions, command inventory) were
+      re-derived by running the gate in this change, not copied from another doc.
+- [ ] Source citations use symbol names rather than `file:line`, and any finding
+      ID closed in behavior is reflected in
+      `docs/13-audit-remediation-status-2026-09-11.md`.

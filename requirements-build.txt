@@ -1,0 +1,31 @@
+# Hash-verified build toolchain (SEC-8).
+#
+# These are the ONLY build tools the release pipeline is allowed to run:
+#   python3 -m pip install --require-hashes -r requirements-build.txt
+#   python3 -m build --no-isolation --wheel --sdist --outdir dist
+#
+# `--no-isolation` makes `build` use exactly these pinned, hash-checked
+# packages instead of resolving a fresh backend from PyPI per run, so the
+# attested wheel/sdist bytes are reproducible. `setuptools==` here must stay
+# equal to `[build-system] requires` in pyproject.toml (a unittest pins it).
+# Every hash is sha256 of an official file published for that exact version.
+#
+# Bumping any version: update this file and pyproject.toml in one commit, or
+# the packaging gate fails loudly rather than silently building something
+# different from what was attested.
+
+build==1.2.2.post1 \
+    --hash=sha256:1d61c0887fa860c01971625baae8bdd338e517b836a2f70dd1f7aa3a6b2fc5b5 \
+    --hash=sha256:b36993e92ca9375a219c99e606a122ff365a760a2d4bba0caa09bd5278b608b7
+
+packaging==26.3 \
+    --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
+    --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+
+pyproject_hooks==1.2.0 \
+    --hash=sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8 \
+    --hash=sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913
+
+setuptools==84.0.0 \
+    --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670 \
+    --hash=sha256:f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73

@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import io
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -33,12 +34,18 @@ class PureHelperTests(unittest.TestCase):
                     launcher.validate_host(host)
 
     def test_chromium_is_preferred_in_documented_order(self):
-        found = {"brave-browser": "/usr/bin/brave-browser",
-                 "google-chrome": "/usr/bin/google-chrome"}
-        self.assertEqual(
-            launcher.find_chromium(lambda name: found.get(name)),
-            "/usr/bin/google-chrome",
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            chrome = root / "google-chrome"
+            brave = root / "brave-browser"
+            for path in (chrome, brave):
+                path.write_text("#!/bin/sh\n", encoding="utf-8")
+                path.chmod(0o700)
+            found = {"brave-browser": str(brave), "google-chrome": str(chrome)}
+            self.assertEqual(
+                launcher.find_chromium(lambda name: found.get(name)),
+                str(chrome.resolve()),
+            )
 
     def test_missing_browser_returns_none(self):
         self.assertIsNone(launcher.find_chromium(lambda name: None))
@@ -119,11 +126,11 @@ class RunFlowTests(unittest.TestCase):
         opener = mock.Mock()
         code = launcher.run(["--print-only"], server_factory=lambda: self.fail(
             "--print-only must not start a server"
-        ), which=lambda name: "/usr/bin/chromium", popen=popen, opener=opener,
+        ), which=lambda name: None, popen=popen, opener=opener,
             out=lines.append)
         self.assertEqual(code, launcher.EXIT_OK)
         self.assertEqual(len(lines), 1)
-        self.assertIn("desktop window", lines[0])
+        self.assertIn("no Chromium-family browser found", lines[0])
         self.assertIn("http://127.0.0.1:8765/", lines[0])
         popen.assert_not_called()
         opener.assert_not_called()
@@ -151,7 +158,7 @@ class RunFlowTests(unittest.TestCase):
         code = launcher.run(
             ["--port", "9999"],
             server_factory=lambda: FakeServer(),
-            which=lambda name: "/usr/bin/chromium",
+            which=lambda name: None,
             popen=mock.Mock(),
             opener=lambda url: opened.append(url),
             out=lines.append,

@@ -1,14 +1,14 @@
 # Store API — Skills Manager
 
-**Version 0.2.0**
+**Version 0.2.1**
 
-**AI manifest**: The `Store` class is the single gateway between the CLI/web UI and global skill data (filesystem + SQLite index). Facts verified against `store.py` on September 10, 2026. The UI MUST use public Store/scopes behavior — never hand-edit files or the DB. Run `python3 smoke_store.py` after any change to `store.py`.
+**AI manifest**: The `Store` class is the single gateway between the CLI/web UI and global skill data (filesystem + SQLite index). Facts verified against `store.py` on September 11, 2026 (source citations are symbol names, not line numbers — the line numbers here had drifted onto unrelated code). The UI MUST use public Store/scopes behavior — never hand-edit files or the DB. Run `python3 smoke_store.py` after any change to `store.py`.
 
 ## Invariants
 
 **[SPEC]**
 
-- The filesystem is the source of truth. SQLite is a rebuildable index only (`SCHEMA_VERSION = "1"`, store.py:26). Never trust the DB over the FS.
+- The filesystem is the source of truth. SQLite is a rebuildable index only (`SCHEMA_VERSION = "1"`, the module constant in `store.py`). Never trust the DB over the FS.
 - Never hand-edit the DB; use `db rebuild`/`db resync` to repair drift.
 - All errors are raised as exceptions — callers surface them as clean dialogs/messages, never tracebacks.
 - Every filesystem operation derived from a skill name first uses the canonical
@@ -18,26 +18,26 @@
 
 ## Exceptions
 
-- `StoreError` (store.py:57) — generic store failure (duplicate, invalid state, I/O).
-- `SkillNotFound` (store.py:61, subclasses `StoreError`) — skill absent or unavailable (e.g. disabled).
+- `StoreError` (the module-level class in `store.py`) — generic store failure (duplicate, invalid state, I/O).
+- `SkillNotFound` (subclasses `StoreError`) — skill absent or unavailable (e.g. disabled).
 - `FrontmatterError` — malformed SKILL.md frontmatter (from `frontmatter.py`).
 
 ## Constructor
 
-`Store(data_dir: Path | None = None)` (store.py:92) — resolves `<data>/skills-manager` (see @docs/01-architecture.md), creates layout, inits DB.
+`Store(data_dir: Path | None = None)` — resolves `<data>/skills-manager` (see @docs/01-architecture.md) and assigns the layout paths.  **It does not create the layout or initialise the DB** (STORE-14): every public entry point calls `_init_db()` itself, so the first use of any method bootstraps the schema.  Call `init_db()` explicitly when an empty data directory must exist before the first call.
 
 ## Public methods
 
 **[SPEC]** Signatures and semantics verified from source.
 
-- `create(self, name, description, *, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — name must match `NAME_RE`, ≤ `MAX_NAME` (64); description required, non-empty, ≤ `MAX_DESCRIPTION` (1024); compatibility ≤ `MAX_COMPATIBILITY` (500). Duplicate name or existing dir → `StoreError`. Returns skill dict.
-- `edit(self, name, description=None, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — partial update; unknown frontmatter keys are preserved. `SkillNotFound` if not installed or no SKILL.md; `StoreError` if disabled. Returns updated skill dict.
-- `list(self, include_disabled=False) -> list[dict]`
+- `create(self, name, description, *, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — name must match `NAME_RE`, ≤ `MAX_NAME` (64); description required, non-empty, ≤ `MAX_DESCRIPTION` (1024); compatibility ≤ `MAX_COMPATIBILITY` (500). Duplicate name or existing dir → `StoreError`. Returns `{"name", "path"}` — **not** the full skill record (STORE-14).
+- `edit(self, name, description=None, license=None, category=None, compatibility=None, version=None, allowed_tools=None, metadata_extra=None, body=None) -> dict` — partial update; unknown frontmatter keys are preserved. `SkillNotFound` if not installed or no SKILL.md; `StoreError` if disabled, or if the document's frontmatter is unparseable (CLI-2/SCOPE-12). Returns `{"name", "changed"}` — **not** the full skill record (STORE-14).
+- `list(self) -> list[dict]` — returns active rows, including disabled ones, annotated with `disabled`; there is **no** `include_disabled` parameter (STORE-14).
 - `get(self, name) -> dict` — raises `SkillNotFound` if absent. Returned records
   include derived, non-persisted observations: portable/extension frontmatter
   partitions, content and metadata hashes, observed timestamp, and provenance.
 - `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`. Scope adapters use the public `list()`/`get()` seams when they need body-aware ranking. CLI global and merged searches pass their requested Store through that adapter, so `--data-dir` remains authoritative.
-- `add(self, path, name=None) -> dict` — import an existing SKILL.md file.
+- `add(self, src, name=None) -> dict` — install an existing skill directory (or SKILL.md file) from `src`; `name` overrides the destination name.
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
 - `restore(self, name, snapshot=None) -> dict` — from trash, or from a validated
   snapshot under `<data>/snapshots/global/<name>/`; the current content is saved
@@ -72,7 +72,9 @@
   module-level guarded helpers; snapshots are not SQLite data and are retained
   newest-five per scope/name.
 - `doctor(self) -> dict` — health check; lists FS/DB inconsistencies, content drift, incomplete transaction artifacts, temporary files, stale snapshots, and repair guidance via `db resync`.
-- `db_rebuild(self)` / `db_resync(self)` — rebuild: drop + re-create index from FS; resync: sync without dropping. FS untouched.
+- `resync(self) -> dict` — re-index from the skills tree **without** dropping the database: it adds new directories, refreshes changed rows, and removes active rows whose directory is gone, returning `{"added", "updated", "removed"}`. No history entries are written (this is an indexing operation), and it takes the library-wide index lock (STORE-12). Note the method is `resync()`, **not** `db_resync()` — the latter does not exist; `db resync` is the *CLI* spelling of this method (STORE-14 follow-up).
+- `db_rebuild(self) -> dict` — delete the index file (plus `-journal`/`-wal`/`-shm`) and rebuild it entirely from the tree, returning `{"added", "updated", "removed"}`. Also runs under the library-wide index lock.
+- `init_db(self) -> None` — create the data directories, tables and metadata if missing. Every public entry point calls it itself, so it is only needed when an empty data directory must exist before the first call.
 
 **[SPEC]** Eval harness results are **not** Store data: `skillsmgr/evals.py`
 reads `evals/evals.json` from a skill directory and writes run results under
@@ -113,7 +115,7 @@ CREATE TABLE IF NOT EXISTS meta (
 CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status);
 ```
 
-**[NOTE]** Timestamps are UTC `YYYY-MM-DDTHH:MM:SSZ` (`now_iso()`). Trash-named files match `_TRASH_TS_RE` = `-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d+)?Z?$` (suffix on trashed skill names). `_connect()` uses `sqlite3.Row` + `PRAGMA foreign_keys = ON`.
+**[NOTE]** Timestamps are UTC `YYYY-MM-DDTHH:MM:SSZ` (`now_iso()`). Trash-named files match `_TRASH_TS_RE` = `-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d+)?Z?(?:-\d+)?$` (suffix on trashed skill names), so a collision counter may follow the `Z` (STORE-14). `_connect()` uses `sqlite3.Row` + `PRAGMA foreign_keys = ON`.
 
 ## Internal helpers (private)
 

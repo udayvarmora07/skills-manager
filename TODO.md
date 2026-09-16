@@ -52,9 +52,20 @@ performed here.
   trash/restore, import/export, history, templates, and rebuild/resync exist.
 - [x] The filesystem is intended to be the source of truth; SQLite is intended
   to be a rebuildable index with `SCHEMA_VERSION = "1"`.
-- [x] The current baseline passes 47 `unittest` tests, `smoke_store.py`,
-  `smoke_web.py`, `node --check skillsmgr/webui/app.js`, and CLI help.
-- [x] The repository is published to GitHub with tag `v1.0.0` and green CI.
+- [x] **Backlog-start baseline (2026-09-07, historical):** 47 `unittest` tests,
+  `smoke_store.py`, `smoke_web.py`, `node --check skillsmgr/webui/app.js`, and CLI
+  help all passed. That number is a record of the baseline this backlog was
+  written against, not of the tree today.
+- [x] **Current baseline (2026-09-16, re-derived by running the gates):** **722
+  `unittest` tests OK**, `smoke_store.py` PASSED, `smoke_web.py` PASSED,
+  `check_docs.py` PASSED, `check_complexity.py` PASSED (221 functions, budget
+  ≤ 15), `node --check` clean on both `skillsmgr/webui/app.js` and
+  `skillsmgr/webui/domain.js`, CLI help runs, and `check_package_data.py` reports
+  `UNAVAILABLE` because the optional `build` tooling is absent (standing
+  behaviour, not a regression). Re-derive these before quoting them — see the
+  ladder in `task.md`.
+- [x] The repository is published to GitHub with tags `v1.0.0` and `v1.0.1` and
+  green CI.
 - [x] PyPI publication is confirmed for `skill-control-plane` 1.0.1 through
   the controlled release workflow; TestPyPI, PyPI, GitHub Release, provenance,
   and post-publish install/CRUD verification all succeeded.
@@ -668,6 +679,218 @@ untouched without approvals; L6 artifacts equal the tested artifacts.
 - [x] T10 docs updated in `task.md`, this file, `PLAN.md`, and the append-only
   progress log; final verification and Git review are recorded in the log.
 
+## Milestone 50 — Deep-audit remediation (2026-09-11, 61 finding IDs closed)
+
+Remediation of `DEEP-AUDIT-2026-09-11.md` (102 distinct findings across seven
+subsystems, baseline commit `0b82094`). Per-finding disposition, one row per ID,
+lives in `docs/13-audit-remediation-status-2026-09-11.md`; this milestone records
+the batches and their verification. No locked constraint moved: the filesystem
+stays the source of truth, `SCHEMA_VERSION = "1"` is unchanged, the CLI stays
+stdlib-only, the web UI stays stdlib-backend with no build step and still binds
+loopback, and no new CLI command or `Store` method was added.
+
+**Status: 67 finding IDs closed, 1 partial, 1 accepted, 33 open — out of 102.**
+(`SEC-5` and `SEC-13` were re-opened as `PARTIAL` on 2026-09-11: halves
+of each had already been closed by `BUG-9` and `BUG-13` in batch 4, before the
+tracker was first written, so the original `OPEN` label and the `40 open` count
+were wrong. Both were closed outright by **Milestone 52** (batch 5), which also
+closed `SEC-6`…`SEC-9` and recorded `SEC-4` as an accepted, documented trade-off.
+See `docs/13-audit-remediation-status-2026-09-11.md`.)
+
+Four batches were run here, in the audit's own §7 severity order; batch 5
+followed as Milestone 52.  A batch is counted
+by *agenda items* it set out to close (20 + 5 + 7 + 14 = 46), which is a smaller
+number than the *distinct IDs* it closed (61), because several agenda items
+covered more than one finding — batch 1's "STORE-3" agenda item closed both
+`STORE-3` and its scope-side twin `SCOPE-13`, for example.  The ID count is the
+authoritative one and comes from the generated table in
+`docs/13-audit-remediation-status-2026-09-11.md`.
+
+- [x] T1 batch 1 — data loss and unrecoverable state (FM-1, STORE-1..STORE-5).
+  An indented `---` inside a multi-line value silently truncated it on every
+  write path; an interrupt during `import_`'s commit destroyed the user's only
+  copy; a both-documents directory was installed and then silently reduced by
+  the next toggle; a force-import discarded a committed `edit()`; `restore`/
+  `purge_trash` raced into an unrepairable row; `add()` copied with no lock.
+- [x] T2 batch 1 — crashes on one bad file (FM-2, FM-3, FM-4, BUG-1, SCOPE-4).
+  A sequence frontmatter root, an out-of-range `\U` escape, a lone surrogate, a
+  raw `sqlite3.OperationalError` from `create()` on a fresh data dir, and an
+  unreadable `SKILL.md` each aborted whole views; each is now a clean error or a
+  reported drift row.
+- [x] T3 batch 1 — remote attack surface (SEC-1, SEC-2, SEC-3). `GET` routes now
+  pass the same Host/Origin/Fetch-Metadata policy as mutations (closing the
+  tracked DNS-rebinding read gap, issue #14); the `doctor?explain=` diagnostic no
+  longer discloses the real agent-skill inventory, the home directory or
+  `data_dir`, and its directory walk is bounded by work rather than by result
+  count.
+- [x] T4 batch 1 — untrusted input (CLI-1, CLI-2, CLI-3, SCOPE-12, SCOPE-13). A
+  hostile `evals.json` regex could hang the CLI and freeze the web-UI process
+  GIL-wide; control characters in `--metadata` keys wrote an unparseable
+  document; ANSI/control characters reached terminal output unfiltered; both
+  edit paths now fail closed on a malformed document.
+- [x] T5 batch 1 — correctness (FM-5..FM-8, FM-10, FM-12, FM-14, BUG-2..BUG-7,
+  SCOPE-1..SCOPE-3). Block-scalar round-trip fidelity, loader/validator
+  agreement, one symlink policy, and the frontend state group.
+- [x] T6 batch 2 — precedence and scope identity (SCOPE-6, SCOPE-7, SCOPE-9,
+  SCOPE-10, SCOPE-11). `explain()` no longer over-claims its top-level verdict or
+  reports a nested-only skill as `no-instances`; roots are deduplicated by
+  physical identity so one file is not two candidates or its own shadowed copy;
+  the global scope has one identity; two in-process servers can no longer read or
+  write each other's data; `list_all()` no longer hides a same-name instance
+  inside one recursive scope.
+- [x] T7 batch 3 — Store integrity (STORE-6..STORE-10, STORE-12, STORE-13),
+  authored by a parallel session in the same working tree and completed here:
+  the two defective tests it left (a teardown that chmod'd a displaced tree, and
+  a lock assertion pinned to the wrong key) were fixed and a property-based
+  lock-sharing test added, and the complexity ratchet it regressed on four
+  functions was restored **by refactoring, not re-baselining**.
+- [x] T8 batch 4 — Store contract truth and web/loader hardening (STORE-14,
+  BUG-8..BUG-15, SCOPE-14..SCOPE-18). All nine silent `except Exception: pass`
+  blocks now diagnose and report payload degradation; `HEAD` mirrors `GET` and
+  `OPTIONS`/`TRACE` return JSON 405 with the security headers instead of a
+  header-less HTML 501; non-canonical names are flagged unaddressable instead of
+  erroring on click; one rogue index row no longer aborts every global aggregate;
+  `HOME=""` no longer relocates agent scopes to `/`; the package-data check now
+  refuses artifacts shipping tests, docs, environment files, databases or
+  bytecode; and the CI SHA-pin contract now covers reusable-workflow refs.
+- [x] T9 documentation truth: `docs/13-audit-remediation-status-2026-09-11.md`
+  (one row per finding, generated from the audit's own tables), a status banner
+  on the audit document, this file, `task.md`, `docs/06-progress-log.md`,
+  `docs/04-store-api.md` (five false contracts corrected) and
+  `docs/02-modules.md`, plus the `CHANGELOG.md` `[Unreleased]` entry.
+- [x] T10 process hardening: `AGENTS.md` gained a **Concurrent writers** `[SPEC]`
+  section after two agent sessions editing one working tree caused a failed edit,
+  a false gate failure and a reverted diff. Six non-destructive checkpoints
+  (`refs/wip/audit-*`) and `/tmp/sm-backup-*` archives exist; nothing is committed.
+- [x] T11 verification: `python3 -m unittest discover -s tests` — **607 tests OK**
+  (598 at the batch close; the nine extra tests pin the extended docs gate added by
+  Milestone 51's follow-up)
+  (audit baseline 477), `smoke_store.py`, `smoke_web.py`, `check_docs.py`,
+  `check_complexity.py`, `node --check` on both frontend files and CLI help all
+  pass. Every fix carries a red-first regression test; batch 4's 29 new tests
+  were confirmed failing (25 of 29) against the pre-fix code.
+- [x] T12 medium security/supply-chain findings closed by **Milestone 52**
+  (batch 5): `SEC-5` (CSP `form-action`), `SEC-6` (multipart staging), `SEC-7`
+  (a write-capable release job executing a PyPI distribution), `SEC-8` (build
+  toolchain pinned + hash-verified), `SEC-9` (vendored Vue integrity), and
+  `SEC-13` (sdist shipped `tests/`). `SEC-4` (`'unsafe-eval'`) is `ACCEPTED`, not
+  fixed — the only real fix needs a build step, which locked constraint 4 forbids.
+- [x] T13 final audit tail is closed in
+  `docs/13-audit-remediation-status-2026-09-11.md`: `FM-20`..`FM-21` now have
+  bounded/canonical validation, `INS-1` is explicitly advisory/heuristic,
+  `INS-2` never self-asserts offline trust/hash/eligibility, and `INFO-1` is a
+  verified false positive with an argv-injection regression. Nothing above Low
+  severity is outstanding; the final tree is 722 tests and 221 tracked
+  functions.
+- [x] T14 `FM-9` is fully closed: representable control-bearing mapping keys
+  use escaped double-quoted output for exact dump/parse round-trips, and root
+  or nested mappings reject distinct Python keys that serialize to the same
+  frontmatter key. Red-first regressions cover both halves; the audit row is
+  now `FIXED`.
+
+## Milestone 54 — Trust-root and validator reference hardening (2026-09-15)
+
+- [x] `SEC-19` — validate and canonicalize environment-selected data roots,
+  reject unsafe roots, and create missing manager directories privately.
+- [x] `FM-19` — normalize URL-decoded link/layout references so fragments,
+  queries, encoded spaces, and sentence punctuation do not warn for existing
+  targets.
+- [x] Add focused regressions, update the audit/security/contributor/changelog
+  and progress records, and run the complete verification ladder without
+  staging or committing.
+
+## Milestone 53 — Launcher, workflow, governance, and hygiene hardening (2026-09-15)
+
+- [x] `SEC-14` — pin every first-party GitHub Action in CI and release to its
+  reviewed full SHA, with version/date comments retained.
+- [x] `SEC-15` — keep Chrome's sandbox enabled and bind the browser harness's
+  ephemeral CDP listener explicitly to loopback.
+- [x] `SEC-16` — share trusted PATH executable discovery across browser and
+  desktop launchers, rejecting unsafe matches and selecting a safe later match.
+- [x] `SEC-17` — add CODEOWNERS, GitHub Actions Dependabot coverage, and a
+  protected `release` environment on the contents-writing job.
+- [x] `SEC-18` — add preventive ignore rules for local configuration,
+  databases, credentials, and private keys.
+- [x] Red-first contracts, focused checks, the live browser harness, complete
+  verification ladder, docs, and Git review are complete; no staging or commit
+  was performed.
+
+## Milestone 51 — Documentation truth pass (2026-09-11)
+
+A documentation reconciliation against the source and the gates, with **no
+product-behaviour change** (no CLI command, flag, exit code, endpoint, `Store`
+method, or schema touched). Every count below was re-derived by running the gate
+in this session; every behaviour claim was read out of the source or probed on a
+hermetic temporary data dir.
+
+- [x] T1 living-vs-historical inventory of every tracked `.md`, so only living
+  documents were edited and the dated records (`docs/09/10/11-*.md`,
+  `docs/05-gui-plan.md`, the pre-publish blocks in this file) were left intact.
+- [x] T2 `docs/SESSION-CONTEXT.md`: the gotcha that claimed **reads are not
+  Host-validated** (issue #14, open) was rewritten — it is now false in the most
+  dangerous direction, because `validate_request()` guards `GET`/`HEAD` too
+  (`SEC-1`) and the characterization test it pointed at was already updated. Its
+  stale counts also fell: `475 tests` → **598** and `check_complexity.py (164
+  functions)` → **216**. The gotcha list's broken numbering (12, 13, 14, 11) was
+  renumbered to 11–14.
+- [x] T3 `docs/03-cli-surface.md` v0.4.0: documented `--metadata`'s control-character
+  rejection (exit 1, nothing written), `edit`'s fail-closed contract on an
+  unparseable document (clean error, file byte-for-byte untouched), and the
+  `cli_output.sanitize_text()` display seam with the `--json`/`--raw` exemptions.
+- [x] T4 `docs/08-web-ui.md` v0.4.0: the request policy applies to **every** method
+  (not mutations only); `HEAD` mirrors `GET`; `OPTIONS`/`TRACE` → JSON `405` with
+  `Allow` and the full security-header set; `degraded` arrays on `/api/doctor?scope=all`
+  and `/api/stats`; the `doctor?explain` disclosure boundary; `addressable: false`.
+- [x] T5 `docs/01-architecture.md` v0.3.0: symlink policy (`contained_entry` keeps
+  the *named* entry; `sync_skill` copies links as links and refuses escaping ones;
+  `export` does not follow links) and the lock model (per-skill lock plus the
+  library-wide index lock at `<data>/skills/.skillsmgr-index-lock`, trash lock at
+  `<data>/trash/.trash-lock`, process-local only) are now written down.
+- [x] T6 `docs/12-agent-root-discovery-2026-09-08.md` v1.2.0 and
+  `docs/ADR-002-root-consumer-effective-state.md` v1.1.0: the read-only
+  `doctor --explain` diagnostic is recorded as **shipped**, invariant 1 is recorded
+  as **enforced**, and `unaddressable` joined the observed instance-state list.
+- [x] T7 security docs: `skills-manager-threat-model.md` v1.3 re-bases every
+  mitigation on the post-audit tree (T-14 mitigated by `SEC-1`; new T-15 for the
+  `doctor?explain` disclosure, T-16 for CLI terminal injection; R-7 closed),
+  `SECURITY.md` documents the all-method boundary and the two disclosure limits,
+  and `security_best_practices_report.md` is re-dated with its controls cited by
+  symbol instead of `file.py:line` (the same correction was applied to
+  `docs/04-store-api.md`); most of the old line numbers had drifted onto
+  unrelated code, so this had become a class of false claim rather than a typo.
+- [x] T7b `docs/13-audit-remediation-status-2026-09-11.md` (v0.4.0): its
+  "Current tree state" table said `check_complexity.py (208 functions)` while the
+  gate prints **216** (confirmed against the checkpoint refs: 208 at
+  `audit-b4-193107`, 216 by `audit-b4-done-194837`, so the published figure was
+  never re-derived), and its checkpoint note said "four refs" where eight
+  `refs/wip/audit-*` refs exist. Both corrected; every finding disposition kept.
+- [x] T7c `docs/13-audit-remediation-status-2026-09-11.md` (v0.5.0): every `OPEN`
+  row was re-verified against the current tree rather than trusted, and two were
+  wrong — `SEC-5` (`BUG-9` had already closed its `501`-with-no-headers half) and
+  `SEC-13` (`BUG-13` had already closed its "no gate inspects non-`webui` members"
+  half). Both are now `PARTIAL`, the tally is `61 / 3 / 38`, and the still-open
+  halves (`form-action` in the CSP; whether the sdist still ships `tests/`) are
+  named, with the second marked `[?]` because it needs the optional `build` tool.
+  The other 38 rows were re-probed and stand.
+- [x] T8 gate hardening: cross-checked the docs against the source with purpose-built
+  checkers (CLI/REST/`Store` parity in both directions, constants quoted in docs,
+  symbols named as calls, the session-context inventory) and fixed what they found
+  — `/api/tokens` missing from the endpoint tables, a documented `Store.db_resync`
+  that does not exist, `add(self, path, …)` where the parameter is `src`, a table
+  row whose unescaped `|` added a column, and a line starting `#2` that rendered as
+  a spurious H1. `check_docs.py` now enforces all of it offline (HADS headers for
+  every `docs/*.md`, link anchors, table cell counts, trailing newlines, route /
+  method / command parity, file inventory), pinned by nine new regression tests —
+  suite 598 → **607** — and each new check was proved by mutation (15 defects
+  injected, all caught, three checks tightened after their first version missed).
+- [x] T8b whole-repo markdown lint (`markdownlint-cli2`, structural rules): 103 real
+  defects fixed (91 unlabelled fences, 11 files with no final newline, 1 spurious
+  heading); render-neutral style rules deliberately left so each doc keeps its voice.
+- [x] T8 verification on the current tree: **607 tests OK**, both smokes,
+  `check_docs.py`, `check_complexity.py`, `node --check` on both frontend files,
+  CLI help, and `check_package_data.py` (`UNAVAILABLE`, standing). Re-run
+  sequentially before trusting any earlier result.
+
 ## Deferred and approval-required work
 
 > Research verdicts 2026-09-09 (loop-engineering probes in isolated temp
@@ -996,3 +1219,54 @@ This protocol is mandatory for every future change:
 - [x] Release provenance and post-publish installation checks exist.
 - [x] Current documentation agrees with source and Git state.
 - [x] Every historical bug has a permanent regression test and recorded cause.
+- [x] Every deep-audit finding carries an explicit disposition
+  (`FIXED`/`PARTIAL`/`OPEN`) in `docs/13-audit-remediation-status-2026-09-11.md`,
+  and every closed one carries a red-first regression test.
+
+## Milestone 52 — Deep-audit remediation, batch 5: the medium security/supply-chain findings (2026-09-12, 5 findings + 1)
+
+Fifth remediation batch, continuing the audit's severity order past batch 4.
+`SEC-5`…`SEC-9` (the last Medium rows) plus the `SEC-13` `[?]`. Two product files
+(`webapp.py`, `web_upload.py`), one repo gate (`check_package_data.py`), the build
+configuration, three new root-level build files, and documentation. **No locked
+constraint moved:** no new CLI command, no `Store` method, no schema or
+`SCHEMA_VERSION` change, no runtime dependency, web UI unchanged in shape (stdlib
+backend, no build step, loopback bind). Per-finding status:
+`docs/13-audit-remediation-status-2026-09-11.md`; full narrative:
+`docs/06-progress-log.md` (2026-09-12).
+
+- [x] T1 `SEC-5` — `form-action 'none'` added, because `form-action` does not
+  fall back to `default-src`; pinned on live `200`/`404`/`405` responses.
+- [x] T2 `SEC-6` — `web_upload._stage_path()` decides the staging path before any
+  write, so a file/directory name conflict is a clean `400` in either part order
+  and a NUL-byte filename gets an explicit message; remaining `OSError`/
+  `ValueError` become a `StoreError` carrying only the OS reason, and the server
+  log stays clean.
+- [x] T3 `SEC-7` — no install from an index inside a `contents: write` job; the
+  post-publish PyPI check moved to a new `postpublish-verify` job with
+  `contents: read` and no `id-token: write`.
+- [x] T4 `SEC-8` — `setuptools==84.0.0` in `[build-system]` plus
+  `requirements-build.txt` (all four packages, every file digest) installed with
+  `--require-hashes` and built with `--no-isolation` in both workflows; verified
+  by a real hash-checked install, build and `--dist-dir` gate PASS. Honest limit:
+  PEP 518 cannot carry hashes in `[build-system] requires`.
+- [x] T5 `SEC-9` — the vendored Vue bundle is pinned by sha256 and verified in the
+  source tree and inside both artifacts, before the optional build step; digest
+  independently confirmed byte-identical to the upstream `vue@3.5.13` file;
+  `.gitattributes` keeps it byte-stable across platforms.
+- [x] T6 `SEC-4` — recorded as `ACCEPTED`, documented in `docs/08-web-ui.md` and
+  pinned by a test; `'unsafe-inline'` must never join `script-src`.
+- [x] T7 `SEC-13` — `[?]` settled with a real build (the sdist shipped 29 test
+  modules) and a second defect fixed: `read_archive_files()` hid every sdist
+  member outside `skillsmgr/` from the `BUG-13` policy while its own test passed
+  on a wheel fixture. `MANIFEST.in` prunes `tests` (73 → 45 members).
+- [x] T8 red-first: the new module reported 16 failures + 3 errors before any fix.
+- [x] T9 verification: **627 unittest OK** (+20), both smokes PASS, compile PASS,
+  `node --check` PASS, `check_docs.py` PASS, `check_complexity.py` PASS (ratchet
+  flat, baseline untouched), `check_package_data.py` PASS on real artifacts, both
+  workflows parse as YAML, `git diff --check` PASS.
+- [x] T10 docs: tracker, progress log, `task.md`, this file, `CHANGELOG.md`,
+  `CONTRIBUTING.md`, `docs/08-web-ui.md`, `docs/SESSION-CONTEXT.md`.
+- [ ] T11 next: the 33 remaining findings are 3 Medium (`STORE-11`, `SCOPE-5`,
+  `SCOPE-8`) and 30 Low/Info — grouped by area in the *Remaining work* table of
+  `docs/13-audit-remediation-status-2026-09-11.md`.

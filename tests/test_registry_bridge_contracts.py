@@ -15,6 +15,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.request import Request, urlopen
 
 from skillsmgr import cli, insights
@@ -127,6 +128,27 @@ class InstallCommandTests(unittest.TestCase):
             with self.subTest(source=source):
                 with self.assertRaises(ValueError):
                     insights.install_argv(source)
+
+    def test_cli_rejects_traversal_absolute_and_oversized_install_values(self):
+        from skillsmgr.cli_handlers import validated_install_source, validated_install_value
+
+        for label, value in (
+            ("source", "../../tmp/pwn"),
+            ("source", "/etc/passwd"),
+            ("source", "C:/Windows"),
+            ("agent", ".."),
+            ("agent", "../../tmp/pwn"),
+            ("agent", "/etc/passwd"),
+            ("agent", "C:/Windows"),
+            ("skill", "../secret"),
+            ("skill", "x" * 257),
+        ):
+            with self.subTest(label=label, value=value):
+                with self.assertRaises(Exception):
+                    if label == "source":
+                        validated_install_source(value)
+                    else:
+                        validated_install_value(label, value)
         for runner in ("unknown", "uvx", ""):
             with self.subTest(runner=runner):
                 with self.assertRaises(ValueError):
@@ -146,18 +168,26 @@ class RegistryBridgePlanTests(unittest.TestCase):
             plan["install_command"],
             "npx skills add vercel-labs/skills -g -s find-skills",
         )
-        self.assertTrue(plan["may_install"])
-        self.assertEqual(plan["blockers"], [])
-        self.assertTrue(plan["trust_confirmed"])
+        self.assertFalse(plan["may_install"])
+        self.assertEqual(len(plan["blockers"]), 1)
+        self.assertFalse(plan["trust_confirmed"])
+        self.assertTrue(plan["trust_requested"])
+        self.assertFalse(plan["trust_verified"])
+        self.assertEqual(plan["trust_status"], "unverified-offline")
+        self.assertEqual(plan["eligibility_status"], "unverified-offline")
         self.assertEqual(plan["hash_status"], "not-provided")
+        self.assertFalse(plan["hash_verified"])
         self.assertIn("no registry API request", plan["network"])
 
     def test_plan_blocks_without_trust_and_reports_provenance(self):
         plan = insights.registry_bridge_plan("vercel-labs/skills")
         self.assertFalse(plan["may_install"])
         self.assertFalse(plan["trust_confirmed"])
-        self.assertEqual(len(plan["blockers"]), 1)
+        self.assertFalse(plan["trust_requested"])
+        self.assertFalse(plan["trust_verified"])
+        self.assertEqual(len(plan["blockers"]), 2)
         self.assertIn("trust not confirmed", plan["blockers"][0])
+        self.assertIn("eligibility", plan["blockers"][1])
         self.assertEqual(plan["description_status"], "not-provided")
         self.assertIn("authenticated catalog read", plan["provenance_note"])
 
@@ -168,9 +198,29 @@ class RegistryBridgePlanTests(unittest.TestCase):
             description="finds skills",
             content_hash="a1b2c3",
         )
-        self.assertEqual(plan["hash_status"], "provided")
+        self.assertEqual(plan["hash_status"], "unverified-provided")
         self.assertEqual(plan["content_hash"], "a1b2c3")
-        self.assertIn("detect", plan["hash_use"])
+        self.assertFalse(plan["hash_verified"])
+        self.assertIn("authenticated registry read", plan["hash_use"])
+
+    def test_INS_2_offline_plan_never_asserts_verified_trust_eligibility_or_hash(self):
+        plan = insights.registry_bridge_plan(
+            "vercel-labs/skills/find-skills",
+            trust_confirmed=True,
+            description="finds skills",
+            content_hash="deadbeef",
+        )
+
+        self.assertFalse(plan["trust_confirmed"])
+        self.assertTrue(plan["trust_requested"])
+        self.assertEqual(plan["trust_status"], "unverified-offline")
+        self.assertFalse(plan["trust_verified"])
+        self.assertFalse(plan["may_install"])
+        self.assertEqual(plan["eligibility_status"], "unverified-offline")
+        self.assertEqual(plan["hash_status"], "unverified-provided")
+        self.assertFalse(plan["hash_verified"])
+        self.assertTrue(any("eligibility" in blocker
+                            for blocker in plan["blockers"]))
 
     def test_agent_scope_plan_omits_the_global_flag(self):
         plan = insights.registry_bridge_plan(
@@ -234,7 +284,9 @@ class InstallPreviewCliTests(unittest.TestCase):
         payload = json.loads(out)
         self.assertEqual(payload["registry_id"], "vercel-labs/skills/find-skills")
         self.assertEqual(payload["content_hash"], "deadbeef")
-        self.assertTrue(payload["may_install"])
+        self.assertFalse(payload["may_install"])
+        self.assertEqual(payload["hash_status"], "unverified-provided")
+        self.assertFalse(payload["hash_verified"])
         self.assertEqual(len(payload["audit_links"]), 3)
 
     def test_preview_rejects_unsupported_reference_cleanly(self):
@@ -244,9 +296,51 @@ class InstallPreviewCliTests(unittest.TestCase):
         self.assertIn("unsupported registry host", err)
         self.assertNotIn("Traceback", err)
 
-    def test_dry_run_output_is_unchanged(self):
-        code, out, err = self.invoke(["install", "vercel-labs/agent-skills", "--dry-run"])
+    @mock.patch("skillsmgr.cli_handlers.subprocess.run")
+    def test_list_only_executes_runner_with_list_flag_and_reports_output(self, run):
+        run.return_value = mock.Mock(returncode=0, stdout="available-skill\n", stderr="")
+
+        code, out, err = self.invoke([
+            "install", "vercel-labs/agent-skills", "--list-only",
+        ])
+
         self.assertEqual(code, cli.EXIT_OK)
+        run.assert_called_once_with(
+            ["npx", "skills", "add", "vercel-labs/agent-skills", "-g", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertIn("running: npx skills add vercel-labs/agent-skills -g -l", out)
+        self.assertIn("available-skill", out)
+        self.assertEqual(err, "")
+
+    @mock.patch("skillsmgr.cli_handlers.subprocess.run")
+    def test_list_only_returns_runner_exit_behavior_and_json_output(self, run):
+        run.return_value = mock.Mock(returncode=7, stdout="partial\n", stderr="runner failed\n")
+
+        code, out, err = self.invoke([
+            "install", "vercel-labs/agent-skills", "--list-only", "--json",
+        ])
+
+        self.assertEqual(code, cli.EXIT_ERROR)
+        run.assert_called_once()
+        self.assertEqual(json.loads(out), {
+            "command": "npx skills add vercel-labs/agent-skills -g -l",
+            "exit_code": 7,
+            "stdout": "partial\n",
+            "stderr": "runner failed\n",
+        })
+        self.assertEqual(err, "")
+
+    @mock.patch("skillsmgr.cli_handlers.subprocess.run")
+    def test_dry_run_does_not_execute_runner(self, run):
+        code, out, err = self.invoke([
+            "install", "vercel-labs/agent-skills", "--dry-run",
+        ])
+
+        self.assertEqual(code, cli.EXIT_OK)
+        run.assert_not_called()
         self.assertEqual(out.strip(), "npx skills add vercel-labs/agent-skills -g")
         self.assertEqual(err, "")
 
@@ -306,7 +400,8 @@ class InstallPreviewRestTests(unittest.TestCase):
             payload["command"], "npx skills add vercel-labs/skills -g -s find-skills"
         )
         self.assertEqual(payload["registry"]["install_command"], payload["command"])
-        self.assertTrue(payload["registry"]["may_install"])
+        self.assertFalse(payload["registry"]["may_install"])
+        self.assertFalse(payload["registry"]["trust_verified"])
         self.assertEqual(len(payload["registry"]["audit_links"]), 3)
 
     def test_preview_rejects_an_unsupported_reference(self):

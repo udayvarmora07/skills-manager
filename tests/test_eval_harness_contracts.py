@@ -8,8 +8,10 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.request import Request, urlopen
 
 from skillsmgr import cli, evals
@@ -81,6 +83,24 @@ class LoadCasesTests(unittest.TestCase):
         self.assertTrue(any("prompt must be a non-empty string" in message for message in messages))
         self.assertTrue(any("stay inside the skill directory" in message for message in messages))
 
+    def test_drive_prefixed_input_is_a_case_error_and_relative_paths_work(self):
+        _write_evals(self.skill, [
+            {"id": 1, "prompt": "windows input", "expected_output": "done",
+             "files": ["C:/Windows/system32/input.csv"]},
+            {"id": 2, "prompt": "relative input", "expected_output": "done",
+             "files": ["inputs/input.csv"]},
+        ])
+        (self.skill / "inputs").mkdir()
+        (self.skill / "inputs" / "input.csv").write_text("data\n", encoding="utf-8")
+
+        report = evals.load_cases(self.skill)
+
+        self.assertEqual([issue["level"] for issue in report["issues"]], ["error"])
+        self.assertIn("case 1:", report["issues"][0]["message"])
+        self.assertIn("stay inside the skill directory", report["issues"][0]["message"])
+        self.assertEqual([case["id"] for case in report["cases"]], [2])
+        self.assertEqual(report["cases"][0]["files"], ["inputs/input.csv"])
+
     def test_missing_input_file_is_a_warning(self):
         _write_evals(self.skill, [
             {"id": 1, "prompt": "x", "expected_output": "y", "files": ["evals/files/gone.csv"]},
@@ -147,6 +167,25 @@ class GradingTests(unittest.TestCase):
         valued = self._case([{"type": "is_json", "value": {"a": 1}}])
         self.assertEqual(evals.grade_output(valued, '{"a": 1}')["passed"], 1)
         self.assertEqual(evals.grade_output(valued, '{"a": 2}')["passed"], 0)
+
+    def test_catastrophic_regex_is_aborted_instead_of_hanging(self):
+        # CLI-1: a hostile evals.json pinned the CLI forever and froze the web
+        # UI process GIL-wide (Ctrl-C could not run).  re.compile succeeding is
+        # not a safety check, so the search runs under a wall-clock budget.
+        case = self._case([{"type": "regex", "value": "(a+)+$"}])
+        started = time.monotonic()
+        result = evals.grade_output(case, "a" * 40000 + "b")
+        elapsed = time.monotonic() - started
+        self.assertLess(elapsed, evals.REGEX_TIMEOUT_SECONDS + 3)
+        self.assertEqual(result["passed"], 0)
+        detail = result["assertions"][0]["detail"]
+        self.assertIn("exceeded", detail)
+
+    def test_a_pattern_longer_than_the_documented_limit_is_refused(self):
+        case = {"assertions": [{"type": "regex", "value": "a" * (evals.MAX_PATTERN_LENGTH + 1)}]}
+        result = evals.grade_output(case, "anything")
+        self.assertEqual(result["passed"], 0)
+        self.assertIn("exceeds", result["assertions"][0]["detail"])
 
     def test_case_without_assertions_is_ungraded(self):
         result = evals.grade_output(self._case([]), "anything")
@@ -244,6 +283,12 @@ class ScoreAndRecordTests(unittest.TestCase):
         self.assertTrue(benchmark["advisory"])
         self.assertIn("advisory-only", benchmark["policy"])
 
+    def test_eval2_duplicate_case_variant_pairs_are_rejected(self):
+        runs = [{"case": 1, "output": "first"}, {"case": 1, "output": "second"}]
+        with self.assertRaises(ValueError) as caught:
+            evals.normalize_runs(self.cases, runs)
+        self.assertIn("duplicate (case, variant) pair", str(caught.exception))
+
     def test_invalid_runs_are_rejected(self):
         for runs, expected in (
             ([{"case": 99, "output": "x"}], "unknown eval case"),
@@ -251,6 +296,7 @@ class ScoreAndRecordTests(unittest.TestCase):
             ([{"case": 1}], "output must be a string"),
             ([{"case": 1, "output": "x", "tokens": -1}], "non-negative"),
             ([{"case": 1, "output": "x" * (evals.MAX_OUTPUT_TEXT + 1)}], "exceeds"),
+            ([{"case": 1, "output": "x"}, {"case": 1, "output": "y"}], "duplicate (case, variant) pair"),
             ("nope", "non-empty list"),
             ([], "non-empty list"),
         ):
@@ -279,6 +325,135 @@ class ScoreAndRecordTests(unittest.TestCase):
         )
         self.assertEqual(
             json.loads((iteration / "benchmark.json").read_text())["delta"], 1.0
+        )
+
+    def test_record_runs_failure_keeps_prior_iteration_intact(self):
+        workspace = self.root / "workspace"
+        evals.record_runs(workspace, 1, self.cases, self.runs)
+        before = {
+            path.relative_to(workspace / "iteration-1"): path.read_bytes()
+            for path in (workspace / "iteration-1").rglob("*")
+            if path.is_file()
+        }
+        real_write = evals.atomic_write_text
+        calls = 0
+
+        def fail_mid_record(path, text, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected mid-record failure")
+            return real_write(path, text, **kwargs)
+
+        with mock.patch.object(evals, "atomic_write_text", side_effect=fail_mid_record):
+            with self.assertRaises(OSError):
+                evals.record_runs(workspace, 1, self.cases, self.runs[:2])
+
+        after = {
+            path.relative_to(workspace / "iteration-1"): path.read_bytes()
+            for path in (workspace / "iteration-1").rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(after, before)
+        self.assertEqual(
+            [path for path in workspace.iterdir() if "skillsmgr" in path.name], []
+        )
+
+    def test_record_runs_interrupt_during_commit_restores_prior_iteration(self):
+        workspace = self.root / "workspace"
+        evals.record_runs(workspace, 1, self.cases, self.runs)
+        real_replace = evals.os.replace
+        final = workspace / "iteration-1"
+
+        def interrupting_replace(source, destination):
+            if Path(destination) == final and ".skillsmgr-staging" in Path(source).parent.name:
+                raise KeyboardInterrupt("injected interrupt during commit")
+            return real_replace(source, destination)
+
+        with mock.patch.object(evals.os, "replace", side_effect=interrupting_replace):
+            with self.assertRaises(KeyboardInterrupt):
+                evals.record_runs(workspace, 1, self.cases[:1], self.runs[:1])
+
+        self.assertTrue((workspace / "iteration-1" / "benchmark.json").is_file())
+        self.assertEqual(
+            [path for path in workspace.iterdir() if "skillsmgr" in path.name], []
+        )
+
+    def test_eval2_record_runs_interrupt_after_backup_move_restores_prior_iteration(self):
+        workspace = self.root / "workspace"
+        evals.record_runs(workspace, 1, self.cases, self.runs)
+        real_replace = evals.os.replace
+        final = workspace / "iteration-1"
+        calls = 0
+
+        def interrupt_after_backup(source, destination):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                self.assertEqual(Path(destination), final)
+                self.assertIn(".skillsmgr-staging", Path(source).parent.name)
+                raise KeyboardInterrupt("injected after backup move")
+            return real_replace(source, destination)
+
+        with mock.patch.object(evals.os, "replace", side_effect=interrupt_after_backup):
+            with self.assertRaises(KeyboardInterrupt):
+                evals.record_runs(workspace, 1, self.cases[:1], self.runs[:1])
+
+        self.assertTrue((final / "benchmark.json").is_file())
+        self.assertEqual([path for path in workspace.iterdir() if "skillsmgr" in path.name], [])
+
+    def test_record_runs_keeps_written_paths_lexical_for_existing_iteration_symlink(self):
+        workspace = self.root / "workspace"
+        external = self.root / "external-iteration"
+        external.mkdir()
+        (external / "sentinel.txt").write_text("keep", encoding="utf-8")
+        workspace.mkdir()
+        (workspace / "iteration-1").symlink_to(external, target_is_directory=True)
+
+        recorded = evals.record_runs(workspace, 1, self.cases[:1], self.runs[:1])
+
+        iteration = workspace / "iteration-1"
+        self.assertEqual(recorded["workspace"], str(iteration))
+        self.assertTrue(all(
+            Path(path).is_relative_to(iteration) for path in recorded["written"]
+        ))
+        self.assertTrue((external / "sentinel.txt").is_file())
+        self.assertFalse(iteration.is_symlink())
+
+    def test_record_runs_preserves_backup_when_rollback_is_interrupted(self):
+        workspace = self.root / "workspace"
+        evals.record_runs(workspace, 1, self.cases, self.runs)
+        real_replace = evals.os.replace
+        calls = 0
+
+        def failing_rollback(source, destination):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise KeyboardInterrupt("injected interrupt during commit")
+            if calls == 3:
+                raise OSError("injected rollback failure")
+            return real_replace(source, destination)
+
+        with mock.patch.object(evals.os, "replace", side_effect=failing_rollback):
+            with self.assertRaises(OSError) as caught:
+                evals.record_runs(workspace, 1, self.cases[:1], self.runs[:1])
+
+        self.assertIn("previous iteration is staged at", str(caught.exception))
+        backups = list(workspace.glob("*.skillsmgr-backup"))
+        self.assertEqual(len(backups), 1)
+        self.assertTrue((backups[0] / "iteration-1" / "benchmark.json").is_file())
+
+    def test_record_runs_replaces_iteration_and_removes_stale_outputs(self):
+        workspace = self.root / "workspace"
+        evals.record_runs(workspace, 1, self.cases, self.runs)
+        evals.record_runs(workspace, 1, self.cases, self.runs[:1])
+        iteration = workspace / "iteration-1"
+        self.assertTrue((iteration / "eval-top-months" / "with_skill" / "grading.json").is_file())
+        self.assertFalse((iteration / "eval-clean-csv").exists())
+        self.assertFalse((iteration / "eval-top-months" / "without_skill").exists())
+        self.assertEqual(
+            [path for path in workspace.iterdir() if "skillsmgr" in path.name], []
         )
 
     def test_record_runs_never_touches_skill_files_or_the_index(self):
@@ -404,6 +579,35 @@ class EvalCliTests(unittest.TestCase):
         self.assertEqual(report["recording"]["iteration"], 1)
         self.assertEqual(report["recording"]["benchmark"]["variants"]["with_skill"]["pass_rate"], 1.0)
 
+    def test_validate_evals_run_rejects_workspace_inside_managed_skills_tree(self):
+        # CLI-4: eval output must not become managed skill data.
+        skill_dir = self._skill_with_evals()
+        override = skill_dir / "eval-workspace"
+        runs = Path(self._tmp.name) / "runs.json"
+        runs.write_text(json.dumps([{"case": 1, "output": "demo"}]), encoding="utf-8")
+        code, out, err = self.invoke([
+            "validate", "demo", "--evals-run", str(runs), "--workspace", str(override),
+        ])
+        self.assertEqual(code, cli.EXIT_ERROR)
+        self.assertEqual(out, "")
+        self.assertIn("managed skills tree", err)
+        self.assertFalse((override / "iteration-1" / "benchmark.json").exists())
+
+    def test_validate_evals_run_rejects_workspace_symlink_resolving_inside_skills_tree(self):
+        skill_dir = self._skill_with_evals()
+        link = Path(self._tmp.name) / "workspace-link"
+        link.symlink_to(skill_dir, target_is_directory=True)
+        override = link / "eval-workspace"
+        runs = Path(self._tmp.name) / "runs.json"
+        runs.write_text(json.dumps([{"case": 1, "output": "demo"}]), encoding="utf-8")
+        code, out, err = self.invoke([
+            "validate", "demo", "--evals-run", str(runs), "--workspace", str(override),
+        ])
+        self.assertEqual(code, cli.EXIT_ERROR)
+        self.assertEqual(out, "")
+        self.assertIn("managed skills tree", err)
+        self.assertFalse((skill_dir / "eval-workspace" / "iteration-1" / "benchmark.json").exists())
+
     def test_validate_workspace_override(self):
         self._skill_with_evals()
         override = Path(self._tmp.name) / "custom-workspace"
@@ -444,6 +648,20 @@ class EvalCliTests(unittest.TestCase):
         code, out, _ = self.invoke(["validate", "demo", "--evals"])
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("evals.json is unreadable", out)
+
+    def test_eval2_path_symlink_alias_to_external_skill_keeps_workspace_outside_skills(self):
+        external = Path(self._tmp.name) / "external" / "demo"
+        external.mkdir(parents=True)
+        skills_root = Path(self._tmp.name) / "skills-manager" / "skills"
+        skills_root.mkdir(parents=True, exist_ok=True)
+        alias = skills_root / "alias"
+        alias.symlink_to(external, target_is_directory=True)
+        workspace = evals.workspace_for_dir(alias, Path(self._tmp.name) / "skills-manager", "demo")
+        self.assertEqual(workspace, Path(self._tmp.name) / "skills-manager" / "evals" / "demo-workspace")
+        cases = [{"id": 1, "prompt": "demo", "expected_output": "done"}]
+        evals.record_runs(workspace, 1, cases, [{"case": 1, "output": "demo"}])
+        self.assertTrue((workspace / "iteration-1" / "benchmark.json").is_file())
+        self.assertFalse((skills_root / "alias-workspace").exists())
 
     def test_validate_path_on_a_store_skill_keeps_workspaces_out_of_skills(self):
         skill_dir = self._skill_with_evals()

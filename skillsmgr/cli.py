@@ -53,6 +53,7 @@ from .cli_handlers import (
     cmd_view,
     install_command_for_display,
     make_store,
+    validate_cli_combinations,
     parse_metadata,
     read_body,
     scope_from_args,
@@ -102,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_USAGE
     try:
         validate_cli_names(args)
+        validate_cli_combinations(args)
         store = make_store(args)
         return args.func(args, store) or EXIT_OK
     except (StoreError, ValueError, OSError) as exc:

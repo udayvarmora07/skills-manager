@@ -15,14 +15,16 @@ import subprocess
 import sys
 import tempfile
 import threading
-import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .store import Store, StoreError, SkillNotFound
 from .diagnostics import diagnose as _diagnose
-from .web_security import RequestError, validate_mutation_request
+# ``RequestError`` is re-exported deliberately: callers imported it from this
+# module before the web_security extraction, and tests/test_compatibility.py
+# pins that import path.  It is not dead code (BUG-15).
+from .web_security import RequestError, validate_request  # noqa: F401
 from .web_serialization import json_bytes, parse_json_object
 from .web_upload import MAX_UPLOAD_PARTS, parse_multipart, upload_folder
 
@@ -106,23 +108,41 @@ def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
     return payload
 
 
-def _doctor_payload(store: Store, qs: dict) -> dict:
+def _doctor_payload(store: Store, qs: dict, diagnostics_roots=None) -> dict:
     """Build the ``/api/doctor`` payload, optionally with the #12 explain block.
 
     ``explain=CONSUMER`` adds the read-only effective-resolution diagnostic; it
     derives from the filesystem at read time and writes nothing.
+
+    SEC-2/SEC-3: the diagnostic is confined to the store's own data directory.
+    ``project`` comes straight from the query string, and without a boundary a
+    single unauthenticated GET walked a caller-chosen directory to completion
+    and then returned the user's real home directory, ``data_dir``, and the
+    complete inventory of skills installed for other agent tools.  The CLI
+    passes no boundary (it already runs as the user); HTTP always does.
     """
     scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
     report = store.doctor()
     if scope == "all":
+        # BUG-8: this swallow made `/api/doctor?scope=all` return a payload
+        # *without* scopes/duplicates while still reporting success, so a client
+        # could not tell "no duplicates" from "the duplicate scan crashed".
         try:
             from .scopes import find_duplicates as _dupes
             from .scopes import list_scopes as _lscopes
 
             report["scopes"] = _lscopes()
             report["duplicates"] = _dupes()
-        except Exception:
-            pass
+        except Exception as exc:
+            _diagnose("doctor scope=all enrichment failed", exc)
+            report["scopes"] = []
+            report["duplicates"] = []
+            report.setdefault("degraded", []).append(
+                {
+                    "section": "scopes/duplicates",
+                    "reason": f"the scope and duplicate scan failed: {exc}",
+                }
+            )
     consumer = (qs.get("explain", [""])[0] or "").strip()
     if consumer:
         from . import effective
@@ -131,8 +151,50 @@ def _doctor_payload(store: Store, qs: dict) -> dict:
             consumer,
             (qs.get("project", [""])[0] or "").strip() or None,
             skill=(qs.get("skill", [""])[0] or "").strip() or None,
+            allowed_root=diagnostics_roots,
         )
     return report
+
+
+def _skill_text(skill_dir: Path) -> str:
+    """Return a skill's document text, or ``""`` when there is none to read."""
+    for candidate in (skill_dir / "SKILL.md", skill_dir / "SKILL.md.disabled"):
+        try:
+            if candidate.is_file():
+                return candidate.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+    return ""
+
+
+def _apply_token_estimate(record: dict, tok) -> None:
+    """Copy one token estimate onto a REST record."""
+    record["tokens"] = tok["tokens"]
+    record["tokens_method"] = tok["method"]
+    record["tokens_pct"] = tok["pct_window"]
+    record["chars"] = tok["chars"]
+
+
+def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None:
+    """Add token estimates to list rows, reporting a failure instead of hiding it.
+
+    BUG-8: four copies of this loop swallowed every failure with
+    ``except Exception: pass``, so a crash left a ``200`` payload silently
+    missing documented keys (which is what produced BUG-7).  A failure is now
+    diagnosed and marked on the rows it affected.
+    """
+    try:
+        from .tokens import estimate as _est
+
+        for row in rows:
+            _apply_token_estimate(row, _est(_skill_text(store.skills_dir / row["name"])))
+    except Exception as exc:
+        _diagnose(f"{label} token enrichment failed", exc)
+        for row in rows:
+            row.setdefault("tokens", 0)
+            row.setdefault("tokens_method", "unavailable")
+            row.setdefault("tokens_pct", 0)
+            row.setdefault("chars", 0)
 
 
 def _validated_skill_fields(data: dict) -> dict:
@@ -151,6 +213,15 @@ def _validated_skill_fields(data: dict) -> dict:
             fields[field] = value
     return fields
 
+
+def _head_safe_body(command: str, body: bytes) -> bytes:
+    """Return the bytes to write for *command*: none at all for HEAD (BUG-9)."""
+    return b"" if command == "HEAD" else body
+
+
+#: BUG-9: the verbs this server routes, advertised on a 405.
+_ALLOWED_METHODS = "GET, HEAD, POST, PATCH, PUT, DELETE"
+_METHOD_NOT_ALLOWED_BODY = b'{"error": "method not allowed"}'
 
 MAX_BODY_BYTES = 25 * 1024 * 1024
 MAX_UPLOAD_PARTS = 200
@@ -188,17 +259,29 @@ class WebAppHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self._send_security_headers()
         self.end_headers()
-        self.wfile.write(body)
+        # A HEAD response carries the same headers as the equivalent GET but no
+        # body (BUG-9); Content-Length still describes the entity that a GET
+        # would have returned.
+        self.wfile.write(_head_safe_body(self.command, body))
 
     def _send_security_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        # `script-src 'unsafe-eval'` is required by the vendored runtime+compiler
+        # build, which compiles the in-DOM template of index.html with
+        # `Function(code)()`; removing it needs a build step, which locked
+        # constraint 4 forbids (SEC-4 — reasoned trade-off recorded in
+        # docs/08-web-ui.md).  `'unsafe-inline'` must never join script-src.
+        #
+        # `form-action` does not fall back to `default-src`, so an injected
+        # <form action="https://…"> would otherwise be allowed to submit (SEC-5).
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+            "img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+            "form-action 'none'",
         )
 
     def _send_json(self, obj, status: int = 200) -> None:
@@ -233,35 +316,72 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            self._validate_request()
             self._route_get()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_POST(self):
         try:
-            self._validate_mutation_request()
+            self._validate_request()
             self._route_post()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_PATCH(self):
         try:
-            self._validate_mutation_request()
+            self._validate_request()
             self._route_patch()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_DELETE(self):
         try:
-            self._validate_mutation_request()
+            self._validate_request()
             self._route_delete()
         except Exception as exc:
             self._handle_exception(exc)
 
     def do_PUT(self):
         try:
-            self._validate_mutation_request()
+            self._validate_request()
             self._route_put()
+        except Exception as exc:
+            self._handle_exception(exc)
+
+    def do_HEAD(self):
+        """Answer HEAD like the equivalent GET, headers only (BUG-9).
+
+        The stdlib's default handler answered HEAD/OPTIONS/TRACE with a 501 HTML
+        page that carried **no** security headers at all, so those verbs
+        bypassed the whole response policy.  HEAD now goes through the read
+        router with the body suppressed by ``_send``.
+        """
+        try:
+            self._validate_request()
+            self._route_get()
+        except Exception as exc:
+            self._handle_exception(exc)
+
+    def do_OPTIONS(self):
+        self._unsupported_method()
+
+    def do_TRACE(self):
+        self._unsupported_method()
+
+    def _unsupported_method(self) -> None:
+        """Refuse an unrouted verb with the standard policy and headers."""
+        try:
+            self._validate_request()
+            self.send_response(405)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Allow", _ALLOWED_METHODS)
+            self.send_header("Content-Length", str(len(_METHOD_NOT_ALLOWED_BODY)))
+            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(_METHOD_NOT_ALLOWED_BODY)
         except Exception as exc:
             self._handle_exception(exc)
 
@@ -282,8 +402,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             host = f"[{host}]"
         return f"http://{host}:{self.server.server_port}"  # type: ignore[attr-defined]
 
-    def _validate_mutation_request(self) -> None:
-        validate_mutation_request(
+    def _validate_request(self) -> None:
+        validate_request(
             self.headers,
             self.server.allowed_hosts,  # type: ignore[attr-defined]
             self.server.allowed_origins,  # type: ignore[attr-defined]
@@ -364,23 +484,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     r.setdefault("scope", "global")
                     r.setdefault("scope_label", "Global")
                 # Add token enrichment from actual files
-                try:
-                    from .tokens import estimate as _est
-
-                    for r in rows:
-                        p = self.store.skills_dir / r["name"]
-                        raw = ""
-                        for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                            if cand.is_file():
-                                raw = cand.read_text(encoding="utf-8")
-                                break
-                        tok = _est(raw)
-                        r["tokens"] = tok["tokens"]
-                        r["tokens_method"] = tok["method"]
-                        r["tokens_pct"] = tok["pct_window"]
-                        r["chars"] = tok["chars"]
-                except Exception:
-                    pass
+                _enrich_rows_with_tokens(self.store, rows, "all-scope list")
                 self._send_json(rows)
             else:
                 rows = self.store.list()
@@ -388,23 +492,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     r.setdefault("scope", "global")
                     r.setdefault("scope_label", "Global")
                 # Token enrichment for list rows
-                try:
-                    from .tokens import estimate as _est2
-
-                    for r in rows:
-                        p = self.store.skills_dir / r["name"]
-                        raw = ""
-                        for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                            if cand.is_file():
-                                raw = cand.read_text(encoding="utf-8")
-                                break
-                        tok = _est2(raw)
-                        r["tokens"] = tok["tokens"]
-                        r["tokens_method"] = tok["method"]
-                        r["tokens_pct"] = tok["pct_window"]
-                        r["chars"] = tok["chars"]
-                except Exception:
-                    pass
+                _enrich_rows_with_tokens(self.store, rows, "global list")
                 self._send_json(rows)
             return
         if parts == ["api", "search"]:
@@ -464,22 +552,15 @@ class WebAppHandler(BaseHTTPRequestHandler):
             try:
                 from .tokens import estimate as _estD
 
-                p = self.store.skills_dir / parts[2]
-                raw = ""
-                for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                    if cand.is_file():
-                        raw = cand.read_text(encoding="utf-8")
-                        break
-                tok = _estD(raw)
-                rec["tokens"] = tok["tokens"]
-                rec["tokens_method"] = tok["method"]
-                rec["tokens_pct"] = tok["pct_window"]
-                rec["chars"] = tok["chars"]
+                tok = _estD(_skill_text(self.store.skills_dir / parts[2]))
+                _apply_token_estimate(rec, tok)
                 rec["lines"] = tok["lines"]
                 rec["body_tokens"] = _estD(rec.get("body") or "")["tokens"]
                 rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
-            except Exception:
-                pass
+            except Exception as exc:
+                _diagnose(f"detail token enrichment failed for {parts[2]!r}", exc)
+                rec.setdefault("tokens", 0)
+                rec.setdefault("tokens_method", "unavailable")
             self._send_json(rec)
             return
         if parts == ["api", "trash"]:
@@ -515,7 +596,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 from .scopes import list_scopes as _list_scopes
                 from .tokens import WINDOWS as _WINDOWS
 
-                scopes = _list_scopes()
+                from .scopes import list_all as _list_all
+
+                records = _list_all()
+                scopes = _list_scopes(records=records)
                 st["scopes"] = scopes
                 st["all_total"] = sum(s["count"] for s in scopes)
                 st["all_tokens"] = sum(s.get("tokens", 0) for s in scopes)
@@ -527,21 +611,32 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 st["all_pct_window"] = round(st["all_tokens"] / win * 100, 1) if win else 0
                 # Top 5 largest across all scopes.
                 try:
-                    from .scopes import list_all as _list_all
-
-                    st["largest"] = sorted(_list_all(), key=lambda r: r.get("tokens", 0), reverse=True)[:5]
+                    st["largest"] = sorted(records, key=lambda r: r.get("tokens", 0), reverse=True)[:5]
                     st["largest"] = [{"name": r["name"], "scope": r.get("scope"), "tokens": r.get("tokens", 0)} for r in st["largest"]]
-                except Exception:
+                except Exception as exc:
+                    _diagnose("stats largest-skills scan failed", exc)
                     st["largest"] = []
+                    st.setdefault("degraded", []).append("largest")
                 # Whether exact counting is available.
                 try:
                     from .tokens import _HAS_TIKTOKEN as _ht
 
                     st["has_tiktoken"] = bool(_ht)
-                except Exception:
+                except Exception as exc:
+                    _diagnose("stats tokenizer probe failed", exc)
                     st["has_tiktoken"] = False
-            except Exception:
-                pass
+            except Exception as exc:
+                # BUG-8/BUG-7: this is the swallow that returned a 200 payload
+                # with documented keys missing.  Report it and fill the keys the
+                # UI depends on so the client cannot be handed a half-record.
+                _diagnose("stats scope enrichment failed", exc)
+                for key, fallback in (
+                    ("scopes", []), ("all_total", 0), ("all_tokens", 0),
+                    ("all_avg_tokens", 0), ("window_tokens", 0),
+                    ("all_pct_window", 0), ("largest", []),
+                ):
+                    st.setdefault(key, fallback)
+                st.setdefault("degraded", []).append("scopes")
             self._send_json(st)
         elif parts == ["api", "tokens"]:
             win = (qs.get("window", ["claude"])[0] or "claude").strip()
@@ -570,8 +665,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
                         from .scopes import get_skill as _gs
 
                         rec = _gs(rec.get("scope", "global"), name)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        # The listing record is still usable; say why it is thin
+                        # rather than silently returning a partial record.
+                        _diagnose(f"tokens detail enrichment failed for {name!r}", exc)
                 from .tokens import estimate as _est2
 
                 raw = ""
@@ -612,7 +709,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(agg)
             return
         elif parts == ["api", "doctor"]:
-            self._send_json(_doctor_payload(self.store, qs))
+            self._send_json(
+                _doctor_payload(
+                    self.store, qs, getattr(self.server, "diagnostics_roots", None) or [self.store.data_dir]
+                )
+            )
         elif parts == ["api", "export"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             if scope != "global":
@@ -662,8 +763,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             source = raw_source.strip()
             if not source:
                 raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
-            if not re.fullmatch(r"[A-Za-z0-9_@./:+-]+", source) or source.startswith("-"):
-                raise StoreError("invalid source value")
+            from .cli_handlers import validated_install_source, validated_install_value
+
+            source = validated_install_source(source)
             agents = data.get("agents")
             skills_filter = data.get("skills")
             raw_scope = data.get("scope", "global")
@@ -699,15 +801,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 cmd_parts.append("-g")
             if agents:
                 for a in agents:
-                    a = str(a)
-                    if not re.fullmatch(r"[A-Za-z0-9_@./:+-]+", a) or a.startswith("-"):
-                        raise StoreError(f"invalid agent value {a!r}")
+                    a = validated_install_value("agent", str(a))
                     cmd_parts.extend(["-a", a])
             if skills_filter:
                 for s in skills_filter:
-                    s = str(s)
-                    if not re.fullmatch(r"[A-Za-z0-9_@./:+-]+", s) or s.startswith("-"):
-                        raise StoreError(f"invalid skill value {s!r}")
+                    s = validated_install_value("skill", str(s))
                     cmd_parts.extend(["-s", s])
             if copy_mode:
                 cmd_parts.append("--copy")
@@ -921,8 +1019,45 @@ class WebAppHandler(BaseHTTPRequestHandler):
         )
 
 
+def _diagnostics_roots(store: Store, extra_allowed_roots) -> list[Path]:
+    """Return the confinement boundary for the read-only diagnostics.
+
+    SEC-2/SEC-3: the store's own data directory is always included, and an
+    operator who wants the effective-resolution view of a real project tree
+    adds it explicitly (``extra_allowed_roots``), so no request can widen the
+    boundary on its own.
+    """
+    roots = [Path(store.data_dir)]
+    for extra in extra_allowed_roots or ():
+        roots.append(Path(extra).expanduser())
+    return [Path(root).resolve() for root in roots]
+
+
+class _StoreBoundHTTPServer(ThreadingHTTPServer):
+    """A threading server that binds its own Store for each request thread.
+
+    SCOPE-10: ``scopes`` resolves the ``global`` scope through an injectable
+    Store.  When that injection was a process-wide module global the last
+    ``WebAppServer`` constructed won for *every* path that went through it, so
+    one server's REST responses (and its agent-scope snapshots) were served from
+    another server's data dir.  Binding at the start of the request thread makes
+    the association per-server and per-request regardless of how many servers
+    share the process.
+    """
+
+    store = None  # type: ignore[assignment]
+
+    def process_request_thread(self, request, client_address):
+        if self.store is not None:  # type: ignore[attr-defined]
+            from .scopes import set_global_store
+
+            set_global_store(self.store)  # type: ignore[attr-defined]
+        super().process_request_thread(request, client_address)
+
+
 class WebAppServer:
-    def __init__(self, store: Store, host: str = "127.0.0.1", port: int = 0):
+    def __init__(self, store: Store, host: str = "127.0.0.1", port: int = 0,
+                 extra_allowed_roots: list[str | Path] | None = None):
         normalized_host = host.strip().lower()
         is_localhost_name = normalized_host == "localhost"
         try:
@@ -931,10 +1066,11 @@ class WebAppServer:
             is_loopback = False
         if not (is_localhost_name or is_loopback):
             raise StoreError("web UI host must be loopback (127.0.0.1, ::1, or localhost)")
-        self.httpd = ThreadingHTTPServer((host, port), WebAppHandler)
+        self.httpd = _StoreBoundHTTPServer((host, port), WebAppHandler)
         self.httpd.store = store  # type: ignore[attr-defined]
         self.host = host
         self.port = self.httpd.server_address[1]
+        self.httpd.diagnostics_roots = _diagnostics_roots(store, extra_allowed_roots)  # type: ignore[attr-defined]
         bound_host = self.httpd.server_address[0]
         hostnames = {host, bound_host}
         if normalized_host == "localhost":
@@ -946,12 +1082,15 @@ class WebAppServer:
         self.httpd.allowed_origins = {
             f"http://{value}" for value in self.httpd.allowed_hosts
         }  # type: ignore[attr-defined]
+        # Also bind in the *constructing* thread so direct (non-HTTP) callers in
+        # that thread see this server's store; request threads rebind their own
+        # copy above, which is what stops two servers from crossing over.
         try:
             from .scopes import set_global_store as _set_global_store
 
             _set_global_store(store)
-        except Exception:
-            pass
+        except Exception as exc:
+            _diagnose("could not bind the server store to the scope adapter", exc)
 
     @property
     def url(self) -> str:

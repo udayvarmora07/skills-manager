@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import re
 import shutil
 import tempfile
 from email.parser import BytesParser
-from email.policy import default as _email_policy
-from pathlib import Path
+from email.policy import compat32 as _email_policy
+from email.utils import collapse_rfc2231_value, unquote
+from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from .store import StoreError
@@ -18,38 +17,134 @@ MAX_UPLOAD_PARTS = 200
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
+def _contained(target: Path, root: Path) -> bool:
+    """Return whether the resolved *target* is inside the staging *root*."""
+
+    return target.is_relative_to(root)
+
+
+def _stage_path(tmp_root: Path, rel: str) -> Path:
+    """Return the staging path for one uploaded part, refusing name conflicts.
+
+    SEC-6: one upload may contain both ``a`` (a file) and ``a/b/SKILL.md``
+    (which requires ``a`` to be a directory).  Either order used to escape as a
+    raw ``IsADirectoryError``/``NotADirectoryError`` — an HTTP 500 that also
+    printed the exception to the server log — so both are reported here as the
+    same actionable conflict: one name is both a file and a directory.
+    """
+
+    if "\x00" in rel:
+        raise StoreError(f"uploaded file name contains a NUL byte: {rel!r}")
+    parts = PurePosixPath(rel).parts
+    if not parts:
+        raise StoreError(f"uploaded file name is empty: {rel!r}")
+    current = tmp_root
+    for index, part in enumerate(parts):
+        current = current / part
+        if index == len(parts) - 1:
+            if current.is_dir():
+                raise StoreError(f"a file and a directory share the name {part!r}")
+            return current
+        if current.is_file():
+            raise StoreError(f"a file and a directory share the name {part!r}")
+    return current  # unreachable: the loop returns or raises on the last part
+
+
 def parse_multipart(raw: bytes, boundary: str) -> list[dict]:
     """Parse the limited multipart form used by webkitdirectory uploads.
 
     Returns dictionaries containing ``name``, ``filename`` and byte
     ``content``.  Relative paths in ``filename`` are retained for the folder
     staging helper; the helper validates containment before writing anything.
+
+    SEC-11: framing follows RFC 2046 — a delimiter is CRLF + ``--`` + boundary —
+    and exactly the one CRLF belonging to the delimiter is removed.  The previous
+    parser split on the bare delimiter anywhere in the bytes and then
+    ``rstrip``-ed every trailing newline, so an uploaded document was stored
+    altered: trailing blank lines disappeared from every upload, and content was
+    silently cut at a literal ``--boundary`` inside it.  Filenames now come from
+    the email parser rather than a regex, so an RFC 2231/5987 encoded name
+    (non-ASCII or quoted, which is what browsers send in that case) arrives
+    decoded instead of missing or truncated.
     """
 
-    delimiter = b"--" + boundary.encode()
+    marker = b"--" + boundary.encode()
+    chunks = _split_multipart(raw, marker)
+    # The first split is the opening delimiter.  A second split is the closing
+    # delimiter (or the next part), so a two-chunk body is an unterminated
+    # single-part upload and still carries its one framing CRLF.
+    has_delimiter = len(chunks) > 2
     parts = []
-    for chunk in raw.split(delimiter):
-        chunk = chunk.strip(b"\r\n")
-        if not chunk or chunk == b"--":
-            continue
+    for index, chunk in enumerate(chunks):
+        if chunk.startswith(b"--"):
+            break
+        if chunk.startswith(b"\r\n"):
+            chunk = chunk[2:]
+        elif chunk.startswith(b"\n"):
+            chunk = chunk[1:]
         header_blob, sep, content = chunk.partition(b"\r\n\r\n")
         if not sep:
             continue
-        content = content.rstrip(b"\r\n")
-        if header_blob.endswith(b"--"):
-            continue
+        # With a real delimiter the CRLF immediately before it was consumed by
+        # _split_multipart.  Only a malformed/unterminated body leaves that
+        # framing CRLF in the final chunk, so remove exactly that one there.
+        if not has_delimiter and index == len(chunks) - 1:
+            if content.endswith(b"\r\n"):
+                content = content[:-2]
+            elif content.endswith(b"\n"):
+                content = content[:-1]
         headers = BytesParser(policy=_email_policy).parsebytes(header_blob + b"\r\n")
         disposition = headers.get("Content-Disposition", "")
-        name_match = re.search(r'name="([^"]*)"', disposition)
-        file_match = re.search(r'filename="([^"]*)"', disposition)
+        name = headers.get_param("name", header="content-disposition") or ""
+        filename = headers.get_param("filename", header="content-disposition")
+        if isinstance(filename, tuple):
+            filename = collapse_rfc2231_value(filename)
+        elif filename is not None:
+            filename = unquote(filename)
         parts.append(
             {
-                "name": name_match.group(1) if name_match else "",
-                "filename": file_match.group(1) if file_match else None,
+                "name": name,
+                "filename": filename,
                 "content": content,
             }
         )
     return parts
+
+
+def _split_multipart(raw: bytes, marker: bytes) -> list[bytes]:
+    """Split a multipart body on exact RFC 2046 delimiter lines.
+
+    The primary framing is CRLF + ``--`` + boundary, and the boundary must be
+    followed by CRLF, LF, ``--`` (closing), or end-of-body.  Checking the suffix
+    matters: ``CRLF--boundary-not-the-boundary`` is file content, not a part
+    delimiter.  A body framed with bare LF remains an accepted fallback for
+    hand-rolled local clients.
+    """
+    for line_break in (b"\r\n", b"\n"):
+        framed = line_break + raw
+        prefix = line_break + marker
+        chunks: list[bytes] = []
+        cursor = 0
+        search = 0
+        while True:
+            index = framed.find(prefix, search)
+            if index < 0:
+                chunks.append(framed[cursor:])
+                break
+            after = index + len(prefix)
+            suffix = framed[after:after + 2]
+            if suffix not in (b"\r\n", b"\n", b"--", b""):
+                # It is content, not framing.  Advance only the search cursor;
+                # the output chunk must retain every byte since the last real
+                # delimiter.
+                search = index + len(line_break)
+                continue
+            chunks.append(framed[cursor:index])
+            cursor = after
+            search = after
+        if len(chunks) > 1:
+            return chunks
+    return [raw]
 
 
 def upload_folder(
@@ -87,15 +182,17 @@ def upload_folder(
             rel = part["filename"]
             if not rel or rel.startswith("/") or ".." in Path(rel).parts:
                 continue
-            target = (tmp_root / rel).resolve()
-            try:
-                inside = target.is_relative_to(tmp_root)
-            except AttributeError:
-                inside = str(target).startswith(str(tmp_root) + os.sep)
-            if not inside:
+            target = _stage_path(tmp_root, rel).resolve()
+            if not _contained(target, tmp_root):
                 continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(part["content"])
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(part["content"])
+            except (OSError, ValueError) as exc:
+                # Never surface a raw Python exception as the client's error
+                # message (SEC-6); the OS's own wording is the useful part.
+                reason = getattr(exc, "strerror", None) or "unsupported file name"
+                raise StoreError(f"cannot stage uploaded file {rel!r}: {reason}") from exc
         for skill_file in sorted(tmp_root.rglob("SKILL.md")):
             source_dir = skill_file.parent
             try:

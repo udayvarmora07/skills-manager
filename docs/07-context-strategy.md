@@ -1,6 +1,6 @@
 # Context Strategy — Session Loading Model
 
-**Version 0.1.0**
+**Version 0.2.0**
 
 **AI manifest**: How sessions (human or agent) should load context for skills-manager. The goal: full situational awareness at minimum tokens, no staleness, no duplicated facts. This file is the cold-tier spec; `AGENTS.md` is the hot tier that summarizes it.
 
@@ -17,7 +17,7 @@
 **[SPEC]** Rules:
 - Read `AGENTS.md` fully (it is deliberately small — the hot cache).
 - Use the router table in `AGENTS.md` to pick the one or two `@docs/...` files for the current task. Never load all docs at once.
-- Prefer explicit pointers (`@docs/04-store-api.md`, `file:line`) over inlining content in this doc or in answers.
+- Prefer explicit pointers (`@docs/04-store-api.md`) over inlining content in this doc or in answers. For source citations use **symbol names** (`Store.edit`, `webapp.MAX_BODY_BYTES`, `archive.commit_staged_skill`) rather than `file:line`: by 2026-09-11 most line numbers in the security docs and `docs/04-store-api.md` had drifted onto unrelated code, while a symbol name fails loudly when it is renamed.
 - `task.md` is the live checklist; update it after every change, before ending a session.
 - Flag stale facts in `docs/06-progress-log.md`, then fix the owning doc — never silently reuse a stale fact.
 
@@ -26,10 +26,11 @@
 | Task | Load |
 |---|---|
 | Any change to `store.py` | @docs/04-store-api.md + run `python3 smoke_store.py` |
+| Any change to `webapp.py` / a REST endpoint | @docs/08-web-ui.md + run `python3 smoke_web.py` |
 | Any CLI work / GUI mirroring | @docs/03-cli-surface.md |
-| GUI build or testing | @docs/05-gui-plan.md + @docs/04-store-api.md |
+| GUI build or testing | @docs/08-web-ui.md + @docs/04-store-api.md (the GTK plan in @docs/05-gui-plan.md is a labelled historical record) |
 | Any edit to `skillsmgr/` internals | @docs/02-modules.md |
-| Anything touching paths/data | @docs/01-architecture.md |
+| Anything touching paths/data | @docs/01-architecture.md (data-dir layout, symlink policy, locking model) |
 | Long session or after compaction | `AGENTS.md` (re-anchor) + @docs/07-context-strategy.md + @docs/06-progress-log.md |
 
 ## Compaction anchors

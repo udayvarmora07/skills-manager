@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.3.0**
+**Version 0.6.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -13,7 +13,7 @@
 
 ## Architecture
 
-```
+```text
 Browser (Vue 3, no build step)
    │  JSON REST + static files
    ▼
@@ -53,11 +53,16 @@ python3 desktop_launcher.py --print-only    # show what would happen, exit
 ```
 
 It refuses any non-loopback `--host`, and `skills-mgr webui` stays the supported
-entry point; the launcher never replaces it.
+entry point; the launcher never replaces it. Both it and the harness resolve
+Chromium through `launcher_security.trusted_executable()`, so an unsafe PATH
+match is skipped rather than executed. The harness leaves Chrome's renderer
+sandbox enabled and passes `--remote-debugging-address=127.0.0.1` with an OS-
+selected ephemeral port; its CDP endpoint is intentionally a local developer
+seam, not a network service.
 
 ## Scopes (tracking other agents' skills)
 
-**[SPEC]** The web UI tracks skills across agent scopes — the same scopes the CLI exposes (`--scope`). Scope ids: `global` (the manager's own store), `claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`, plus project-local scopes. `cursor` maps to `~/.cursor/skills`; `agents` maps to `~/.agents/skills`. Aggregate scope views deduplicate aliases by resolved physical path, while direct scope ids remain compatible. See @docs/ADR-002-root-consumer-effective-state.md and @docs/12-agent-root-discovery-2026-09-08.md.
+**[SPEC]** The web UI tracks skills across agent scopes — the same scopes the CLI exposes (`--scope`). Scope ids: `global` (the manager's own store), `claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`, plus project-local scopes. `cursor` maps to `~/.cursor/skills`; `agents` maps to `~/.agents/skills`. Aggregate scope views deduplicate aliases by resolved physical path (first stable descriptor wins), while direct scope ids remain compatible. Rows whose on-disk directory name fails the canonical `NAME_RE` rule are still listed — the filesystem is the source of truth — but carry `addressable: false` and an `unaddressable` instance state, so the UI does not offer a row that would error the moment it is clicked (SCOPE-14). See @docs/ADR-002-root-consumer-effective-state.md and @docs/12-agent-root-discovery-2026-09-08.md.
 
 - **Scope switcher** in the topbar (`activeScope` persisted to `localStorage` as `skillsmgr-scope`; default `all`).
 - Agent scopes are read/written directly on disk (no DB index). Disable/enable renames `SKILL.md` <-> `SKILL.md.disabled` in place; remove trashes to `<scope-base>/../trash` (e.g. `~/.agents/trash`).
@@ -65,19 +70,63 @@ entry point; the launcher never replaces it.
 
 ## REST API
 
-All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError/invalid bounded input), 403 (host or cross-origin mutation rejection), 404 (SkillNotFound / unknown), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal).
+All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
 
-State-changing requests are accepted only on a loopback-bound server with the
-configured loopback `Host` and port. `Sec-Fetch-Site: cross-site`, hostile
-`Origin`, and hostile `Referer` values are rejected before route handlers run.
-JSON mutation endpoints require `Content-Type: application/json`; raw archive and
-multipart import keep their explicitly documented content types. Local CLI/test
-clients may omit browser-only headers, but if `Origin`, `Referer`, or
-`Sec-Fetch-Site` is supplied it must pass the same-origin policy.
+**[SPEC]** Requests are accepted only on a loopback-bound server with the
+configured loopback `Host` and port. This policy applies to **every** request,
+`GET` included — not only to state-changing methods (SEC-1). Before this was
+fixed, an attacker-controlled `Host` plus cross-site Fetch Metadata still
+returned `GET /api/skills` and the full `GET /api/export` archive, and the
+response was readable because a browser enforces CORS only on non-simple reads.
+`web_security.validate_request()` is therefore run by `do_GET`, `do_HEAD`,
+`do_POST`, `do_PATCH`, `do_PUT`, and `do_DELETE`.
+
+- `Sec-Fetch-Site: cross-site` is rejected (`403`), as are a mismatched `Origin`
+  and a mismatched `Referer` (only the scheme+authority of a `Referer` is
+  compared).
+- Local CLI/test clients may omit browser-only headers; a header-absent request
+  is valid by design. If `Origin`, `Referer`, or `Sec-Fetch-Site` is supplied it
+  must pass the same-origin policy.
+- The historical name `validate_mutation_request` survives as an alias of
+  `validate_request`; it is now a misnomer.
+- JSON mutation endpoints require `Content-Type: application/json`; raw archive
+  and multipart import keep their explicitly documented content types.
+
+**Other verbs.** `HEAD` mirrors the equivalent `GET`: identical status, headers
+and `Content-Length`, with the body suppressed (a `HEAD /api/skills` is how a
+client checks reachability without transferring data). `OPTIONS` and `TRACE` are
+**not** routed: they return `405` with a JSON body `{"error": "method not
+allowed"}`, an `Allow: GET, HEAD, POST, PATCH, PUT, DELETE` header, and the full
+security-header set. They previously fell through to the stdlib default handler,
+which answered with an HTML `501` carrying **no** security headers at all
+(`BUG-9`).
 
 Responses, including archive downloads, include `Content-Security-Policy` with `frame-ancestors 'none'`,
 `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, and `Cross-Origin-Resource-Policy: same-origin`.
+
+**CSP details and one recorded trade-off (SEC-4, SEC-5).** The full policy is
+`default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self'
+'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none';
+frame-ancestors 'none'; form-action 'none'`.
+
+- `form-action 'none'` is stated explicitly because `form-action` does **not**
+  fall back to `default-src`; without it a future injected `<form
+  action="https://…">` could submit. There is no `<form>` in the UI, so this is
+  free defence-in-depth (`SEC-5`).
+- `script-src 'unsafe-eval'` is a **known, deliberate trade-off**, not an
+  oversight (`SEC-4`). The vendored file is the *runtime + compiler* build, and
+  `app.js` passes no `template:`/`render:` option, so Vue compiles the in-DOM
+  markup of `index.html` with `Function(code)()` at start-up. Removing the
+  directive is therefore impossible without a build step, which locked rule 3
+  below forbids. Its cost is real but bounded: `'unsafe-inline'` is absent from
+  `script-src`, so an injected `<script>` or `onerror=` is still blocked, and no
+  HTML-injection sink exists today. What it does remove is CSP as the safety net
+  for the *next* injection bug — most plausibly the hand-rolled Markdown
+  renderer, which processes attacker-authored `SKILL.md` bodies, so keep that
+  renderer escaping everything (locked rule 4). The decision is pinned by
+  `tests/test_audit_batch5_contracts.py`, which fails if the directive is dropped
+  without also documenting the replacement.
 
 Skill path parameters are URL-decoded by segment and then validated by the
 canonical skill-name/root-containment guards before any Store or scope path is
@@ -88,23 +137,24 @@ mutate an outside directory.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/api/skills[?scope=SCOPE]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, observed instance state, and unresolved effective-state metadata |
+| GET | `/api/skills[?scope=SCOPE]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata |
 | GET | `/api/skills/<name>[?scope=SCOPE]` | — | full record incl. body + path |
 | GET | `/api/skills/<name>/raw[?scope=SCOPE]` | — | raw SKILL.md text (text/plain) |
 | POST | `/api/skills[?scope=SCOPE]` | `{name, description, category?, version?, license?, compatibility?, allowed_tools?, body?}` | created record (201) |
 | PATCH | `/api/skills/<name>[?scope=SCOPE]` | partial fields (same keys as POST) | `{name, changed}` |
 | POST | `/api/skills/<name>/disable[?scope=SCOPE]` | — | `{name, disable: true}` |
 | POST | `/api/skills/<name>/enable[?scope=SCOPE]` | — | `{name, enable: true}` |
-| DELETE | `/api/skills/<name>?purge=0|1[&scope=SCOPE]` | — | Store.remove / scopes.remove_skill result |
+| DELETE | `/api/skills/<name>?purge=0\|1[&scope=SCOPE]` | — | Store.remove / scopes.remove_skill result |
 
 ### Search / maintenance
 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/search?q=term[&scope=SCOPE]` | search over name/description/body (scope-aware); bounded wildcard failures return the standard JSON `StoreError` 400 |
-| GET | `/api/stats` | Store.stats |
-| GET | `/api/doctor[?scope=all]` | Store.doctor (global), including filesystem/index drift and transaction-artifact diagnostics; `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`) |
-| GET | `/api/doctor?explain=CONSUMER[&project=DIR][&skill=NAME]` | adds the read-only effective-resolution report (issue #12, `effective.explain`) under `explain`; derived at read time, writes nothing, and reports `unknown-consumer`/`missing-project` as explicit results |
+| GET | `/api/stats` | Store.stats plus scope/token enrichment: `scopes`, `all_total`, `all_tokens`, `all_avg_tokens`, `window`, `window_tokens`, `all_pct_window`, `largest`, `has_tiktoken`. When an enrichment step fails, the documented keys are still filled with safe fallbacks and the step is named in a `degraded` array (e.g. `"largest"`, `"scopes"`) |
+| GET | `/api/doctor[?scope=all]` | Store.doctor (global), including filesystem/index drift and transaction-artifact diagnostics; `?scope=all` adds `scopes` + `duplicates` (`scopes.find_duplicates()`), and on an enrichment failure both are returned as `[]` with an entry appended to `degraded` (`[{"section", "reason"}]`), so a client can tell "no duplicates" from "the scan crashed" |
+| GET | `/api/doctor?explain=CONSUMER[&project=DIR][&skill=NAME]` | adds the read-only effective-resolution report (issue #12, `effective.explain`) under `explain`; derived at read time, writes nothing, and reports `unknown-consumer`/`missing-project` as explicit results. **The report is confined to the manager's data directory** plus any extra root the operator passed at server construction; a request cannot widen that boundary (SEC-2/SEC-3): every path outside it is replaced by `<redacted>` with `paths_redacted: true`, and a `project` outside it returns resolution `project-outside-managed-roots` **without being walked** (no nested-root search, no instance read). The CLI passes no boundary and stays fully transparent |
+| GET | `/api/tokens?window=&name=&scope=&text=` | token/context estimate: with `text=` it estimates that text, with `name=` it estimates one skill's document (scope-qualified when `scope=` is a scope id, otherwise the first match across scopes), and with neither it aggregates over `scope` (default `all`). Aggregate responses add `window`, `window_tokens` and `pct_window`; `window` selects the context window (claude, claude-haiku, gpt-5.6, gpt-5, gpt-4o, gemini, gemini-2m) |
 | GET | `/api/history?name=&limit=` | Store.history (name optional) |
 | GET | `/api/history?name=NAME&scope=SCOPE&snapshots=1` | retained snapshot IDs for a skill |
 | POST | `/api/validate` | body `{name}` → `{valid, issues: [{level, key, message}]}`; `{evals: true}` adds the advisory eval report for `evals/evals.json` (read-only); `{runs: [...], iteration?}` scores and records results inside the store's `evals/` workspace |
@@ -112,7 +162,7 @@ mutate an outside directory.
 | POST | `/api/resync` | Store.resync |
 | GET | `/api/scopes` | `list_scopes()`: id/label/path/kind/writable/availability/recursive/supported/consumer/exists/count/tokens |
 | POST | `/api/sync` | body `{name, from_scope, to_scopes[], force}` → `{synced[], skipped[]}` |
-| POST | `/api/install` | body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` → built `skills add` command, or runs it when `run:true`; `{preview: true, trust_confirmed?, registry_hash?, description?}` adds the offline registry bridge plan under `registry` and makes `command` the recommended `skills add` mapping (no request, no execution) |
+| POST | `/api/install` | body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` → built `skills add` command, or runs it when `run:true`; `{preview: true, trust_confirmed?, registry_hash?, description?}` adds the offline registry bridge plan under `registry` and makes `command` the recommended `skills add` mapping (no request, no execution). `trust_confirmed` records caller intent only: offline plans keep `trust_verified`, `hash_verified`, and `may_install` false, with eligibility unverified and supplied hashes marked unverified until authenticated comparison |
 
 ### Trash
 
@@ -137,6 +187,15 @@ mutate an outside directory.
 | PUT | `/api/import?filename=&force=&full=` | raw tar or ZIP archive bytes → Store.import_; `full=1` restores trash/templates from a full archive |
 | PUT | `/api/import` (multipart/form-data) | webkitdirectory folder upload → Store.add per SKILL.md |
 
+A multipart upload stages every part into a private temporary tree before any
+skill is added, and it reports a name conflict as a plain `400` instead of
+failing mid-request (SEC-6): one upload that contains both `a` (a file) and
+`a/b/SKILL.md` (needing directory `a`) answers `{"error": "a file and a
+directory share the name 'a'"}` in either part order, and a filename containing
+a NUL byte answers an explicit message rather than the interpreter's own
+`embedded null byte` text. Parts with an absolute path or a `..` segment are
+still skipped silently, as before.
+
 ### Local client integration contract (non-browser clients — issue #8)
 
 The REST API is the product surface for local integrations (an editor/VS Code
@@ -149,35 +208,39 @@ pins the contract). What a client must know:
 - **Address it at `127.0.0.1`.** The server binds loopback only and rejects a
   non-loopback bind host. With the default bind, its `Host` allowlist holds only
   `127.0.0.1:<port>`; a client configured with the equally-loopback name
-  `localhost` gets **403 on every state-changing call** (`GET` is unaffected).
-  Using the same host for bind and link keeps the header valid — which is why
-  `desktop_launcher.py` does exactly that. Tracked as issue #14 F-2.
+  `localhost` gets **403 on every request, `GET` included**. Using the same host
+  for bind and link keeps the header valid — which is why `desktop_launcher.py`
+  does exactly that. Tracked as issue #14 F-2.
 - **Call from the extension host (Node), not a webview origin.** No CORS headers
   are served on purpose: the server has no authentication, so a cross-origin
   browser request must stay rejectable. Requests carrying `Origin`/`Referer`
   outside the loopback origin set, or `Sec-Fetch-Site: cross-site`, get 403 on
-  state-changing methods; header-absent local clients are allowed by design,
-  which is exactly the extension-host path.
+  **every** method; header-absent local clients are allowed by design, which is
+  exactly the extension-host path.
 - **Errors are JSON and machine-readable** (`{"error": "..."}` with 400/403/404/409/415),
   and mutations require `Content-Type: application/json`.
 - **There is no health endpoint** (adding one would be a new surface). A client
   confirms it reached this tool by reading `/api/stats` (counts, sizes,
   categories) at the loopback URL it started or discovered.
-- **Reads are not Host-validated today.** That is a known, tracked gap for a
-  DNS-rebound page whose origin *is* the rebound host; issue #14 records the
-  options and the current behavior is pinned as characterization in the test
-  file, not as an endorsement. Mutation paths are already rejected.
+- **Reads are validated too.** `GET` and `HEAD` run the same
+  Host/Fetch-Metadata/Origin/Referer policy as the mutations, so a DNS-rebound
+  page whose origin *is* the rebound host can no longer read `/api/skills` or
+  download `/api/export` (SEC-1; this closed the F-1 half of issue #14, and
+  `tests/test_web_client_contracts.py` now pins the closed behaviour).
+- **`OPTIONS` and `TRACE` are refused** with a JSON `405` plus `Allow` and the
+  security headers — do not use them as a reachability probe; use `HEAD` (which
+  mirrors `GET`, headers only) or `/api/stats`.
 
 ## Frontend map (app.js)
 
 - **State**: `view` (skills|trash), `filter` (all|active|disabled), `query` (live search, 220ms debounce), `skills`, `trashSkills`, `selected`/`selectedName`, `theme` (light|dark, localStorage), `modals.*` (one object per dialog, including help), `toasts`/`liveAnnouncement`, focus lifecycle state, `scopes` (from `/api/scopes`), `activeScope` (persisted).
 - **Domain seam (`domain.js`)**: `api()` fetch wrapper, formatting/token helpers, raw frontmatter enrichment, and hand-rolled escaped Markdown rendering; all load before `app.js` without a bundler.
-- **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Scope helpers `_scopeParam`/`_scopeQs` append `?scope=` to skill/detail/search calls.
+- **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). The scope query string is built inline per call (`"?scope=" + encodeURIComponent(scope)`); the former `_scopeParam`/`_scopeQs` helpers were dead code and were removed (`BUG-15`).
 - **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), `openInstall`/`runInstall` (build or run `skills add`), and escaped editor preview.
 - **Markdown**: block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
 - **Keyboard**: `/` focuses search; `?` opens shortcut help; `Esc` closes menus/modals; `Tab` is trapped within the active dialog and focus returns to its opener. Destructive dialogs focus the safer cancel action first. Dialog backgrounds expose `inert`/`aria-hidden` while open, with labelled dialogs and live status/error announcements.
 - **Preview and safety**: skill editors show an escaped live Markdown preview; sync dialogs show source/target resolution, skip-versus-overwrite behavior, and rollback expectations before commit.
-- **Responsive**: <900px stacks sidebar above detail; <640px compacts the topbar (no brand text, no stat pill, tighter padding). The dev-only `browser_harness.py` uses system Chrome DevTools Protocol to capture console/runtime/network failures and checks 320/400/640/900/desktop viewports.
+- **Responsive**: <900px stacks sidebar above detail; <640px compacts the topbar (no brand text, no stat pill, tighter padding). The dev-only `browser_harness.py` uses system Chrome DevTools Protocol with the browser sandbox enabled, an explicit loopback address, and trusted executable discovery to capture console/runtime/network failures across 320/400/640/900/desktop viewports.
 
 ## Design system (styles.css)
 

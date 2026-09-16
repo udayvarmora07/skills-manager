@@ -94,7 +94,9 @@ createApp({
       localStorage.setItem("skillsmgr-scope", v);
       this.selectedName = null;
       this.selected = null;
-      this.loadSkills();
+      // BUG-4: a live query must keep filtering after the scope changes,
+      // otherwise the search box shows a term while the list shows every skill.
+      this.refreshList();
       this.loadStatsTokens();
     },
     budgetWindow(v) {
@@ -240,16 +242,6 @@ createApp({
       }
     },
 
-    _scopeParam() {
-      return this.activeScope && this.activeScope !== "all" ? "?scope=" + encodeURIComponent(this.activeScope) : "";
-    },
-
-    _scopeQs(qs) {
-      const s = this.activeScope || "all";
-      if (!s || s === "global") return qs;
-      return qs ? qs + "&scope=" + encodeURIComponent(s) : "?scope=" + encodeURIComponent(s);
-    },
-
     async loadSkills() {
       const mySeq = ++this.listSeq;
       const scopeAtCall = this.activeScope || "all";
@@ -340,7 +332,17 @@ createApp({
     },
 
     selectSkill(s) {
-      if (this.selectedName === s.name) return;
+      // BUG-3: the list keys rows by scope+name and the UI supports the same
+      // skill name in several scopes, so comparing the name alone made
+      // clicking another scope's copy a no-op that left the detail pane
+      // showing the first scope's record.
+      if (
+        this.selectedName === s.name
+        && this.selected
+        && this.selected.scope === (s.scope || null)
+      ) {
+        return;
+      }
       this.loadDetail(s.name, s.scope);
     },
 
@@ -351,6 +353,17 @@ createApp({
     switchView(v) {
       this.view = v;
       if (v === "trash") this.loadTrash();
+      // BUG-4: entering the skills view with a live query must re-apply it, or
+      // the list silently disagrees with the search box.
+      else if (v === "skills") this.refreshList();
+    },
+
+    /* Refresh the skills list, honouring an active search query (BUG-4). */
+    refreshList() {
+      if (this.query && this.query.trim() && this.view === "skills") {
+        return this.applySearch();
+      }
+      return this.loadSkills();
     },
 
     setFilter(f) {
@@ -619,7 +632,16 @@ createApp({
     confirmRemove(record) {
       this.modalRestoreFocus = document.activeElement;
       if (!record) { this.toast("Select a skill first.", "err"); return; }
-      this.modals.remove = { name: record.name, mode: "trash" };
+      // BUG-5: bind the modal to the record it was opened for.  The scope was
+      // re-derived from live `this.selected` at confirm time, so a selection
+      // change (or a same-name skill in another scope) between opening and
+      // confirming removed a different skill than the one the dialog named --
+      // irreversibly for the purge path.
+      this.modals.remove = {
+        name: record.name,
+        scope: record.scope || (this.activeScope !== "all" ? this.activeScope : "global"),
+        mode: "trash",
+      };
     },
 
     async doRemove() {
@@ -627,7 +649,7 @@ createApp({
       if (!m) return;
       this.busy = true;
       try {
-        await this.removeSkill(m.name, m.mode === "purge");
+        await this.removeSkill(m.name, m.mode === "purge", m.scope);
         this.closeModal("remove");
       } catch (e) {
         this.toast(e.message, "err");
@@ -636,8 +658,10 @@ createApp({
       }
     },
 
-    async removeSkill(name, purge) {
-      const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
+    async removeSkill(name, purge, scope) {
+      const sc = scope
+        || (this.selected && this.selected.scope)
+        || (this.activeScope !== "all" ? this.activeScope : "global");
       const qp = "?scope=" + encodeURIComponent(sc) + "&purge=" + (purge ? "1" : "0");
       await api("/api/skills/" + encodeURIComponent(name) + qp, { method: "DELETE" });
       if (purge) {

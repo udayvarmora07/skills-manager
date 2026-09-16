@@ -30,6 +30,7 @@ __all__ = [
     "REGISTRY_AUDIT_PROVIDERS",
     "REGISTRY_BASE_URL",
     "REGISTRY_PREVIEW_POLICY",
+    "SCRIPT_SCAN_POLICY",
     "consumer_view",
     "diff_skills",
     "diff_three_way",
@@ -72,9 +73,25 @@ _INSTALL_RUNNERS = ("npx", "pnpm", "yarn", "bunx", "bun")
 _QUARANTINE_SCOPE = "quarantine"
 _RESOLUTION_NOTE = "unresolved-precedence-approval-gated"
 
+SCRIPT_SCAN_POLICY = (
+    "advisory-only: text-pattern matches are heuristic signals, not proof "
+    "of execution, safety, or trust; review and validate independently"
+)
+
 _SCRIPT_RE = re.compile(
-    r"(?i)\b(rm\s+-rf|curl\b.{0,40}\|\s*sh|wget\b.{0,40}\|\s*sh|"
-    r"powershell\b.{0,20}-(?:enc|hidden)|chmod\s+\+x|sudo\s+)"
+    r"""
+    (?:
+        \brm\s+(?:(?:-[a-z]*[rf]|--(?:recursive|force))\s+)+[^\n;`]*
+        |\b(?:curl|wget)\b[^\n|]{0,160}\|\s*(?:sh|bash)\b
+        |\bbase64\b[^\n|]{0,160}\|\s*(?:sh|bash)\b
+        |\bpowershell\b[^\n]{0,80}\s-(?:enc|encodedcommand|hidden)\b
+        |\bchmod\s+(?:\+x|[0-7]{3,4})\b
+        |\bsudo\s+
+        |\bshell\s*=\s*true\b
+        |\beval\s*(?:\(|\b)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 _URL_RE = re.compile(r"https?://[^\s)`\"']+")
 _LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -343,7 +360,11 @@ def quarantine_plan(name: str, source: str = "unknown") -> dict:
 
 
 def risk_scan(record: dict) -> list[dict]:
-    """Explainable static scan over body, links, tools, and phrases."""
+    """Return explainable, advisory-only signals over a skill record.
+
+    These findings are not an authority decision: the scan cannot determine
+    whether an instruction will execute or whether a skill is safe.
+    """
     _require_record(record, "record")
     findings: list[dict] = []
     body = str(record.get("body") or "")
@@ -353,15 +374,16 @@ def risk_scan(record: dict) -> list[dict]:
     findings.extend(_scan_suspicious_phrases(body))
     findings.extend(_scan_extension_keys(record))
     findings.extend(_scan_bare_urls(body, findings))
-    return findings
+    return [dict(finding, advisory=True, authority="advisory")
+            for finding in findings]
 
 
 def _scan_script_patterns(body: str) -> list[dict]:
-    """Match shell/destructive command patterns in instruction text."""
+    """Match advisory shell/destructive patterns in instruction text."""
     return [{"kind": "script", "severity": "high",
              "evidence": match.group(0).strip()[:120],
-             "why": "shell/destructive command pattern in skill "
-                    "instructions; review before trusting"}
+             "confidence": "heuristic",
+             "why": SCRIPT_SCAN_POLICY}
             for match in _SCRIPT_RE.finditer(body)]
 
 
@@ -435,10 +457,8 @@ def registry_preview(entry: dict, trust_confirmed: bool = False) -> dict:
     if not isinstance(raw_name, str) or not raw_name.strip():
         raise ValueError("registry entry must carry a valid skill name")
     name = validate_skill_name(raw_name.strip())
-    blockers: list[str] = []
-    if not trust_confirmed:
-        blockers.append("trust not confirmed: review source preview and "
-                        "provenance, then confirm explicitly")
+    gate = _offline_registry_gate(trust_confirmed, entry.get("content_hash"))
+    blockers: list[str] = list(gate["blockers"])
     description = entry.get("description")
     if not isinstance(description, str) or not description.strip():
         blockers.append("entry has no description; provenance is incomplete")
@@ -457,7 +477,44 @@ def registry_preview(entry: dict, trust_confirmed: bool = False) -> dict:
         "content_hash": content_hash,
         "target_scope": target_scope,
         "dry_run": steps,
-        "may_install": not blockers,
+        "may_install": gate["may_install"],
+        "trust_confirmed": gate["trust_confirmed"],
+        "trust_requested": gate["trust_requested"],
+        "trust_status": gate["trust_status"],
+        "trust_verified": gate["trust_verified"],
+        "eligibility_status": gate["eligibility_status"],
+        "hash_status": gate["hash_status"],
+        "hash_verified": gate["hash_verified"],
+        "blockers": blockers,
+    }
+
+
+def _offline_registry_gate(trust_requested: object,
+                           content_hash: object) -> dict:
+    """Describe what an offline preview can and cannot establish.
+
+    The legacy fields are retained for payload compatibility.  In offline
+    mode, ``trust_confirmed`` and ``may_install`` deliberately never become
+    true, while caller intent and a supplied hash remain observable through
+    explicitly unverified fields.
+    """
+    requested = bool(trust_requested)
+    supplied_hash = isinstance(content_hash, str) and bool(content_hash)
+    blockers = []
+    if not requested:
+        blockers.append("trust not confirmed: review source preview and "
+                        "provenance, then confirm explicitly")
+    blockers.append("install eligibility is unverified: offline preview did "
+                    "not fetch or authenticate registry metadata")
+    return {
+        "may_install": False,
+        "trust_confirmed": False,
+        "trust_requested": requested,
+        "trust_status": "unverified-offline" if requested else "not-confirmed",
+        "trust_verified": False,
+        "eligibility_status": "unverified-offline",
+        "hash_status": "unverified-provided" if supplied_hash else "not-provided",
+        "hash_verified": False,
         "blockers": blockers,
     }
 
@@ -547,13 +604,27 @@ def registry_reference(spec: str) -> dict:
     raise ValueError(f"unsupported registry reference: {raw!r}")
 
 
+def _safe_install_value(value: object, label: str) -> str:
+    if not isinstance(value, str) or len(value) > 256 or not _INSTALL_VALUE_RE.fullmatch(value):
+        raise ValueError(f"invalid {label} value {value!r}")
+    normalized = value.replace("\\", "/")
+    segments = normalized.split("/")
+    if (
+        value.startswith("-")
+        or value.startswith("/")
+        or value in {".", ".."}
+        or any(segment in {".", ".."} for segment in segments)
+        or (len(value) >= 2 and value[1] == ":")
+    ):
+        raise ValueError(f"invalid {label} value {value!r}")
+    return value
+
+
 def install_argv(source: str, runner: str = "npx", scope: str = "global",
                  agents=None, skills=None, copy: bool = False,
                  list_only: bool = False) -> list[str]:
     """Render the ecosystem-runner argv for one install request."""
-    if not isinstance(source, str) or not _INSTALL_VALUE_RE.fullmatch(source) \
-            or source.startswith("-"):
-        raise ValueError(f"invalid install source {source!r}")
+    source = _safe_install_value(source, "install source")
     if runner not in _INSTALL_RUNNERS:
         raise ValueError(f"unsupported runner {runner!r}")
     parts = {
@@ -565,9 +636,7 @@ def install_argv(source: str, runner: str = "npx", scope: str = "global",
         parts.append("-g")
     for label, values, flag in (("agent", agents, "-a"), ("skill", skills, "-s")):
         for value in values or []:
-            if not isinstance(value, str) or not _INSTALL_VALUE_RE.fullmatch(value) \
-                    or value.startswith("-"):
-                raise ValueError(f"invalid {label} value {value!r}")
+            value = _safe_install_value(value, label)
             parts.extend([flag, value])
     if copy:
         parts.append("--copy")
@@ -601,10 +670,8 @@ def registry_bridge_plan(spec: str, runner: str = "npx", scope: str = "global",
     targets = list(skills or []) or ([reference["slug"]] if reference["slug"] else [])
     command = install_command_line(reference["source"], runner, scope, agents,
                                    targets, copy, list_only)
-    blockers: list[str] = []
-    if not trust_confirmed:
-        blockers.append("trust not confirmed: review the source and audit "
-                        "links, then confirm explicitly")
+    gate = _offline_registry_gate(trust_confirmed, content_hash)
+    blockers: list[str] = list(gate["blockers"])
     has_description = isinstance(description, str) and bool(description.strip())
     return {
         "spec": reference["spec"],
@@ -620,22 +687,28 @@ def registry_bridge_plan(spec: str, runner: str = "npx", scope: str = "global",
                            "authenticated catalog read; supply it manually when "
                            "you have it, otherwise provenance stays incomplete",
         "content_hash": content_hash,
-        "hash_status": "provided" if content_hash else "not-provided",
-        "hash_use": "compare the registry hash with a stored value to detect "
-                    "upstream change without re-fetching files",
+        "hash_status": gate["hash_status"],
+        "hash_verified": gate["hash_verified"],
+        "hash_use": "compare a supplied hash only after an authenticated "
+                    "registry read; this offline preview performs no comparison",
         "target_scope": scope,
         "runner": runner,
         "install_command": command,
         "steps": [
             "preview (offline): reference parsed, audit links and hash shown",
             f"dry-run: {command}",
-            "confirm trust explicitly (advisory gate)",
+            "record caller trust intent (still unverified offline)",
+            "obtain an authenticated registry read before deciding install eligibility",
             f"run: {command} (set DISABLE_TELEMETRY=1 to opt out of runner telemetry)",
             "validate the installed copy with `validate`",
             "store the registry hash to detect later upstream change",
         ],
-        "may_install": not blockers,
-        "trust_confirmed": bool(trust_confirmed),
+        "may_install": gate["may_install"],
+        "trust_confirmed": gate["trust_confirmed"],
+        "trust_requested": gate["trust_requested"],
+        "trust_status": gate["trust_status"],
+        "trust_verified": gate["trust_verified"],
+        "eligibility_status": gate["eligibility_status"],
         "blockers": blockers,
         "network": "deferred: no registry API request, cache, or credential is used",
         "policy": REGISTRY_PREVIEW_POLICY,

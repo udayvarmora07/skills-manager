@@ -304,7 +304,7 @@ Working-tree diff vs baseline: `skillsmgr/{store,archive,atomic_io,cli,frontmatt
 - **Area:** `skillsmgr/store.py` (`remove`, `disable`, `enable`, trash-branch
   `restore`) vs. per-skill mutation locks in `create`/`edit`.
 - **Evidence (concurrency stress, 4 writers × ~25 s on 6 names):**
-  ```
+  ```text
   FileNotFoundError: [Errno 2] … '.SKILL.md.<tmp>.skillsmgr-tmp' -> '…/conc-5/SKILL.md'
   doctor: temporary_files = [trash/conc-5-…/.SKILL.md.<tmp>.skillsmgr-tmp, … (7 files)]
   ```

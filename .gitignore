@@ -12,6 +12,15 @@ venv/
 # Data dirs created at runtime (never commit user skills)
 # $SKILLS_MANAGER_DATA / ~/.local/share/skills-manager
 
+# Local configuration, databases, credentials, and private keys
+.env
+.env.*
+*.db
+*.sqlite*
+*.pem
+*.key
+.netrc
+
 # Editors / OS
 .vscode/
 .idea/
