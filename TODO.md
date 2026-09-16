@@ -56,9 +56,9 @@ performed here.
   `smoke_store.py`, `smoke_web.py`, `node --check skillsmgr/webui/app.js`, and CLI
   help all passed. That number is a record of the baseline this backlog was
   written against, not of the tree today.
-- [x] **Current baseline (2026-09-16, re-derived by running the gates):** **722
+- [x] **Current baseline (2026-09-16, re-derived by running the gates):** **728
   `unittest` tests OK**, `smoke_store.py` PASSED, `smoke_web.py` PASSED,
-  `check_docs.py` PASSED, `check_complexity.py` PASSED (221 functions, budget
+  `check_docs.py` PASSED, `check_complexity.py` PASSED (222 functions, budget
   ≤ 15), `node --check` clean on both `skillsmgr/webui/app.js` and
   `skillsmgr/webui/domain.js`, CLI help runs, and `check_package_data.py` reports
   `UNAVAILABLE` because the optional `build` tooling is absent (standing
@@ -780,8 +780,8 @@ authoritative one and comes from the generated table in
   bounded/canonical validation, `INS-1` is explicitly advisory/heuristic,
   `INS-2` never self-asserts offline trust/hash/eligibility, and `INFO-1` is a
   verified false positive with an argv-injection regression. Nothing above Low
-  severity is outstanding; the final tree is 722 tests and 221 tracked
-  functions.
+  severity is outstanding; the audit-tail close-out tree was 722 tests and 221
+  tracked functions.
 - [x] T14 `FM-9` is fully closed: representable control-bearing mapping keys
   use escaped double-quoted output for exact dump/parse round-trips, and root
   or nested mappings reject distinct Python keys that serialize to the same

@@ -345,7 +345,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; color: var(--te
 
 .chip:hover { border-color: var(--border-strong); color: var(--text); }
 .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
-.chip-count { font-size: 11px; opacity: 0.8; margin-left: 2px; }
+.chip-count { font-size: 11px; margin-left: 2px; }
 
 .scopebar {
   display: flex;

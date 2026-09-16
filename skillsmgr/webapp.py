@@ -290,6 +290,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def _send_error(self, status: int, message: str) -> None:
         self._send_json({"error": message}, status)
 
+    def _drain_body(self, length: int) -> None:
+        """Read and discard an over-limit body before sending its error."""
+        remaining = length
+        try:
+            while remaining > 0:
+                chunk = self.rfile.read(min(65536, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except (OSError, ValueError):
+            pass
+
     def _read_body(self, limit: int = MAX_BODY_BYTES) -> bytes:
         raw_length = self.headers.get("Content-Length") or "0"
         try:
@@ -299,7 +311,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if length < 0:
             raise StoreError("invalid Content-Length")
         if length > limit:
-            raise StoreError("request body too large")
+            self._drain_body(length)
+            raise RequestError(413, "request body too large")
         return self.rfile.read(length) if length else b""
 
     def _body_json(self) -> dict:

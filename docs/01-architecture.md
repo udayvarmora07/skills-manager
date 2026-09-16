@@ -2,7 +2,7 @@
 
 **Version 0.6.0**
 
-**AI manifest**: Current architecture and data-flow facts verified against source on September 16, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and a 722-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
+**AI manifest**: Current architecture and data-flow facts verified against source on September 16, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and a 728-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
 
 ## Repo map
 
@@ -44,7 +44,7 @@ skills-manager/
   smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers
   browser_harness.py # dev-only system-Chrome CDP viewport probe (no runtime dep)
   desktop_launcher.py # optional, unbundled loopback-only app-window launcher (issue #9; no runtime dep, not packaged)
-  tests/             # stdlib unittest regression suite (722 tests, 2026-09-16)
+  tests/             # stdlib unittest regression suite (728 tests, 2026-09-16)
   check_docs.py      # machine-checkable docs/source gate: HADS headers, links/anchors,
                      # table integrity, CLI/REST/Store surface parity, file inventory
   check_complexity.py# AST complexity ratchet (+ complexity-baseline.json)

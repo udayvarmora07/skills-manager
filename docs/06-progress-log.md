@@ -4,7 +4,21 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
-**Verification (current tree, 2026-09-16):** 722 unittest tests pass; Store/Web smoke tests, docs, complexity (221 functions), frontend syntax, package-data source hash, and diff checks pass. Package artifact coverage is unavailable locally because optional `python -m build` is not installed.
+**Verification (current tree, 2026-09-16):** 728 unittest tests pass; Store/Web smoke tests, docs, complexity (222 functions), frontend syntax, package-data source hash, and diff checks pass. Package artifact coverage is unavailable locally because optional `python -m build` is not installed.
+
+## 2026-09-16 — Worktree comparison and frontend report close-out
+
+Compared all three linked worktrees and the local backup branch against the
+pushed `main`. Snapshot/full-migration work from the first agent worktree was
+already present in the current refactored implementation; its stale CLI/UI
+patch was not merged. The third worktree contained a report only. The valid
+remaining findings from the second worktree's historical frontend report were
+ported to the current `domain.js`, `app.js`, `index.html`, `styles.css`, and
+`webapp.py`: CRLF Markdown normalization, array compatibility formatting,
+definition-list Path markup, chip-count contrast, raw-metadata failure
+feedback, and drained oversized-body `413` handling. Focused source and
+request-body regressions were added; ZIP-hint changes were intentionally not
+ported because ZIP import is now supported.
 
 ## 2026-09-16 — FM-9 dumper-key fidelity
 
@@ -19,7 +33,7 @@ Red-first regressions are in
 `tests/test_frontmatter_contracts.py::BlockScalarFidelityTests` for escaped-key
 round-tripping and serialized-key collision rejection. No command, Store
 method, schema, dependency, or bind changed; accepted SEC-4 remains untouched.
-The current suite is **722 tests OK** and complexity is **221 functions**.
+At that close-out, the suite was **722 tests OK** and complexity was **221 functions**.
 
 ## 2026-09-16 — Final audit tail (FM-20, FM-21, INFO-1, INS-1, INS-2)
 

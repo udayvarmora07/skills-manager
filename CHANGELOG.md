@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Web UI robustness
+
+Ported the remaining valid findings from the historical frontend test report:
+CRLF-safe Markdown rendering, array-safe compatibility formatting, accessible
+Path metadata markup, stronger chip-count contrast, visible raw-metadata
+enrichment failures, and clean drained `413` responses for oversized bodies.
+The current suite is **728 tests** with **222 complexity-tracked functions**.
+
 ### Final audit tail
 
 The final five low/info audit findings are closed: frontmatter dumping now

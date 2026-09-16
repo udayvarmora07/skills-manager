@@ -317,8 +317,14 @@ createApp({
           if (raw.ok) {
             const text = await raw.text();
             Object.assign(record, parseFrontmatter(text));
+          } else if (mySeq === this.detailSeq) {
+            this.toast("Could not load full metadata (compatibility may be missing).", "err");
           }
-        } catch (e) { /* optional enrichment */ }
+        } catch (e) {
+          if (mySeq === this.detailSeq) {
+            this.toast("Could not load full metadata (compatibility may be missing).", "err");
+          }
+        }
         if (mySeq !== this.detailSeq) return;
         this.selected = record;
         this.selectedName = name;

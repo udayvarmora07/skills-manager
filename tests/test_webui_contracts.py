@@ -73,6 +73,37 @@ class FrontendSourceContractTests(unittest.TestCase):
         self.assertIn("function formatTokens(", domain)
         self.assertIn('if (n == null) return "—";', domain)
 
+    def test_domain_format_compat_handles_arrays_before_objects(self):
+        source = _read(DOMAIN_JS)
+        array_branch = 'if (Array.isArray(v)) return v.join(", ");'
+        object_branch = 'if (typeof v === "object") return Object.entries(v)'
+        self.assertIn(array_branch, source)
+        self.assertLess(source.index(array_branch), source.index(object_branch))
+
+    def test_domain_markdown_normalizes_crlf(self):
+        source = _read(DOMAIN_JS)
+        self.assertIn('String(md).replace(/\\r\\n?/g, "\\n").split("\\n")', source)
+
+    def test_detail_path_metadata_uses_definition_list(self):
+        html = _read(INDEX_HTML)
+        self.assertRegex(
+            html,
+            r'<dl class="meta" style="margin-top:8px;">\s*<div>\s*<dt>Path</dt>',
+        )
+
+    def test_chip_count_does_not_reduce_contrast(self):
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        match = re.search(r"\.chip-count\s*\{([^}]*)\}", css)
+        self.assertIsNotNone(match)
+        self.assertNotIn("opacity", match.group(1))
+
+    def test_detail_surfaces_raw_metadata_failure(self):
+        source = _read(APP_JS)
+        self.assertIn(
+            "Could not load full metadata (compatibility may be missing).", source
+        )
+        self.assertIn("else if (mySeq === this.detailSeq)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

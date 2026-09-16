@@ -57,9 +57,20 @@
   to the same frontmatter key. Red-first regressions cover both halves; no
   command, Store method, schema, dependency, or bind changed.
 
+## Milestone 67 — Worktree comparison and frontend report close-out (2026-09-16)
+
+- [x] Compare every registered worktree and local branch with pushed `main`;
+  retain already-integrated snapshot/migration work without reapplying stale
+  architecture changes.
+- [x] Port the valid frontend report fixes: CRLF Markdown, array compatibility
+  formatting, accessible Path metadata, chip-count contrast, visible raw
+  metadata failures, and drained oversized-body `413` responses.
+- [x] Add focused regressions, update the changelog/progress record, and run
+  the current-tree verification ladder before pushing.
+
 **Verified on the current tree (re-derived by running the final audit-tail close-out, 2026-09-16):**
-**722 `unittest` tests OK**; `smoke_store.py` and `smoke_web.py` PASSED;
-`check_docs.py` PASSED; `check_complexity.py` PASSED (**221 functions**, budget
+**728 `unittest` tests OK**; `smoke_store.py` and `smoke_web.py` PASSED;
+`check_docs.py` PASSED; `check_complexity.py` PASSED (**222 functions**, budget
 ≤ 15); `node --check` clean on `skillsmgr/webui/app.js` and
 `skillsmgr/webui/domain.js`; CLI help runs; `check_package_data.py` asserts the
 vendored Vue sha256 and then reports `UNAVAILABLE` locally without the optional

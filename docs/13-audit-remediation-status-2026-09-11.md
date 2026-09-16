@@ -20,11 +20,11 @@ and the final audit-tail close-out (`FM-20`, `FM-21`, `INFO-1`, `INS-1`,
 
 | Gate | Result |
 |---|---|
-| `python3 -m unittest discover -s tests` | **722 tests OK** (audit baseline: 477; includes the final FM-9, FM-20/FM-21, INFO-1, INS-1, and INS-2 regressions) |
+| `python3 -m unittest discover -s tests` | **728 tests OK** (audit baseline: 477; includes the final FM-9, FM-20/FM-21, INFO-1, INS-1, and INS-2 regressions plus the frontend report close-out contracts) |
 | `python3 smoke_store.py` | PASSED |
 | `python3 smoke_web.py` | PASSED |
 | `check_docs.py` | PASSED |
-| `check_complexity.py` | PASSED (221 functions, new-function budget respected) |
+| `check_complexity.py` | PASSED (222 functions, new-function budget respected) |
 | `node --check` webui `app.js` / `domain.js` | clean |
 | `check_package_data.py` | PASS (vendored-Vue hash asserted; build coverage `UNAVAILABLE` locally, PASS on real built artifacts — see batch 5) |
 

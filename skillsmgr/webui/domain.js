@@ -59,7 +59,7 @@ function inlineMd(s) {
 
 function renderMarkdown(md) {
   if (!md || !md.trim()) return '<p style="color:var(--text-muted);">No documentation body.</p>';
-  const lines = String(md).split("\n");
+  const lines = String(md).replace(/\r\n?/g, "\n").split("\n");
   const out = [];
   let i = 0, inList = null, inCode = false, codeBuf = [], inTable = false;
 
@@ -136,6 +136,7 @@ function parseFrontmatter(text) {
 function formatCompat(v) {
   if (!v) return "";
   if (typeof v === "string") return v;
+  if (Array.isArray(v)) return v.join(", ");
   if (typeof v === "object") return Object.entries(v).map(([k, val]) => `${k} ${val}`).join(", ");
   return String(v);
 }

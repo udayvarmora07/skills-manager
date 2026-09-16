@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from skillsmgr.store import Store, StoreError
-from skillsmgr.webapp import WebAppServer
+from skillsmgr.webapp import RequestError, WebAppHandler, WebAppServer
 
 
 class WebAppTestCase(unittest.TestCase):
@@ -86,6 +86,20 @@ class WebAppTestCase(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self._get("/api/search?q=" + "x" * 300)
         self.assertEqual(ctx.exception.code, 400)
+
+    def test_over_limit_body_is_drained_and_returns_413(self):
+        class FakeHandler:
+            headers = {"Content-Length": "5"}
+            rfile = io.BytesIO(b"12345")
+
+            def _drain_body(self, length):
+                return WebAppHandler._drain_body(self, length)
+
+        handler = FakeHandler()
+        with self.assertRaises(RequestError) as ctx:
+            WebAppHandler._read_body(handler, limit=4)
+        self.assertEqual(ctx.exception.status, 413)
+        self.assertEqual(handler.rfile.read(), b"")
 
     def test_static_traversal_blocked(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
