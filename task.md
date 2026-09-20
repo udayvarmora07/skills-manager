@@ -53,8 +53,10 @@
   now has an opt-in `--screenshots-dir` capture path. A fresh current-build
   run produced five dated local PNGs at `.specs/evidence/del-11-2026-09-20-run2/`
   with zero console/runtime/network failures and no viewport overflow. These
-  are local automated evidence only; external screenshots and real consented
-  participant sessions remain intentionally human-gated.
+  are local automated evidence only; a second fresh run produced the same
+  five-viewport evidence at `.specs/evidence/del-11-2026-09-20-run3/`.
+  External screenshots and real consented participant sessions remain
+  intentionally human-gated.
 
 - **DEL-09 Git/review/apply integration: DONE (2026-09-20).** `backup_sync.py`
   now reads safe Git remote metadata and fetches through Git's configured
@@ -83,6 +85,19 @@
   distribution, and content-only signed metadata. Named-person identity,
   hosted distribution, approval-state, eval/review metadata, archive
   integration, and key lifecycle remain explicitly out of the shipped scope.
+
+- **Queue reconciliation: DONE (2026-09-20).** The stale Milestone 11 L2
+  checkbox and the old audit-batch T11 marker are reconciled with the current
+  tree: ZIP import is shipped, and the audit tracker reports no open findings.
+  The only uncompleted current evidence gates are external screenshots and
+  consented human sessions; they remain human-gated and are not fabricated by
+  automated runs.
+
+- **Current-tree verification: DONE (2026-09-20).** The final ladder passes:
+  787 unittest tests, both smoke suites, Python compilation, docs consistency,
+  complexity at 238 functions, frontend syntax, CLI help, and all five browser
+  harness viewports. Vendored Vue source integrity passes; package artifact
+  inspection remains `UNAVAILABLE` because `python3 -m build` is not installed.
 
 ## Milestone 75 — DEL-07 read-only source locks and update preview (2026-09-19)
 
@@ -138,6 +153,9 @@
 - [x] Add a bounded startup-critical REST probe and stable JSON evidence schema;
   preserve the existing five-viewport browser harness.
 - [x] Add focused contracts and `docs/16-product-baseline-2026-09-18.md`.
+- [x] Refresh the privacy-safe synthetic all-fixture baseline; the dated
+  report is `.specs/evidence/del-11-2026-09-20-run3/baseline.json` and records
+  the expected empty, small, divergent, malformed, and 2,000-instance shapes.
 - [ ] Run five consent-safe human usability sessions; automated work does not
   fabricate participant evidence.
 
@@ -1071,7 +1089,9 @@ unittest PASS, `check_docs.py` PASS, `check_complexity.py` PASS).
   section, Milestone 11 queue), this milestone, `PLAN.md` (§9 + §11),
   and `docs/06-progress-log.md`.
 - [x] L1 closed issue #10 with evidence 2026-09-09 (no code; CLOSED) — see `TODO.md` L1.
-- [ ] L2 ZIP slice on approval (red-first corpus, extend `import` only) — see `TODO.md` L2. Remains the only code item.
+- [x] L2 ZIP slice shipped 2026-09-10 as the approved `import`-only
+  extension with the red-first hostile corpus — see `TODO.md` L2. This dated
+  queue record is retained for historical traceability.
 - [x] L3 effective-explain research done docs-only 2026-09-09 (3 `[?]`s closed in `docs/12-agent-root-discovery-2026-09-08.md` v1.1.0; diagnostic proposal filed as issue #12, awaiting approval) — see `TODO.md` L3.
 - [x] L4 rejections #6/#7/#9 recorded with file/line evidence 2026-09-09 — see `TODO.md` L4.
 - [x] L5 deferred #3/#4/#8/#11 verified untouched 2026-09-09 (all OPEN, zero comments; no network/backend/signing code) — see `TODO.md` L5.

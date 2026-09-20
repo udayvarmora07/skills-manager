@@ -1273,6 +1273,7 @@ backend, no build step, loopback bind). Per-finding status:
   workflows parse as YAML, `git diff --check` PASS.
 - [x] T10 docs: tracker, progress log, `task.md`, this file, `CHANGELOG.md`,
   `CONTRIBUTING.md`, `docs/08-web-ui.md`, `docs/SESSION-CONTEXT.md`.
-- [ ] T11 next: the 33 remaining findings are 3 Medium (`STORE-11`, `SCOPE-5`,
-  `SCOPE-8`) and 30 Low/Info — grouped by area in the *Remaining work* table of
-  `docs/13-audit-remediation-status-2026-09-11.md`.
+- [x] T11 audit-tail reconciliation: the former 33-finding remainder is closed
+  by the later remediation batches and follow-up close-outs. The current
+  *Remaining work* table in `docs/13-audit-remediation-status-2026-09-11.md`
+  reports no open findings; `SEC-4` is the sole accepted trade-off.

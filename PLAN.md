@@ -815,10 +815,13 @@ The world-class baseline is complete only when:
 
 ## 13. Immediate next implementation action
 
-Milestone 11 queue order still governs: L2 ZIP is complete in the approved
-scoped import extension; issue #12 still awaits maintainer approval and remains
-read-only. The Phase 0–1 history below is complete on `main` and retained as the
-audit trail:
+Milestone 11 queue order is complete for its approved implementation slices:
+L2 ZIP is shipped in the scoped import extension, and issue #12 shipped as the
+read-only `doctor --explain` diagnostic on 2026-09-11. The Phase 0–1 history
+below is complete on `main` and retained as the audit trail. No new runtime
+implementation is authorized by this section; future provider-backed evals,
+hosted coordination, and human research remain separately gated by their ADRs
+and evidence protocols.
 
 1. ~~Capture baseline evidence~~ — done (`docs/09-baseline-evidence-2026-09-07.md`).
 2. ~~Add the five failing P0 reproductions~~ — done (regression tests in

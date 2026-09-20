@@ -1,0 +1,400 @@
+{
+  "created_at": "2026-09-20T07:11:07Z",
+  "elapsed_ms": 12296.1,
+  "fixtures": [
+    {
+      "description": "Initialized store with no skill documents.",
+      "environment": {
+        "fixture_workspace": "/tmp/skillsmgr-baseline-empty-gh1qlupo",
+        "platform": "posix",
+        "python": "3.12.3"
+      },
+      "expected_skill_count": 0,
+      "expected_states": [
+        "empty"
+      ],
+      "kind": "empty",
+      "observed_skill_rows": 0,
+      "probes": [
+        {
+          "elapsed_ms": 26.37,
+          "items": 1,
+          "keys": null,
+          "route": "/api/scopes"
+        },
+        {
+          "elapsed_ms": 3.98,
+          "items": 0,
+          "keys": null,
+          "route": "/api/skills?scope=all"
+        },
+        {
+          "elapsed_ms": 4.09,
+          "items": null,
+          "keys": [
+            "active",
+            "all_avg_tokens",
+            "all_pct_window",
+            "all_tokens",
+            "all_total",
+            "categories",
+            "db_bytes",
+            "db_rows",
+            "disabled",
+            "has_tiktoken",
+            "largest",
+            "scopes",
+            "size_bytes",
+            "total",
+            "trashed",
+            "window",
+            "window_tokens"
+          ],
+          "route": "/api/stats"
+        },
+        {
+          "elapsed_ms": 3.86,
+          "items": null,
+          "keys": [
+            "conflicting_documents",
+            "data_dir",
+            "db_integrity",
+            "db_rows",
+            "dirs",
+            "duplicates",
+            "filesystem_index_drift",
+            "incomplete_transactions",
+            "ok",
+            "orphan_dirs",
+            "scopes",
+            "skills_on_disk",
+            "stale_rows",
+            "stale_snapshots",
+            "templates_count",
+            "temporary_files",
+            "transaction_artifacts",
+            "trash_count",
+            "undecodable_documents"
+          ],
+          "route": "/api/doctor?scope=all"
+        }
+      ]
+    },
+    {
+      "description": "Twelve ordinary active skills with stable descriptions.",
+      "environment": {
+        "fixture_workspace": "/tmp/skillsmgr-baseline-small-50m1scxa",
+        "platform": "posix",
+        "python": "3.12.3"
+      },
+      "expected_skill_count": 12,
+      "expected_states": [
+        "active"
+      ],
+      "kind": "small",
+      "observed_skill_rows": 12,
+      "probes": [
+        {
+          "elapsed_ms": 6.48,
+          "items": 1,
+          "keys": null,
+          "route": "/api/scopes"
+        },
+        {
+          "elapsed_ms": 9.43,
+          "items": 12,
+          "keys": null,
+          "route": "/api/skills?scope=all"
+        },
+        {
+          "elapsed_ms": 10.99,
+          "items": null,
+          "keys": [
+            "active",
+            "all_avg_tokens",
+            "all_pct_window",
+            "all_tokens",
+            "all_total",
+            "categories",
+            "db_bytes",
+            "db_rows",
+            "disabled",
+            "has_tiktoken",
+            "largest",
+            "scopes",
+            "size_bytes",
+            "total",
+            "trashed",
+            "window",
+            "window_tokens"
+          ],
+          "route": "/api/stats"
+        },
+        {
+          "elapsed_ms": 18.14,
+          "items": null,
+          "keys": [
+            "conflicting_documents",
+            "data_dir",
+            "db_integrity",
+            "db_rows",
+            "dirs",
+            "duplicates",
+            "filesystem_index_drift",
+            "incomplete_transactions",
+            "ok",
+            "orphan_dirs",
+            "scopes",
+            "skills_on_disk",
+            "stale_rows",
+            "stale_snapshots",
+            "templates_count",
+            "temporary_files",
+            "transaction_artifacts",
+            "trash_count",
+            "undecodable_documents"
+          ],
+          "route": "/api/doctor?scope=all"
+        }
+      ]
+    },
+    {
+      "description": "Identical and divergent same-name copies across agent roots.",
+      "environment": {
+        "fixture_workspace": "/tmp/skillsmgr-baseline-divergent-aba5ayjf",
+        "platform": "posix",
+        "python": "3.12.3"
+      },
+      "expected_skill_count": 4,
+      "expected_states": [
+        "duplicated",
+        "divergent"
+      ],
+      "kind": "divergent",
+      "observed_skill_rows": 4,
+      "probes": [
+        {
+          "elapsed_ms": 9.1,
+          "items": 3,
+          "keys": null,
+          "route": "/api/scopes"
+        },
+        {
+          "elapsed_ms": 9.67,
+          "items": 4,
+          "keys": null,
+          "route": "/api/skills?scope=all"
+        },
+        {
+          "elapsed_ms": 18.42,
+          "items": null,
+          "keys": [
+            "active",
+            "all_avg_tokens",
+            "all_pct_window",
+            "all_tokens",
+            "all_total",
+            "categories",
+            "db_bytes",
+            "db_rows",
+            "disabled",
+            "has_tiktoken",
+            "largest",
+            "scopes",
+            "size_bytes",
+            "total",
+            "trashed",
+            "window",
+            "window_tokens"
+          ],
+          "route": "/api/stats"
+        },
+        {
+          "elapsed_ms": 13.37,
+          "items": null,
+          "keys": [
+            "conflicting_documents",
+            "data_dir",
+            "db_integrity",
+            "db_rows",
+            "dirs",
+            "duplicates",
+            "filesystem_index_drift",
+            "incomplete_transactions",
+            "ok",
+            "orphan_dirs",
+            "scopes",
+            "skills_on_disk",
+            "stale_rows",
+            "stale_snapshots",
+            "templates_count",
+            "temporary_files",
+            "transaction_artifacts",
+            "trash_count",
+            "undecodable_documents"
+          ],
+          "route": "/api/doctor?scope=all"
+        }
+      ]
+    },
+    {
+      "description": "One valid document and one malformed frontmatter document.",
+      "environment": {
+        "fixture_workspace": "/tmp/skillsmgr-baseline-malformed-83z2ob3f",
+        "platform": "posix",
+        "python": "3.12.3"
+      },
+      "expected_skill_count": 2,
+      "expected_states": [
+        "active",
+        "malformed"
+      ],
+      "kind": "malformed",
+      "observed_skill_rows": 2,
+      "probes": [
+        {
+          "elapsed_ms": 4.27,
+          "items": 1,
+          "keys": null,
+          "route": "/api/scopes"
+        },
+        {
+          "elapsed_ms": 5.23,
+          "items": 2,
+          "keys": null,
+          "route": "/api/skills?scope=all"
+        },
+        {
+          "elapsed_ms": 5.85,
+          "items": null,
+          "keys": [
+            "active",
+            "all_avg_tokens",
+            "all_pct_window",
+            "all_tokens",
+            "all_total",
+            "categories",
+            "db_bytes",
+            "db_rows",
+            "disabled",
+            "has_tiktoken",
+            "largest",
+            "scopes",
+            "size_bytes",
+            "total",
+            "trashed",
+            "window",
+            "window_tokens"
+          ],
+          "route": "/api/stats"
+        },
+        {
+          "elapsed_ms": 12.56,
+          "items": null,
+          "keys": [
+            "conflicting_documents",
+            "data_dir",
+            "db_integrity",
+            "db_rows",
+            "dirs",
+            "duplicates",
+            "filesystem_index_drift",
+            "incomplete_transactions",
+            "ok",
+            "orphan_dirs",
+            "scopes",
+            "skills_on_disk",
+            "stale_rows",
+            "stale_snapshots",
+            "templates_count",
+            "temporary_files",
+            "transaction_artifacts",
+            "trash_count",
+            "undecodable_documents"
+          ],
+          "route": "/api/doctor?scope=all"
+        }
+      ]
+    },
+    {
+      "description": "Two thousand deterministic active documents.",
+      "environment": {
+        "fixture_workspace": "/tmp/skillsmgr-baseline-large-0__cx4xf",
+        "platform": "posix",
+        "python": "3.12.3"
+      },
+      "expected_skill_count": 2000,
+      "expected_states": [
+        "active"
+      ],
+      "kind": "large",
+      "observed_skill_rows": 2000,
+      "probes": [
+        {
+          "elapsed_ms": 1192.84,
+          "items": 1,
+          "keys": null,
+          "route": "/api/scopes"
+        },
+        {
+          "elapsed_ms": 1729.06,
+          "items": 2000,
+          "keys": null,
+          "route": "/api/skills?scope=all"
+        },
+        {
+          "elapsed_ms": 1687.09,
+          "items": null,
+          "keys": [
+            "active",
+            "all_avg_tokens",
+            "all_pct_window",
+            "all_tokens",
+            "all_total",
+            "categories",
+            "db_bytes",
+            "db_rows",
+            "disabled",
+            "has_tiktoken",
+            "largest",
+            "scopes",
+            "size_bytes",
+            "total",
+            "trashed",
+            "window",
+            "window_tokens"
+          ],
+          "route": "/api/stats"
+        },
+        {
+          "elapsed_ms": 3864.41,
+          "items": null,
+          "keys": [
+            "conflicting_documents",
+            "data_dir",
+            "db_integrity",
+            "db_rows",
+            "dirs",
+            "duplicates",
+            "filesystem_index_drift",
+            "incomplete_transactions",
+            "ok",
+            "orphan_dirs",
+            "scopes",
+            "skills_on_disk",
+            "stale_rows",
+            "stale_snapshots",
+            "templates_count",
+            "temporary_files",
+            "transaction_artifacts",
+            "trash_count",
+            "undecodable_documents"
+          ],
+          "route": "/api/doctor?scope=all"
+        }
+      ]
+    }
+  ],
+  "schema": "skillsmgr-baseline-v1",
+  "telemetry": "none"
+}

@@ -11,6 +11,63 @@
   `python3 -m build` is not installed. Earlier counts in dated entries remain
   historical.
 
+## 2026-09-20 — Execution-queue reconciliation
+
+Reconciled the active checklist with the shipped tree. The historical Milestone
+11 L2 line now records the approved ZIP-import slice as complete, and the stale
+deep-audit T11 line now records the current tracker result: no open findings,
+with `SEC-4` retained as the documented accepted trade-off. External screenshots
+and consented human usability sessions remain explicitly open because local
+automation cannot provide that evidence.
+
+## 2026-09-20 — Current plan action refresh
+
+Updated `PLAN.md` §13 so its live next-action statement matches the current
+delivery state: ZIP import is shipped and `doctor --explain` is shipped as a
+read-only diagnostic. The historical Phase 0–1 checklist remains unchanged;
+future provider-backed evaluation, hosted coordination, and human research stay
+approval- or evidence-gated.
+
+## 2026-09-20 — Session-context truth refresh
+
+Refreshed `docs/SESSION-CONTEXT.md`'s current Milestone 11 summary to record the
+published and verified `skill-control-plane` 1.0.1 release, the shipped ZIP
+slice, and the intentionally deferred provider-backed work. The cache now also
+names external screenshots and consented participant sessions as human-gated
+instead of implying they are automated deliverables.
+
+## 2026-09-20 — Product-baseline evidence owner refresh
+
+Updated `docs/16-product-baseline-2026-09-18.md` to include the current
+synthetic all-fixture report at
+`.specs/evidence/del-11-2026-09-20-run3/baseline.json`, its expected
+0/12/4/2/2,000 row shapes, and the separate status of local viewport PNGs.
+The document continues to leave participant research explicitly unclaimed.
+
+## 2026-09-20 — Current-tree verification close-out
+
+Ran the complete current-tree ladder sequentially: `python3 -m unittest
+discover -s tests` (**787 tests OK**), `smoke_store.py`, `smoke_web.py`, Python
+compilation, `check_docs.py`, `check_complexity.py` (**238 functions**), both
+frontend `node --check` probes, CLI help, `git diff --check`, and the five
+browser-harness viewports (320/400/640/900/1280; no errors or overflow). The
+vendored Vue hash check passed. `check_package_data.py` honestly reported
+`UNAVAILABLE` only for optional artifact inspection because `python3 -m build`
+is not installed.
+
+## 2026-09-20 — DEL-11 local evidence refresh
+
+Re-ran the current-build developer browser harness with
+`--screenshots-dir .specs/evidence/del-11-2026-09-20-run3`. The 320, 400, 640,
+900, and 1280 px probes all reported the expected `Skills Manager` title, zero
+console/runtime/network failures, and no horizontal overflow. The five PNGs
+are dated local automated evidence, and the 320 px and 1280 px states were
+visually inspected. A fresh `baseline_harness.py --fixture all` run also wrote
+`baseline.json` in the same directory with the expected 0/12/4/2/2,000 row
+shapes and no telemetry. This does not satisfy the separate
+external-screenshot or consented-participant gates; no human evidence or
+adoption claim is made.
+
 ## 2026-09-20 — DEL-11 local screenshot evidence
 
 Extended the dev-only Chrome/CDP browser harness with an opt-in

@@ -1,6 +1,6 @@
 # Product baseline evidence — 2026-09-18
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest**: Reproducible DEL-01 evidence for the proposed product/UX
 delivery plan. This document contains synthetic local fixtures and bounded
@@ -48,6 +48,22 @@ portable targets.
 The required browser viewport matrix remains the separate
 `python3 browser_harness.py` check at 320, 400, 640, 900, and 1280 pixels.
 
+## Current synthetic refresh — 2026-09-20
+
+The all-fixture baseline was refreshed against the current build with:
+
+```text
+python3 baseline_harness.py --fixture all \
+  --output .specs/evidence/del-11-2026-09-20-run3/baseline.json
+```
+
+The dated report records the expected row shapes: empty `0`, small `12`,
+divergent `4`, malformed `2`, and large `2,000`, with no telemetry or private
+user-content access. The same current-build evidence directory contains the
+five local automated viewport PNGs from the browser harness. These artifacts
+are reproducible local evidence only; they are not external screenshots or
+participant research results.
+
 Human usability sessions are intentionally not fabricated by this repository
 run. DEL-01 still requires five consent-based task sessions (novice and expert
 participants); record task completion, wrong-copy actions, time to first useful
@@ -57,7 +73,8 @@ identifying data.
 ## Acceptance status
 
 - [x] Synthetic empty/small/divergent/malformed/2,000-instance fixtures are
-  codified and covered by stdlib unit contracts.
+  codified, covered by stdlib unit contracts, and refreshed in the dated
+  `del-11-2026-09-20-run3/baseline.json` report.
 - [x] Startup-critical REST probe routes and timings are recorded in a stable
   JSON schema with no telemetry.
 - [x] Browser viewport capture procedure is preserved by the existing harness.
