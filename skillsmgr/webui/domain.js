@@ -46,6 +46,56 @@ function tokenBarWidth(pct) {
   return Math.max(2, Math.min(100, pct)).toFixed(1) + "%";
 }
 
+/* Derive the product's logical-library rows without creating a new source of
+ * truth. The API supplies physical_path so aliases to one resolved document
+ * collapse once, while different copies retain their own instance records. */
+function groupLogicalSkills(records) {
+  const groups = new Map();
+  for (const record of (Array.isArray(records) ? records : [])) {
+    const name = String(record.name || "");
+    if (!name) continue;
+    if (!groups.has(name)) groups.set(name, { name, instances: [], _seen: new Set() });
+    const group = groups.get(name);
+    const identity = String(record.physical_path || record.path || `${record.scope || ""}/${name}`);
+    if (group._seen.has(identity)) continue;
+    group._seen.add(identity);
+    group.instances.push(record);
+  }
+  return [...groups.values()].map((group) => {
+    const instances = group.instances.slice().sort((a, b) =>
+      String(a.scope_label || a.scope || "").localeCompare(String(b.scope_label || b.scope || ""))
+    );
+    const states = new Set();
+    const hashes = new Set();
+    const scopes = [];
+    const badges = [];
+    for (const instance of instances) {
+      const state = instance.malformed ? "malformed" : instance.addressable === false
+        ? "unaddressable" : instance.disabled ? "disabled" : "active";
+      states.add(state);
+      for (const explicit of (Array.isArray(instance.instance_states) ? instance.instance_states : [])) states.add(explicit);
+      if (instance.content_hash) hashes.add(String(instance.content_hash));
+      const scope = String(instance.scope_label || instance.scope || "");
+      if (scope && !scopes.includes(scope)) scopes.push(scope);
+      if (scope && !badges.includes(scope)) badges.push(scope);
+    }
+    const divergent = hashes.size > 1 || states.has("divergent");
+    return {
+      name: group.name,
+      description: instances.find((item) => item.description)?.description || "",
+      category: instances.find((item) => item.category)?.category || "",
+      instances,
+      instanceCount: instances.length,
+      scopes,
+      badges,
+      states: [...states],
+      divergent,
+      identical: instances.length > 1 && !divergent,
+      primary: instances[0] || null,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /* Minimal, safe markdown renderer: blocks only, everything escaped. */
 function inlineMd(s) {
   let out = esc(s);
@@ -149,6 +199,7 @@ function formatTools(v) {
 
 window.SkillManagerDomain = Object.freeze({
   api,
+  groupLogicalSkills,
   formatBytes,
   formatTokens,
   tokenPctClass,

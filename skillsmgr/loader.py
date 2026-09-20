@@ -270,6 +270,20 @@ def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
         "chars": tok["chars"],
     }
     record.update(document_observations(skill_dir, raw_text, data))
+    # Registry provenance is a filesystem sidecar, not an index column.  A
+    # stale or malformed sidecar is visible drift rather than silently being
+    # treated as trustworthy metadata.
+    try:
+        from .registry import read_provenance
+
+        registry_provenance = read_provenance(skill_dir)
+    except (OSError, StoreError) as exc:
+        registry_provenance = None
+        record["registry_provenance_error"] = str(exc)
+        malformed = True
+    if registry_provenance is not None:
+        record["registry_provenance"] = registry_provenance
+    record["malformed"] = malformed
     return record
 
 

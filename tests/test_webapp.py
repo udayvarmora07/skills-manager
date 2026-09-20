@@ -101,6 +101,15 @@ class WebAppTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status, 413)
         self.assertEqual(handler.rfile.read(), b"")
 
+    def test_client_disconnect_during_response_is_ignored(self):
+        class BrokenWriter:
+            def write(self, body):
+                raise BrokenPipeError()
+
+        handler = object.__new__(WebAppHandler)
+        handler.wfile = BrokenWriter()
+        WebAppHandler._write_body(handler, b"response")
+
     def test_static_traversal_blocked(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self._get("/static/../webapp.py")

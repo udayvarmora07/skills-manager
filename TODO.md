@@ -56,9 +56,9 @@ performed here.
   `smoke_store.py`, `smoke_web.py`, `node --check skillsmgr/webui/app.js`, and CLI
   help all passed. That number is a record of the baseline this backlog was
   written against, not of the tree today.
-- [x] **Current baseline (2026-09-16, re-derived by running the gates):** **728
+- [x] **Current baseline (2026-09-16, re-derived by running the gates):** **750
   `unittest` tests OK**, `smoke_store.py` PASSED, `smoke_web.py` PASSED,
-  `check_docs.py` PASSED, `check_complexity.py` PASSED (222 functions, budget
+  `check_docs.py` PASSED, `check_complexity.py` PASSED (226 functions, budget
   ≤ 15), `node --check` clean on both `skillsmgr/webui/app.js` and
   `skillsmgr/webui/domain.js`, CLI help runs, and `check_package_data.py` reports
   `UNAVAILABLE` because the optional `build` tooling is absent (standing
@@ -508,20 +508,24 @@ installation verification passes.
 > per-consumer observed views stay precedence-unresolved per ADR-002; diff,
 > ownership, provenance, update preview, quarantine planning, risk scan,
 > registry dry-run, provider-neutral eval, and deferred bundle policy are
-> available as tested helpers over existing public seams. Runtime CLI/REST/UI
-> exposure remains approval-gated work.
+> available as tested helpers over existing public seams. The network registry
+> exposure is now shipped through the existing install surfaces and tracked by
+> the successor ADR.
 
 - [x] Per-consumer “what this agent sees” view (observed instances only; effective resolution stays `unresolved`).
 - [x] Side-by-side and three-way skill diff (`diff_skills`/`diff_three_way`).
 - [x] Managed, unmanaged, adopted, quarantined, and invalid ownership states (`ownership_states`).
 - [x] Provenance: source, revision, install mechanism, content hash, importer,
-  and validation history (`provenance_summary` over loader observations; persistence approval-gated).
+  and validation history (`provenance_summary` over loader observations), with
+  registry fetch provenance persisted as a credential-free filesystem sidecar
+  under @docs/ADR-005-registry-network-and-provenance.md.
 - [x] Update preview with changed files, metadata, risks, and rollback status (`update_preview`).
 - [x] Quarantine untrusted imports before activation (stage-only `quarantine_plan`; activation approval-gated).
 - [x] Explainable static risk scan for scripts, links, tools, and suspicious
   instruction patterns (`risk_scan` with why + evidence).
 - [x] Registry browsing with source preview, provenance, scope selection,
-  dry-run, and explicit trust confirmation (offline `registry_preview`; network browse deferred).
+  dry-run, and explicit trust confirmation (offline `registry_preview` plus the
+  network `install --browse|--search|--curated|--fetch` workflow).
 - [x] Evaluation harness with provider adapters and no mandatory runtime SDK (stdlib-only `eval_plan`/`eval_score`, advisory-only).
 - [x] Revisit signed/team bundles only after the single-user trust model,
   quarantine, provenance, and recovery behavior are mature (`bundle_policy` records `deferred`).
@@ -928,12 +932,15 @@ hermetic temporary data dir.
   `hash` slot for change detection. Surfaces are extensions of existing ones
   only: `install --preview [--trust-confirmed] [--registry-hash HEX]` and
   `POST /api/install {preview: true}`; `install` behavior (runner allowlist,
-  dry-run-first, delegation) is unchanged, no network request, cache, or
-  credential exists anywhere in the product, and one test pins that the bridge
-  modules import no network client. Contract tests:
-  `tests/test_registry_bridge_contracts.py` (21). Remaining for this item:
-  network browse/fetch, caching, auth, and provenance persistence still need
-  their own ADR. Historical research verdict follows. `skills.sh` exposes a real catalog API (`GET
+  dry-run-first, delegation) is unchanged, and the offline bridge itself makes
+  no network request, cache write, or credential read. One test pins that the
+  bridge modules import no network client. Contract tests:
+  `tests/test_registry_bridge_contracts.py` (21). The network half shipped
+  2026-09-16 through the existing install surface; its decisions and safety
+  boundaries are in @docs/ADR-005-registry-network-and-provenance.md. Contract
+  tests are in `tests/test_registry_contracts.py` and
+  `tests/test_registry_integration_contracts.py`. Historical research verdict
+  follows. `skills.sh` exposes a real catalog API (`GET
   /api/v1/skills|search|curated|{source}/{skill}|audit/{source}/{skill}`
   with file contents plus a SHA-256 `hash`, per
   `https://www.skills.sh/docs/api`), but authenticated reads require a
@@ -955,10 +962,9 @@ hermetic temporary data dir.
   staging: (1)
   keep the preview gate, (2) map registry ids to `npx skills add`
   through the existing `install` dry-run machinery, (3) surface the audit
-  link plus `hash` for invalidation. Network fetch, caching, auth, and
-  provenance design need their own ADR first: decide API, caching,
-  provenance, trust, and whether to extend `install` or add a new
-  surface.
+  link plus `hash` for invalidation. Those approved staging items remain the
+  offline preview contract; the network implementation extends `install`
+  without adding a command or Store method.
 - [!] Eval harness: issue #4. Research verdict: ADVISORY-ONLY stays;
   defer any runtime backend indefinitely. **FINAL (2026-09-10):
   ADVISORY-ONLY — confirmed by promptfoo + LLM-judge-bias literature.**

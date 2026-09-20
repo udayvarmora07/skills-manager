@@ -3,7 +3,7 @@
 
 /* ------------------------------------------------------------- utilities */
 
-const { api, formatBytes, formatTokens, tokenPctClass, tokenBarWidth, renderMarkdown, parseFrontmatter, formatCompat, formatTools } = window.SkillManagerDomain;
+const { api, formatBytes, formatTokens, tokenPctClass, tokenBarWidth, renderMarkdown, parseFrontmatter, formatCompat, formatTools, groupLogicalSkills } = window.SkillManagerDomain;
 
 /* ------------------------------------------------------------------ app */
 
@@ -17,15 +17,21 @@ createApp({
       query: "",
       skills: [],
       trashSkills: [],
+      catalog: { version: 1, tags: {}, profiles: {} },
+      tagFilter: "",
+      selectedKeys: [],
+      batchTagInput: "",
       selectedName: null,
       selected: null,
       selectedTrash: null,
       dataDir: "",
       scopes: [],
       activeScope: localStorage.getItem("skillsmgr-scope") || "all",
+      libraryMode: localStorage.getItem("skillsmgr-library-mode") || "library",
+      onboardingDismissed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, lastResult: null },
+      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null },
       theme: localStorage.getItem("skillsmgr-theme") || "light",
       menuOpen: false,
       busy: false,
@@ -33,6 +39,14 @@ createApp({
       loadingList: false,
       loadingDetail: false,
       loadingTrash: false,
+      loadingWorkspaces: false,
+      workspaces: null,
+      workspaceProject: "",
+      profileForm: { name: "", description: "", skills: "", targets: "" },
+      profilePreview: null,
+      mobileDetailOpen: false,
+      compactControlsOpen: false,
+      mobileReturnKey: "",
       toasts: [],
       liveAnnouncement: "",
       toastSeq: 0,
@@ -54,6 +68,7 @@ createApp({
         import: null,
         sync: null,
         install: null,
+        batch: null,
         help: null,
       },
     };
@@ -64,8 +79,44 @@ createApp({
       return this.skills.filter((s) => {
         if (this.filter === "active" && s.disabled) return false;
         if (this.filter === "disabled" && !s.disabled) return false;
+        if (this.tagFilter === "__untagged" && s.tags && s.tags.length) return false;
+        if (this.tagFilter && this.tagFilter !== "__untagged" && !(s.tags || []).includes(this.tagFilter)) return false;
         return true;
       });
+    },
+    logicalSkills() { return groupLogicalSkills(this.filteredSkills); },
+    visibleSkills() { return this.libraryMode === "instances" ? this.filteredSkills : this.logicalSkills; },
+    selectedLogical() {
+      return groupLogicalSkills(this.skills).find((skill) => skill.name === this.selectedName) || null;
+    },
+    tagNames() {
+      return [...new Set(Object.values(this.catalog.tags || {}).flat())].sort((a, b) => a.localeCompare(b));
+    },
+    visibleTargetKeys() {
+      const records = this.libraryMode === "library"
+        ? this.visibleSkills.flatMap((group) => group.instances || [])
+        : this.visibleSkills;
+      return records.map((record) => this.targetKey(record));
+    },
+    selectedTargets() {
+      const wanted = new Set(this.selectedKeys);
+      return this.skills.filter((record) => wanted.has(this.targetKey(record)));
+    },
+    selectedCount() { return this.selectedTargets.length; },
+    allVisibleSelected() {
+      return this.visibleTargetKeys.length > 0 && this.visibleTargetKeys.every((key) => this.selectedKeys.includes(key));
+    },
+    onboardingVisible() {
+      return this.view === "skills"
+        && this.activeScope === "all"
+        && !this.loadingList
+        && this.skills.length === 0
+        && !this.query.trim()
+        && !this.filter
+        && !this.onboardingDismissed;
+    },
+    onboardingRoots() {
+      return (this.scopes || []).filter((scope) => scope.exists);
     },
     filteredTrash() {
       const q = this.query.trim().toLowerCase();
@@ -94,10 +145,14 @@ createApp({
       localStorage.setItem("skillsmgr-scope", v);
       this.selectedName = null;
       this.selected = null;
+      this.selectedKeys = [];
       // BUG-4: a live query must keep filtering after the scope changes,
       // otherwise the search box shows a term while the list shows every skill.
       this.refreshList();
       this.loadStatsTokens();
+    },
+    libraryMode(v) {
+      localStorage.setItem("skillsmgr-library-mode", v);
     },
     budgetWindow(v) {
       localStorage.setItem("skillsmgr-budget-window", v);
@@ -121,11 +176,7 @@ createApp({
     document.documentElement.dataset.theme = this.theme;
     document.addEventListener("keydown", this.onKeydown);
     document.addEventListener("mousedown", this.onDocMousedown);
-    this.loadScopes();
-    this.loadSkills();
-    this.loadTrash();
-    this.loadDataDir();
-    this.loadStatsTokens();
+      this.loadInitialData();
   },
 
   methods: {
@@ -136,6 +187,60 @@ createApp({
     tokenBarWidth,
     formatCompat,
     formatTools,
+    groupLogicalSkills,
+
+    setLibraryMode(mode) {
+      this.libraryMode = mode === "instances" ? "instances" : "library";
+    },
+
+    selectLogicalSkill(group) {
+      if (group && group.primary) this.selectSkill(group.primary);
+    },
+
+    targetKey(record) {
+      return (record.scope || "") + "/" + record.name + "|" + (record.physical_path || record.path || "");
+    },
+
+    isSelected(record) {
+      return this.selectedKeys.includes(this.targetKey(record));
+    },
+
+    groupSelectionState(group) {
+      const instances = group.instances || [];
+      const count = instances.filter((record) => this.isSelected(record)).length;
+      return count === 0 ? "none" : (count === instances.length ? "all" : "some");
+    },
+
+    groupTags(group) {
+      return [...new Set((group.instances || []).flatMap((instance) => instance.tags || []))];
+    },
+
+    toggleSelection(record, checked) {
+      const instances = record.instances || [record];
+      const keys = new Set(this.selectedKeys);
+      for (const instance of instances) {
+        const key = this.targetKey(instance);
+        if (checked) keys.add(key); else keys.delete(key);
+      }
+      this.selectedKeys = [...keys];
+    },
+
+    toggleSelectAll() {
+      const keys = new Set(this.selectedKeys);
+      if (this.allVisibleSelected) this.visibleTargetKeys.forEach((key) => keys.delete(key));
+      else this.visibleTargetKeys.forEach((key) => keys.add(key));
+      this.selectedKeys = [...keys];
+    },
+
+    skipOnboarding() {
+      this.onboardingDismissed = true;
+    },
+
+    restartOnboarding() {
+      this.onboardingDismissed = false;
+      this.view = "skills";
+      this.activeScope = "all";
+    },
 
     modalElement() {
       return this.activeModal ? document.querySelector('[data-modal="' + this.activeModal + '"] .modal') : null;
@@ -172,29 +277,56 @@ createApp({
 
     /* ----------------------------------------------------------- data */
 
-    async loadDataDir() {
-      try {
-        const st = await api("/api/stats");
-        this.dataDir = st.dirs && st.dirs.skills
-          ? st.dirs.skills.replace(/\/skills$/, "")
-          : "";
-      } catch (e) { /* non-fatal */ }
-    },
-
     async loadScopes() {
       try {
         this.scopes = await api("/api/scopes");
       } catch (e) { /* non-fatal */ }
     },
 
+    async loadCatalog() {
+      try {
+        this.catalog = await api("/api/catalog");
+        for (const record of this.skills) record.tags = this.catalog.tags[record.name] || record.tags || [];
+      } catch (e) { /* non-fatal: skills remain usable without organization metadata */ }
+    },
+
+    async loadInitialData() {
+      // The list is useful before secondary stats are ready. Keep the first
+      // paint independent while fetching each required source once.
+      await Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash()]);
+      await this.loadCatalog();
+      await this.loadStatsTokens();
+    },
+
+    async loadWorkspaces() {
+      this.loadingWorkspaces = true;
+      try {
+        const suffix = this.workspaceProject.trim() ? "?project=" + encodeURIComponent(this.workspaceProject.trim()) : "";
+        this.workspaces = await api("/api/workspaces" + suffix);
+      } catch (e) {
+        this.toast("Could not load workspace evidence: " + e.message, "err");
+      } finally {
+        this.loadingWorkspaces = false;
+      }
+    },
+
     async loadStatsTokens() {
       try {
         const s = await api("/api/stats?window=" + encodeURIComponent(this.budgetWindow || "claude"));
         this.budget = s;
+        this.dataDir = s.dirs && s.dirs.skills
+          ? s.dirs.skills.replace(/\/skills$/, "")
+          : "";
       } catch (e) { /* non-fatal */ }
     },
 
     installPreview() {
+      if (this.install.mode === "registry") {
+        if (this.install.registryOp === "browse") return `skills.sh leaderboard (${this.install.view || "all-time"})`;
+        if (this.install.registryOp === "search") return `skills.sh search ${this.install.source || "<query>"}`;
+        if (this.install.registryOp === "curated") return "skills.sh curated catalog";
+        return `skills.sh fetch ${this.install.source || "<owner/repo/skill>"} → global store`;
+      }
       const r = this.install.runner || "npx";
       const src = (this.install.source || "").trim() || "owner/repo";
       let cmd = r === "npx" ? `npx skills add ${src}` : r === "pnpm" ? `pnpm dlx skills add ${src}` : r === "yarn" ? `yarn dlx skills add ${src}` : `bunx skills add ${src}`;
@@ -207,6 +339,11 @@ createApp({
     },
 
     async runInstall(confirm) {
+      if (this.install.mode === "registry") {
+        if (confirm) return this.runRegistry();
+        this.toast(this.installPreview(), "info");
+        return;
+      }
       if (!this.install.source || !this.install.source.trim()) { this.toast("Enter a source (e.g. vercel-labs/agent-skills).", "err"); return; }
       if (this.install.runner === "uvx") { this.toast("uvx does not apply to the npm 'skills' package; use npx/pnpm/yarn/bunx.", "err"); return; }
       if (!confirm) {
@@ -234,6 +371,47 @@ createApp({
           await this.loadSkills();
         } else {
           this.toast(`Install exited ${res.exit_code}: ${(res.stderr || res.stdout || "").slice(0, 200)}`, "err");
+        }
+      } catch (e) {
+        this.toast(e.message, "err");
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    registryReady() {
+      return this.install.registryOp === "browse" || this.install.registryOp === "curated"
+        || !!(this.install.source && this.install.source.trim());
+    },
+
+    async runRegistry() {
+      if (!this.registryReady()) {
+        this.toast("Enter a registry query or skill id first.", "err");
+        return;
+      }
+      this.busy = true;
+      try {
+        const op = this.install.registryOp;
+        const payload = {
+          browse: op === "browse" ? true : undefined,
+          search: op === "search" ? this.install.source.trim() : undefined,
+          curated: op === "curated" ? true : undefined,
+          fetch: op === "fetch" ? true : undefined,
+          source: op === "fetch" ? this.install.source.trim() : undefined,
+          trust_confirmed: op === "fetch" ? true : undefined,
+          page: Number(this.install.page) || 0,
+          per_page: Number(this.install.perPage) || 25,
+          view: this.install.view || "all-time",
+          allow_stale: !!this.install.allowStale,
+        };
+        const res = await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        this.install.lastResult = res;
+        if (op === "fetch") {
+          this.toast(`Fetched ${res.name} with registry provenance.`, "ok");
+          await this.loadScopes();
+          await this.loadSkills();
+        } else {
+          this.toast(`Registry ${op} loaded (${(res.data || []).length} result groups).`, "ok");
         }
       } catch (e) {
         this.toast(e.message, "err");
@@ -347,9 +525,21 @@ createApp({
         && this.selected
         && this.selected.scope === (s.scope || null)
       ) {
+        this.mobileDetailOpen = true;
         return;
       }
+      this.mobileReturnKey = (s.scope || "") + "/" + s.name;
+      this.mobileDetailOpen = true;
       this.loadDetail(s.name, s.scope);
+    },
+
+    closeMobileDetail() {
+      this.mobileDetailOpen = false;
+      this.$nextTick(() => {
+        const row = [...document.querySelectorAll("[data-skill-key]")]
+          .find((el) => el.dataset.skillKey === this.mobileReturnKey);
+        if (row) row.focus();
+      });
     },
 
     selectTrash(t) {
@@ -359,6 +549,7 @@ createApp({
     switchView(v) {
       this.view = v;
       if (v === "trash") this.loadTrash();
+      else if (v === "workspaces") this.loadWorkspaces();
       // BUG-4: entering the skills view with a live query must re-apply it, or
       // the list silently disagrees with the search box.
       else if (v === "skills") this.refreshList();
@@ -374,6 +565,110 @@ createApp({
 
     setFilter(f) {
       this.filter = f;
+    },
+
+    setTagFilter(tag) {
+      this.tagFilter = tag || "";
+    },
+
+    async updateBatchTags(operation) {
+      if (!this.selectedTargets.length) { this.toast("Select at least one skill instance.", "err"); return; }
+      const tags = this.batchTagInput.split(",").map((tag) => tag.trim()).filter(Boolean);
+      if (!tags.length) { this.toast("Enter at least one tag.", "err"); return; }
+      this.busy = true;
+      try {
+        this.catalog = await api("/api/catalog/tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation, names: [...new Set(this.selectedTargets.map((record) => record.name))], tags }),
+        });
+        this.selectedKeys = [];
+        this.batchTagInput = "";
+        await this.loadSkills();
+        this.toast("Tags updated for the selected logical skills.");
+      } catch (e) { this.toast(e.message, "err"); }
+      finally { this.busy = false; }
+    },
+
+    openBatch(operation) {
+      if (!this.selectedTargets.length) { this.toast("Select at least one skill instance.", "err"); return; }
+      const targets = (this.scopes || []).filter((scope) => scope.id !== this.activeScope && scope.writable);
+      this.modals.batch = { operation, plan: null, toScopes: Object.fromEntries(targets.map((scope) => [scope.id, true])), force: false };
+      this.prepareBatch();
+    },
+
+    async prepareBatch() {
+      const modal = this.modals.batch;
+      if (!modal) return;
+      if (modal.operation === "sync") {
+        const selectedScopes = Object.keys(modal.toScopes).filter((scope) => modal.toScopes[scope]);
+        modal.to_scopes = selectedScopes;
+      }
+      this.busy = true;
+      try {
+        modal.plan = await api("/api/batch/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation: modal.operation, targets: this.selectedTargets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
+        });
+      } catch (e) { this.toast(e.message, "err"); }
+      finally { this.busy = false; }
+    },
+
+    async executeBatch() {
+      const modal = this.modals.batch;
+      if (!modal || !modal.plan) return;
+      this.busy = true;
+      try {
+        const result = await api("/api/batch/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation: modal.operation, plan_id: modal.plan.plan_id, targets: this.selectedTargets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
+        });
+        const failed = (result.results || []).filter((item) => item.status === "failed").length;
+        this.closeModal("batch");
+        this.selectedKeys = [];
+        await this.loadScopes();
+        await this.loadSkills();
+        this.toast(failed ? `Batch completed with ${failed} failure(s). See each item for details.` : `Batch ${modal.operation} completed for ${result.target_count} target(s).`, failed ? "err" : "ok");
+      } catch (e) { this.toast(e.message, "err"); }
+      finally { this.busy = false; }
+    },
+
+    async saveProfile() {
+      const form = this.profileForm;
+      if (!form.name.trim()) { this.toast("Profile name is required.", "err"); return; }
+      this.busy = true;
+      try {
+        this.catalog = await api("/api/catalog/profiles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name.trim(),
+            description: form.description.trim(),
+            skills: form.skills.split(",").map((name) => name.trim()).filter(Boolean),
+            targets: form.targets.split(",").map((target) => target.trim()).filter(Boolean),
+          }),
+        });
+        this.profileForm = { name: "", description: "", skills: "", targets: "" };
+        this.toast("Profile saved.");
+      } catch (e) { this.toast(e.message, "err"); }
+      finally { this.busy = false; }
+    },
+
+    async previewProfile(name) {
+      try { this.profilePreview = await api("/api/catalog/profiles/" + encodeURIComponent(name) + "/preview"); }
+      catch (e) { this.toast(e.message, "err"); }
+    },
+
+    async deleteProfile(name) {
+      this.busy = true;
+      try {
+        this.catalog = await api("/api/catalog/profiles/" + encodeURIComponent(name), { method: "DELETE" });
+        if (this.profilePreview && this.profilePreview.name === name) this.profilePreview = null;
+        this.toast("Profile deleted.");
+      } catch (e) { this.toast(e.message, "err"); }
+      finally { this.busy = false; }
     },
 
     /* ---------------------------------------------------------- helpers */
@@ -445,6 +740,7 @@ createApp({
         else if (this.modals.import) this.closeModal("import");
         else if (this.modals.sync) this.closeModal("sync");
         else if (this.modals.install) this.closeModal("install");
+        else if (this.modals.batch) this.closeModal("batch");
         else if (this.modals.help) this.closeModal("help");
       }
     },
@@ -477,7 +773,7 @@ createApp({
         history: this.openHistory,
         rebuild: this.rebuildIndex,
         resync: this.resyncIndex,
-        refresh: () => { this.loadScopes(); this.loadSkills(); this.loadTrash(); this.loadStatsTokens(); },
+        refresh: () => { this.loadScopes(); this.loadSkills(); this.loadTrash(); this.loadCatalog(); this.loadStatsTokens(); },
       };
       const fn = actions[action];
       if (fn) fn.call(this);

@@ -78,6 +78,80 @@ def _install_preview_payload(store: Store, data: dict, source: str, cmd_str: str
     return payload
 
 
+def _registry_operation_kind(data: dict) -> str | None:
+    """Validate and identify a registry operation in an install payload."""
+    for flag in ("browse", "curated", "fetch"):
+        if flag in data and not isinstance(data[flag], bool):
+            raise StoreError(f"{flag} must be a boolean")
+    operations = [flag for flag in ("browse", "curated", "fetch") if data.get(flag)]
+    if data.get("search") is not None:
+        operations.append("search")
+    if len(operations) > 1:
+        raise StoreError("install accepts only one registry operation")
+    return operations[0] if operations else None
+
+
+def _registry_read_result(client, operation: str, data: dict, allow_stale: bool) -> dict:
+    """Run a read-only registry operation from an install payload."""
+    if operation == "browse":
+        return client.browse(
+            page=data.get("page", 0), per_page=data.get("per_page", 25),
+            view=data.get("view", "all-time"), allow_stale=allow_stale,
+        )
+    if operation == "search":
+        if not isinstance(data.get("search"), str):
+            raise StoreError("search must be a string")
+        return client.search(
+            data["search"], limit=data.get("limit", 50), owner=data.get("owner"),
+            allow_stale=allow_stale,
+        )
+    if operation == "curated":
+        return client.curated(allow_stale=allow_stale)
+
+
+def _registry_fetch_result(store: Store, data: dict, allow_stale: bool) -> dict:
+    """Run the registry review or the separate reviewed commit transaction."""
+    from .cli_handlers import _commit_registry_review, _prepare_registry_skill
+
+    review_id = data.get("review_id")
+    if review_id is not None:
+        if not isinstance(review_id, str) or not review_id.strip():
+            raise StoreError("review_id must be a non-empty string")
+        if data.get("trust_confirmed") is not True:
+            raise StoreError("registry commit requires trust_confirmed after reviewing the fetched snapshot")
+        return _commit_registry_review(store, review_id.strip())
+    if data.get("trust_confirmed") is True:
+        raise StoreError("fetch and trust confirmation are separate: fetch first, then commit with review_id and trust_confirmed")
+    source = data.get("source")
+    if not isinstance(source, str) or not source.strip():
+        raise StoreError("fetch requires a registry skill id in source")
+    scope = data.get("scope", "global")
+    if not isinstance(scope, str) or (scope.strip() or "global") != "global":
+        raise StoreError("registry fetch currently targets the global manager store only")
+    expected_hash = data.get("registry_hash")
+    if expected_hash is not None and not isinstance(expected_hash, str):
+        raise StoreError("registry_hash must be a string")
+    return _prepare_registry_skill(
+        store, source.strip(), expected_hash=expected_hash, allow_stale=allow_stale
+    )
+
+
+def _registry_install_result(store: Store, data: dict) -> dict | None:
+    """Handle registry operations carried by the existing install route."""
+    operation = _registry_operation_kind(data)
+    if operation is None:
+        return None
+    if data.get("run") or data.get("preview"):
+        raise StoreError("registry operations cannot be combined with run or preview")
+    from .registry import RegistryClient
+
+    client = RegistryClient(store.data_dir)
+    allow_stale = bool(data.get("allow_stale"))
+    if operation == "fetch":
+        return _registry_fetch_result(store, data, allow_stale)
+    return _registry_read_result(client, operation, data, allow_stale)
+
+
 def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
                       payload: dict) -> dict:
     """Add the advisory eval harness block to ``/api/validate`` on request.
@@ -184,9 +258,16 @@ def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None
     diagnosed and marked on the rows it affected.
     """
     try:
+        physical_root = str(store.skills_dir.resolve())
         from .tokens import estimate as _est
 
         for row in rows:
+            row.setdefault("physical_root", physical_root)
+            if row.get("path"):
+                try:
+                    row.setdefault("physical_path", str(Path(row["path"]).resolve()))
+                except OSError:
+                    row.setdefault("physical_path", str(row["path"]))
             _apply_token_estimate(row, _est(_skill_text(store.skills_dir / row["name"])))
     except Exception as exc:
         _diagnose(f"{label} token enrichment failed", exc)
@@ -195,6 +276,90 @@ def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None
             row.setdefault("tokens_method", "unavailable")
             row.setdefault("tokens_pct", 0)
             row.setdefault("chars", 0)
+
+
+def _enrich_rows_with_catalog(store: Store, rows: list[dict]) -> None:
+    """Attach manager-owned tags without changing skill or index authority."""
+    from .catalog import enrich_rows
+
+    enrich_rows(rows, data_dir=store.data_dir)
+
+
+def _batch_target_inputs(item: object) -> tuple[str, str, str]:
+    if not isinstance(item, dict):
+        raise StoreError("each batch target must be an object")
+    name = item.get("name")
+    scope = item.get("scope")
+    if not isinstance(name, str) or not name.strip() or not isinstance(scope, str) or not scope.strip():
+        raise StoreError("each batch target needs a name and scope")
+    return name.strip(), scope.strip(), str(item.get("physical_path") or item.get("path") or "")
+
+
+def _batch_target_candidates(
+    name: str, scope: str, physical: str, records: list[dict]
+) -> list[dict]:
+    candidates = [row for row in records if row.get("name") == name and row.get("scope") == scope]
+    if physical:
+        candidates = [
+            row for row in candidates
+            if str(row.get("physical_path") or row.get("path") or "") == physical
+        ]
+    return candidates
+
+
+def _resolve_batch_target(item: object, records: list[dict], seen: set[tuple[str, str, str]]) -> dict:
+    name, scope, physical = _batch_target_inputs(item)
+    candidates = _batch_target_candidates(name, scope, physical, records)
+    if not candidates:
+        raise StoreError(f"batch target is no longer present: {scope}/{name}")
+    if len(candidates) > 1:
+        raise StoreError(f"batch target is ambiguous; include its physical_path: {scope}/{name}")
+    row = candidates[0]
+    path = str(row.get("physical_path") or row.get("path") or "")
+    key = (scope, name, path)
+    if key in seen:
+        raise StoreError(f"duplicate batch target: {scope}/{name}")
+    seen.add(key)
+    return {
+        "name": name,
+        "scope": scope,
+        "scope_label": row.get("scope_label", scope),
+        "path": row.get("path"),
+        "physical_path": row.get("physical_path") or row.get("path"),
+        "disabled": bool(row.get("disabled")),
+        "instance_state": row.get("instance_state", "unresolved"),
+    }
+
+
+def _batch_targets(data: dict) -> list[dict]:
+    """Validate and resolve an exact physical target selection."""
+    raw = data.get("targets")
+    if not isinstance(raw, list) or not raw or len(raw) > 500:
+        raise StoreError("targets must be a non-empty list of at most 500 items")
+    from .scopes import list_all as _list_all
+
+    records = _list_all()
+    seen: set[tuple[str, str, str]] = set()
+    return [_resolve_batch_target(item, records, seen) for item in raw]
+
+
+def _batch_plan(operation: str, targets: list[dict], data: dict) -> dict:
+    from .catalog import plan_hash
+
+    options = {
+        "force": bool(data.get("force")),
+        "to_scopes": sorted({str(scope) for scope in (data.get("to_scopes") or [])}),
+    }
+    return {
+        "operation": operation,
+        "targets": targets,
+        "target_count": len(targets),
+        "atomic": False,
+        "partial_failure": True,
+        "recovery": "remove creates per-item trash snapshots; other actions report each item",
+        "options": options,
+        "plan_id": plan_hash(operation, targets, options),
+    }
 
 
 def _validated_skill_fields(data: dict) -> dict:
@@ -262,7 +427,17 @@ class WebAppHandler(BaseHTTPRequestHandler):
         # A HEAD response carries the same headers as the equivalent GET but no
         # body (BUG-9); Content-Length still describes the entity that a GET
         # would have returned.
-        self.wfile.write(_head_safe_body(self.command, body))
+        self._write_body(_head_safe_body(self.command, body))
+
+    def _write_body(self, body: bytes) -> None:
+        """Write a response without treating a disconnected client as a bug."""
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Browsers and smoke clients can leave while a response is being
+            # produced.  The request is already over from the client's point
+            # of view; there is no useful error response left to send.
+            return
 
     def _send_security_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -394,7 +569,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_security_headers()
             self.end_headers()
             if self.command != "HEAD":
-                self.wfile.write(_METHOD_NOT_ALLOWED_BODY)
+                self._write_body(_METHOD_NOT_ALLOWED_BODY)
         except Exception as exc:
             self._handle_exception(exc)
 
@@ -466,6 +641,28 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
             self._send_json(_list_scopes())
             return
+        if parts == ["api", "catalog"]:
+            from .catalog import load_catalog
+
+            self._send_json(load_catalog(self.store.data_dir))
+            return
+        if parts == ["api", "workspaces"]:
+            from .adapters import workspaces_payload
+
+            project = (qs.get("project", [""])[0] or "").strip() or None
+            roots = getattr(self.server, "diagnostics_roots", None) or [self.store.data_dir]
+            self._send_json(workspaces_payload(project, roots))
+            return
+        if len(parts) == 5 and parts[:3] == ["api", "catalog", "profiles"] and parts[4] == "preview":
+            from .catalog import load_catalog, profile_preview
+            from .scopes import list_all as _list_all
+
+            profile_name = parts[3]
+            profile = load_catalog(self.store.data_dir)["profiles"].get(profile_name)
+            if profile is None:
+                raise SkillNotFound(f"profile '{profile_name}' not found")
+            self._send_json({"name": profile_name, **profile_preview(profile, _list_all())})
+            return
         if parts == ["api", "skills"]:
             scope = (qs.get("scope", [""])[0] or "").strip()
             q = (qs.get("q", [""])[0] or "").strip()
@@ -473,19 +670,23 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 if q:
                     from .scopes import search_all as _search_all
 
-                    self._send_json(_search_all(q, scope_id="all", store=self.store))
+                    rows = _search_all(q, scope_id="all", store=self.store)
                 else:
                     from .scopes import list_all as _list_all
 
-                    self._send_json(_list_all())
+                    rows = _list_all()
+                _enrich_rows_with_catalog(self.store, rows)
+                self._send_json(rows)
                 return
             if scope and scope != "global":
                 from .scopes import scan_scope as _scan_scope, search_all as _search_all
 
                 if q:
-                    self._send_json(_search_all(q, scope_id=scope))
+                    rows = _search_all(q, scope_id=scope)
                 else:
-                    self._send_json(_scan_scope(scope))
+                    rows = _scan_scope(scope)
+                _enrich_rows_with_catalog(self.store, rows)
+                self._send_json(rows)
                 return
             # scope == "" or "global": use the scope adapter so wildcard
             # validation and body-aware ranking share one StoreError seam.
@@ -498,6 +699,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     r.setdefault("scope_label", "Global")
                 # Add token enrichment from actual files
                 _enrich_rows_with_tokens(self.store, rows, "all-scope list")
+                _enrich_rows_with_catalog(self.store, rows)
                 self._send_json(rows)
             else:
                 rows = self.store.list()
@@ -506,6 +708,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     r.setdefault("scope_label", "Global")
                 # Token enrichment for list rows
                 _enrich_rows_with_tokens(self.store, rows, "global list")
+                _enrich_rows_with_catalog(self.store, rows)
                 self._send_json(rows)
             return
         if parts == ["api", "search"]:
@@ -518,17 +721,23 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 if scope == "all":
                     from .scopes import search_all as _search_all
 
-                    self._send_json(_search_all(q, scope_id="all", store=self.store))
+                    rows = _search_all(q, scope_id="all", store=self.store)
                 else:
-                    self._send_json(self.store.search(q))
+                    rows = self.store.search(q)
+                _enrich_rows_with_catalog(self.store, rows)
+                self._send_json(rows)
             elif scope == "global":
                 from .scopes import search_all as _search_all
 
-                self._send_json(_search_all(q, scope_id="global", store=self.store))
+                rows = _search_all(q, scope_id="global", store=self.store)
+                _enrich_rows_with_catalog(self.store, rows)
+                self._send_json(rows)
             else:
                 from .scopes import search_all as _search_all
 
-                self._send_json(_search_all(q, scope_id=scope))
+                rows = _search_all(q, scope_id=scope)
+                _enrich_rows_with_catalog(self.store, rows)
+                self._send_json(rows)
             return
         if len(parts) == 4 and parts[:2] == ["api", "skills"] and parts[3] == "raw":
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
@@ -556,7 +765,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if scope != "global":
                 from .scopes import get_skill as _get_skill
 
-                self._send_json(_get_skill(scope, parts[2]))
+                record = _get_skill(scope, parts[2])
+                _enrich_rows_with_catalog(self.store, [record])
+                self._send_json(record)
                 return
             # Use injected store for correct data_dir in tests, with token enrichment
             rec = self.store.get(parts[2])
@@ -574,6 +785,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 _diagnose(f"detail token enrichment failed for {parts[2]!r}", exc)
                 rec.setdefault("tokens", 0)
                 rec.setdefault("tokens_method", "unavailable")
+            _enrich_rows_with_catalog(self.store, [rec])
             self._send_json(rec)
             return
         if parts == ["api", "trash"]:
@@ -741,15 +953,106 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self._send_security_headers()
             self.end_headers()
-            self.wfile.write(body)
+            self._write_body(body)
         else:
             self._send_error(404, "unknown endpoint")
 
     # -- POST routes ------------------------------------------------------
 
+    def _execute_batch_post(self) -> bool:
+        data = self._body_json()
+        operation = data.get("operation")
+        if operation not in {"enable", "disable", "remove", "sync"}:
+            raise StoreError("batch operation must be enable, disable, remove, or sync")
+        targets = _batch_targets(data)
+        plan = _batch_plan(operation, targets, data)
+        if data.get("plan_id") != plan["plan_id"]:
+            raise StoreError("batch preview is stale; review the current targets again")
+        if operation == "sync" and not plan["options"]["to_scopes"]:
+            raise StoreError("sync batch plans require at least one target scope")
+        results: list[dict] = []
+        from .scopes import remove_skill as _remove_skill, sync_skill as _sync_skill, toggle_skill as _toggle_skill
+
+        for target in targets:
+            item = {"name": target["name"], "scope": target["scope"], "status": "ok"}
+            try:
+                if operation in {"enable", "disable"}:
+                    desired = operation == "enable"
+                    if target["disabled"] == (not desired):
+                        item["result"] = "already-set"
+                    else:
+                        item.update(_toggle_skill(target["scope"], target["name"], enable=desired))
+                elif operation == "remove":
+                    item.update(_remove_skill(target["scope"], target["name"], purge=False))
+                else:
+                    item.update(_sync_skill(
+                        target["name"], target["scope"], plan["options"]["to_scopes"],
+                        force=bool(plan["options"]["force"]),
+                    ))
+            except (StoreError, OSError, ValueError) as exc:
+                item["status"] = "failed"
+                item["error"] = str(exc)
+            results.append(item)
+        failures = [item for item in results if item["status"] == "failed"]
+        self._send_json({
+            "operation": operation,
+            "plan_id": plan["plan_id"],
+            "target_count": len(targets),
+            "results": results,
+            "ok": not failures,
+            "partial": bool(failures) and len(failures) < len(results),
+        })
+        return True
+
+    def _route_batch_post(self, parts: list[str]) -> bool:
+        if parts == ["api", "batch", "preview"]:
+            data = self._body_json()
+            operation = data.get("operation")
+            if operation not in {"enable", "disable", "remove", "sync"}:
+                raise StoreError("batch operation must be enable, disable, remove, or sync")
+            if operation == "sync" and not isinstance(data.get("to_scopes"), list):
+                raise StoreError("sync batch plans require a to_scopes list")
+            targets = _batch_targets(data)
+            self._send_json(_batch_plan(operation, targets, data))
+            return True
+        if parts == ["api", "batch", "execute"]:
+            return self._execute_batch_post()
+        return False
+
+    def _route_catalog_post(self, parts: list[str]) -> bool:
+        if parts == ["api", "catalog", "tags"]:
+            data = self._body_json()
+            names = data.get("names")
+            values = data.get("tags")
+            if not isinstance(names, list) or not isinstance(values, list):
+                raise StoreError("tag updates require names and tags lists")
+            from .catalog import update_tags
+
+            self._send_json(update_tags(self.store.data_dir, names, data.get("operation", "add"), values))
+            return True
+        if parts != ["api", "catalog", "profiles"]:
+            return False
+        data = self._body_json()
+        name = data.pop("name", None)
+        if not isinstance(name, str):
+            raise StoreError("profile name must be a string")
+        from .catalog import save_profile
+
+        self._send_json(save_profile(self.store.data_dir, name, data))
+        return True
+
+    def _route_new_post(self, parts: list[str]) -> bool:
+        if parts[:2] == ["api", "batch"]:
+            return self._route_batch_post(parts)
+        if parts[:2] == ["api", "catalog"]:
+            return self._route_catalog_post(parts)
+        return False
+
     def _route_post(self):
         parts = self._parts()
         qs = parse_qs(urlparse(self.path).query)
+        if self._route_new_post(parts):
+            return
         if parts == ["api", "sync"]:
             data = self._body_json()
             raw_name = data.get("name")
@@ -770,6 +1073,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return
         if parts == ["api", "install"]:
             data = self._body_json()
+            result = _registry_install_result(self.store, data)
+            if result is not None:
+                self._send_json(result)
+                return
             raw_source = data.get("source")
             if not isinstance(raw_source, str):
                 raise StoreError("source must be a string")
@@ -843,9 +1150,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._send_json({"command": cmd_str, "error": f"timed out after 120s: {exc}", "executed": True}, 500)
             except FileNotFoundError as exc:
                 raise StoreError(f"runner not found: {exc}")
-            return
-        if parts == ["api", "scopes"]:
-            self._send_error(404, "unknown endpoint")
             return
         if parts == ["api", "skills"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
@@ -962,9 +1266,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     # -- DELETE routes ----------------------------------------------------
 
-    def _route_delete(self):
-        parts = self._parts()
-        qs = parse_qs(urlparse(self.path).query)
+    def _delete_route(self, parts: list[str], qs: dict[str, list[str]]) -> None:
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
             purge = qs.get("purge", ["0"])[0] in ("1", "true", "yes")
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
@@ -974,8 +1276,15 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._send_json(_remove_skill(scope, parts[2], purge=purge))
                 return
             self._send_json(self.store.remove(parts[2], purge=purge))
+        elif len(parts) == 4 and parts[:3] == ["api", "catalog", "profiles"]:
+            from .catalog import delete_profile
+
+            self._send_json(delete_profile(self.store.data_dir, parts[3]))
         else:
             self._send_error(404, "unknown endpoint")
+
+    def _route_delete(self):
+        self._delete_route(self._parts(), parse_qs(urlparse(self.path).query))
 
     # -- PUT routes -------------------------------------------------------
 

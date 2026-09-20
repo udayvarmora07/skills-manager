@@ -113,14 +113,22 @@ python3 desktop_launcher.py
 
 ## Registry bridge and eval harness
 
-Two advisory, offline-first workflows ship in the existing surfaces — no new
-command, no runtime dependency, no network access (see
-[ADR-003](docs/ADR-003-registry-bridge-and-eval-harness.md)):
+The existing `install` surface now supports bounded skills.sh catalog reads and
+an explicit, provenance-recording fetch. The offline preview and file-based eval
+harness remain documented in [ADR-003](docs/ADR-003-registry-bridge-and-eval-harness.md);
+network behavior is governed by
+[ADR-005](docs/ADR-005-registry-network-and-provenance.md):
 
 ```bash
 # Registry bridge: preview a registry skill offline, then install it explicitly
 skills-mgr install --preview vercel-labs/skills/find-skills
 skills-mgr install vercel-labs/skills --skill find-skills   # executes (dry-run first with --dry-run)
+
+# Registry catalog: browse/search/curate, then fetch and review before committing
+skills-mgr install --browse --view trending
+skills-mgr install --search "react native"
+skills-mgr install --fetch vercel-labs/skills/find-skills --json
+skills-mgr install --fetch --review REVIEW_ID --trust-confirmed
 
 # Eval harness: author evals/evals.json inside a skill, then report or record runs
 skills-mgr validate my-workflow --evals
@@ -130,8 +138,18 @@ skills-mgr validate my-workflow --evals-run runs.json
 `--preview` parses `owner/repo`, `owner/repo/slug`, a `https://skills.sh/{source}/{slug}`
 page URL, or a GitHub URL, links the per-skill audit pages, shows the `--registry-hash`
 slot used to detect upstream change, and prints the exact `npx skills add … -s <slug>`
-command — without any registry request, cache, or credential. Browsing the catalog,
-fetching files, and provenance persistence remain deferred (issue #3).
+command without any registry request, cache, or credential. `--browse`, `--search`,
+and `--curated` read the documented skills.sh API; `--fetch` validates a bounded
+text snapshot, requires `--trust-confirmed`, and installs only into the global
+store with a credential-free `.skillsmgr-provenance.json` sidecar. The complete
+staged tree is validated and advisory-risk-inspected before it reaches the
+store. Set
+`SKILLS_MANAGER_REGISTRY_TOKEN` (or use the Vercel `VERCEL_OIDC_TOKEN`) for an
+authenticated API read. Cache state and stale-cache use are explicit; cache is
+not trust evidence. The first fetch is networked and may fail on API auth/rate
+limits; it returns a review id without mutation. Commit that reviewed id with
+`--trust-confirmed`; the commit revalidates locally and does not contact the
+network.
 
 The eval harness follows the official [`evals/evals.json`](https://agentskills.io/skill-creation/evaluating-skills)
 contract with deterministic assertions (`equals`, `contains`, `not_contains`,
@@ -162,6 +180,15 @@ PRs welcome — start with [`CONTRIBUTING.md`](CONTRIBUTING.md). Locked constrai
 3. CLI stays stdlib-only.
 4. Web UI: stdlib backend, no build step, no new runtime deps, loopback bind.
 5. No new CLI commands or Store methods without maintainer approval — open an issue first.
+
+## Adoption and migration
+
+For a current product brief and a safe migration path from manually managed
+agent roots, see [docs/17-adoption-and-distribution.md](docs/17-adoption-and-distribution.md).
+The short version is read-only inventory first (`skills-mgr scopes`, then
+`skills-mgr list --scope all`), followed by explicit validation, target review,
+sync, and recovery checks. The manager does not infer undocumented precedence,
+delete project files, upload skill bodies, or install an update daemon.
 
 ## Security
 

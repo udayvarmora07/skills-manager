@@ -286,11 +286,18 @@ def scan_scope(scope_id: str) -> list[dict]:
     if scope_id == "global":
         store = _global_store()
         rows = store.list()
+        physical_root = str(store.skills_dir.resolve())
         for r in rows:
             r["scope"] = "global"
             r["scope_label"] = "Global"
             if not r.get("path"):
                 r["path"] = _global_row_path(store, r["name"], paths)
+            r["physical_root"] = physical_root
+            if r.get("path"):
+                try:
+                    r["physical_path"] = str(Path(r["path"]).resolve())
+                except OSError:
+                    r["physical_path"] = str(r["path"])
             # Enrich global rows with tokens if missing (DB rows don't have them).
             if "tokens" not in r or not r.get("tokens"):
                 try:
@@ -320,6 +327,7 @@ def scan_scope(scope_id: str) -> list[dict]:
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     entries = scan_dir(scope.base, recursive=scope.recursive)
+    physical_root = str(_resolved_scope_root(scope))
     for e in entries:
         e["scope"] = scope.id
         e["scope_label"] = scope.label
@@ -329,6 +337,11 @@ def scan_scope(scope_id: str) -> list[dict]:
             e["path"] = e.get("path") or str(paths.contained_entry(scope.base, e["name"]))
         except (ValueError, OSError):
             continue
+        e["physical_root"] = physical_root
+        try:
+            e["physical_path"] = str(Path(e["path"]).resolve())
+        except OSError:
+            e["physical_path"] = str(e["path"])
         e["status"] = "disabled" if e.get("disabled") else "active"
         e.setdefault("tokens_pct", 0)
         e.setdefault("chars", 0)

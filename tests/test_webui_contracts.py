@@ -9,6 +9,8 @@ assertions are the guard for the UI-side findings (BUG-3..BUG-7).
 from __future__ import annotations
 
 import re
+import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -103,6 +105,69 @@ class FrontendSourceContractTests(unittest.TestCase):
             "Could not load full metadata (compatibility may be missing).", source
         )
         self.assertIn("else if (mySeq === this.detailSeq)", source)
+
+    def test_install_workflow_surfaces_registry_reads_and_fetch(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        self.assertIn('registryOp: "browse"', source)
+        self.assertIn('async runRegistry()', source)
+        self.assertIn('"/api/install"', source)
+        self.assertIn("trust_confirmed: op === \"fetch\" ? true : undefined", source)
+        self.assertIn('value="registry"', html)
+        self.assertIn('value="fetch"', html)
+        self.assertIn("Use an expired cache if the registry is unavailable", html)
+        self.assertIn("Fetch and install", html)
+
+    def test_logical_library_groups_aliases_but_keeps_divergence(self):
+        script = """
+const fs = require('fs'), vm = require('vm');
+const sandbox = {window: {}};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), sandbox);
+const rows = [
+  {name:'alpha', scope:'global', scope_label:'Global', physical_path:'/root/alpha', content_hash:'same'},
+  {name:'alpha', scope:'agents', scope_label:'Agents', physical_path:'/root/alpha', content_hash:'same'},
+  {name:'alpha', scope:'claude-code', scope_label:'Claude Code', physical_path:'/claude/alpha', content_hash:'different'}
+];
+console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(rows)));
+"""
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+        groups = json.loads(result.stdout)
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["instanceCount"], 2)
+        self.assertTrue(groups[0]["divergent"])
+        self.assertEqual(len(groups[0]["badges"]), 2)
+        self.assertIn("groupLogicalSkills", _read(DOMAIN_JS))
+
+    def test_startup_fetches_each_source_once_and_stats_are_secondary(self):
+        source = _read(APP_JS)
+        self.assertIn("this.loadInitialData();", source)
+        self.assertIn("Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash()])", source)
+        self.assertIn("await this.loadStatsTokens();", source)
+
+    def test_mobile_detail_has_back_navigation_and_focus_return(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        self.assertIn("mobileDetailOpen", source)
+        self.assertIn("closeMobileDetail()", source)
+        self.assertIn("data-skill-key", html)
+        self.assertIn('class="mobile-back"', html)
+        self.assertIn("mobile-controls-toggle", html)
+        self.assertIn(".layout.mobile-detail-open .sidebar", css)
+
+    def test_empty_library_has_local_first_run_onboarding_with_expert_escape(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        self.assertIn("onboardingDismissed: false", source)
+        self.assertIn("onboardingVisible()", source)
+        self.assertIn("onboardingRoots()", source)
+        self.assertIn("skipOnboarding()", source)
+        self.assertIn("restartOnboarding()", source)
+        self.assertIn("filesystem as the source of truth", html)
+        self.assertIn("openDoctor", html)
+        self.assertIn("Import archive", html)
+        self.assertIn(".onboarding-steps", css)
 
 
 if __name__ == "__main__":

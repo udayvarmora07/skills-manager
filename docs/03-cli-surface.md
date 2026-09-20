@@ -1,8 +1,8 @@
 # CLI Surface — Skills Manager
 
-**Version 0.4.0**
+**Version 0.5.0**
 
-**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against the parser/handler modules (`cli_parser.py`, `cli_handlers.py`, `cli_output.py` behind the stable `cli.py` adapter) plus live invocations on 2026-09-16. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
+**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against the parser/handler modules (`cli_parser.py`, `cli_handlers.py`, `cli_output.py` behind the stable `cli.py` adapter) plus live invocations on 2026-09-20. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
 
 **[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
 
@@ -159,10 +159,32 @@ List known skill scopes and their counts (id, label, path, kind, exists, count, 
 ### `tokens [NAME] [--scope SCOPE] [--text TEXT] [--window WINDOW] [--json]`
 Estimate token/context usage. `NAME` = a skill; omit to aggregate over `--scope` (default `all`). `--text` estimates raw text instead (`@path` reads a file). `--window` selects the context window (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M). Uses tiktoken when installed, else chars/4 heuristic.
 
-### `install SOURCE [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--json]`
+### `install [SOURCE] [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--review REVIEW_ID] [--browse|--search QUERY|--curated|--fetch] [--page N] [--per-page N] [--view VIEW] [--allow-stale] [--json]`
 Install skills from the open skills ecosystem via the `skills` npm package (npx/pnpm/yarn/bunx). `SOURCE` like `vercel-labs/agent-skills` or `owner/repo@skill`. `--scope global` passes `-g`; `--agent` targets agent install dirs; `--skill` filters names; `--copy` copies instead of symlinking; `--list-only` executes the runner's list mode and reports its output/exit status; `--dry-run` prints the command without running. Source, agent, and skill values must be non-empty, at most 256 characters, and may not be option-like, traversal-shaped, absolute, or Windows drive-prefixed. `uvx` is rejected (it's an npm package).
 
-`--preview` prints the offline registry bridge preview instead of installing: the parsed registry reference, linkable per-skill audit pages, the `--registry-hash` slot used to detect upstream change, and the exact command this surface would run (`-s <slug>` is added for a registry skill id). It performs no registry request, no cache write, and no execution. `--trust-confirmed` records caller review intent only; the offline plan still reports `trust_verified: false`, `eligibility_status: "unverified-offline"`, `hash_verified: false`, and `may_install: false` (a supplied hash is `unverified-provided` until an authenticated read and comparison). Registry references accept `owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo`; a bare two-segment value is always read as a source (`owner/repo`), so use the skills.sh page URL for a well-known source's skill. Network browse/fetch stays deferred (issue #3). See @docs/ADR-003-registry-bridge-and-eval-harness.md.
+`--preview` prints the offline registry bridge preview instead of installing: the parsed registry reference, linkable per-skill audit pages, the `--registry-hash` slot used to detect upstream change, and the exact command this surface would run (`-s <slug>` is added for a registry skill id). It performs no registry request, no cache write, and no execution. `--trust-confirmed` records caller review intent only for the offline plan; that plan still reports `trust_verified: false`, `eligibility_status: "unverified-offline"`, `hash_verified: false`, and `may_install: false` (a supplied hash is `unverified-provided` until an authenticated read and comparison).
+
+The existing install surface also supports the network registry operations
+`--browse`, `--search QUERY`, `--curated`, and two-step `--fetch`. Browse/search/
+curated and the first `--fetch SOURCE` return bounded catalog/review evidence
+and cache metadata without mutating the Store. The second request is
+`--fetch --review REVIEW_ID --trust-confirmed`; it is global-store-only,
+revalidates the expiring review snapshot and optional `--registry-hash` evidence,
+then writes a credential-free `.skillsmgr-provenance.json` sidecar. The commit
+request performs no network request and a review id is single-use. `--allow-stale`
+opts into an expired cache only when the network is unavailable. Set
+`SKILLS_MANAGER_REGISTRY_TOKEN` or `VERCEL_OIDC_TOKEN` for bearer authentication;
+tokens are not persisted.
+The registry client rejects unsafe hosts/redirects, oversized or malformed
+responses, traversal/symlink paths, duplicate files, and resource-limit
+violations. See @docs/ADR-003-registry-bridge-and-eval-harness.md and
+@docs/ADR-005-registry-network-and-provenance.md.
+
+Before the existing store-add seam is reached, a fetched snapshot is
+materialized in a private temporary directory, fully validated, and scanned
+with the advisory `risk_scan()` heuristic. Validation errors fail before any
+managed-file mutation; warnings and risk findings are returned under the JSON
+`inspection` block and are never a safety certification.
 
 ### `webui [--host H] [--port P] [--no-browser]` (alias: `gui`)
 Launch the local web UI (see @docs/08-web-ui.md). Defaults: `127.0.0.1:8765`, opens browser unless `--no-browser`.

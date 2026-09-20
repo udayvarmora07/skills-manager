@@ -10,6 +10,7 @@ skills via :meth:`Store.resync` / :meth:`Store.db_rebuild`.
 from __future__ import annotations
 
 import errno
+import io
 import json
 import os
 import re
@@ -659,6 +660,16 @@ def _validate_full_payload(kind: str, source: Path) -> bool:
     """Return whether one preflighted full-import payload is usable."""
     if kind == "trash":
         return source.is_dir() and _trash_entry_name(source) is not None
+    if kind == "catalog":
+        if not source.is_dir():
+            return False
+        try:
+            from .catalog import load_catalog
+
+            load_catalog(source.parent)
+        except (OSError, ValueError):
+            return False
+        return True
     return source.is_file()
 
 
@@ -681,6 +692,11 @@ def _plan_full_restore(store: "Store", tmp: Path, manifest: dict) -> list[tuple[
             except ValueError as exc:
                 raise StoreError(f"archive {kind} entry escapes the data directory: {label!r}") from exc
             entries.append((kind, label, source, dest))
+    if manifest.get("catalog"):
+        source = tmp / "catalog"
+        if not _validate_full_payload("catalog", source):
+            raise StoreError("archive catalog metadata is missing or invalid")
+        entries.append(("catalog", "metadata.json", source, store.data_dir / "catalog"))
     return entries
 
 
@@ -1107,6 +1123,8 @@ class Store:
             "provenance",
             "portable_frontmatter",
             "frontmatter_extensions",
+            "registry_provenance",
+            "registry_provenance_error",
             "malformed",
             "decode_error",
         ):
@@ -1148,6 +1166,8 @@ class Store:
                     "provenance",
                     "portable_frontmatter",
                     "frontmatter_extensions",
+                    "registry_provenance",
+                    "registry_provenance_error",
                     "malformed",
                     "decode_error",
                 ):
@@ -1960,6 +1980,11 @@ class Store:
         }
         trash_names: list[str] = []
         template_names: list[str] = []
+        catalog_payload = b""
+        if full:
+            from .catalog import load_catalog
+
+            catalog_payload = (json.dumps(load_catalog(self.data_dir), indent=2, sort_keys=True) + "\n").encode("utf-8")
         handle, temp_name = tempfile.mkstemp(
             prefix=f".{dest.name}.", suffix=".skillsmgr-export", dir=dest.parent
         )
@@ -1992,9 +2017,11 @@ class Store:
                                 tar.add(template, arcname=f"templates/{template.name}")
                     manifest["trash"] = trash_names
                     manifest["templates"] = template_names
+                    manifest["catalog"] = True
+                    info = tarfile.TarInfo("catalog/metadata.json")
+                    info.size = len(catalog_payload)
+                    tar.addfile(info, io.BytesIO(catalog_payload))
                 payload = json.dumps(manifest, indent=2).encode("utf-8")
-                import io
-
                 info = tarfile.TarInfo("manifest.json")
                 info.size = len(payload)
                 tar.addfile(info, io.BytesIO(payload))
@@ -2123,7 +2150,11 @@ class Store:
             restored_trash: list[str] = []
             restored_templates: list[str] = []
             skipped_full: list[str] = []
+            restored_catalog = False
             if full:
+                from .catalog import catalog_path
+
+                catalog_existed = catalog_path(self.data_dir).is_file()
                 try:
                     restored_trash, restored_templates, skipped_full = _archive.restore_full_payload(
                         full_entries, replace=force
@@ -2131,6 +2162,7 @@ class Store:
                 except _archive.ArchiveError as exc:
                     raise StoreError(str(exc)) from exc
                 _record_restored_trash(self, restored_trash)
+                restored_catalog = bool(manifest.get("catalog")) and (force or not catalog_existed)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         result = {
@@ -2143,6 +2175,7 @@ class Store:
             result["restored_trash"] = restored_trash
             result["restored_templates"] = restored_templates
             result["skipped_full"] = skipped_full
+            result["restored_catalog"] = restored_catalog
         return result
 
     # -------------------------------------------------------------- misc

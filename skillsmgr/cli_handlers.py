@@ -14,6 +14,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from . import colors
@@ -158,11 +159,51 @@ def validate_cli_combinations(args) -> None:
     elif command == "tokens":
         if getattr(args, "name", None) and getattr(args, "text", None) is not None:
             raise StoreError("tokens NAME cannot be combined with --text")
-    elif command == "install" and not getattr(args, "preview", False):
-        if getattr(args, "trust_confirmed", False):
-            raise StoreError("install --trust-confirmed requires --preview")
-        if getattr(args, "registry_hash", None) is not None:
-            raise StoreError("install --registry-hash requires --preview")
+    elif command == "install":
+        operation = any(
+            getattr(args, flag, False)
+            for flag in ("browse", "curated", "fetch")
+        ) or getattr(args, "search", None) is not None
+        if operation and getattr(args, "preview", False):
+            raise StoreError("registry operations cannot be combined with --preview")
+        if operation and getattr(args, "dry_run", False):
+            raise StoreError("registry operations cannot be combined with --dry-run")
+        if operation and getattr(args, "trust_confirmed", False) and not getattr(args, "fetch", False):
+            raise StoreError("--trust-confirmed applies to --preview or --fetch only")
+        if operation and getattr(args, "runner", "npx") != "npx":
+            raise StoreError("registry operations cannot be combined with --runner")
+        if operation and getattr(args, "agent", None):
+            raise StoreError("registry operations cannot be combined with --agent")
+        if operation and getattr(args, "skill", None):
+            raise StoreError("registry operations cannot be combined with --skill")
+        if operation and getattr(args, "copy", False):
+            raise StoreError("registry operations cannot be combined with --copy")
+        if operation and getattr(args, "list_only", False):
+            raise StoreError("registry operations cannot be combined with --list-only")
+        if getattr(args, "review", None) and not getattr(args, "fetch", False):
+            raise StoreError("install --review requires --fetch")
+        if getattr(args, "review", None) and getattr(args, "source", None):
+            raise StoreError("install --fetch --review does not accept a source; use the review id")
+        if getattr(args, "trust_confirmed", False) and not (
+            getattr(args, "preview", False) or getattr(args, "fetch", False)
+        ):
+            raise StoreError("install --trust-confirmed requires --preview or --fetch")
+        if getattr(args, "registry_hash", None) is not None and not (
+            getattr(args, "preview", False) or getattr(args, "fetch", False)
+        ):
+            raise StoreError("install --registry-hash requires --preview or --fetch")
+        if operation and getattr(args, "curated", False) and getattr(args, "source", None):
+            raise StoreError("install --curated does not accept a source")
+        if operation and getattr(args, "search", None) is not None and getattr(args, "source", None):
+            raise StoreError("install --search does not accept a source")
+        if operation and getattr(args, "browse", False) and getattr(args, "source", None):
+            raise StoreError("install --browse does not accept a source")
+        if operation and not getattr(args, "fetch", False) and getattr(args, "registry_hash", None) is not None:
+            raise StoreError("--registry-hash requires --fetch or --preview")
+        if getattr(args, "fetch", False) and not getattr(args, "review", None) and not getattr(args, "source", None):
+            raise StoreError("install --fetch requires a registry skill id")
+        if getattr(args, "review", None) and not getattr(args, "trust_confirmed", False):
+            raise StoreError("install --fetch --review requires --trust-confirmed after reviewing the source")
 
 
 def make_store(args) -> Store:
@@ -1160,7 +1201,254 @@ def validated_install_source(raw: str | None) -> str:
     return validated_install_value("source", source)
 
 
+def _registry_client(store: Store):
+    from .registry import RegistryClient
+
+    return RegistryClient(store.data_dir)
+
+
+def _registry_operation(args, store: Store) -> int:
+    """Run an explicit registry read or review/commit through install."""
+    client = _registry_client(store)
+    allow_stale = bool(getattr(args, "allow_stale", False))
+    if getattr(args, "browse", False):
+        result = client.browse(
+            page=args.page, per_page=args.per_page, view=args.view,
+            allow_stale=allow_stale,
+        )
+        title = "registry leaderboard"
+    elif getattr(args, "search", None) is not None:
+        result = client.search(args.search, allow_stale=allow_stale)
+        title = "registry search"
+    elif getattr(args, "curated", False):
+        result = client.curated(allow_stale=allow_stale)
+        title = "registry curated"
+    else:
+        if scope_from_args(args) != "global":
+            raise StoreError("install --fetch currently targets the global manager store only")
+        review_id = getattr(args, "review", None)
+        if review_id:
+            if not getattr(args, "trust_confirmed", False):
+                raise StoreError("registry commit requires --trust-confirmed after reviewing the fetched snapshot")
+            result = _commit_registry_review(store, review_id)
+        else:
+            if getattr(args, "trust_confirmed", False):
+                raise StoreError("fetch and trust confirmation are separate: fetch first, then commit with --review REVIEW_ID --trust-confirmed")
+            result = _prepare_registry_skill(
+                store,
+                validated_install_source(args.source),
+                expected_hash=getattr(args, "registry_hash", None),
+                allow_stale=allow_stale,
+            )
+        title = "registry fetch"
+    if args.json:
+        _print_json(result)
+        return EXIT_OK
+    if getattr(args, "fetch", False):
+        if result.get("review_id"):
+            print(f"review required for {result['registry']['id']}")
+            print(f"  review id     {result['review_id']}")
+            print(f"  snapshot hash {result['registry']['snapshot_hash']}")
+            print("  mutation      none (commit only after a separate review)")
+        else:
+            print(f"installed {result['name']} from {result['registry']['id']}")
+            print(f"  path          {result['path']}")
+            print(f"  snapshot hash {result['registry']['snapshot_hash']}")
+            print(f"  cache         {result['registry']['cache_state']}")
+        return EXIT_OK
+    print(title)
+    rows = result.get("data", [])
+    if title == "registry curated":
+        for owner in rows:
+            if isinstance(owner, dict):
+                print(f"  {owner.get('owner', '-')}: {owner.get('totalSkills', 0)} skills")
+        print(f"  cache         {result['_registry']['cache_state']}")
+        return EXIT_OK
+    for entry in rows:
+        if isinstance(entry, dict):
+            print(
+                f"  {entry.get('id', entry.get('name', '-'))}"
+                f"  {entry.get('installs', 0)} installs"
+                f"  {entry.get('url', '')}"
+            )
+    print(f"  cache         {result['_registry']['cache_state']}")
+    return EXIT_OK
+
+
+def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | None,
+                            allow_stale: bool) -> dict:
+    """Fetch and inspect a registry snapshot without touching the managed Store."""
+    from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
+    from .insights import risk_scan
+    from .registry import (
+        materialize_snapshot,
+        provenance_for_snapshot,
+        write_registry_review,
+    )
+
+    snapshot = _registry_client(store).fetch(
+        spec, expected_hash=expected_hash, allow_stale=allow_stale
+    )
+    name = snapshot.get("slug")
+    try:
+        name = validate_skill_name(name)
+    except (TypeError, ValueError) as exc:
+        raise StoreError(f"registry slug cannot be installed as a skill name: {name!r}") from exc
+    local_snapshot = snapshot
+    normalization = None
+    try:
+        frontmatter, body = parse_frontmatter(
+            next(entry["contents"] for entry in snapshot["files"] if entry["path"] == "SKILL.md")
+        )
+        remote_name = frontmatter.get("name")
+        if isinstance(remote_name, str) and remote_name != name:
+            local_files = [dict(entry) for entry in snapshot["files"]]
+            root_file = next(entry for entry in local_files if entry["path"] == "SKILL.md")
+            frontmatter["name"] = name
+            root_file["contents"] = dump_frontmatter(
+                frontmatter, key_order=list(frontmatter.keys())
+            ) + body
+            local_snapshot = dict(snapshot)
+            local_snapshot["files"] = local_files
+            local_snapshot.pop("hash", None)
+            normalization = f"frontmatter.name {remote_name!r} normalized to slug {name!r}"
+            local_snapshot["normalization"] = normalization
+    except (FrontmatterError, StopIteration):
+        pass
+    provenance = provenance_for_snapshot(local_snapshot)
+    if normalization is not None:
+        provenance["remote_hash"] = snapshot.get("hash")
+        provenance["hash_verified"] = bool(snapshot.get("hash_verified"))
+    with tempfile.TemporaryDirectory(prefix="skillsmgr-registry-review-") as temporary:
+        staged = Path(temporary) / name
+        materialize_snapshot(local_snapshot, staged)
+        validation = validate_skill(name, staged)
+        if validation.errors:
+            summary = "; ".join(issue.message for issue in validation.errors[:3])
+            raise StoreError(f"registry snapshot failed validation before install: {summary}")
+        risk_findings = risk_scan({
+            "name": name,
+            "body": validation.body,
+            "allowed_tools": validation.data.get("allowed-tools"),
+        })
+    inspection = {
+        "validation": {
+            "valid": validation.valid,
+            "warnings": [
+                {"level": issue.level, "key": issue.key, "message": issue.message}
+                for issue in validation.warnings
+            ],
+        },
+        "risk": {
+            "policy": "advisory-only; heuristic evidence is not a safety or trust verdict",
+            "findings": risk_findings,
+        },
+        "reviewed_before_install": False,
+        "review_required": True,
+        "target_scope": "global",
+    }
+    local_snapshot["remote_hash"] = snapshot.get("hash")
+    review = write_registry_review(store.data_dir, local_snapshot, inspection)
+    registry = dict(review["registry"])
+    registry["remote_hash"] = snapshot.get("hash")
+    registry["remote_registry_hash"] = snapshot["registry_hash"]
+    registry["registry_hash"] = provenance["registry_hash"]
+    registry["snapshot_hash"] = provenance["local_snapshot_hash"]
+    registry["normalization"] = normalization
+    return {
+        "review_id": review["review_id"],
+        "review_expires_at": review["expires_at"],
+        "registry": registry,
+        "inspection": inspection,
+    }
+
+
+def _commit_registry_review(store: Store, review_id: str) -> dict:
+    """Commit one registry review under the cross-process single-use lock."""
+    from .atomic_io import mutation_lock
+    from .registry import _review_path
+
+    with mutation_lock(_review_path(store.data_dir, review_id)):
+        return _commit_registry_review_unlocked(store, review_id)
+
+
+def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
+    """Commit one reviewed registry snapshot without another network request."""
+    from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
+    from .insights import risk_scan
+    from .registry import (
+        materialize_snapshot,
+        mark_registry_review_committed,
+        provenance_for_snapshot,
+        read_registry_review,
+        write_provenance,
+    )
+
+    review = read_registry_review(store.data_dir, review_id)
+    snapshot = review["snapshot"]
+    name = snapshot.get("slug")
+    try:
+        name = validate_skill_name(name)
+    except (TypeError, ValueError) as exc:
+        raise StoreError(f"registry slug cannot be installed as a skill name: {name!r}") from exc
+    provenance = provenance_for_snapshot(snapshot)
+    remote_hash = snapshot.get("remote_hash")
+    if remote_hash is not None:
+        provenance["remote_hash"] = remote_hash
+        provenance["hash_verified"] = bool(snapshot.get("hash_verified"))
+    with tempfile.TemporaryDirectory(prefix="skillsmgr-registry-commit-") as temporary:
+        staged = Path(temporary) / name
+        materialize_snapshot(snapshot, staged)
+        validation = validate_skill(name, staged)
+        if validation.errors:
+            summary = "; ".join(issue.message for issue in validation.errors[:3])
+            raise StoreError(f"registry review failed validation before install: {summary}")
+        risk_findings = risk_scan({
+            "name": name,
+            "body": validation.body,
+            "allowed_tools": validation.data.get("allowed-tools"),
+        })
+        write_provenance(staged, provenance)
+        installed = store.add(staged, name=name)
+    committed = mark_registry_review_committed(store.data_dir, review_id)
+    registry = dict(committed["registry"])
+    registry["remote_hash"] = remote_hash
+    registry["normalization"] = snapshot.get("normalization")
+    inspection = dict(review["inspection"])
+    inspection.update({
+        "risk": {
+            "policy": "advisory-only; heuristic evidence is not a safety or trust verdict",
+            "findings": risk_findings,
+        },
+        "reviewed_before_install": True,
+        "review_required": False,
+        "review_id": review_id,
+        "target_scope": "global",
+    })
+    return {
+        "name": installed["name"],
+        "path": installed["path"],
+        "registry": registry,
+        "inspection": inspection,
+    }
+
+
+def _fetch_registry_skill(store: Store, spec: str, *, expected_hash: str | None,
+                          allow_stale: bool) -> dict:
+    """Compatibility adapter for callers that used the old private helper."""
+    return _prepare_registry_skill(
+        store, spec, expected_hash=expected_hash, allow_stale=allow_stale
+    )
+
+
 def cmd_install(args, store: Store) -> int:
+    if (
+        getattr(args, "browse", False)
+        or getattr(args, "search", None) is not None
+        or getattr(args, "curated", False)
+        or getattr(args, "fetch", False)
+    ):
+        return _registry_operation(args, store)
     runner = validated_install_runner(getattr(args, "runner", None))
     agents = getattr(args, "agent", None)
     skills_filter = getattr(args, "skill", None)

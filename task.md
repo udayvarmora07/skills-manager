@@ -1,10 +1,219 @@
 # Task Checklist — Skills Manager
 
-**Version 0.6.0**
+**Version 0.8.0**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
-## Current state — 2026-09-16 (authoritative; older milestones below are dated records)
+## Current state — 2026-09-20 (authoritative; older milestones below are dated records)
+
+- **DEL-00: DONE (2026-09-18).** The pre-existing registry network/provenance
+  batch is identified and kept separate from the product UX work. The current
+  tree passes 787 unittest tests, both smoke suites, compile, docs, complexity,
+  CLI help, package-data source integrity, frontend syntax, diff checks, and
+  the five-viewport browser harness. A non-failing browser client-disconnect
+  traceback is recorded for DEL-03. Recovery artefacts are recorded in
+  `.specs/reports/del-00-step-1-2026-09-18.md`; no staging or commit was done.
+
+- **DEL-00 through DEL-04 engineering delivery sequence: DONE (2026-09-18).**
+  Baseline evidence, logical Library navigation, responsive/progressive
+  loading, and first-run onboarding were each implemented and verified as
+  separate steps. DEL-01's five-participant usability protocol remains
+  intentionally unclaimed until real consented participants are available.
+
+- **DEL-05 and DEL-06: DONE (2026-09-18).** Tags, profiles, exact-target batch
+  plans, adapter evidence, and contained project observations are implemented
+  and verified without a new CLI command, Store method, SQLite schema, runtime
+  dependency, or deployment mutation.
+
+- **DEL-07 read-only foundation: DONE (2026-09-19).** `source_lock.py` now
+  provides bounded source identities, whole-directory candidate manifests,
+  added/removed/changed-file evidence, CRLF/LF-only explanations, candidate
+  validation and advisory risk findings, explicit physical-target metadata, and
+  a permanently non-committing review result. No new CLI command, Store
+  method, SQLite schema, dependency, network request, or REST mutation was
+  added.
+
+- **DEL-07 live workflow: DONE (2026-09-20).** `source_lock.py` now persists
+  bounded `.skillsmgr-source-lock.json` evidence and exposes a separate
+  review-id/apply/rollback transaction. Apply requires explicit target
+  containment, a fresh review, `approve=True`, an explicit complete-tree
+  snapshot root, and revalidation under the cross-process mutation lock. No
+  CLI command, Store method, SQLite schema, dependency, network request, or
+  REST mutation was added.
+
+- **DEL-08 review/commit split: DONE (2026-09-20).** The existing registry
+  install and `POST /api/install` surfaces now separate network fetch/review
+  from no-network commit. Private expiring credential-free review artifacts
+  hold the validated snapshot and inspection evidence; commit requires the
+  review id plus explicit trust confirmation and is single-use. Store API,
+  global-only scope, SQLite schema, and existing command surfaces remain
+  unchanged.
+
+- **DEL-11 local evidence: DONE (2026-09-20).** The dev-only browser harness
+  now has an opt-in `--screenshots-dir` capture path. A fresh current-build
+  run produced five dated local PNGs at `.specs/evidence/del-11-2026-09-20-run2/`
+  with zero console/runtime/network failures and no viewport overflow. These
+  are local automated evidence only; external screenshots and real consented
+  participant sessions remain intentionally human-gated.
+
+- **DEL-09 Git/review/apply integration: DONE (2026-09-20).** `backup_sync.py`
+  now reads safe Git remote metadata and fetches through Git's configured
+  credential helper/SSH agent without receiving or persisting credentials. It
+  stores bounded private expiring sync reviews and applies only after fresh
+  candidate-hash validation, explicit target containment, `approve=True`, and
+  a complete-tree snapshot through the existing source-lock seam. No CLI
+  command, Store method, SQLite schema, or runtime dependency was added.
+
+- **DEL-09 dry-run foundation: DONE (2026-09-19).** `backup_sync.py` now
+  normalizes bounded credential-free manifests, reports exact local/remote
+  deltas and conflicts, plans non-destructive three-way choices, and exposes
+  retryable interruption state. The Git/remote/apply integration is delivered
+  in the 2026-09-20 close-out above; this dated foundation entry remains the
+  pure-planner history with no new CLI command, Store method, or schema.
+
+- **DEL-10 integrity foundation: DONE (2026-09-19).** `bundles.py` now
+  provides deterministic version-1 manifest bytes, SHA-256 identity, and
+  detached HMAC evidence with explicit tamper, wrong-key, revocation, and
+  shared-secret limitations. Full archive/team distribution remains
+  unimplemented under the resolved ADR-004 policy; no key transport, archive
+  integration, command, Store method, schema, network, or mutation was added.
+
+- **DEL-10 policy decisions: DONE (2026-09-20).** ADR-004 §6 now resolves
+  HMAC/shared-secret integrity as the only crypto scope, file-only offline
+  distribution, and content-only signed metadata. Named-person identity,
+  hosted distribution, approval-state, eval/review metadata, archive
+  integration, and key lifecycle remain explicitly out of the shipped scope.
+
+## Milestone 75 — DEL-07 read-only source locks and update preview (2026-09-19)
+
+- [x] Add bounded, credential-free source identity for local/Git/archive/registry evidence.
+- [x] Compare complete candidate trees with symlink, traversal, depth, count, and size guards.
+- [x] Explain CRLF/LF-only changes while retaining raw hashes, sizes, and text diff evidence.
+- [x] Run candidate validation before readiness and keep risk findings advisory/heuristic.
+- [x] Require explicit physical target metadata and keep preview permanently non-mutating.
+- [x] Add hermetic contracts and ADR-008; update architecture/module/index docs and this record.
+- [x] Approve and implement a live review/commit/source-lock persistence workflow with explicit rollback.
+
+## Milestone 76 — DEL-08 trust-first registry install evidence (2026-09-19)
+
+- [x] Validate the complete staged registry snapshot before the existing global `Store.add` seam.
+- [x] Return validation warnings and advisory/heuristic `risk_scan()` evidence in CLI/REST fetch results.
+- [x] Keep explicit trust confirmation, bounded network/cache/hash/provenance controls, and manual install paths unchanged.
+- [x] Add invalid-snapshot-before-mutation coverage and update CLI, web, README, and ADR-005 documentation.
+- [x] Split network fetch into a separately approved, expiring review/commit transaction with no-network single-use commit.
+
+## Milestone 77 — DEL-11 positioning, distribution, and adoption brief (2026-09-19)
+
+- [x] Add the one-sentence control-plane position and evidence-based differentiation.
+- [x] Document migration from manually managed roots without deletion, upload, daemon, or precedence claims.
+- [x] Define a reproducible four-scene proof story and the existing five-viewport browser evidence procedure.
+- [x] Verify package, loopback, desktop-launcher, and artifact-claim boundaries without fabricating adoption metrics.
+- [x] Add a consent-safe design-partner brief with data handling, success signals, and exit conditions.
+- [x] Add a dated current-build screenshot capture path and record local viewport evidence.
+- [ ] Capture dated external screenshots and run real consented participant sessions; this repository records the protocol only.
+
+## Milestone 78 — DEL-09 backup/sync dry-run planner (2026-09-19)
+
+- [x] Add bounded, sorted, credential-free manifests with safe member paths.
+- [x] Report exact local/remote changes and three-way conflicts without writes.
+- [x] Keep review as the default conflict action; expose explicit non-destructive strategies.
+- [x] Record retryable interrupted-sync state and snapshot/recovery evidence.
+- [x] Add ADR-009, module/architecture/index docs, hermetic contracts, and this record.
+- [x] Approve and implement Git/remote/auth/apply integration with private review artifacts and snapshot-backed recovery.
+
+## Milestone 79 — DEL-10 offline team-integrity foundation (2026-09-19)
+
+- [x] Define bounded deterministic manifest bytes covering member paths and SHA-256 digests.
+- [x] Add detached HMAC-SHA256 evidence without storing or transporting keys.
+- [x] Report valid, wrong-key, tampered, revoked, and malformed-signature outcomes honestly.
+- [x] Preserve the shared-secret-only guarantee; do not imply named-person identity or safety.
+- [x] Add contracts and update ADR-004, architecture/module/index docs, progress, and this record.
+- [x] Refresh `docs/SESSION-CONTEXT.md` with the 787-test current state and new evidence-module inventory.
+- [x] Resolve ADR-004 §6 crypto/distribution/metadata decisions before archive or team workflow integration.
+
+## Milestone 69 — DEL-01 product baseline and research harness (2026-09-18)
+
+- [x] Codify hermetic empty, small, divergent, malformed, and 2,000-instance
+  fixtures in `baseline_harness.py` without reading private user content.
+- [x] Add a bounded startup-critical REST probe and stable JSON evidence schema;
+  preserve the existing five-viewport browser harness.
+- [x] Add focused contracts and `docs/16-product-baseline-2026-09-18.md`.
+- [ ] Run five consent-safe human usability sessions; automated work does not
+  fabricate participant evidence.
+
+## Milestone 70 — DEL-02 logical Library and navigation foundation (2026-09-18)
+
+- [x] Add derived physical-root/path observations to scope list rows without
+  changing the filesystem authority, SQLite schema, CLI, or Store API.
+- [x] Add `groupLogicalSkills()` with alias deduplication, instance retention,
+  and explicit divergent-content detection.
+- [x] Make the web UI default to a logical Library view with a persistent
+  Instances view; selected mutations continue to target one physical instance.
+- [x] Add focused frontend grouping coverage and update the web/module docs.
+- [x] Verify frontend syntax, grouping/scopes contracts, both smoke suites, and
+  the docs consistency gate.
+
+## Milestone 71 — DEL-03 responsive shell and progressive startup (2026-09-18)
+
+- [x] Fetch scopes, skills, and trash once in parallel; load secondary stats
+  after the first required data sources settle.
+- [x] Add a narrow-screen Library/detail state with explicit Back navigation
+  and focus return to the selected row.
+- [x] Collapse secondary filters behind a small-screen disclosure while
+  keeping the desktop controls unchanged.
+- [x] Bound disconnected-client writes so browser aborts do not emit raw
+  server tracebacks; add focused UI and web-handler regressions.
+- [x] Update the web UI map and verify the focused contracts, smoke suites,
+  frontend syntax, browser harness, and docs gate.
+
+## Milestone 72 — DEL-04 first-run onboarding (2026-09-18)
+
+- [x] Add a local-only empty-library checklist derived from detected scope
+  roots and the completed initial scan.
+- [x] Link the first-run actions directly to create, archive import, folder
+  add, and the existing health-check workflow.
+- [x] Keep onboarding dismissible and restartable in memory so it never blocks
+  expert access or adds a persistence contract.
+- [x] Add focused onboarding coverage and document the behavior.
+- [x] Verify the complete regression ladder after the final delivery step:
+  760 unittest tests, both smoke suites, compile, docs, complexity,
+  package-source integrity, CLI help, diff checks, frontend syntax, and all
+  five browser-harness viewports pass; optional artifact coverage is
+  unavailable because `python3 -m build` is not installed.
+
+## Milestone 73 — DEL-05 tags, profiles, and batch plans (2026-09-18)
+
+- [x] Add filesystem-owned tags and saved profiles with bounded metadata,
+  read-only membership previews, and full export/import preservation.
+- [x] Add tag/untagged filtering, visible-filter select-all, profile editing,
+  and explicit profile missing/disabled/divergent states in the web UI.
+- [x] Add preview-locked enable/disable/soft-remove/sync batch operations with
+  exact physical targets, stale-plan rejection, partial-failure reporting, and
+  recovery guidance.
+- [x] Preserve templates, rebuild/resync behavior, and the existing CLI/Store/
+  SQLite contracts; add focused catalog and web route coverage.
+- [x] Run the final current-tree regression ladder and record its evidence:
+  764 unittest tests, both smoke suites, compile, docs, complexity (238
+  functions), package-source integrity, CLI help, diff checks, frontend syntax,
+  and all five browser-harness viewports pass; optional artifact coverage is
+  unavailable because `python3 -m build` is not installed.
+
+## Milestone 74 — DEL-06 workspaces, projects, and adapter catalog (2026-09-18)
+
+- [x] Add a read-only adapter catalog derived from the existing consumer/root
+  evidence, with verified/experimental tiers, reload guidance, platform notes,
+  and explicit unknown precedence.
+- [x] Add contained project-root observations with outside-path redaction and
+  no project creation, deletion, or deployment side effects.
+- [x] Render adapter evidence and project observations in the responsive web
+  UI, while preserving unresolved effective-state semantics and alias-safe
+  physical targeting.
+- [x] Add focused evidence/containment contracts and ADR-007 documentation.
+- [x] Run the final current-tree regression ladder and record its evidence:
+  764 unittest tests, both smoke suites, compile, docs, complexity (238
+  functions), package-source integrity, CLI help, diff checks, frontend syntax,
+  and all five browser-harness viewports pass; optional artifact coverage is
+  unavailable because `python3 -m build` is not installed.
 
 - **SEC-14…SEC-18: DONE (2026-09-15).** First-party workflow actions
   are pinned; the browser/launcher executable boundary is hardened; release
@@ -57,6 +266,29 @@
   to the same frontmatter key. Red-first regressions cover both halves; no
   command, Store method, schema, dependency, or bind changed.
 
+- **Registry network/provenance: DONE (2026-09-16).** Bounded skills.sh
+  browsing/search/curated reads and an explicit global fetch now use private
+  auth-isolated caching, upstream-compatible hash verification, atomic snapshot
+  materialization, and a credential-free provenance sidecar reconciled by the
+  loader. The current tree was re-verified after final cleanup. No new command,
+  Store method, schema, dependency, or bind was added.
+
+## Milestone 68 — Registry network browsing, fetching, and provenance (2026-09-16)
+
+- [x] Add a stdlib-only skills.sh client for bounded browse, search, curated,
+  detail-compatible references, and snapshot fetches with HTTPS host,
+  redirect, response, auth, cache, and stale-cache boundaries.
+- [x] Validate upstream-compatible hashes plus a framed local integrity hash;
+  materialize snapshots atomically and reject traversal, symlink, duplicate,
+  size-limit, and manager-sidecar inputs.
+- [x] Add credential-free provenance sidecars with per-file hashes and loader
+  reconciliation; surface registry operations through the existing CLI, REST,
+  and Vue install workflow. Fetch requires explicit trust confirmation and is
+  global-store-only.
+- [x] Add hermetic core/integration contracts and update ADR, README, CLI, web,
+  architecture, roadmap, and progress documentation.
+- [x] Re-run the complete current-tree verification ladder after all edits.
+
 ## Milestone 67 — Worktree comparison and frontend report close-out (2026-09-16)
 
 - [x] Compare every registered worktree and local branch with pushed `main`;
@@ -68,9 +300,9 @@
 - [x] Add focused regressions, update the changelog/progress record, and run
   the current-tree verification ladder before pushing.
 
-**Verified on the current tree (re-derived by running the final audit-tail close-out, 2026-09-16):**
-**728 `unittest` tests OK**; `smoke_store.py` and `smoke_web.py` PASSED;
-`check_docs.py` PASSED; `check_complexity.py` PASSED (**222 functions**, budget
+**Verified on the current tree (re-derived after the registry network/provenance close-out, 2026-09-16):**
+**750 `unittest` tests OK**; `smoke_store.py` and `smoke_web.py` PASSED;
+`check_docs.py` PASSED; `check_complexity.py` PASSED (**226 functions**, budget
 ≤ 15); `node --check` clean on `skillsmgr/webui/app.js` and
 `skillsmgr/webui/domain.js`; CLI help runs; `check_package_data.py` asserts the
 vendored Vue sha256 and then reports `UNAVAILABLE` locally without the optional

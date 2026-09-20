@@ -9,20 +9,23 @@ carry them, and what remains deferred.
 
 ## Status
 
-Accepted — September 10, 2026, for the offline/file-based scope only. Network
-fetch, registry caching and authentication, eval provider abstraction, and team
-signing remain deferred under issues #3, #4, and #11.
+Accepted — September 10, 2026, for the offline/file-based scope. The registry
+network scope is now governed by the successor
+@docs/ADR-005-registry-network-and-provenance.md; eval provider abstraction and
+team signing remain deferred under issues #4 and #11.
 
 ## Context
 
-Both items already existed as pure helpers. They are now reachable only through
-the approved existing CLI/REST preview and validation seams; there is still no
-direct network API or new Store surface for them.
+Both items already existed as pure helpers. The offline bridge and eval harness
+remain reachable through the approved existing CLI/REST preview and validation
+seams. Registry network behavior is specified separately in ADR-005 and does
+not add a direct network API or new Store surface.
 
 Their research verdicts are unchanged and still binding:
 
-- **Registry bridge (#3): DEFERRED network browse/fetch.** The skills.sh catalog
-  API is real (`/api/v1/skills`, `/api/v1/skills/{source}/{skill}`,
+- **Historical registry bridge verdict (#3): DEFERRED network browse/fetch.**
+  Before ADR-005, the skills.sh catalog API was real (`/api/v1/skills`,
+  `/api/v1/skills/{source}/{skill}`,
   `/api/v1/skills/audit/{source}/{skill}`) but authenticated reads need a Vercel
   OIDC bearer token (600 req/min per team+project), which needs `vercel link` and
   a credential lifecycle — unsuitable for a local-first stdlib tool. Install is
@@ -126,11 +129,10 @@ preview and the real command cannot drift.
   comparison are performed.
 - Eval scores are advisory by construction: no code path reads them before an
   install or an edit, and no score is persisted in SQLite.
-- Registry provenance stays incomplete until an authenticated read or manual
-  entry supplies it; the plan says so instead of guessing.
-- Still open and requiring their own ADR/approval: registry API/caching/auth and
-  provenance persistence, an eval provider abstraction with credentials and
-  isolation, and signed team bundles (#11).
+- Registry API/caching/auth and provenance persistence are specified and shipped
+  by @docs/ADR-005-registry-network-and-provenance.md. An eval provider
+  abstraction with credentials and isolation, and signed team bundles, remain
+  deferred (#4, #11).
 - `Store`, the SQLite schema, and `SCHEMA_VERSION = "1"` are untouched.
 
 ## Verification

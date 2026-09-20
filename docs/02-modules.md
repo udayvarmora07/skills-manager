@@ -1,8 +1,8 @@
 # Modules — Skills Manager
 
-**Version 0.7.0**
+**Version 0.9.0**
 
-**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-15 (CLI 27+7+3=37 via `check_docs._command_inventory` + live parser; insights 57 via test count; launcher executable discovery now rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; `Store`/`scopes`/`webapp` rows retain the request, locking, sanitization, and fail-closed contracts; package-data and workflow security gates are pinned). Keep this doc updated when module internals change.
+**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-20 (CLI 27+7+3=37 via `check_docs._command_inventory` + live parser; launcher executable discovery now rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; source-lock review/apply evidence, backup/sync planning, and offline HMAC evidence seams remain filesystem-owned; `Store`/`scopes`/`webapp` rows retain the request, locking, sanitization, and fail-closed contracts; package-data and workflow security gates are pinned). Keep this doc updated when module internals change.
 
 ## `__init__.py`
 
@@ -26,9 +26,35 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `store.py`
 
-`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Live skill directories are always recorded `status='active'` (stale `'trashed'` rows are reactivated via `_upsert_entry`/`resync`, including a post-sync resync when sync commits into the global scope). Text mutations use atomic sibling-temp writes, fsync, replacement, and the same-process per-skill lock shared by `create`/`edit`/`remove`/`disable`/`enable`/`restore` (`_with_skill_lock`); every mutation also takes the library-wide index lock at `<data>/skills/.skillsmgr-index-lock` (`_index_lock_path`) so a whole-tree scan cannot interleave, and `restore`/`purge_trash` additionally serialize on `<data>/trash/.trash-lock`; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar or ZIP members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, fail malformed streams as clean `StoreError`, preserve the original destination when commit staging fails, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. ZIP extraction uses explicit contained paths and rejects symlink-bit entries because ZIP has no equivalent safe extraction filter, and the compression-ratio budget is enforced per member as well as per archive. Per-skill commits are staged and failures are reported in `skipped`; a failed staging copy never removes the user's existing skill directory. A `--full` import validates every trash/template payload before any mutation, then installs them as one all-or-nothing transaction (`archive.restore_full_payload`) and reconciles the restored trash names into the index, so failures surface as `StoreError` with the previous state intact. `purge_trash` wraps filesystem failures as `StoreError`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Live skill directories are always recorded `status='active'` (stale `'trashed'` rows are reactivated via `_upsert_entry`/`resync`, including a post-sync resync when sync commits into the global scope). Text mutations use atomic sibling-temp writes, fsync, replacement, and the same-process per-skill lock shared by `create`/`edit`/`remove`/`disable`/`enable`/`restore` (`_with_skill_lock`); every mutation also takes the library-wide index lock at `<data>/skills/.skillsmgr-index-lock` (`_index_lock_path`) so a whole-tree scan cannot interleave, and `restore`/`purge_trash` additionally serialize on `<data>/trash/.trash-lock`; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar or ZIP members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, fail malformed streams as clean `StoreError`, preserve the original destination when commit staging fails, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. ZIP extraction uses explicit contained paths and rejects symlink-bit entries because ZIP has no equivalent safe extraction filter, and the compression-ratio budget is enforced per member as well as per archive. Per-skill commits are staged and failures are reported in `skipped`; a failed staging copy never removes the user's existing skill directory. A `--full` import validates every trash/template/catalog payload before any mutation, then installs them as one all-or-nothing transaction (`archive.restore_full_payload`) and reconciles the restored trash names into the index, so failures surface as `StoreError` with the previous state intact. `purge_trash` wraps filesystem failures as `StoreError`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+
+## `catalog.py`
+
+Filesystem-owned manager metadata at `<data>/catalog/metadata.json`: bounded
+tags keyed by canonical skill name and saved profiles containing member names
+and target scopes/consumers. `load_catalog()`/`save_catalog()` use atomic
+writes and a mutation lock; `profile_preview()` derives observed, disabled,
+divergent, and missing states from current scope rows. `plan_hash()` binds a
+batch preview to exact physical targets and operation options. It does not
+write SQLite or change skill documents. Full archive support is implemented in
+`archive.py`/`Store.export()`/`Store.import_`; the decision record is
+@docs/ADR-006-catalog-metadata-and-batch-plans.md.
+
+## `adapters.py`
+
+Read-only consumer adapter catalog derived from `effective.CONSUMERS` and the
+primary root-discovery evidence. It exposes candidate roots, tiered precedence
+evidence, reload guidance, verification date, and explicit unknown-precedence
+status. `project_observation()` validates resolved project containment and
+redacts outside paths; `workspaces_payload()` combines that observation with
+adapter records. No project or consumer binding is persisted. Decision record:
+@docs/ADR-007-adapter-catalog-and-project-workspaces.md.
 
 ## `scopes.py`
+
+Scope list rows additionally expose derived `physical_root` and
+`physical_path` observations for the logical-library UI; aliases to one
+resolved document can be grouped once without becoming a new source of truth.
 
 Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable, recursive, supported, consumer). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()` exposes root availability and discovery metadata; `list_all()` deduplicates resolved physical roots for aggregate views while keeping *distinct* instances apart, so two same-name skills inside one recursive scope are both listed and both carry the `duplicated`/`divergent` states; direct ids remain addressable. Scope records expose observed instance states (`active`, `disabled`, `invalid`, `duplicated`, `divergent`, `unmanaged`, and `unaddressable` for a name that fails `NAME_RE`, which is paired with `addressable: false` on the row); precedence-based `shadowed`/effective resolution remains approval-gated. `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()` (skips duplicate physical target roots), and `search_all()`. `search_all()` builds global ranking records through the public `Store.list()`/`Store.get()` seams so body matches are retained; callers such as CLI may pass their requested Store, while omitted stores retain the injectable adapter behavior. It converts bounded wildcard `ValueError`s to the scope layer's `StoreError` contract. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to the injected `Store`; that injection is a `ContextVar` (per-thread, rebound per request by the web server), so two in-process servers on different data dirs cannot cross over. `known_scopes()` and `scan_scope("global")` share one identity for the global root: the injected Store's own tree when one is injected, otherwise the environment-derived data dir.
 
@@ -41,6 +67,67 @@ Shared SKILL.md loader + directory scanner (`load_skill`, `scan_dir`) used by bo
 Pure, non-persisted document observations: portable versus client-extension
 frontmatter partitions, content/metadata SHA-256 hashes, observed timestamp, and
 scope/consumer provenance.
+
+## `registry.py`
+
+Stdlib-only skills.sh network boundary used by the existing install surfaces.
+`RegistryClient` implements bounded browse/search/curated reads and snapshot
+fetches, optional bearer authentication, private auth-scope-isolated cache
+entries, explicit stale-cache fallback, and clean response/redirect errors.
+`validate_snapshot()` checks canonical text-file paths, resource limits, the
+upstream-compatible registry hash, and the manager's framed local
+`snapshot_hash()`. `materialize_snapshot()` performs symlink-safe atomic
+staging. `provenance_for_snapshot()`, `write_provenance()`, and
+`read_provenance()` maintain and reconcile the credential-free
+`.skillsmgr-provenance.json` sidecar; loader observations expose valid
+provenance or a fail-closed error. No network request occurs at import time,
+SQLite is not used, and no `Store` method is added. Full decisions:
+@docs/ADR-005-registry-network-and-provenance.md.
+
+## `source_lock.py`
+
+DEL-07's filesystem-owned evidence and review seam. `source_identity()` accepts
+bounded local, Git, archive, and registry identifiers without credentials;
+`local_manifest()` hashes a bounded regular-file tree without following
+symlinks; and `preview_local_update()` compares every file, distinguishes
+missing from inaccessible sources, explains CRLF/LF-only changes, validates the
+candidate, and attaches advisory `risk_scan()` findings. `review_local_update()`
+creates a stale-detecting review id; `commit_local_update()` requires explicit
+approval and a snapshot root before atomically replacing the target; and
+`restore_source_snapshot()` provides an explicit rollback seam. The
+`.skillsmgr-source-lock.json` sidecar is bounded, atomic, owner-only, and
+excluded from content hashes. No CLI command, Store method, SQLite state,
+network, cache, or REST route is added. Decision record:
+@docs/ADR-008-source-lock-and-update-preview.md.
+
+## `backup_sync.py`
+
+DEL-09 review-first planning and integration seam. `build_manifest()`
+normalizes bounded, sorted skill/file digests with credential-free source
+labels; `dry_run()` reports exact local and remote changes plus three-way
+conflicts; `three_way_plan()` keeps the default conflict action at review and
+reports explicit keep-mine, use-remote, or keep-both choices; and
+`interrupted_sync()` exposes completed/pending work and a retryable snapshot
+handle. `git_remote_info()` and `git_fetch()` use a trusted Git executable,
+delegate auth to configured Git helpers/SSH agents, and reject credential-
+bearing remote URLs. `prepare_sync_review()`/`read_sync_review()` persist and
+inspect private expiring manifests and plans; `commit_sync_review()` rechecks
+the candidate and applies only through the existing source-lock snapshot,
+atomic replacement, and rollback seam. No CLI command, Store method, or
+SQLite state is added. Decision record:
+@docs/ADR-009-backup-sync-dry-run-planner.md.
+
+## `bundles.py`
+
+Pure DEL-10 integrity foundation. `canonical_manifest()` accepts a bounded
+version-1 member manifest and produces deterministic bytes; `bundle_digest()`
+hashes those bytes; `sign_manifest()` and `verify_manifest()` provide detached
+HMAC-SHA256 evidence with key fingerprints, tamper/wrong-key/revocation
+reasons, and the explicit limitation that this is shared-secret group
+integrity only. The module never reads keys from the environment, creates an
+archive, transports a key, publishes, imports, writes, or adds CLI/REST/Store/
+SQLite behavior. The crypto/distribution/metadata policy and the unimplemented
+archive boundary remain in @docs/ADR-004-team-sharing-signed-bundles.md.
 
 ## `web_security.py`, `web_serialization.py`, `web_upload.py`
 

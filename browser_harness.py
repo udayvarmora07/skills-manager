@@ -75,7 +75,7 @@ def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float
     raise RuntimeError("Chrome DevTools endpoint did not start")
 
 
-def _run_probe(url: str, width: int, height: int, port: int) -> dict:
+def _run_probe(url: str, width: int, height: int, port: int, screenshot: Path | None = None) -> dict:
     """Use Chrome's remote debugging endpoint through a tiny Node CDP client."""
     script = r"""
 const http = require('http');
@@ -84,7 +84,7 @@ if (typeof globalThis.WebSocket !== 'function') {
   process.exit(2);
 }
 const WebSocket = globalThis.WebSocket;
-const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]), port = Number(process.argv[4]);
+const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]), port = Number(process.argv[4]), screenshot = process.argv[5] || '';
 function getJson(path) { return new Promise((resolve, reject) => { const req=http.request('http://127.0.0.1:' + port + path, {method:'PUT'}, r => { let b=''; r.on('data', x=>b+=x); r.on('end',()=>resolve(JSON.parse(b))); }); req.on('error',reject); req.end(); }); }
 (async () => {
   const tabs = await getJson('/json/new?' + encodeURIComponent(url));
@@ -96,11 +96,16 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false}); await send('Page.navigate',{url});
   await new Promise(r=>setTimeout(r,1200));
+  if (screenshot) {
+    const capture = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:true});
+    require('fs').writeFileSync(screenshot, Buffer.from(capture.result.data, 'base64'));
+  }
   const value = await send('Runtime.evaluate',{expression:'JSON.stringify({title:document.title,modalCount:document.querySelectorAll("[role=dialog]").length,overflow:document.documentElement.scrollWidth>window.innerWidth})',returnByValue:true});
   ws.close(); console.log(JSON.stringify({width,height,document:JSON.parse(value.result.result.value),errors,warnings,failed}));
 })().catch(e=>{ console.error(e.stack||String(e)); process.exit(1); });
 """
-    result = subprocess.run([_node(), "-e", script, url, str(width), str(height), str(port)], capture_output=True, text=True, timeout=20)
+    screenshot_arg = str(screenshot) if screenshot is not None else ""
+    result = subprocess.run([_node(), "-e", script, url, str(width), str(height), str(port), screenshot_arg], capture_output=True, text=True, timeout=20)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     lines = [line for line in result.stdout.splitlines() if line.strip()]
@@ -110,7 +115,17 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
 def run() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep-profile", action="store_true")
+    parser.add_argument(
+        "--screenshots-dir",
+        type=Path,
+        help="also save one PNG per viewport in this developer-selected directory",
+    )
     args = parser.parse_args()
+    screenshot_dir = None
+    if args.screenshots_dir is not None:
+        screenshot_dir = args.screenshots_dir.expanduser().resolve()
+        screenshot_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(screenshot_dir, 0o700)
     with tempfile.TemporaryDirectory(prefix="skillsmgr-browser-") as directory:
         os.environ["SKILLS_MANAGER_DATA"] = directory
         store = Store()
@@ -123,7 +138,16 @@ def run() -> int:
         chrome = subprocess.Popen([_chrome(), "--headless=new", "--disable-gpu", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
         try:
             port = _devtools_port(chrome, profile)
-            results = [_run_probe(server.url, width, height, port) for width, height in VIEWPORTS]
+            results = [
+                _run_probe(
+                    server.url,
+                    width,
+                    height,
+                    port,
+                    screenshot_dir / f"viewport-{width}x{height}.png" if screenshot_dir else None,
+                )
+                for width, height in VIEWPORTS
+            ]
             failures = [r for r in results if r["errors"] or r["failed"] or r["document"]["overflow"]]
             print(json.dumps({"viewports": results, "passed": not failures}, indent=2))
             return 1 if failures else 0

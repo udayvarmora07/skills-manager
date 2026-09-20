@@ -2,6 +2,12 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Version 1.7.0** (2026-09-20: DEL-09 Git/review/apply close-out; 787
+tests, 238 complexity-tracked functions. The current tree has a filesystem-
+owned source-lock sidecar and explicit review/apply/rollback seam, plus bounded
+backup/sync Git review/apply and offline HMAC manifest-evidence seams; team
+distribution and participant evidence remain gated as documented below.)
+
 **Version 1.4.0** (2026-09-16: worktree comparison and frontend report
 close-out; 728 tests, 222 complexity-tracked functions.)
 
@@ -33,7 +39,7 @@ the read-only `doctor --explain` diagnostic plus the non-UTF8 `SKILL.md` fix; an
 the 2026-09-10 offline registry bridge (`install --preview`) with the file-based
 advisory eval harness, both shipped by extending existing surfaces only — see
 @docs/ADR-003-registry-bridge-and-eval-harness.md.)
-## What exists today (2026-09-16)
+## What exists today (2026-09-20)
 
 - **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.2.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only). The read-only `doctor --explain` diagnostic shipped 2026-09-11 (`skillsmgr/effective.py`; per-consumer rules cited from that doc, `unknown-consumer`/`undocumented-precedence` instead of a guess, nothing persisted). See @docs/03-cli-surface.md.
@@ -45,7 +51,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
-- **Tests**: stdlib `unittest` regression/contract suite — 728 tests green 2026-09-16 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (222 functions, budget ≤ 15), and `python3 check_package_data.py` (always asserts the vendored Vue sha256, then reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280px) is green.
+- **Tests**: stdlib `unittest` regression/contract suite — 787 tests green 2026-09-20 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (238 functions, budget ≤ 15), and `python3 check_package_data.py` (always asserts the vendored Vue sha256, then reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280px) is green.
 - **Client contract (2026-09-11, #8)**: the REST API is the surface for local non-browser
   clients (editor extensions, scripts). Address it at `127.0.0.1` — `Host: localhost:<port>`
   is rejected on **every** request under the default bind, reads included (issue #14 F-2) —
@@ -63,12 +69,15 @@ advisory eval harness, both shipped by extending existing surfaces only — see
   writable by group/other users outside a sticky parent. Missing manager-owned
   components are created with owner-only permissions; explicit `Store(data_dir=…)`
   injection remains an internal/test seam.
-- **Team sharing (design only, 2026-09-11, #11)**: @docs/ADR-004-team-sharing-signed-bundles.md
-  defines the trust model (HMAC shared secret is the only stdlib option), the canonical-MAC
-  format sketch, and the draft → review → publish stages. No signing code exists; blocked on
-  ADR-004 §6.
+- **Team sharing (policy resolved 2026-09-20, #11)**: @docs/ADR-004-team-sharing-signed-bundles.md
+  selects HMAC shared-secret integrity, file-only offline distribution, and
+  content-only signed metadata; `skillsmgr/bundles.py` provides detached
+  canonical-manifest evidence. Archive, key transport, distribution,
+  approval-state, CLI, and Store integration remain unimplemented, but ADR-004
+  §6 is resolved.
 - **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, `registry_reference`/`registry_bridge_plan` + the shared `install_argv`/`install_command_line` renderer, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Script-risk findings are machine-marked advisory/heuristic and are not enforcement evidence. Locked by hermetic tests in `tests/test_insights_contracts.py` and `tests/test_registry_bridge_contracts.py`.
-- **Registry bridge (offline half, 2026-09-10)**: `install --preview [--trust-confirmed] [--registry-hash HEX]` / `POST /api/install {preview: true}` parse a registry reference (`owner/repo`, `owner/repo/slug`, skills.sh page URL, GitHub URL), record caller trust intent, surface linkable `/security/{provider}` audit pages plus the hash slot, and map a skill id onto `npx skills add … -s <slug>`. Because there is no authenticated request or content comparison, offline plans keep trust, hash, eligibility, and `may_install` unverified/false; network browse/fetch is still deferred (#3, @docs/ADR-003-registry-bridge-and-eval-harness.md).
+- **Source/update evidence (2026-09-20)**: `skillsmgr/source_lock.py` compares bounded complete candidate trees against an explicit physical target with validation and advisory risk evidence, persists bounded `.skillsmgr-source-lock.json` evidence, and provides explicit review-id/apply/rollback operations with complete-tree snapshots. `skillsmgr/backup_sync.py` adds safe Git remote metadata/fetch delegation, private expiring sync reviews, candidate revalidation, and snapshot-backed apply through that source-lock seam. Neither module adds a CLI command, Store method, SQLite schema, runtime dependency, or credential persistence path.
+- **Registry bridge (network/provenance, 2026-09-19)**: `skillsmgr/registry.py` backs the existing `install`/`POST /api/install` surfaces with bounded skills.sh browse/search/fetch, explicit trust confirmation, auth-isolated cache, stale-cache opt-in, response/path/resource limits, upstream-compatible hash comparison, atomic materialization, credential-free provenance sidecars, and pre-Store validation plus advisory risk evidence. See @docs/ADR-005-registry-network-and-provenance.md.
 - **Eval harness (file-based, advisory, 2026-09-10)**: `skillsmgr/evals.py` reads `evals/evals.json` from a skill dir and records `iteration-N/eval-<slug>/{with_skill,without_skill}/{outputs/output.txt,grading.json,timing.json}` plus a per-iteration `benchmark.json` (per-variant case pass rate and the `with_skill` − `without_skill` delta). Surfaces: `validate --evals`, `validate --evals-run FILE [--workspace DIR]`, `POST /api/validate {evals|runs}`. Workspaces default to `<data>/evals/<name>-workspace` (outside `skills/`; `--path` uses beside-the-skill only outside the store's `skills/` tree). Scores never change `valid`, never gate installs/edits, never enter SQLite (#4).
 - **Milestone 11 queue (2026-09-10)**: L1/L2/L3/L4 done; L2 ZIP import is shipped as an `import`-only extension with bounded preflight and guarded extraction, and L5's offline/file-based halves are now shipped (#3/#4 partially closed; their network/backend halves stay deferred). L6 release remains gated on a fresh exact artifact build and authorized publication.
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
@@ -175,6 +184,10 @@ skillsmgr/
   cli_output.py        # JSON/errors/table rendering
   store.py             # FS/index/recovery/archive policy
   insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
+  source_lock.py       # bounded source identity and whole-tree update previews
+  backup_sync.py       # bounded backup/sync manifests and dry-run plans
+  bundles.py           # offline HMAC manifest evidence; no archive integration
+  registry.py          # bounded registry API, snapshots, cache, provenance
 tests/test_insights_contracts.py  # insights hermetic contracts (57 tests)
 tests/test_audit_batch5_contracts.py  # SEC-4..SEC-9 + SEC-13 regressions
 tests/test_audit_batch8_contracts.py  # SEC-14..SEC-18 regressions

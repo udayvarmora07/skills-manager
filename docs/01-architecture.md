@@ -1,8 +1,8 @@
 # Architecture — Skills Manager
 
-**Version 0.6.0**
+**Version 0.7.0**
 
-**AI manifest**: Current architecture and data-flow facts verified against source on September 16, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and a 728-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
+**AI manifest**: Current architecture and data-flow facts verified against source on September 20, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, registry network/cache/provenance boundary, bounded source-lock and backup/sync review/apply boundaries, offline HMAC manifest evidence, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and a 787-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
 
 ## Repo map
 
@@ -38,13 +38,17 @@ skills-manager/
     web_serialization.py # JSON body/response helpers
     web_upload.py    # multipart folder-upload staging policy
     insights.py      # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
+    source_lock.py   # bounded source identity and whole-tree update previews
+    backup_sync.py   # bounded backup/sync manifests and dry-run plans
+    bundles.py       # offline HMAC manifest evidence; no archive integration
+    registry.py      # bounded skills.sh API, cache, snapshots, provenance
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
   smoke_store.py     # smoke test driving the Store API (hermetic fixture)
   smoke_web.py       # smoke test driving the REST API (hermetic fixture)
   smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers
   browser_harness.py # dev-only system-Chrome CDP viewport probe (no runtime dep)
   desktop_launcher.py # optional, unbundled loopback-only app-window launcher (issue #9; no runtime dep, not packaged)
-  tests/             # stdlib unittest regression suite (728 tests, 2026-09-16)
+    tests/             # stdlib unittest regression suite (750 tests, 2026-09-16)
   check_docs.py      # machine-checkable docs/source gate: HADS headers, links/anchors,
                      # table integrity, CLI/REST/Store surface parity, file inventory
   check_complexity.py# AST complexity ratchet (+ complexity-baseline.json)
@@ -64,6 +68,12 @@ skills-manager/
 - Skill: `<data>/skills/<name>/SKILL.md`. Disabled: `<data>/skills/<name>/SKILL.md.disabled`.
 - SQLite at `<data>/skills-manager/skills-manager.db` is an index only — rebuilt by `db rebuild`/`db resync`; `SCHEMA_VERSION = "1"`. Never hand-edit the DB; never trust SQLite over the filesystem.
 - Trash: `<data>/trash/` (removed skills move here). Backups: `<data>/backups/` (timestamped tarballs). Templates: `<data>/templates/*.md`.
+- Registry cache: `<data>/registry-cache/` (private, auth-scope-isolated JSON
+  optimization; never a trust store). Fetched registry skills carry a
+  credential-free `.skillsmgr-provenance.json` sidecar inside their skill
+  directory; loader reconciliation exposes drift instead of trusting stale
+  metadata. Registry snapshots are validated and committed through the
+  existing Store API, so SQLite remains a rebuildable index only.
 
 ## Data-dir resolution
 
@@ -83,6 +93,29 @@ Web UI         ─┘          │
 
 - `Store.list/search/stats` may read the index; mutations (`add/remove/enable/...`) always write the filesystem and update the index in the same operation.
 - `resync`/`db_rebuild` re-scan the filesystem and rebuild the index from scratch.
+
+**[SPEC] Review-first source updates.** `source_lock.py` compares a bounded
+candidate tree with an explicit physical target, excludes manager sidecars from
+content hashes, rejects symlinks/traversal and resource-limit violations,
+reports added/removed/changed files, and explains CRLF/LF-only changes.
+Validation errors block readiness; risk findings are advisory. The preview and
+review are non-mutating. A separate explicit commit requires a matching review
+id, `approve=True`, and an explicit rollback snapshot root; it rechecks the
+candidate under the cross-process mutation lock, snapshots the complete current
+tree, atomically swaps the candidate, and persists
+`.skillsmgr-source-lock.json` beside the skill. SQLite is unchanged. See
+@docs/ADR-008-source-lock-and-update-preview.md.
+
+**[SPEC] Review-first backup/sync integration.** `backup_sync.py` normalizes
+bounded skill manifests and reports exact local/remote deltas, conflicts,
+explicit three-way choices, and retryable interruption state. Its optional Git
+seam reads safe remote metadata and fetches through the user's configured
+credential helper/SSH agent without accepting or persisting credentials. A
+private expiring review artifact records the candidate digest and plan; apply
+requires a fresh candidate, explicit contained target, `approve=True`, and a
+complete-tree snapshot, then delegates atomic replacement and source-lock
+evidence to `source_lock.py`. No CLI command, Store method, or SQLite state is
+added. See @docs/ADR-009-backup-sync-dry-run-planner.md.
 
 **[SPEC]** Any skill name entering a filesystem operation is validated by the
 canonical name rule before path construction. Resolved paths are checked to

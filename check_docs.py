@@ -145,7 +145,7 @@ def check_documented_source_symbols(root: Path = ROOT) -> list[str]:
     # Only dotted references with a symbol after the module are checked; plain
     # ``foo.py`` source-path prose is handled by source_path_pattern above.
     module_ref_pattern = re.compile(
-        r"(?<![A-Za-z0-9_/])(?:skillsmgr/)?(" + "|".join(sorted(module_symbols)) + r")\.(?!py\b)([A-Za-z_]\w*)"
+        r"(?<![A-Za-z0-9_/-])(?:skillsmgr/)?(" + "|".join(sorted(module_symbols)) + r")\.(?!py\b)([A-Za-z_]\w*)"
     )
     for path in docs:
         if not path.is_file():

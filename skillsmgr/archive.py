@@ -96,18 +96,22 @@ def _zip_member_is_dir(member: zipfile.ZipInfo) -> bool:
 
 
 def _validate_archive_layout(normalized: str, is_dir: bool, is_file: bool) -> None:
-    if normalized == "manifest.json":
+    if normalized in {"manifest.json", "catalog/metadata.json"}:
         if not is_file:
-            raise ArchiveError("manifest.json must be a regular file")
+            raise ArchiveError(f"{normalized} must be a regular file")
         return
     parts = normalized.split("/")
-    if parts[0] in {"skills", "trash"}:
+    if parts[0] in {"skills", "trash", "catalog"}:
         if len(parts) == 1:
             if not is_dir:
                 raise ArchiveError(f"archive root entry must be a directory: {normalized!r}")
-        elif len(parts) == 2 and not is_dir:
+        elif parts[0] == "catalog" and len(parts) == 2 and parts[1] != "metadata.json":
+            raise ArchiveError(f"unexpected catalog archive entry: {normalized!r}")
+        elif len(parts) == 2 and not is_dir and parts[0] != "catalog":
             label = "skill" if parts[0] == "skills" else "trash"
             raise ArchiveError(f"{label} archive entry must be a directory: {normalized!r}")
+        elif parts[0] == "catalog" and len(parts) == 2 and not is_file:
+            raise ArchiveError(f"catalog archive entry must be a regular file: {normalized!r}")
     elif parts[0] == "templates" and len(parts) == 2 and parts[1].endswith(".md"):
         if not is_file:
             raise ArchiveError(f"template archive entry must be a regular file: {normalized!r}")
@@ -156,6 +160,9 @@ def validate_manifest(manifest: object) -> list[dict]:
     full_flag = manifest.get("full")
     if full_flag is not None and not isinstance(full_flag, bool):
         raise ArchiveError("invalid archive manifest: full must be a boolean")
+    catalog_flag = manifest.get("catalog")
+    if catalog_flag is not None and not isinstance(catalog_flag, bool):
+        raise ArchiveError("invalid archive manifest: catalog must be a boolean")
     for field in ("trash", "templates"):
         value = manifest.get(field)
         if value is None:
@@ -420,7 +427,7 @@ def restore_full_payload(
     rmtree = rmtree or shutil.rmtree
     copytree = copytree or shutil.copytree
     copyfile = copyfile or shutil.copyfile
-    restored: dict[str, list[str]] = {"trash": [], "templates": []}
+    restored: dict[str, list[str]] = {"trash": [], "templates": [], "catalog": []}
     skipped: list[str] = []
     installed: list[tuple[Path, Path | None]] = []
     staged: list[Path] = []

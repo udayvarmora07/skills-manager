@@ -1,6 +1,6 @@
 # Product, UX, and Delivery Plan — 2026-09-15
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest**: Implementation-ready planning companion to
 @docs/14-competitive-product-business-strategy-2026-09-15.md. It translates
@@ -527,7 +527,7 @@ Acceptance criteria:
 
 ### DEL-09 — Git/managed backup and multi-device synchronization alpha
 
-**[?]**
+**[NOTE]**
 
 Priority: validate before build. Labels: `ADR`, `SERVICE` for hosted storage;
 possibly `ASK-STORE`/`ASK-CLI`.
@@ -556,8 +556,10 @@ Alpha acceptance criteria:
 
 **[?]**
 
-Priority: design-partner gated. Labels: `ADR`, `SERVICE`, likely new service APIs;
-ADR-004 decisions are blocking.
+Priority: design-partner gated. Labels: `ADR`, `SERVICE`, likely new service APIs.
+ADR-004 §6 is resolved as HMAC/shared-secret integrity, file-only offline
+distribution, and content-only signed metadata; archive/team-governance
+implementation remains separate and unshipped.
 
 Pilot workflow:
 
@@ -634,7 +636,7 @@ Acceptance criteria:
 | P1 | DEL-07 provenance/updates | Adds recurring individual value and trust moat | Source-record ADR and safe staging design |
 | P1 | DEL-08 discovery | Improves acquisition only when trust controls exist | DEL-07 plus network/security decision |
 | P2 | DEL-09 multi-device sync | Candidate Pro value | Demand and conflict/security design |
-| P2 | DEL-10 team governance | Primary recurring-revenue thesis | Design partners plus ADR-004/service decisions |
+| P2 | DEL-10 team governance | Primary recurring-revenue thesis | Design partners plus a separate service/governance decision; ADR-004 §6 policy is resolved |
 | Parallel | DEL-11 positioning/distribution | Improves discovery and validates message | Stable logical-library language |
 
 ## Proposed 90-day release slices
@@ -704,8 +706,8 @@ workarounds, consequences, authority, budget, and an explicit next commitment.
 | DEC-02 | Runtime representation of consumers/projects/bindings | DEL-06 | ADR-002 amendment or new ADR; no persisted effective state by default |
 | DEC-03 | Source/provenance lock format and credential boundary | DEL-07/08 | ADR plus threat-model update and migration rules |
 | DEC-04 | Network registry authentication, cache, integrity, and availability | DEL-08 | ADR-003 amendment plus threat model |
-| DEC-05 | Git-only versus managed backup; encryption and conflict semantics | DEL-09 | Backup/sync ADR and service boundary |
-| DEC-06 | HMAC versus asymmetric signatures and bundle versus service distribution | DEL-10 | Maintainer answer to ADR-004 section 6 |
+| DEC-05 | Git-only versus managed backup; encryption and conflict semantics | DEL-09 | ADR-009 local Git/review/apply policy resolved 2026-09-20; hosted/encrypted backup remains separate |
+| DEC-06 | HMAC versus asymmetric signatures and bundle versus service distribution | DEL-10 | **Resolved 2026-09-20:** HMAC/shared-secret, file-only offline distribution, content-only signed metadata in ADR-004 §6 |
 | DEC-07 | Free/Pro/Team packaging and first price test | DEL-09/10/11 | Interview evidence and pricing experiment brief |
 | DEC-08 | Optional analytics scope and consent | All growth work | Data inventory, privacy model, opt-in UX, retention/deletion policy |
 | DEC-09 | Desktop/standalone distribution approach | DEL-11 | Packaging ADR if any locked constraint or runtime changes |

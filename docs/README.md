@@ -1,8 +1,8 @@
 # Docs Index — Skills Manager
 
-**Version 0.3.0**
+**Version 0.4.0**
 
-**AI manifest**: Entry point to the project docs. Every doc **in this tree** follows HADS: H1 title, version line, AI manifest, then `[SPEC]`/`[NOTE]`/`[?]` block markers on their own bold lines — and `check_docs.py` now enforces those three header facts for every `docs/*.md`, plus valid local links/anchors, table integrity, and the surface-parity checks below. Project files that live at the repository root (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, `TODO.md`, `PLAN.md`, the threat model, the security report) carry their own header conventions and are deliberately outside the HADS contract. The index was refreshed on 2026-09-15; flag stale facts in `06-progress-log.md`.
+**AI manifest**: Entry point to the project docs. Every doc **in this tree** follows HADS: H1 title, version line, AI manifest, then `[SPEC]`/`[NOTE]`/`[?]` block markers on their own bold lines — and `check_docs.py` now enforces those three header facts for every `docs/*.md`, plus valid local links/anchors, table integrity, and the surface-parity checks below. Project files that live at the repository root (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, `TODO.md`, `PLAN.md`, the threat model, the security report) carry their own header conventions and are deliberately outside the HADS contract. The index was refreshed on 2026-09-20; flag stale facts in `06-progress-log.md`.
 
 ## Document map
 
@@ -22,9 +22,16 @@
 | @docs/13-audit-remediation-status-2026-09-11.md | Per-finding disposition (`FIXED`/`PARTIAL`/`OPEN`) for every ID in `DEEP-AUDIT-2026-09-11.md`, plus the remaining-work grouping and provenance | Before starting or resuming any deep-audit remediation work |
 | @docs/14-competitive-product-business-strategy-2026-09-15.md | Dated competitor research, positioning, customer segments, monetization, GTM, metrics, and strategic decisions | Before changing product positioning, packaging, or business model |
 | @docs/15-product-ux-delivery-plan-2026-09-15.md | Target IA and UX, phased workstreams, acceptance criteria, experiments, dependencies, and approval gates | Before cutting a product/UX/business roadmap milestone |
+| @docs/16-product-baseline-2026-09-18.md | Synthetic DEL-01 fixtures, REST timing schema, and consent-safe measurement status | Before changing UI loading/grouping behavior |
+| @docs/17-adoption-and-distribution.md | DEL-11 positioning, migration, proof-story, release claims, and design-partner protocol | Before publishing product or adoption claims |
 | @docs/ADR-002-root-consumer-effective-state.md | Proposed root/consumer/instance/effective-state vocabulary and approval boundary | Any scope architecture or discovery-model change |
 | @docs/ADR-003-registry-bridge-and-eval-harness.md | Offline registry bridge + file-based eval harness: decisions, surfaces, deferred halves | Any registry, install-preview, or eval-harness change |
-| @docs/ADR-004-team-sharing-signed-bundles.md | Team sharing (signed bundles, draft → review → publish): trust model, format sketch, blocking decisions — design only | Any bundle-signing, team-distribution, or review-workflow change |
+| @docs/ADR-005-registry-network-and-provenance.md | Registry API browsing/fetching, cache/auth boundaries, snapshot integrity, and filesystem provenance | Any network registry or provenance change |
+| @docs/ADR-006-catalog-metadata-and-batch-plans.md | Filesystem-owned tags/profiles, full-archive metadata, and exact-target batch plans | Any catalog or multi-selection change |
+| @docs/ADR-007-adapter-catalog-and-project-workspaces.md | Read-only consumer adapters, precedence evidence, and contained project observations | Any workspace, adapter, or deployment-preview change |
+| @docs/ADR-008-source-lock-and-update-preview.md | Read-only source identity, whole-tree candidate comparison, and review gating | Any provenance, source-lock, or update-preview change |
+| @docs/ADR-009-backup-sync-dry-run-planner.md | Bounded manifests, dry-run deltas, three-way conflicts, and recovery evidence | Any backup, Git, or sync-planner change |
+| @docs/ADR-004-team-sharing-signed-bundles.md | Team sharing design plus offline HMAC manifest evidence; crypto/distribution/metadata policy resolved, archive workflow unimplemented | Any bundle-signing, team-distribution, or review-workflow change |
 | @docs/06-progress-log.md | Dated log of changes, decisions, bugs | Before/after any session; keep updated |
 | @docs/07-context-strategy.md | Hot/warm/cold loading model, compaction anchors | Long sessions, context management |
 | @docs/SESSION-CONTEXT.md | Fast re-anchor cache: current state, common tasks, gotchas | Start of any session (preferred over re-reading source) |

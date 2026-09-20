@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.6.0**
+**Version 0.7.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -26,6 +26,16 @@ store.py ──> filesystem (source of truth) + SQLite index
 - **Backend**: `skillsmgr/webapp.py`. Stdlib only. Serves the static frontend from `skillsmgr/webui/` and a REST API under `/api/`. Request security, JSON serialization/body parsing, and multipart folder-upload staging live in private `web_security.py`, `web_serialization.py`, and `web_upload.py` modules; `webapp.py` keeps the route and compatibility interfaces. Scope-aware endpoints delegate to the `scopes` layer (`skillsmgr/scopes.py`), which reads/writes agent skill dirs directly (no DB).
 - **Frontend**: `skillsmgr/webui/` — `index.html`, `styles.css`, `domain.js`, `app.js`, `static/vendor/vue.global.prod.js` (Vue 3.5.13, vendored so the app works offline). `domain.js` owns transport/formatting/frontmatter/escaped Markdown rendering behind a small browser-global seam; `app.js` owns Vue state and workflows. The split is plain script loading and keeps the no-build contract.
 - **No build step**: Vue global production build, plain CSS, plain JS. No npm, no bundler, no CDN at runtime.
+
+The Install modal also exposes the skills.sh registry through the existing
+`POST /api/install` route. Browse/search/curated and the first fetch request are
+read-only and cache-aware; fetch returns a bounded review id. A separate POST
+with that `review_id` and `trust_confirmed: true` revalidates and commits the
+single-use, expiring snapshot into the global Store without another network
+request. The backend delegates to `registry.py`, which validates the HTTPS
+endpoint, optional bearer token, response/snapshot bounds, cache state, private
+review artifact, and provenance sidecar before calling the existing Store
+`add()` path. Trust confirmation does not imply malware scanning or a signature.
 
 ## How to run
 
@@ -61,6 +71,12 @@ selected ephemeral port; its CDP endpoint is intentionally a local developer
 seam, not a network service.
 
 ## Scopes (tracking other agents' skills)
+
+The aggregate list adds `physical_root` and `physical_path` as derived
+observations. The default Library view groups same-name rows, collapses aliases
+to one resolved document, retains distinct physical instances, and marks
+unequal content as divergent; the explicit Instances view and selected-scope
+actions preserve physical targeting.
 
 **[SPEC]** The web UI tracks skills across agent scopes — the same scopes the CLI exposes (`--scope`). Scope ids: `global` (the manager's own store), `claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`, plus project-local scopes. `cursor` maps to `~/.cursor/skills`; `agents` maps to `~/.agents/skills`. Aggregate scope views deduplicate aliases by resolved physical path (first stable descriptor wins), while direct scope ids remain compatible. Rows whose on-disk directory name fails the canonical `NAME_RE` rule are still listed — the filesystem is the source of truth — but carry `addressable: false` and an `unaddressable` instance state, so the UI does not offer a row that would error the moment it is clicked (SCOPE-14). See @docs/ADR-002-root-consumer-effective-state.md and @docs/12-agent-root-discovery-2026-09-08.md.
 
@@ -135,6 +151,10 @@ mutate an outside directory.
 
 ### Skills
 
+The list response includes derived `physical_root` and `physical_path` values
+when the filesystem can resolve them; these are presentation observations, not
+new persistence or authority.
+
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/api/skills[?scope=SCOPE]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata |
@@ -162,7 +182,15 @@ mutate an outside directory.
 | POST | `/api/resync` | Store.resync |
 | GET | `/api/scopes` | `list_scopes()`: id/label/path/kind/writable/availability/recursive/supported/consumer/exists/count/tokens |
 | POST | `/api/sync` | body `{name, from_scope, to_scopes[], force}` → `{synced[], skipped[]}` |
-| POST | `/api/install` | body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` → built `skills add` command, or runs it when `run:true`; `{preview: true, trust_confirmed?, registry_hash?, description?}` adds the offline registry bridge plan under `registry` and makes `command` the recommended `skills add` mapping (no request, no execution). `trust_confirmed` records caller intent only: offline plans keep `trust_verified`, `hash_verified`, and `may_install` false, with eligibility unverified and supplied hashes marked unverified until authenticated comparison |
+| GET | `/api/catalog` | manager-owned tags and saved profiles from the filesystem sidecar |
+| POST | `/api/catalog/tags` | body `{names[], operation: add\|remove\|replace, tags[]}` → normalized catalog |
+| POST | `/api/catalog/profiles` | body `{name, description?, skills[], targets[]}` → normalized catalog |
+| GET | `/api/catalog/profiles/<name>/preview` | read-only profile membership states: observed, disabled, divergent, or missing |
+| DELETE | `/api/catalog/profiles/<name>` | removes only the saved profile metadata |
+| POST | `/api/batch/preview` | body `{operation, targets[], options?}` → exact target count, plan hash, and recovery/partial-failure policy |
+| POST | `/api/batch/execute` | body `{operation, targets[], options?, plan_id}` → per-target results; stale or widened plans are rejected |
+| GET | `/api/workspaces?project=DIR` | read-only adapter catalog plus contained project-root observation; outside paths are redacted |
+| POST | `/api/install` | Legacy body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` builds/runs `skills add`; `{preview: true, trust_confirmed?, registry_hash?, description?}` returns the offline bridge plan with no request/execution. Registry body uses one of `{browse: true, page?, per_page?, view?, allow_stale?}`, `{search: QUERY, limit?, owner?, allow_stale?}`, `{curated: true, allow_stale?}`, `{fetch: true, source: ID, registry_hash?, allow_stale?}` for a read-only review, or `{fetch: true, review_id: ID, trust_confirmed: true}` for a no-network commit. Browse/search/curated return bounded catalog data. Fetch is global-store-only, writes a private expiring review artifact after full validation/risk evidence, and only the separate reviewed commit writes credential-free `.skillsmgr-provenance.json` and calls `Store.add`. Cache state is returned under `_registry`; stale fallback is opt-in. |
 
 ### Trash
 
@@ -233,14 +261,31 @@ pins the contract). What a client must know:
 
 ## Frontend map (app.js)
 
-- **State**: `view` (skills|trash), `filter` (all|active|disabled), `query` (live search, 220ms debounce), `skills`, `trashSkills`, `selected`/`selectedName`, `theme` (light|dark, localStorage), `modals.*` (one object per dialog, including help), `toasts`/`liveAnnouncement`, focus lifecycle state, `scopes` (from `/api/scopes`), `activeScope` (persisted).
+The state also derives `logicalSkills`/`visibleSkills` through
+`groupLogicalSkills()` and persists `libraryMode` (`library` or `instances`) in
+local storage; the default is the logical Library. Initial scopes, skills, and
+trash reads run once in parallel; stats and token-budget data follows as a
+secondary request, so the list can paint without waiting for aggregate work.
+When the all-scopes library is empty, the detail pane shows a local-only
+getting-started checklist based on the detected scope roots and completed scan.
+Its create, archive-import, folder-add, and health-check actions call existing
+workflows; Skip hides it only in memory, and the empty state can restart it.
+
+- **State**: `view` (skills|trash|profiles|workspaces), `filter` (all|active|disabled), `tagFilter` (tag or `__untagged`), `query` (live search, 220ms debounce), `skills`, `trashSkills`, `catalog`, exact `selectedKeys`, `selected`/`selectedName`, `workspaces`, `profileForm`/`profilePreview`, `theme` (light|dark, localStorage), `modals.*` (one object per dialog, including batch/help), `toasts`/`liveAnnouncement`, focus lifecycle state, `scopes` (from `/api/scopes`), `activeScope` (persisted).
 - **Domain seam (`domain.js`)**: `api()` fetch wrapper, formatting/token helpers, raw frontmatter enrichment, and hand-rolled escaped Markdown rendering; all load before `app.js` without a bundler.
 - **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). The scope query string is built inline per call (`"?scope=" + encodeURIComponent(scope)`); the former `_scopeParam`/`_scopeQs` helpers were dead code and were removed (`BUG-15`).
-- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), `openInstall`/`runInstall` (build or run `skills add`), and escaped editor preview.
+- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), exact visible-set selection and tag changes, `prepareBatch`/`executeBatch` (preview-locked enable/disable/remove/sync), `saveProfile`/`previewProfile`/`deleteProfile`, `loadWorkspaces` (read-only adapter/project evidence), `openInstall`/`runInstall` (build/run `skills add` or browse/search/curate/fetch skills.sh), `runRegistry` (cache-aware reads and explicit provenance fetch), and escaped editor preview.
 - **Markdown**: block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
 - **Keyboard**: `/` focuses search; `?` opens shortcut help; `Esc` closes menus/modals; `Tab` is trapped within the active dialog and focus returns to its opener. Destructive dialogs focus the safer cancel action first. Dialog backgrounds expose `inert`/`aria-hidden` while open, with labelled dialogs and live status/error announcements.
 - **Preview and safety**: skill editors show an escaped live Markdown preview; sync dialogs show source/target resolution, skip-versus-overwrite behavior, and rollback expectations before commit.
-- **Responsive**: <900px stacks sidebar above detail; <640px compacts the topbar (no brand text, no stat pill, tighter padding). The dev-only `browser_harness.py` uses system Chrome DevTools Protocol with the browser sandbox enabled, an explicit loopback address, and trusted executable discovery to capture console/runtime/network failures across 320/400/640/900/desktop viewports.
+- **Responsive**: <900px stacks sidebar above detail; <640px presents Library
+  and detail as separate states, with an explicit Back action that returns focus
+  to the selected row. Secondary controls are behind a keyboard-accessible
+  disclosure; the topbar also drops brand text and the stat pill. The dev-only
+  `browser_harness.py` uses system Chrome DevTools Protocol with the browser
+  sandbox enabled, an explicit loopback address, and trusted executable
+  discovery to capture console/runtime/network failures across
+  320/400/640/900/desktop viewports.
 
 ## Design system (styles.css)
 

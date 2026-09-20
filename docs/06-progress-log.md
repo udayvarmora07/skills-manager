@@ -4,7 +4,279 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
-**Verification (current tree, 2026-09-16):** 728 unittest tests pass; Store/Web smoke tests, docs, complexity (222 functions), frontend syntax, package-data source hash, and diff checks pass. Package artifact coverage is unavailable locally because optional `python -m build` is not installed.
+**Verification (current tree, 2026-09-20):** 787 unittest tests pass; Store/Web
+  smoke tests, docs, complexity (238 functions), frontend syntax, compilation,
+  CLI help, five-viewport browser harness, vendored Vue source hash, and diff
+  checks pass. Optional package artifact coverage is `UNAVAILABLE` because
+  `python3 -m build` is not installed. Earlier counts in dated entries remain
+  historical.
+
+## 2026-09-20 — DEL-11 local screenshot evidence
+
+Extended the dev-only Chrome/CDP browser harness with an opt-in
+`--screenshots-dir` switch. The fresh current-build run wrote five local PNGs
+under `.specs/evidence/del-11-2026-09-20-run2/` for 320, 400, 640, 900, and
+1280 px viewports. All five probes reported the expected title, zero console,
+runtime, and network failures, and no horizontal overflow. The screenshots
+are dated local automated evidence, not external communication or participant
+evidence. Playwright was not installed; no runtime dependency was added.
+
+## 2026-09-20 — DEL-08 review/commit split
+
+Split the existing registry fetch path into a networked prepare/review
+transaction and a separate no-network commit transaction. The first CLI or
+`POST /api/install` fetch validates and risk-inspects the complete snapshot,
+then writes a private 0700/0600, 24-hour, credential-free review artifact
+without touching the managed Store. The second request supplies the review id
+and explicit trust confirmation, revalidates the snapshot, installs through
+the existing `Store.add()` seam, writes provenance, and marks the review
+single-use. Review artifacts reject credential-shaped inspection fields and
+preserve remote hash evidence across frontmatter normalization.
+
+No new command, Store method, SQLite schema, dependency, or network request is
+used during commit. Focused registry contract and CLI/REST integration tests
+pass; the final verification ladder is rerun after the remaining queued tasks.
+
+## 2026-09-20 — DEL-09 Git/review/apply integration
+
+Extended `skillsmgr.backup_sync` beyond pure planning with an explicit local
+Git seam. `git_remote_info()` and `git_fetch()` use a trusted Git executable,
+disable terminal prompting, and delegate authentication to existing Git
+credential helpers or SSH agents without accepting a token or writing a
+credential. Remote URLs containing credentials are rejected. The review seam
+stores bounded manifests, plan, target, candidate digest, and Git revision in
+owner-only 24-hour `sync-reviews` artifacts; apply rechecks the candidate,
+rejects unresolved conflicts, requires explicit approval and a snapshot root,
+and delegates atomic replacement/rollback evidence to `source_lock.py` before
+marking the review single-use.
+
+No CLI command, Store method, SQLite schema, or runtime dependency was added.
+Focused DEL-09 contracts now cover local Git fetch, credential redaction,
+private review permissions, revalidation, apply, snapshot, and replay refusal.
+
+## 2026-09-20 — DEL-10 ADR-004 policy resolution
+
+Resolved ADR-004 §6 without changing runtime behavior: team integrity uses the
+stdlib HMAC-SHA256 shared-secret model only; distribution is an offline file
+passed through existing approved channels; and signed metadata is content-only
+(member paths, digests, and format fields), excluding eval results, review
+notes, participant data, identity claims, approval labels, and telemetry. The
+honest guarantee remains group authenticity/integrity, not named-person
+identity or safety. The existing `bundles.py` evidence helper remains narrow;
+archive signing/import, key transport, approval state, and team governance are
+still unimplemented and require a separate implementation review.
+
+Updated ADR-004, the threat model, roadmap, session context, module/index
+references, task record, and this log. No command, Store method, schema,
+dependency, or product mutation was added.
+
+## 2026-09-20 — DEL-07 review/apply/rollback workflow
+
+Extended `skillsmgr.source_lock` from read-only evidence to an explicit,
+filesystem-owned transaction seam. Bounded `.skillsmgr-source-lock.json`
+sidecars are validated, atomically written with owner-only permissions, and
+excluded from whole-tree content hashes. `review_local_update()` returns a
+review id over the candidate/current hashes, diff, source identity, and exact
+physical target without mutation. `commit_local_update()` requires that fresh
+review, explicit target containment, `approve=True`, and an explicit snapshot
+root; it rechecks under the existing cross-process mutation lock, snapshots the
+complete current tree, atomically swaps the staged candidate, and reports a
+rollback path. `restore_source_snapshot()` requires a separate explicit
+approval.
+
+No CLI command, Store method, SQLite schema, network request, dependency, or
+REST route was added. The focused source-lock contracts now cover sidecar
+drift, stale review rejection, snapshot/apply, and rollback.
+
+Focused verification: `tests/test_source_lock_contracts.py` — 10 tests pass;
+compile and `git diff --check` pass. The full ladder is rerun at the end of the
+serial task sequence.
+
+## 2026-09-19 — DEL-09 backup/sync dry-run planner
+
+Added `skillsmgr.backup_sync`, a pure stdlib planner for bounded canonical
+manifests, exact local/remote deltas, three-way conflict decisions, and
+retryable interrupted-sync evidence. Source labels and member paths reject
+credentials, traversal, and unsafe forms; default conflicts remain review
+only; remote deletion requires explicit recovery. The module does not invoke
+Git, contact a remote, read credentials, write files, mutate SQLite/Store, or
+add a CLI surface. ADR-009, module/architecture/index docs, task tracking, and
+hermetic contracts were added.
+
+Focused verification: `tests/test_backup_sync_contracts.py` — 5 tests pass.
+Git/remote/auth/apply integration remains deferred pending explicit decisions.
+
+## 2026-09-19 — DEL-10 offline team-integrity foundation
+
+Added `skillsmgr.bundles`, a pure stdlib helper for bounded deterministic
+version-1 member manifests, SHA-256 manifest identity, and detached
+HMAC-SHA256 evidence. Verification distinguishes valid, wrong-key, tampered,
+revoked, and malformed-signature states while stating the only guarantee is
+shared-secret group integrity. No key is read from the environment or stored;
+there is no archive, import/export integration, distribution, approval state,
+CLI/REST/Store/SQLite change, or mutation. The docs-symbol gate also received a
+hyphenated filename boundary guard exposed by the new `bundles.py` module.
+ADR-004 now records this narrow
+foundation while keeping its crypto, distribution, and metadata decisions
+open.
+
+The warm session-context cache was refreshed to the 781-test current tree and
+now inventories the source-lock, backup/sync, bundle-evidence, and network
+registry seams.
+
+Focused verification: `tests/test_bundle_contracts.py` — 4 tests pass.
+
+## 2026-09-19 — DEL-07 read-only source locks and update preview
+
+Added `skillsmgr.source_lock`, a pure stdlib evidence seam for bounded local,
+Git, archive, and registry source identities and complete candidate-tree
+manifests. Previews compare every regular file, retain hashes/sizes and text
+diff evidence, distinguish additions/removals, explain CRLF/LF-only changes,
+and fail closed on missing, inaccessible, symlinked, traversal, oversized, or
+overlarge sources. Candidate validation runs before readiness; `risk_scan()`
+findings stay explicitly advisory/heuristic. Every result carries an explicit
+physical target and is permanently non-committing, with no snapshot,
+provenance, cache, SQLite, CLI, Store, network, or REST mutation.
+
+Focused verification: `tests/test_source_lock_contracts.py` — 7 tests pass.
+The live source-lock persistence and update/commit workflow remains approval-
+gated and is not represented as shipped.
+
+## 2026-09-19 — DEL-08 trust-first registry install evidence
+
+The existing skills.sh fetch path now materializes its bounded snapshot in a
+private temporary directory, runs full skill validation, and collects advisory
+heuristic `risk_scan()` findings before the first managed-store mutation.
+Validation errors fail closed; warnings and risk findings are returned as
+evidence under the existing CLI/REST fetch result `inspection` block. Explicit
+trust confirmation, global-only fetch, auth-isolated cache, hash verification,
+atomic materialization, and credential-free provenance remain unchanged.
+
+Focused verification: registry bridge/core/integration contracts — 47 tests
+pass. A separate staged-review/commit transaction remains approval-gated.
+
+## 2026-09-19 — DEL-11 positioning, distribution, and adoption brief
+
+Added `docs/17-adoption-and-distribution.md` with the control-plane headline,
+manual-root migration path, four-scene proof story, current install/loopback
+claims, and a consent-safe design-partner protocol. It explicitly separates
+verified repository evidence from future screenshots, human sessions, adoption
+metrics, hosted sync, and team-governance claims. README and ROADMAP now point
+to the brief; no product runtime, packaging, telemetry, dependency, command,
+Store method, schema, bind, or network behavior changed.
+
+## 2026-09-18 — DEL-06 workspaces, projects, and adapter catalog
+
+Added the read-only `skillsmgr.adapters` catalog derived from the existing
+consumer/root evidence. Adapter records expose candidate roots, tiered
+precedence evidence, verified versus experimental status, explicit
+`unknown-precedence`, reload guidance, platform notes, and verification date.
+The new `/api/workspaces` surface observes an optional project only inside the
+server's managed roots, redacts outside paths, and reports unavailable or
+missing projects without walking them. The UI renders this as workspace
+evidence; it does not create bindings, delete projects, or invent effective
+state. Focused adapter/containment contracts and the five-viewport browser
+harness pass.
+
+## 2026-09-18 — DEL-05 tags, profiles, and previewable batch plans
+
+Added filesystem-owned catalog metadata at `catalog/metadata.json` for bounded
+tags and saved profiles. Full archives preserve and validate the catalog;
+rebuild/resync and templates remain independent. The web UI now filters tagged
+and untagged skills, selects the exact visible physical instances, previews and
+executes enable/disable/soft-remove/sync batches with stale-plan rejection and
+partial-failure reports, and previews profile members as observed, disabled,
+divergent, or missing. No CLI command, Store method, SQLite schema, runtime
+dependency, or purge batch was added. Focused catalog/web contracts, both
+smokes, frontend syntax, and the browser harness pass. The final current-tree
+ladder then passed 764 unittest tests, both smokes, compilation, docs,
+complexity, package-source integrity, CLI help, diff checks, frontend syntax,
+and all five browser-harness viewports. Optional artifact coverage remains
+unavailable because `python3 -m build` is not installed.
+
+## 2026-09-18 — DEL-00 current-tree delivery checkpoint
+
+The pre-existing registry network/provenance changes were inventoried and kept
+separate from the product UX delivery work. A recoverable non-destructive
+checkpoint of the dirty diff and untracked files was created before UI work;
+no staging, commit, reset, stash, or branch mutation was performed.
+
+The current tree passed 750 unittest tests, `smoke_store.py`, `smoke_web.py`,
+Python compilation, both frontend syntax checks, `check_docs.py`,
+`check_complexity.py` at 226 functions, CLI help, `git diff --check`, and the
+vendored Vue source-hash check. The optional artifact build remains unavailable
+because `python3 -m build` is not installed. `browser_harness.py` passed at
+320/400/640/900/1280 px with no browser errors or overflow. Its client-abort
+probe still caused the server to log a raw `BrokenPipeError`; this is carried
+into DEL-03 as a required clean-disconnect fix.
+
+## 2026-09-18 — DEL-01 product baseline and research harness
+
+Added `baseline_harness.py`, a stdlib-only disposable fixture/probe for empty,
+small, divergent, malformed, and 2,000-instance libraries. It records the
+startup-critical `/api/scopes`, `/api/skills?scope=all`, `/api/stats`, and
+`/api/doctor?scope=all` timings and response shapes in a stable JSON schema,
+with no telemetry or user-content access. Five focused contracts cover the
+fixture plan. The existing browser harness remains the viewport procedure.
+Five human usability sessions are explicitly left unclaimed because they need
+consented participants; the baseline records the protocol rather than inventing
+results.
+
+## 2026-09-18 — DEL-02 logical Library and navigation foundation
+
+Scope list observations now carry resolved `physical_root` and `physical_path`
+values for derived presentation only. The Vue domain seam groups rows by
+canonical name, collapses aliases to one resolved document, preserves each
+distinct physical instance, and flags divergent content hashes. The default UI
+is now a logical Library with a deliberate Instances toggle; the detail pane
+lists observed copies and every existing action still receives an explicit
+scope/name/path-backed instance. No Store method, SQLite schema, CLI contract,
+or filesystem authority changed. Focused frontend/scopes contracts, both smoke
+suites, frontend syntax, and `check_docs.py` pass.
+
+## 2026-09-18 — DEL-04 first-run onboarding
+
+The empty all-scopes Library now presents a local-only getting-started
+checklist: detected consumer roots, completed scan, and the next safe action.
+Create, archive import, folder add, and doctor actions reuse existing
+workflows. Skip and restart are in-memory UI state, so onboarding never adds a
+persistence contract or blocks direct expert access. Focused frontend coverage
+pins the copy and escape routes. The final current-tree ladder then passed 760
+unittest tests, both smoke suites, compile, docs, complexity, package-source
+integrity, CLI help, diff checks, frontend syntax, and all five browser-harness
+viewports; optional artifact coverage remains unavailable without `python3 -m
+build`.
+
+## 2026-09-18 — DEL-03 responsive shell and progressive startup
+
+Startup now fetches scopes, skills, and trash exactly once in parallel, then
+loads secondary stats and token budget data. On narrow screens the Library and
+detail pane become separate states: selecting a row opens the detail screen,
+Back returns focus to the originating row, and secondary filters sit behind an
+explicit disclosure. Response writes catch expected client disconnects so a
+browser abort does not produce a raw `BrokenPipeError` traceback. Focused UI and
+handler contracts were added; the web/module docs describe the state flow.
+
+## 2026-09-16 — Registry network browsing, fetching, and provenance
+
+The network half of registry issue #3 is implemented behind the existing
+`install` CLI and `POST /api/install` surfaces. The new stdlib-only
+`skillsmgr.registry` client supports bounded skills.sh browse/search/curated
+reads, explicit global fetch, optional bearer authentication, private
+auth-isolated caching, opt-in stale fallback, redirect/response limits, and
+clean errors. Fetched snapshots are checked with the upstream-compatible
+registry hash plus a framed local integrity hash, then materialized atomically
+with traversal/symlink/resource-limit defenses.
+
+Successful fetches write a credential-free `.skillsmgr-provenance.json`
+sidecar containing source, URLs, hashes, cache state, fetch time, and a
+per-file manifest. `loader.py` validates and reconciles the sidecar so malformed
+or changed files are surfaced as malformed observations. Fetch requires
+explicit `--trust-confirmed`, remains global-store-only, and does not claim
+malware scanning or signature verification. No CLI command, Store method,
+SQLite schema, runtime dependency, or bind changed. Decisions are recorded in
+@docs/ADR-005-registry-network-and-provenance.md; the offline preview remains
+the historical contract in ADR-003.
 
 ## 2026-09-16 — Worktree comparison and frontend report close-out
 
