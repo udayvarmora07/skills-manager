@@ -4,6 +4,23 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-22 — UI regional formatting coverage audit
+
+**[NOTE]** Continued the screenshot-led UI/UX refinement with a complete
+numeric-surface audit after the regional-format foundation. Secondary Profile,
+Doctor, Stats, context-budget percentage, and token-share values now use the
+same locale-aware formatter as the primary workspace counts, sizes, and dates.
+Settings context copy names regional formats explicitly, and the status bar
+keeps the active locale visible after the user leaves Settings. The interface
+copy and `lang="en"` boundary remain unchanged; this is regional formatting,
+not translation. No backend/API/Store/schema/CLI/dependency/build behavior
+changed.
+
+**Verification (2026-09-22):** 836 unittest tests, JavaScript syntax,
+regional-format source contracts, documentation consistency, complexity, diff
+checks, and the six-viewport browser harness pass with no runtime errors,
+failed requests, or horizontal overflow.
+
 ## 2026-09-22 — UI regional formatting foundation
 
 **[NOTE]** Continued the screenshot-led UI/UX refinement with a bounded
