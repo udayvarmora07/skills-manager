@@ -154,7 +154,7 @@
             <option value="gemini">Gemini 1M</option>
             <option value="gemini-2m">Gemini 2M</option>
           </select>
-          <span class="budgetbar-meta">{{ formatTokens(budget.all_tokens) }} / {{ formatTokens(budget.window_tokens) }} · {{ budget.all_pct_window }}%</span>
+          <span class="budgetbar-meta">{{ formatTokens(budget.all_tokens) }} / {{ formatTokens(budget.window_tokens) }} · {{ formatNumber(budget.all_pct_window) }}%</span>
           <span v-if="!budget.has_tiktoken" class="hint" title="Install tiktoken for exact BPE counts; fallback is chars/4 heuristic (avg 27.8% error)">heuristic</span>
           <span v-else class="hint">tiktoken</span>
         </div>
@@ -321,7 +321,7 @@
 
       <div v-else-if="view === 'settings'" class="sidepanel" aria-label="Settings">
         <div class="sidepanel-intro"><strong>Settings</strong><span class="hint">Local preferences</span></div>
-        <div class="settings-side-note">Theme and text size are stored only in this browser. Operating-system settings remain unchanged.</div>
+        <div class="settings-side-note">Theme, text size, and regional formats are stored only in this browser. Operating-system settings remain unchanged.</div>
       </div>
 
       <div v-else-if="view === 'trash'" class="skilllist" aria-label="Trash">
@@ -507,7 +507,7 @@
             </div>
             <div>
               <dt>Tokens</dt>
-              <dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'heuristic' }})</span> · {{ selected.tokens_pct }}% of {{ (selected.window || 'claude') }}</dd>
+              <dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'heuristic' }})</span> · {{ selected.tokens_pct != null ? formatNumber(selected.tokens_pct) + '%' : 'not observed' }} of {{ (selected.window || 'claude') }}</dd>
             </div>
             <div>
               <dt>Chars / Lines</dt>
@@ -605,7 +605,7 @@
           </section>
           <section class="quality-section" aria-labelledby="quality-size-title">
             <div class="section-label-row"><h2 id="quality-size-title">Content and context estimate</h2><span class="hint">observed estimate</span></div>
-            <dl class="meta compact-meta"><div><dt>Tokens</dt><dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'method unavailable' }})</span></dd></div><div><dt>Window share</dt><dd>{{ selected.tokens_pct != null ? selected.tokens_pct + '%' : 'not observed' }} of {{ selected.window || 'configured window' }}</dd></div><div><dt>Document size</dt><dd>{{ selected.chars != null ? formatNumber(selected.chars) + ' chars' : 'not observed' }} · {{ selected.lines != null ? formatNumber(selected.lines) + ' lines' : 'line count unavailable' }}</dd></div><div><dt>Body / frontmatter</dt><dd>{{ selected.body_tokens != null ? formatTokens(selected.body_tokens) : 'not observed' }} / {{ selected.frontmatter_tokens != null ? formatTokens(selected.frontmatter_tokens) : 'not observed' }}</dd></div></dl>
+            <dl class="meta compact-meta"><div><dt>Tokens</dt><dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'method unavailable' }})</span></dd></div><div><dt>Window share</dt><dd>{{ selected.tokens_pct != null ? formatNumber(selected.tokens_pct) + '%' : 'not observed' }} of {{ selected.window || 'configured window' }}</dd></div><div><dt>Document size</dt><dd>{{ selected.chars != null ? formatNumber(selected.chars) + ' chars' : 'not observed' }} · {{ selected.lines != null ? formatNumber(selected.lines) + ' lines' : 'line count unavailable' }}</dd></div><div><dt>Body / frontmatter</dt><dd>{{ selected.body_tokens != null ? formatTokens(selected.body_tokens) : 'not observed' }} / {{ selected.frontmatter_tokens != null ? formatTokens(selected.frontmatter_tokens) : 'not observed' }}</dd></div></dl>
           </section>
           <section class="quality-section" aria-labelledby="quality-unavailable-title">
             <div class="section-label-row"><h2 id="quality-unavailable-title">Signals not observed</h2><span class="badge badge-warn">unavailable</span></div>
@@ -644,7 +644,7 @@
         </section>
         <section v-if="profilePreview" class="profile-preview" aria-live="polite">
           <div class="section-label-row"><h2>{{ profilePreview.name }}</h2><span class="hint">read-only desired vs observed</span></div>
-          <dl class="meta profile-summary"><div><dt>Observed</dt><dd>{{ (profilePreview.summary || {}).observed || 0 }}</dd></div><div><dt>Disabled</dt><dd>{{ (profilePreview.summary || {}).disabled || 0 }}</dd></div><div><dt>Divergent</dt><dd>{{ (profilePreview.summary || {}).divergent || 0 }}</dd></div><div><dt>Missing</dt><dd>{{ (profilePreview.summary || {}).missing || 0 }}</dd></div></dl>
+          <dl class="meta profile-summary"><div><dt>Observed</dt><dd>{{ formatNumber((profilePreview.summary || {}).observed || 0) }}</dd></div><div><dt>Disabled</dt><dd>{{ formatNumber((profilePreview.summary || {}).disabled || 0) }}</dd></div><div><dt>Divergent</dt><dd>{{ formatNumber((profilePreview.summary || {}).divergent || 0) }}</dd></div><div><dt>Missing</dt><dd>{{ formatNumber((profilePreview.summary || {}).missing || 0) }}</dd></div></dl>
           <p class="hint">Targets: {{ (profilePreview.targets || []).length ? (profilePreview.targets || []).join(', ') : 'all observed scopes' }} · {{ formatNumber(profileObservedCount) }} observed physical instance{{ profileObservedCount === 1 ? '' : 's' }} in this preview.</p>
           <ul class="profile-members">
             <li v-for="member in profilePreview.members" :key="member.name"><strong>{{ member.name }}</strong><span class="tag" :class="member.state === 'missing' || member.state === 'divergent' ? 'tag-warn' : ''">{{ member.state }}</span><small>{{ formatNumber(member.instances.length) }} observed instance{{ member.instances.length === 1 ? '' : 's' }}</small><code v-for="instance in member.instances" :key="instance.scope + '/' + instance.path">{{ instance.scope }} · {{ instance.path }}</code></li>
@@ -793,11 +793,11 @@
     <span v-if="view === 'overview'">Overview · {{ formatNumber(overviewLogicalCount) }} logical skills · {{ formatNumber(overviewAttentionCount) }} attention item{{ overviewAttentionCount === 1 ? '' : 's' }}</span>
     <span v-else-if="view === 'skills'">{{ formatNumber(activeScope === 'all' ? allScopesCount : totalCount) }} total · {{ formatNumber(activeCount) }} active · {{ formatNumber(disabledCount) }} disabled<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
     <span v-else-if="view === 'trash'">{{ formatNumber(trashCount) }} trashed</span>
-    <span v-else-if="view === 'profiles'">{{ Object.keys(catalog.profiles || {}).length }} profiles</span>
+    <span v-else-if="view === 'profiles'">{{ formatNumber(Object.keys(catalog.profiles || {}).length) }} profiles</span>
     <span v-else-if="view === 'install'">{{ formatNumber(registryInventoryCount) }} registry-backed skills observed</span>
     <span v-else-if="view === 'recovery'">{{ formatNumber(trashCount) }} global trash items</span>
     <span v-else-if="view === 'quality'">Quality · {{ formatNumber(qualitySummary.observed) }} observed copies · no combined score</span>
-    <span v-else-if="view === 'settings'">Settings · {{ themeModeLabel }} theme · {{ textSize }} text</span>
+    <span v-else-if="view === 'settings'">Settings · {{ themeModeLabel }} theme · {{ textSize }} text · {{ resolvedLocale }} formats</span>
     <span v-else>{{ formatNumber(workspaces && workspaces.adapters.length || 0) }} adapters</span>
     <span class="spacer"></span>
     <span class="path">{{ dataDir }}</span>
@@ -983,12 +983,12 @@
           </div>
           <dl class="kv">
             <dt>Database integrity</dt><dd>{{ modals.doctor.report.db_integrity }}</dd>
-            <dt>Skills on disk</dt><dd>{{ modals.doctor.report.skills_on_disk }}</dd>
-            <dt>Database rows</dt><dd>{{ modals.doctor.report.db_rows }}</dd>
+            <dt>Skills on disk</dt><dd>{{ formatNumber(modals.doctor.report.skills_on_disk) }}</dd>
+            <dt>Database rows</dt><dd>{{ formatNumber(modals.doctor.report.db_rows) }}</dd>
             <dt>Orphan dirs</dt><dd>{{ (modals.doctor.report.orphan_dirs || []).join(', ') || '—' }}</dd>
             <dt>Stale rows</dt><dd>{{ (modals.doctor.report.stale_rows || []).join(', ') || '—' }}</dd>
-            <dt>Trash count</dt><dd>{{ modals.doctor.report.trash_count }}</dd>
-            <dt>Templates count</dt><dd>{{ modals.doctor.report.templates_count }}</dd>
+            <dt>Trash count</dt><dd>{{ formatNumber(modals.doctor.report.trash_count) }}</dd>
+            <dt>Templates count</dt><dd>{{ formatNumber(modals.doctor.report.templates_count) }}</dd>
           </dl>
           <div v-if="modals.doctor.report.duplicates && modals.doctor.report.duplicates.length" style="margin-top:16px;">
             <h3 style="margin:0 0 8px;">Same name in multiple scopes ({{ formatNumber(modals.doctor.report.duplicates.length) }})</h3>
@@ -1017,10 +1017,10 @@
         <div v-if="modals.stats.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else-if="modals.stats.report">
           <div class="stat-grid" style="margin-bottom:16px;">
-            <div class="stat-card"><div class="stat-value">{{ modals.stats.report.total }}</div><div class="stat-label">Total skills</div></div>
-            <div class="stat-card"><div class="stat-value">{{ modals.stats.report.active }}</div><div class="stat-label">Active</div></div>
-            <div class="stat-card"><div class="stat-value">{{ modals.stats.report.disabled }}</div><div class="stat-label">Disabled</div></div>
-            <div class="stat-card"><div class="stat-value">{{ modals.stats.report.trashed }}</div><div class="stat-label">Trashed</div></div>
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.total) }}</div><div class="stat-label">Total skills</div></div>
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.active) }}</div><div class="stat-label">Active</div></div>
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.disabled) }}</div><div class="stat-label">Disabled</div></div>
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.trashed) }}</div><div class="stat-label">Trashed</div></div>
             <div class="stat-card"><div class="stat-value">{{ formatBytes(modals.stats.report.size_bytes) }}</div><div class="stat-label">Skills on disk</div></div>
             <div class="stat-card"><div class="stat-value">{{ formatBytes(modals.stats.report.db_bytes) }}</div><div class="stat-label">Database</div></div>
           </div>
