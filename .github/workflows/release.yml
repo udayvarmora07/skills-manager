@@ -171,7 +171,7 @@ jobs:
           name: dist
           path: dist
       - name: Create GitHub Release with the exact artifacts
-        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3 — 2026-09-09 reviewed
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v2.3.3 — 2026-09-09 reviewed
         with:
           files: dist/*
       - name: Verify tag, package version, web assets, and hermetic CRUD
