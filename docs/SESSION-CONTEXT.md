@@ -2,8 +2,8 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
-**Version 1.8.1** (2026-09-22: UI semantic accessibility audit after the
-navigation hierarchy polish; 834 tests, 238 complexity-tracked functions. The current tree has a filesystem-
+**Version 1.8.2** (2026-09-22: UI regional formatting foundation after the
+semantic accessibility audit; 835 tests, 238 complexity-tracked functions. The current tree has a filesystem-
 owned source-lock sidecar and explicit review/apply/rollback seam, plus bounded
 backup/sync Git review/apply and offline HMAC manifest-evidence seams; team
 distribution and participant evidence remain gated as documented below.)
@@ -50,8 +50,8 @@ advisory eval harness, both shipped by extending existing surfaces only — see
   - `doctor()` returns `ok`/`db_integrity` etc. (no `trash_mismatch`/`db_rebuilt` keys).
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
-  - Frontend: `skillsmgr/webui/` (`preferences.js` bootstraps local theme/text-size before `styles.css`; `domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`).
-- **Tests**: stdlib `unittest` regression/contract suite — 834 tests green 2026-09-22 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (238 functions, budget ≤ 15), and `python3 check_package_data.py` (always asserts the vendored Vue sha256, then reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
+  - Frontend: `skillsmgr/webui/` (`preferences.js` bootstraps local theme/text-size before `styles.css`; `domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`); Settings persists the regional format preference in `skillsmgr-locale`.
+- **Tests**: stdlib `unittest` regression/contract suite — 835 tests green 2026-09-22 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (238 functions, budget ≤ 15), and `python3 check_package_data.py` (always asserts the vendored Vue sha256, then reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
 - **Client contract (2026-09-11, #8)**: the REST API is the surface for local non-browser
   clients (editor extensions, scripts). Address it at `127.0.0.1` — `Host: localhost:<port>`
   is rejected on **every** request under the default bind, reads included (issue #14 F-2) —

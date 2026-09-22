@@ -4,6 +4,27 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-22 — UI regional formatting foundation
+
+**[NOTE]** Continued the screenshot-led UI/UX refinement with a bounded
+internationalization foundation. Settings now persists a regional format choice
+(`system`, `en-US`, `en-GB`, or `en-IN`) and previews the resulting number/date
+conventions. Counts, file sizes, document metadata, trash/history timestamps,
+and modal summaries share locale-aware `Intl` wrappers, so the preference is
+visible across the workspace instead of being a decorative setting.
+
+The boundary remains explicit: interface copy is still English and the document
+keeps `lang="en"` until translated resources exist. The responsive native select
+and preview retain the existing 44px/focus treatment. No backend/API/Store/
+schema/CLI/dependency/build behavior changed.
+
+**Verification (2026-09-22):** 835 unittest tests, JavaScript syntax, locale
+source/behavior contracts, documentation consistency, complexity, diff checks,
+and the six-viewport browser harness pass with no runtime errors, failed
+requests, or horizontal overflow. The existing Lighthouse snapshot remains at
+100 Accessibility, Best Practices, SEO, and Agentic Browsing with zero failed
+audits.
+
 ## 2026-09-22 — UI semantic accessibility audit pass
 
 **[NOTE]** Continued the live UI/UX review with a Lighthouse/axe audit against

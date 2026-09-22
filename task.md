@@ -1,6 +1,6 @@
 # Task Checklist — Skills Manager
 
-**Version 0.8.2**
+**Version 0.8.3**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
@@ -227,6 +227,20 @@
   Practices, 100 SEO, and 100 Agentic Browsing with zero failed audits; the
   six-viewport browser harness remains green.
 
+## UI regional formatting foundation — 2026-09-22
+
+- [x] Added a persisted Settings preference for system, United States, United
+  Kingdom, and India regional number/date formats, with an inline preview.
+- [x] Routed counts, file sizes, document metadata, trash/history timestamps,
+  and modal summaries through locale-aware `Intl` wrappers; removed direct
+  `toLocaleString()` template calls so one preference controls the surface.
+- [x] Kept the accessibility language truthful: the document remains `lang="en"`
+  until translated resources exist, and Settings explicitly says regional
+  formats do not translate interface copy.
+- [x] Added responsive select/preview styling and Node/source contracts. No
+  backend/API/Store/schema/CLI/dependency/build behavior changed.
+- [x] Verification for this pass is recorded in `docs/06-progress-log.md`.
+
 ## Documentation milestone — 2026-09-20 comparison refresh
 
 - [x] Reconciled the competitive snapshot to upstream commit
@@ -243,7 +257,7 @@
 
 - **DEL-00: DONE (2026-09-18).** The pre-existing registry network/provenance
   batch is identified and kept separate from the product UX work. The current
-  tree passes 834 unittest tests, both smoke suites, compile, docs, complexity,
+  tree passes 835 unittest tests, both smoke suites, compile, docs, complexity,
   CLI help, package-data source integrity, frontend syntax, diff checks, and
   the six-viewport browser harness with menu keyboard checks. A non-failing browser client-disconnect
   traceback is recorded for DEL-03. Recovery artefacts are recorded in
@@ -373,7 +387,7 @@
   automated runs.
 
 - **Current-tree verification: DONE (2026-09-22).** The final ladder passes:
-  831 unittest tests, both Store/Web smoke suites, JavaScript syntax, Python
+  835 unittest tests, both Store/Web smoke suites, JavaScript syntax, Python
   compilation, complexity at 238 functions, documentation/source consistency,
   vendored Vue integrity, CLI help, all six browser-harness viewports with
   menu keyboard checks, and `git diff --check`. The pinned temporary build

@@ -689,6 +689,7 @@ labels describe the likely boundary; none is shipped by this document.
 | Shipped | Recovery center | Review backups, trash, snapshots, and restore choices together | Existing backup/trash/history/source-lock seams; frontend-only | A recovery fixture can restore or explain every listed artifact without a new truth source |
 | Shipped | Settings and accessibility | Change text size and system-theme behavior predictably | Frontend-only preferences; `DERIVED` | Text-size modes and theme preference remain usable at all harness widths |
 | Shipped | Command palette | Reach existing actions without hunting through menus | Frontend-only action index; `DERIVED` | Keyboard search exposes only available, permission-safe actions |
+| Shipped | Regional formatting foundation | Read counts, sizes, and timestamps in a familiar regional convention | Frontend-only `Intl` formatting preference; `DERIVED` | Settings persists system/en-US/en-GB/en-IN formats, keeps English copy explicit, and remains usable at all harness widths |
 | Later | Internationalization | Use the core workflows in additional locales | Frontend-only resource layer after IA stabilizes; `DERIVED` initially | English remains complete and locale expansion has no clipped labels |
 | Evidence-gated | Optional packaged desktop experiment | Evaluate installer/tray/keychain/updater value | DEC-09; `ASK-CONSTRAINT`/`ADR` if packaging changes locked runtime assumptions | Design-partner evidence justifies a bounded Tauri/sidecar spike before any packaging rewrite |
 
