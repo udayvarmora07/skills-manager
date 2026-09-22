@@ -46,16 +46,109 @@ function tokenBarWidth(pct) {
   return Math.max(2, Math.min(100, pct)).toFixed(1) + "%";
 }
 
+/* The API gives us observations, not a resolver. Keep the vocabulary here so
+ * the Library can name the consumer/workspace and the state it actually saw
+ * without implying precedence, deployment, or a desired state. */
+const OBSERVED_STATE_LABELS = Object.freeze({
+  active: "Active",
+  disabled: "Disabled",
+  malformed: "Malformed",
+  unaddressable: "Unaddressable",
+  divergent: "Divergent",
+});
+
+function stateKeysFor(record) {
+  const states = Array.isArray(record && (record.instance_states || record.states))
+    ? (record.instance_states || record.states) : [];
+  const out = [];
+  if (record && (record.malformed || record.decode_error)
+      || states.some((state) => ["invalid", "malformed"].includes(String(state).toLowerCase()))) {
+    out.push("malformed");
+  }
+  if (record && record.addressable === false
+      || states.some((state) => String(state).toLowerCase() === "unaddressable")) {
+    out.push("unaddressable");
+  }
+  if (record && record.disabled || states.some((state) => String(state).toLowerCase() === "disabled")) {
+    out.push("disabled");
+  }
+  if (!out.length) out.push("active");
+  return out;
+}
+
+function scopeDescriptorFor(record, scopes) {
+  const scopeId = String((record && record.scope) || "");
+  return (Array.isArray(scopes) ? scopes : []).find((scope) => String(scope && scope.id || "") === scopeId) || null;
+}
+
+function observedIdentity(record, scopes, options = {}) {
+  const descriptor = scopeDescriptorFor(record, scopes);
+  const scopeId = String((record && record.scope) || (descriptor && descriptor.id) || "");
+  const scopeLabel = String((record && record.scope_label) || (descriptor && descriptor.label) || scopeId || "Unknown scope");
+  const kind = String((record && record.kind) || (descriptor && descriptor.kind) || "unknown");
+  const consumer = String((record && record.consumer) || (descriptor && descriptor.consumer) || "").trim();
+  const consumerLabel = consumer || "Unknown consumer";
+  const kindLabel = kind === "project" ? "workspace" : kind === "agent" ? "agent" : kind === "global" ? "" : kind;
+  const identityLabel = !kindLabel || kindLabel === "unknown"
+    ? scopeLabel
+    : `${scopeLabel} ${kindLabel}`;
+  const baseStates = stateKeysFor(record || {});
+  if (options.divergent && !baseStates.includes("divergent")) baseStates.push("divergent");
+  const stateLabels = baseStates.map((state) => OBSERVED_STATE_LABELS[state] || state);
+  return {
+    key: [scopeId || scopeLabel, consumerLabel, kind, baseStates.join(",")].join("|"),
+    scope: scopeId,
+    scopeLabel,
+    kind,
+    kindLabel,
+    consumer: consumer || null,
+    consumerLabel,
+    identityLabel,
+    label: `${identityLabel} · consumer: ${consumerLabel}`,
+    stateKeys: baseStates,
+    stateLabels,
+    stateLabel: stateLabels.join(" · "),
+    problem: baseStates.some((state) => state !== "active"),
+  };
+}
+
+function deriveLogicalSkillIdentity(records, scopes, options = {}) {
+  const source = Array.isArray(records) ? records.filter(Boolean) : [];
+  const divergent = !!options.divergent;
+  const byKey = new Map();
+  for (const record of source) {
+    const identity = observedIdentity(record, scopes, { divergent });
+    const prior = byKey.get(identity.key);
+    if (prior) {
+      prior.count += 1;
+      continue;
+    }
+    byKey.set(identity.key, { ...identity, count: 1 });
+  }
+  const identities = [...byKey.values()].sort((a, b) =>
+    a.label.localeCompare(b.label) || a.stateLabel.localeCompare(b.stateLabel)
+  );
+  const stateKeys = [...new Set(identities.flatMap((item) => item.stateKeys))];
+  return {
+    identities,
+    stateKeys,
+    stateLabels: stateKeys.map((state) => OBSERVED_STATE_LABELS[state] || state),
+  };
+}
+
 /* Derive the product's logical-library rows without creating a new source of
  * truth. The API supplies physical_path so aliases to one resolved document
  * collapse once, while different copies retain their own instance records. */
-function groupLogicalSkills(records) {
+function groupLogicalSkills(records, scopes) {
   const groups = new Map();
   for (const record of (Array.isArray(records) ? records : [])) {
     const name = String(record.name || "");
     if (!name) continue;
-    if (!groups.has(name)) groups.set(name, { name, instances: [], _seen: new Set() });
+    if (!groups.has(name)) groups.set(name, { name, instances: [], records: [], _seen: new Set() });
     const group = groups.get(name);
+    /* Keep every API observation for identity display, including aliases that
+     * intentionally collapse to one physical instance below. */
+    group.records.push(record);
     const identity = String(record.physical_path || record.path || `${record.scope || ""}/${name}`);
     if (group._seen.has(identity)) continue;
     group._seen.add(identity);
@@ -67,28 +160,34 @@ function groupLogicalSkills(records) {
     );
     const states = new Set();
     const hashes = new Set();
-    const scopes = [];
+    const scopeLabels = [];
     const badges = [];
-    for (const instance of instances) {
-      const state = instance.malformed ? "malformed" : instance.addressable === false
-        ? "unaddressable" : instance.disabled ? "disabled" : "active";
-      states.add(state);
-      for (const explicit of (Array.isArray(instance.instance_states) ? instance.instance_states : [])) states.add(explicit);
+    for (const instance of group.records) {
+      for (const state of stateKeysFor(instance)) states.add(state);
+      const explicit = Array.isArray(instance.instance_states) ? instance.instance_states : [];
+      if (explicit.includes("divergent")) states.add("divergent");
       if (instance.content_hash) hashes.add(String(instance.content_hash));
       const scope = String(instance.scope_label || instance.scope || "");
-      if (scope && !scopes.includes(scope)) scopes.push(scope);
+      if (scope && !scopeLabels.includes(scope)) scopeLabels.push(scope);
+    }
+    for (const instance of instances) {
+      const scope = String(instance.scope_label || instance.scope || "");
       if (scope && !badges.includes(scope)) badges.push(scope);
     }
     const divergent = hashes.size > 1 || states.has("divergent");
+    if (divergent) states.add("divergent");
+    const identity = deriveLogicalSkillIdentity(group.records, scopes, { divergent });
     return {
       name: group.name,
       description: instances.find((item) => item.description)?.description || "",
       category: instances.find((item) => item.category)?.category || "",
       instances,
       instanceCount: instances.length,
-      scopes,
+      scopes: scopeLabels,
       badges,
       states: [...states],
+      stateLabels: [...states].map((state) => OBSERVED_STATE_LABELS[state] || state),
+      identities: identity.identities,
       divergent,
       identical: instances.length > 1 && !divergent,
       primary: instances[0] || null,
@@ -200,6 +299,8 @@ function formatTools(v) {
 window.SkillManagerDomain = Object.freeze({
   api,
   groupLogicalSkills,
+  deriveLogicalSkillIdentity,
+  observedIdentity,
   formatBytes,
   formatTokens,
   tokenPctClass,

@@ -3,7 +3,7 @@
 
 /* ------------------------------------------------------------- utilities */
 
-const { api, formatBytes, formatTokens, tokenPctClass, tokenBarWidth, renderMarkdown, parseFrontmatter, formatCompat, formatTools, groupLogicalSkills } = window.SkillManagerDomain;
+const { api, formatBytes, formatTokens, tokenPctClass, tokenBarWidth, renderMarkdown, parseFrontmatter, formatCompat, formatTools, groupLogicalSkills, deriveLogicalSkillIdentity, observedIdentity } = window.SkillManagerDomain;
 
 /* ------------------------------------------------------------------ app */
 
@@ -11,11 +11,13 @@ const { createApp, nextTick } = Vue;
 
 createApp({
   data() {
+    const savedTheme = localStorage.getItem("skillsmgr-theme");
     return {
-      view: "skills",
+      view: "overview",
       filter: "",
       query: "",
       skills: [],
+      allSkills: [],
       trashSkills: [],
       catalog: { version: 1, tags: {}, profiles: {} },
       tagFilter: "",
@@ -28,17 +30,28 @@ createApp({
       scopes: [],
       activeScope: localStorage.getItem("skillsmgr-scope") || "all",
       libraryMode: localStorage.getItem("skillsmgr-library-mode") || "library",
+      browseMode: localStorage.getItem("skillsmgr-browse-mode") === "grid" ? "grid" : "list",
       onboardingDismissed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null },
-      theme: localStorage.getItem("skillsmgr-theme") || "light",
+      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null },
+      theme: ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system",
+      resolvedTheme: "light",
+      systemTheme: "light",
+      textSize: localStorage.getItem("skillsmgr-text-size") === "large" ? "large" : "standard",
+      prefersReducedMotion: false,
+      themeMediaQuery: null,
+      themeMediaHandler: null,
       menuOpen: false,
       busy: false,
       banner: null,
-      loadingList: false,
+      // Keep the Overview readiness marker absent until the first list
+      // request has settled, including the initial render before mounted().
+      loadingList: true,
       loadingDetail: false,
       loadingTrash: false,
+      loadingHistory: true,
+      overviewHistory: [],
       loadingWorkspaces: false,
       workspaces: null,
       workspaceProject: "",
@@ -51,10 +64,14 @@ createApp({
       liveAnnouncement: "",
       toastSeq: 0,
       searchTimer: null,
+      searchRestore: [],
       listSeq: 0,
       detailSeq: 0,
       modalRestoreFocus: null,
       modalFocusTimer: null,
+      commandPaletteTransfer: false,
+      commandPaletteQuery: "",
+      commandPaletteActiveIndex: 0,
       modals: {
         skill: null,
         remove: null,
@@ -70,13 +87,17 @@ createApp({
         install: null,
         batch: null,
         help: null,
+        commands: null,
       },
     };
   },
 
   computed: {
     filteredSkills() {
-      return this.skills.filter((s) => {
+      const source = !this.query.trim() && this.skills.length === 0 && this.allSkills.length
+        ? this.allSkills
+        : this.skills;
+      return source.filter((s) => {
         if (this.filter === "active" && s.disabled) return false;
         if (this.filter === "disabled" && !s.disabled) return false;
         if (this.tagFilter === "__untagged" && s.tags && s.tags.length) return false;
@@ -84,10 +105,10 @@ createApp({
         return true;
       });
     },
-    logicalSkills() { return groupLogicalSkills(this.filteredSkills); },
+    logicalSkills() { return groupLogicalSkills(this.filteredSkills, this.scopes); },
     visibleSkills() { return this.libraryMode === "instances" ? this.filteredSkills : this.logicalSkills; },
     selectedLogical() {
-      return groupLogicalSkills(this.skills).find((skill) => skill.name === this.selectedName) || null;
+      return groupLogicalSkills(this.skills, this.scopes).find((skill) => skill.name === this.selectedName) || null;
     },
     tagNames() {
       return [...new Set(Object.values(this.catalog.tags || {}).flat())].sort((a, b) => a.localeCompare(b));
@@ -103,6 +124,14 @@ createApp({
       return this.skills.filter((record) => wanted.has(this.targetKey(record)));
     },
     selectedCount() { return this.selectedTargets.length; },
+    profileObservedCount() {
+      return (this.profilePreview && this.profilePreview.members || [])
+        .reduce((count, member) => count + (member.instances || []).length, 0);
+    },
+    profileUnresolvedMembers() {
+      return (this.profilePreview && this.profilePreview.members || [])
+        .filter((member) => member.state === "missing" || member.state === "divergent");
+    },
     allVisibleSelected() {
       return this.visibleTargetKeys.length > 0 && this.visibleTargetKeys.every((key) => this.selectedKeys.includes(key));
     },
@@ -134,18 +163,232 @@ createApp({
     activeModal() {
       return Object.keys(this.modals).find((key) => this.modals[key]) || null;
     },
+    commandPaletteCommands() {
+      const commands = [
+        { id: "nav-overview", label: "Overview", title: "Open Overview", category: "Navigation", keywords: "dashboard home", action: "switchView", args: ["overview"], focusDestination: true },
+        { id: "nav-library", label: "Library", title: "Open Library", category: "Navigation", keywords: "skills browse", action: "switchView", args: ["skills"], focusDestination: true },
+        { id: "nav-profiles", label: "Profiles", title: "Open Profiles", category: "Navigation", keywords: "catalog groups", action: "switchView", args: ["profiles"], focusDestination: true },
+        { id: "nav-install", label: "Install", title: "Open Install", category: "Navigation", keywords: "workflow registry", action: "switchView", args: ["install"], focusDestination: true },
+        { id: "nav-recovery", label: "Recovery", title: "Open Recovery", category: "Navigation", keywords: "trash restore backups", action: "switchView", args: ["recovery"], focusDestination: true },
+        { id: "nav-workspaces", label: "Workspaces", title: "Open Workspaces", category: "Navigation", keywords: "projects adapters", action: "switchView", args: ["workspaces"], focusDestination: true },
+        { id: "nav-quality", label: "Quality", title: "Open Quality", category: "Navigation", keywords: "evidence health", action: "switchView", args: ["quality"], focusDestination: true },
+        { id: "nav-settings", label: "Settings", title: "Open Settings", category: "Navigation", keywords: "preferences accessibility theme", action: "switchView", args: ["settings"], focusDestination: true },
+        { id: "create-skill", label: "Create skill", title: "Create a new skill", category: "Skill actions", keywords: "new add author", action: "openCreate", focusDestination: true },
+        { id: "add-folder", label: "Add folder", title: "Add skills from a folder", category: "Skill actions", keywords: "import directory upload", action: "openAdd" },
+        { id: "install-workflow", label: "Install workflow", title: "Install via a runner or registry", category: "Transfer", keywords: "install npx pnpm bunx registry", action: "openInstall", focusDestination: true },
+        { id: "import-archive", label: "Import archive", title: "Import a skills archive", category: "Transfer", keywords: "archive tar zip migration", action: "openImport", focusDestination: true },
+        { id: "export-archive", label: "Export archive", title: "Export the current skill library", category: "Transfer", keywords: "download backup archive", action: "exportArchive" },
+        { id: "full-export", label: "Full migration export", title: "Export skills, trash, and templates", category: "Transfer", keywords: "full backup migration archive", action: "exportArchive", args: [true] },
+        { id: "templates", label: "Templates", title: "View templates", category: "Tools", keywords: "starter files", action: "openTemplates", focusDestination: true },
+        { id: "new-template", label: "New template", title: "Create a template", category: "Tools", keywords: "starter create", action: "openNewTemplate", focusDestination: true },
+        { id: "doctor", label: "Doctor", title: "Inspect filesystem and index health", category: "Tools", keywords: "diagnostic integrity", action: "openDoctor", focusDestination: true },
+        { id: "stats", label: "Stats", title: "View skill statistics", category: "Tools", keywords: "metrics tokens", action: "openStats", focusDestination: true },
+        { id: "history", label: "History", title: "View skill history", category: "Tools", keywords: "snapshots rollback", action: "openHistory", focusDestination: true },
+        { id: "refresh", label: "Refresh", title: "Refresh skills and scope data", category: "Tools", keywords: "reload update", action: "refreshCommand" },
+        { id: "rebuild", label: "Rebuild", title: "Rebuild the local index", category: "Tools", keywords: "database index", action: "rebuildIndex" },
+        { id: "resync", label: "Resync", title: "Resync the local index", category: "Tools", keywords: "database index", action: "resyncIndex" },
+      ];
+      const selectedAvailable = this.view === "skills" && !!this.selectedName && !!this.selected;
+      if (selectedAvailable) {
+        commands.push(
+          { id: "selected-edit", label: "Edit", title: `Edit ${this.selectedName}`, category: "Selected skill", keywords: "modify change", action: "openEdit", focusDestination: true },
+          { id: "selected-validate", label: "Validate", title: `Validate ${this.selectedName}`, category: "Selected skill", keywords: "check lint", action: "openValidate", focusDestination: true },
+          { id: "selected-toggle", label: this.selectedDisabled ? "Enable" : "Disable", title: `${this.selectedDisabled ? "Enable" : "Disable"} ${this.selectedName}`, category: "Selected skill", keywords: "active disabled toggle", action: "toggleSelected" },
+          { id: "selected-sync", label: "Sync", title: `Sync ${this.selectedName} to agents`, category: "Selected skill", keywords: "copy agents scopes", action: "openSync", focusDestination: true },
+          { id: "selected-remove", label: "Remove", title: `Remove ${this.selectedName}`, category: "Selected skill", keywords: "trash delete", action: "removeSelected", focusDestination: true },
+        );
+      }
+      return commands;
+    },
+    filteredCommandPaletteCommands() {
+      const needle = this.commandPaletteQuery.trim().toLowerCase();
+      if (!needle) return this.commandPaletteCommands;
+      return this.commandPaletteCommands.filter((command) => [command.label, command.title, command.category, command.keywords]
+        .join(" ").toLowerCase().includes(needle));
+    },
+    commandPaletteActiveCommand() {
+      return this.filteredCommandPaletteCommands[this.commandPaletteActiveIndex] || null;
+    },
+    commandPaletteStatus() {
+      const count = this.filteredCommandPaletteCommands.length;
+      return count ? `${count} command${count === 1 ? "" : "s"} available` : "No commands found. Try a different search term.";
+    },
+    overviewRecords() {
+      return this.allSkills.length ? this.allSkills : this.skills;
+    },
+    overviewLogicalSkills() {
+      return groupLogicalSkills(this.overviewRecords, this.scopes);
+    },
+    overviewLogicalCount() {
+      return this.overviewLogicalSkills.length;
+    },
+    overviewInstanceCount() {
+      return this.overviewRecords.length;
+    },
+    overviewActiveCount() {
+      return this.overviewRecords.filter((record) => {
+        const states = record.instance_states || record.states || [];
+        return !record.disabled
+          && !record.malformed
+          && !record.decode_error
+          && record.addressable !== false
+          && !states.some((state) => ["invalid", "malformed", "unaddressable"].includes(state));
+      }).length;
+    },
+    overviewDisabledCount() {
+      return this.overviewRecords.filter((record) => !!record.disabled).length;
+    },
+    overviewDivergentGroups() {
+      return this.overviewLogicalSkills.filter((group) => !!group.divergent);
+    },
+    overviewMalformedCount() {
+      return this.overviewRecords.filter((record) => {
+        const states = record.instance_states || record.states || [];
+        return !!record.malformed || states.includes("malformed");
+      }).length;
+    },
+    overviewUnaddressableCount() {
+      return this.overviewRecords.filter((record) => {
+        const states = record.instance_states || record.states || [];
+        return record.addressable === false || states.includes("unaddressable");
+      }).length;
+    },
+    overviewInvalidRecords() {
+      return this.overviewRecords.filter((record) => {
+        const states = record.instance_states || record.states || [];
+        return !!record.malformed
+          || !!record.decode_error
+          || record.addressable === false
+          || states.some((state) => ["invalid", "malformed", "unaddressable"].includes(state));
+      });
+    },
+    overviewAttention() {
+      const items = [];
+      if (this.overviewInvalidRecords.length) {
+        const count = this.overviewInvalidRecords.length;
+        items.push({
+          key: "observed-invalid",
+          title: "Review malformed or unaddressable entries",
+          detail: `${count} observed instance${count === 1 ? " cannot" : "s cannot"} be treated as a normal addressable skill.`,
+          action: "Review in Library",
+        });
+      }
+      if (this.overviewDivergentGroups.length) {
+        items.push({
+          key: "divergent",
+          title: "Resolve divergent copies",
+          detail: `${this.overviewDivergentGroups.length} logical skill${this.overviewDivergentGroups.length === 1 ? " has" : "s have"} unequal observed instances.`,
+          action: "Inspect copies",
+        });
+      }
+      if (this.overviewDisabledCount) {
+        items.push({
+          key: "disabled",
+          title: "Review disabled instances",
+          detail: `${this.overviewDisabledCount} observed instance${this.overviewDisabledCount === 1 ? " is" : "s are"} disabled and will be skipped by its consumer.`,
+          action: "Show disabled",
+        });
+      }
+      if (this.trashCount) {
+        items.push({
+          key: "recovery",
+          title: "Recover removed skills",
+          detail: `${this.trashCount} skill${this.trashCount === 1 ? " is" : "s are"} available in global trash.`,
+          action: "Open recovery",
+        });
+      }
+      return items;
+    },
+    overviewAttentionCount() {
+      return this.overviewAttention.length;
+    },
+    themeModeLabel() {
+      return this.theme === "system" ? "System" : (this.theme === "dark" ? "Dark" : "Light");
+    },
+    themeToggleTitle() {
+      const next = this.theme === "system" ? "light" : (this.theme === "light" ? "dark" : "system");
+      const nextLabel = next === "system" ? "system" : next;
+      return `Theme: ${this.themeModeLabel} (currently ${this.resolvedTheme}). Activate to use ${nextLabel} theme.`;
+    },
+    systemThemeLabel() {
+      return this.systemTheme === "dark" ? "dark" : "light";
+    },
+    registryInventory() {
+      const source = this.allSkills.length ? this.allSkills : this.skills;
+      return source.filter((record) => record && record.registry_provenance && typeof record.registry_provenance === "object");
+    },
+    filteredRegistryInventory() {
+      const q = this.query.trim().toLowerCase();
+      if (!q) return this.registryInventory;
+      return this.registryInventory.filter((record) => {
+        const provenance = record.registry_provenance || {};
+        return [record.name, provenance.id, provenance.source, provenance.slug]
+          .some((value) => String(value || "").toLowerCase().includes(q));
+      });
+    },
+    registryInventoryCount() {
+      return this.filteredRegistryInventory.length;
+    },
+    qualityRecords() {
+      return this.allSkills.length ? this.allSkills : this.skills;
+    },
+    filteredQualitySkills() {
+      const q = this.query.trim().toLowerCase();
+      if (!q) return this.qualityRecords;
+      return this.qualityRecords.filter((record) => {
+        const provenance = record.registry_provenance || {};
+        return [record.name, record.description, record.category, ...(record.tags || []), provenance.id, provenance.source, provenance.slug]
+          .some((value) => String(value || "").toLowerCase().includes(q));
+      });
+    },
+    qualitySummary() {
+      const records = this.qualityRecords;
+      const logical = groupLogicalSkills(records, this.scopes);
+      const stateOf = (record) => {
+        const states = record.instance_states || record.states || [];
+        if (states.includes("invalid")) return "invalid";
+        if (record.malformed || record.decode_error || states.includes("malformed")) return "malformed";
+        if (record.addressable === false || states.includes("unaddressable")) return "unaddressable";
+        if (record.disabled) return "disabled";
+        return "observed";
+      };
+      const validityFlagged = records.filter((record) => {
+        const states = record.instance_states || record.states || [];
+        return record.malformed
+          || record.decode_error
+          || record.addressable === false
+          || states.some((state) => ["invalid", "malformed", "unaddressable"].includes(state));
+      });
+      return {
+        observed: records.length,
+        active: records.filter((record) => stateOf(record) === "observed").length,
+        disabled: records.filter((record) => stateOf(record) === "disabled").length,
+        malformed: records.filter((record) => stateOf(record) === "malformed").length,
+        unaddressable: records.filter((record) => stateOf(record) === "unaddressable").length,
+        validityFlagged: validityFlagged.length,
+        divergent: logical.filter((group) => !!group.divergent).length,
+        provenance: records.filter((record) => record.registry_provenance && typeof record.registry_provenance === "object").length,
+      };
+    },
   },
 
   watch: {
     theme(v) {
-      document.documentElement.dataset.theme = v;
-      localStorage.setItem("skillsmgr-theme", v);
+      this.applyThemePreference(v);
+      this.setupThemeListener();
+      localStorage.setItem("skillsmgr-theme", this.theme);
+    },
+    textSize(v) {
+      this.applyTextSize(v);
+      localStorage.setItem("skillsmgr-text-size", this.textSize);
     },
     activeScope(v) {
       localStorage.setItem("skillsmgr-scope", v);
       this.selectedName = null;
       this.selected = null;
       this.selectedKeys = [];
+      this.mobileDetailOpen = false;
+      this.allSkills = [];
       // BUG-4: a live query must keep filtering after the scope changes,
       // otherwise the search box shows a term while the list shows every skill.
       this.refreshList();
@@ -154,12 +397,36 @@ createApp({
     libraryMode(v) {
       localStorage.setItem("skillsmgr-library-mode", v);
     },
+    browseMode(v) {
+      localStorage.setItem("skillsmgr-browse-mode", v);
+    },
     budgetWindow(v) {
       localStorage.setItem("skillsmgr-budget-window", v);
       this.loadStatsTokens();
     },
-    query() {
+    commandPaletteQuery() {
+      this.commandPaletteActiveIndex = 0;
+    },
+    filteredCommandPaletteCommands(commands) {
+      const max = commands.length - 1;
+      const next = max < 0 ? 0 : Math.min(this.commandPaletteActiveIndex, max);
+      if (next !== this.commandPaletteActiveIndex) this.commandPaletteActiveIndex = next;
+      this.$nextTick(() => this.scrollActiveCommandIntoView());
+    },
+    commandPaletteActiveIndex() {
+      this.$nextTick(() => this.scrollActiveCommandIntoView());
+    },
+    query(value, previous) {
       clearTimeout(this.searchTimer);
+      if (value.trim() && !String(previous || '').trim() && this.view === "skills") this.searchRestore = this.skills.slice();
+      if (!value.trim() && this.searchRestore.length && this.view === "skills") this.skills = this.searchRestore.slice();
+      if (value.trim() && !["skills", "trash", "install", "recovery", "quality"].includes(this.view)) {
+        // Preserve focus in the persistent search field while making it a
+        // useful global entry point from Overview and auxiliary views.
+        this.view = "skills";
+        this.mobileDetailOpen = false;
+        this.compactControlsOpen = false;
+      }
       this.searchTimer = setTimeout(() => this.applySearch(), 220);
     },
     activeModal(value) {
@@ -167,16 +434,31 @@ createApp({
       if (value) {
         this.modalFocusTimer = setTimeout(() => this.$nextTick(() => this.focusModal()), 0);
       } else {
-        this.modalFocusTimer = setTimeout(() => this.restoreModalFocus(), 0);
+        this.modalFocusTimer = setTimeout(() => {
+          if (this.commandPaletteTransfer) {
+            this.commandPaletteTransfer = false;
+            return;
+          }
+          this.restoreModalFocus();
+        }, 0);
       }
     },
   },
 
   mounted() {
-    document.documentElement.dataset.theme = this.theme;
+    this.applyThemePreference(this.theme);
+    this.applyTextSize(this.textSize);
+    this.prefersReducedMotion = this.readReducedMotion();
+    this.setupThemeListener();
     document.addEventListener("keydown", this.onKeydown);
     document.addEventListener("mousedown", this.onDocMousedown);
       this.loadInitialData();
+  },
+
+  beforeUnmount() {
+    this.removeThemeListener();
+    document.removeEventListener("keydown", this.onKeydown);
+    document.removeEventListener("mousedown", this.onDocMousedown);
   },
 
   methods: {
@@ -188,9 +470,40 @@ createApp({
     formatCompat,
     formatTools,
     groupLogicalSkills,
+    deriveLogicalSkillIdentity,
+    observedIdentity,
+
+    qualityStateLabel(record) {
+      const states = (record && (record.instance_states || record.states)) || [];
+      if (states.includes("invalid")) return "Invalid observed";
+      if (record && (record.malformed || record.decode_error || states.includes("malformed"))) return "Malformed observed";
+      if (record && (record.addressable === false || states.includes("unaddressable"))) return "Unaddressable observed";
+      if (record && record.disabled) return "Disabled observed";
+      return "Observed; not a validation verdict";
+    },
+
+    inspectQualityInLibrary() {
+      const record = this.selected;
+      this.query = "";
+      this.filter = "";
+      this.tagFilter = "";
+      this.switchView("skills");
+      if (record) this.$nextTick(() => this.selectSkill(record));
+    },
+
+    identityItems(item) {
+      if (!item) return [];
+      return this.libraryMode === "library"
+        ? (item.identities || [])
+        : [observedIdentity(item, this.scopes)];
+    },
 
     setLibraryMode(mode) {
       this.libraryMode = mode === "instances" ? "instances" : "library";
+    },
+
+    setBrowseMode(mode) {
+      this.browseMode = mode === "grid" ? "grid" : "list";
     },
 
     selectLogicalSkill(group) {
@@ -213,6 +526,25 @@ createApp({
 
     groupTags(group) {
       return [...new Set((group.instances || []).flatMap((instance) => instance.tags || []))];
+    },
+
+    profileTargets() {
+      const seen = new Set();
+      const targets = [];
+      for (const member of (this.profilePreview && this.profilePreview.members || [])) {
+        for (const instance of (member.instances || [])) {
+          const target = {
+            name: member.name,
+            scope: instance.scope,
+            path: instance.path || instance.physical_path || "",
+          };
+          const key = (target.name || "") + "|" + (target.scope || "") + "|" + target.path;
+          if (!target.name || !target.scope || seen.has(key)) continue;
+          seen.add(key);
+          targets.push(target);
+        }
+      }
+      return targets;
     },
 
     toggleSelection(record, checked) {
@@ -249,7 +581,8 @@ createApp({
     focusableInModal() {
       const modal = this.modalElement();
       if (!modal) return [];
-      return [...modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+      return [...modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')]
+        .filter((el) => !el.closest('[hidden], [inert]') && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
     },
 
     focusModal() {
@@ -272,7 +605,14 @@ createApp({
     restoreModalFocus() {
       const target = this.modalRestoreFocus;
       this.modalRestoreFocus = null;
-      if (target && typeof target.focus === 'function' && document.contains(target)) target.focus();
+      if (target && typeof target.focus === 'function' && document.contains(target)) {
+        target.focus();
+        return;
+      }
+      // Menu items disappear when the actions menu closes before its modal
+      // opens. Return keyboard users to the stable actions trigger instead.
+      const trigger = document.querySelector('[aria-label="Open actions menu"]');
+      if (trigger) trigger.focus();
     },
 
     /* ----------------------------------------------------------- data */
@@ -294,8 +634,17 @@ createApp({
       // The list is useful before secondary stats are ready. Keep the first
       // paint independent while fetching each required source once.
       await Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash()]);
+      await this.loadOverviewHistory();
       await this.loadCatalog();
       await this.loadStatsTokens();
+    },
+
+    openInstallCenter() {
+      this.switchView("install");
+    },
+
+    openRecoveryCenter() {
+      this.switchView("recovery");
     },
 
     async loadWorkspaces() {
@@ -389,6 +738,11 @@ createApp({
         this.toast("Enter a registry query or skill id first.", "err");
         return;
       }
+      // A new request retires the prior review before its response arrives;
+      // the commit action can never be mistaken for the new form values.
+      this.install.review_id = null;
+      this.install.review = null;
+      this.install.lastResult = null;
       this.busy = true;
       try {
         const op = this.install.registryOp;
@@ -398,7 +752,6 @@ createApp({
           curated: op === "curated" ? true : undefined,
           fetch: op === "fetch" ? true : undefined,
           source: op === "fetch" ? this.install.source.trim() : undefined,
-          trust_confirmed: op === "fetch" ? true : undefined,
           page: Number(this.install.page) || 0,
           per_page: Number(this.install.perPage) || 25,
           view: this.install.view || "all-time",
@@ -407,12 +760,39 @@ createApp({
         const res = await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         this.install.lastResult = res;
         if (op === "fetch") {
-          this.toast(`Fetched ${res.name} with registry provenance.`, "ok");
-          await this.loadScopes();
-          await this.loadSkills();
+          this.install.review_id = res.review_id || null;
+          this.install.review = res.review_id ? res : null;
+          if (res.review_id) {
+            this.toast("Registry snapshot reviewed locally. Inspect the evidence before trusting it.", "info");
+          } else {
+            this.toast("Registry fetch returned no review id; nothing was installed.", "err");
+          }
         } else {
           this.toast(`Registry ${op} loaded (${(res.data || []).length} result groups).`, "ok");
         }
+      } catch (e) {
+        this.toast(e.message, "err");
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async commitRegistryReview() {
+      const review = this.install.review;
+      if (!review || !review.review_id) { this.toast("Fetch a registry snapshot for review first.", "err"); return; }
+      this.busy = true;
+      try {
+        const res = await api("/api/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fetch: true, review_id: review.review_id, trust_confirmed: true }),
+        });
+        this.install.lastResult = res;
+        this.install.review_id = null;
+        this.install.review = null;
+        this.toast(`Installed ${res.name} from the reviewed registry snapshot.`, "ok");
+        await this.loadScopes();
+        await this.loadSkills();
       } catch (e) {
         this.toast(e.message, "err");
       } finally {
@@ -430,6 +810,8 @@ createApp({
         const rows = await api("/api/skills?scope=" + encodeURIComponent(s));
         if (mySeq !== this.listSeq || (this.activeScope || "all") !== scopeAtCall) return;
         this.skills = rows;
+        this.allSkills = rows.slice();
+        if (this.query.trim() && this.view === "skills") this.applySearch();
         if (this.selectedName) {
           const still = this.skills.find((sk) => sk.name === this.selectedName && (s === "all" || sk.scope === s));
           if (still) this.loadDetail(still.name, still.scope);
@@ -445,23 +827,29 @@ createApp({
 
     async applySearch() {
       const q = this.query.trim();
-      if (!q) { this.loadSkills(); return; }
-      if (this.view !== "skills") return;
-      const mySeq = ++this.listSeq;
-      const scopeAtCall = this.activeScope || "all";
-      this.loadingList = true;
-      this.banner = null;
-      try {
-        const s = scopeAtCall;
-        const rows = await api("/api/search?q=" + encodeURIComponent(q) + "&scope=" + encodeURIComponent(s));
-        if (mySeq !== this.listSeq) return;
-        this.skills = rows;
-      } catch (e) {
-        if (mySeq !== this.listSeq) return;
-        this.banner = { type: "error", text: "Search failed: " + e.message };
-      } finally {
-        if (mySeq === this.listSeq) this.loadingList = false;
+      if (!q) {
+        // Restore the last complete scope immediately while the authoritative
+        // refresh settles. This keeps clearing search responsive even when a
+        // local scan takes longer than the debounce window.
+        if (this.allSkills.length) this.skills = this.allSkills.slice();
+        if (this.view === "skills") this.loadSkills();
+        return;
       }
+      if (["install", "recovery", "quality"].includes(this.view)) return;
+      if (this.view !== "skills" && this.view !== "trash") {
+        this.view = "skills";
+        this.mobileDetailOpen = false;
+        this.compactControlsOpen = false;
+      }
+      if (this.view === "trash") return;
+      // The complete scope snapshot is already local, so filtering it here
+      // keeps search and reset deterministic while preserving the server API
+      // for clients that still use it directly.
+      const needle = q.toLowerCase();
+      const source = this.allSkills.length ? this.allSkills : this.skills;
+      this.skills = source.filter((record) => [record.name, record.description, record.category, ...(record.tags || [])]
+        .some((value) => String(value || "").toLowerCase().includes(needle)));
+      this.loadingList = false;
     },
 
     async loadTrash() {
@@ -472,6 +860,17 @@ createApp({
         this.toast("Could not load trash: " + e.message, "err");
       } finally {
         this.loadingTrash = false;
+      }
+    },
+
+    async loadOverviewHistory() {
+      this.loadingHistory = true;
+      try {
+        this.overviewHistory = await api("/api/history?limit=8");
+      } catch (e) {
+        this.overviewHistory = [];
+      } finally {
+        this.loadingHistory = false;
       }
     },
 
@@ -542,17 +941,94 @@ createApp({
       });
     },
 
+    closeMobileView() {
+      this.mobileDetailOpen = false;
+      this.$nextTick(() => {
+        const label = this.view === "trash" ? "Trash" : this.view.charAt(0).toUpperCase() + this.view.slice(1);
+        const tab = [...document.querySelectorAll('.viewtabs button')]
+          .find((el) => (el.innerText || '').trim().startsWith(label));
+        if (tab) tab.focus();
+      });
+    },
+
     selectTrash(t) {
       this.selectedTrash = this.selectedTrash && this.selectedTrash.trash_path === t.trash_path ? null : t;
+      this.mobileReturnKey = "trash/" + (t && t.trash_path || "");
+      this.mobileDetailOpen = true;
     },
 
     switchView(v) {
       this.view = v;
-      if (v === "trash") this.loadTrash();
+      // Keep auxiliary lists visible on phones; a selected item can then move
+      // to its detail state and the explicit back action returns to that list.
+      this.mobileDetailOpen = false;
+      this.compactControlsOpen = false;
+      if (v === "trash" || v === "recovery") this.loadTrash();
+      else if (v === "install") this.loadSkills();
       else if (v === "workspaces") this.loadWorkspaces();
       // BUG-4: entering the skills view with a live query must re-apply it, or
       // the list silently disagrees with the search box.
       else if (v === "skills") this.refreshList();
+      if (v === "overview") this.loadOverviewHistory();
+      this.$nextTick(() => {
+        this.scrollActiveViewTab();
+        const heading = v === "skills"
+          ? document.querySelector("#library-view-title")
+          : document.querySelector("#view-title, #overview-title");
+        if (heading) heading.focus();
+      });
+    },
+
+    scrollActiveViewTab() {
+      if (typeof window === "undefined" || !window.matchMedia
+        || !window.matchMedia("(max-width: 760px)").matches) return;
+      const active = document.querySelector(".navigation-rail .viewtabs button.active");
+      if (active && typeof active.scrollIntoView === "function") {
+        active.scrollIntoView({ block: "nearest", inline: "center" });
+      }
+    },
+
+    openOverviewSkill(group) {
+      const record = group && (group.primary || (group.instances || [])[0]);
+      this.filter = "";
+      this.tagFilter = "";
+      this.query = "";
+      if (record) {
+        // Pin the requested identity before switchView refreshes the list. A
+        // stale selection here lets the refresh start a competing detail load
+        // for the skill that was selected before returning to Overview.
+        this.selectedName = record.name;
+        this.selected = null;
+        this.mobileReturnKey = (record.scope || "") + "/" + record.name;
+        this.mobileDetailOpen = true;
+      }
+      this.switchView("skills");
+      if (record) this.$nextTick(() => this.selectSkill(record));
+    },
+
+    openOverviewAttention(key) {
+      if (key === "recovery") {
+        this.switchView("recovery");
+        return;
+      }
+      if (key === "disabled") {
+        this.query = "";
+        this.tagFilter = "";
+        this.filter = "disabled";
+        // The filter changes the visible list; clear any prior detail so it
+        // cannot contradict the disabled-only result set.
+        this.selectedName = null;
+        this.selected = null;
+        this.switchView("skills");
+        return;
+      }
+      const group = key === "divergent"
+        ? this.overviewDivergentGroups[0]
+        : this.overviewLogicalSkills.find((item) => (item.instances || []).some((record) => {
+          const states = record.instance_states || record.states || [];
+          return !!record.malformed || record.addressable === false || states.includes("malformed") || states.includes("unaddressable");
+        }));
+      this.openOverviewSkill(group);
     },
 
     /* Refresh the skills list, honouring an active search query (BUG-4). */
@@ -569,6 +1045,168 @@ createApp({
 
     setTagFilter(tag) {
       this.tagFilter = tag || "";
+    },
+
+    onSearchKeydown(e) {
+      // Keep the native select-all shortcut reliable for keyboard and browser
+      // automation users before a following Backspace/Delete clears the field.
+      // Some embedded Chromium contexts expose the shortcut without applying
+      // the selection to a type=search control.
+      if ((e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "a") {
+        e.preventDefault();
+        e.target.select();
+      }
+    },
+
+    menuItems() {
+      if (!this.$refs.menuWrap) return [];
+      return [...this.$refs.menuWrap.querySelectorAll('[role="menuitem"]:not([disabled])')];
+    },
+
+    focusFirstMenuItem() {
+      const first = this.menuItems()[0];
+      if (first) first.focus();
+    },
+
+    toggleActionsMenu() {
+      if (this.menuOpen) {
+        this.closeActionsMenu(true);
+        return;
+      }
+      this.menuOpen = true;
+      this.$nextTick(() => this.focusFirstMenuItem());
+    },
+
+    closeActionsMenu(restoreFocus = false) {
+      this.menuOpen = false;
+      if (restoreFocus) {
+        const trigger = this.$refs.menuTrigger;
+        this.$nextTick(() => trigger && trigger.focus());
+      }
+    },
+
+    onMenuKeydown(e) {
+      const items = this.menuItems();
+      if (!items.length) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.closeActionsMenu(true);
+        return;
+      }
+      const index = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const delta = e.key === "ArrowDown" ? 1 : -1;
+        items[(index + delta + items.length) % items.length].focus();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        items[0].focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        items[items.length - 1].focus();
+      }
+    },
+
+    clearSearch() {
+      this.query = "";
+      this.$nextTick(() => this.$refs.searchInput && this.$refs.searchInput.focus());
+    },
+
+    toggleCommandPalette(event) {
+      if (this.activeModal && this.activeModal !== "commands") return;
+      if (this.modals.commands) {
+        this.closeModal("commands");
+        return;
+      }
+      this.openCommandPalette(event && event.currentTarget);
+    },
+
+    openCommandPalette(opener = null) {
+      if (this.activeModal && this.activeModal !== "commands") return;
+      this.menuOpen = false;
+      this.commandPaletteQuery = "";
+      this.commandPaletteActiveIndex = 0;
+      this.openModal("commands", {});
+      if (opener && opener.matches && opener.matches(".command-trigger")) {
+        this.modalRestoreFocus = opener;
+      } else if (document.activeElement === document.body || document.activeElement === document.documentElement) {
+        this.modalRestoreFocus = document.querySelector(".command-trigger") || this.modalRestoreFocus;
+      }
+    },
+
+    scrollActiveCommandIntoView() {
+      const active = this.commandPaletteActiveCommand;
+      if (!active) return;
+      const option = document.getElementById("command-option-" + active.id);
+      if (option && typeof option.scrollIntoView === "function") option.scrollIntoView({ block: "nearest" });
+    },
+
+    moveCommandPaletteSelection(delta) {
+      const count = this.filteredCommandPaletteCommands.length;
+      if (!count) return;
+      this.commandPaletteActiveIndex = (this.commandPaletteActiveIndex + delta + count) % count;
+    },
+
+    onCommandPaletteKeydown(e) {
+      const commands = this.filteredCommandPaletteCommands;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this.moveCommandPaletteSelection(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this.moveCommandPaletteSelection(-1);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        this.commandPaletteActiveIndex = 0;
+      } else if (e.key === "End") {
+        e.preventDefault();
+        this.commandPaletteActiveIndex = Math.max(0, commands.length - 1);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        this.executeCommand(this.commandPaletteActiveCommand);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        this.closeModal("commands");
+      }
+    },
+
+    executeCommand(command) {
+      if (!command) return;
+      const available = this.filteredCommandPaletteCommands.find((item) => item.id === command.id);
+      if (!available) return;
+      const opener = this.modalRestoreFocus;
+      this.commandPaletteTransfer = !!available.focusDestination;
+      this.closeModal("commands");
+      this.$nextTick(() => {
+        // Let Vue remove Commands before invoking the destination. This keeps
+        // the destination opener distinct from the palette input and gives
+        // navigation commands a stable render to focus.
+        this.modalRestoreFocus = opener;
+        this.invokeCommand(available);
+        if (this.activeModal) {
+          // A newly opened dialog owns restoration now, but it must return to
+          // the original Commands trigger/opener when it closes.
+          this.modalRestoreFocus = opener;
+          this.commandPaletteTransfer = false;
+        }
+      });
+    },
+
+    invokeCommand(command) {
+      const fn = this[command.action];
+      if (typeof fn === "function") fn.apply(this, command.args || []);
+    },
+
+    refreshCommand() {
+      this.loadScopes();
+      this.loadSkills();
+      this.loadTrash();
+      this.loadCatalog();
+      this.loadStatsTokens();
+    },
+
+    removeSelected() {
+      if (this.selectedName && this.selected) this.confirmRemove(this.selected);
     },
 
     async updateBatchTags(operation) {
@@ -590,10 +1228,16 @@ createApp({
       finally { this.busy = false; }
     },
 
-    openBatch(operation) {
-      if (!this.selectedTargets.length) { this.toast("Select at least one skill instance.", "err"); return; }
-      const targets = (this.scopes || []).filter((scope) => scope.id !== this.activeScope && scope.writable);
-      this.modals.batch = { operation, plan: null, toScopes: Object.fromEntries(targets.map((scope) => [scope.id, true])), force: false };
+    openBatch(operation, explicitTargets = null, context = null) {
+      const targets = (explicitTargets || this.selectedTargets).map((target) => Object.freeze({
+        name: target.name,
+        scope: target.scope,
+        path: target.path || target.physical_path || "",
+        physical_path: target.physical_path || target.path || "",
+      }));
+      if (!targets.length) { this.toast("Select at least one skill instance.", "err"); return; }
+      const writableScopes = (this.scopes || []).filter((scope) => scope.id !== this.activeScope && scope.writable);
+      this.modals.batch = { operation, targets: Object.freeze(targets.slice()), plan: null, context, toScopes: Object.fromEntries(writableScopes.map((scope) => [scope.id, true])), force: false };
       this.prepareBatch();
     },
 
@@ -609,7 +1253,7 @@ createApp({
         modal.plan = await api("/api/batch/preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ operation: modal.operation, targets: this.selectedTargets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
+          body: JSON.stringify({ operation: modal.operation, targets: modal.targets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
         });
       } catch (e) { this.toast(e.message, "err"); }
       finally { this.busy = false; }
@@ -617,19 +1261,20 @@ createApp({
 
     async executeBatch() {
       const modal = this.modals.batch;
-      if (!modal || !modal.plan) return;
+      if (!modal || !modal.plan || !modal.plan.plan_id || !modal.targets || !modal.targets.length) return;
       this.busy = true;
       try {
         const result = await api("/api/batch/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ operation: modal.operation, plan_id: modal.plan.plan_id, targets: this.selectedTargets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
+          body: JSON.stringify({ operation: modal.operation, plan_id: modal.plan.plan_id, targets: modal.targets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
         });
         const failed = (result.results || []).filter((item) => item.status === "failed").length;
         this.closeModal("batch");
         this.selectedKeys = [];
         await this.loadScopes();
         await this.loadSkills();
+        if (modal.context && modal.context.profileName) await this.previewProfile(modal.context.profileName);
         this.toast(failed ? `Batch completed with ${failed} failure(s). See each item for details.` : `Batch ${modal.operation} completed for ${result.target_count} target(s).`, failed ? "err" : "ok");
       } catch (e) { this.toast(e.message, "err"); }
       finally { this.busy = false; }
@@ -659,6 +1304,17 @@ createApp({
     async previewProfile(name) {
       try { this.profilePreview = await api("/api/catalog/profiles/" + encodeURIComponent(name) + "/preview"); }
       catch (e) { this.toast(e.message, "err"); }
+    },
+
+    openProfileBatch() {
+      const targets = this.profileTargets();
+      if (!targets.length) { this.toast("This profile has no observed physical instances to enable.", "err"); return; }
+      const unresolved = this.profileUnresolvedMembers;
+      this.openBatch("enable", targets, {
+        profileName: this.profilePreview && this.profilePreview.name,
+        unresolvedCount: unresolved.length,
+        unresolvedMembers: unresolved.map((member) => member.name),
+      });
     },
 
     async deleteProfile(name) {
@@ -701,33 +1357,110 @@ createApp({
       this.toast("Path copied to clipboard.");
     },
 
+    normalizeThemePreference(value) {
+      return ["light", "dark", "system"].includes(value) ? value : "system";
+    },
+
+    readSystemTheme() {
+      if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      return "light";
+    },
+
+    readReducedMotion() {
+      return typeof window !== "undefined"
+        && typeof window.matchMedia === "function"
+        && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    },
+
+    applyThemePreference(value) {
+      const preference = this.normalizeThemePreference(value);
+      const systemTheme = this.readSystemTheme();
+      const resolved = preference === "system" ? systemTheme : preference;
+      this.systemTheme = systemTheme;
+      this.resolvedTheme = resolved;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.dataset.themePreference = preference;
+    },
+
+    setupThemeListener() {
+      this.removeThemeListener();
+      if (this.theme !== "system" || typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+      this.themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      this.themeMediaHandler = () => {
+        if (this.theme === "system") this.applyThemePreference("system");
+      };
+      if (typeof this.themeMediaQuery.addEventListener === "function") {
+        this.themeMediaQuery.addEventListener("change", this.themeMediaHandler);
+      } else if (typeof this.themeMediaQuery.addListener === "function") {
+        this.themeMediaQuery.addListener(this.themeMediaHandler);
+      }
+    },
+
+    removeThemeListener() {
+      if (!this.themeMediaQuery || !this.themeMediaHandler) {
+        this.themeMediaQuery = null;
+        this.themeMediaHandler = null;
+        return;
+      }
+      if (typeof this.themeMediaQuery.removeEventListener === "function") {
+        this.themeMediaQuery.removeEventListener("change", this.themeMediaHandler);
+      } else if (typeof this.themeMediaQuery.removeListener === "function") {
+        this.themeMediaQuery.removeListener(this.themeMediaHandler);
+      }
+      this.themeMediaQuery = null;
+      this.themeMediaHandler = null;
+    },
+
+    setThemePreference(value) {
+      this.theme = this.normalizeThemePreference(value);
+    },
+
+    applyTextSize(value) {
+      const mode = value === "large" ? "large" : "standard";
+      this.textSize = mode;
+      document.documentElement.dataset.textSize = mode;
+    },
+
+    setTextSize(value) {
+      this.textSize = value === "large" ? "large" : "standard";
+    },
+
     toggleTheme() {
-      this.theme = this.theme === "dark" ? "light" : "dark";
+      const next = this.theme === "system" ? "light" : (this.theme === "light" ? "dark" : "system");
+      this.setThemePreference(next);
     },
 
     closeModal(key) {
       this.modals[key] = null;
-      this.$nextTick(() => this.restoreModalFocus());
     },
 
     openModal(key, value = {}) {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals[key] = value;
       this.$nextTick(() => this.focusModal());
     },
 
     onKeydown(e) {
       this.trapModalFocus(e);
+      const commandShortcut = (e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "k";
+      if (commandShortcut && (!this.activeModal || this.activeModal === "commands")) {
+        e.preventDefault();
+        this.toggleCommandPalette();
+        return;
+      }
       const tag = (e.target.tagName || "").toLowerCase();
       const typing = ["input", "textarea", "select"].includes(tag) || e.target.isContentEditable;
-      if (e.key === "/" && !typing) {
+      if (e.key === "/" && !typing && !this.activeModal) {
         e.preventDefault();
         this.$refs.searchInput && this.$refs.searchInput.focus();
       } else if (e.key === "?" && !typing && !this.activeModal) {
         e.preventDefault();
         this.openModal("help", {});
       } else if (e.key === "Escape") {
-        if (this.menuOpen) this.menuOpen = false;
+        if (this.menuOpen) this.closeActionsMenu(true);
+        else if (this.modals.commands) this.closeModal("commands");
         else if (this.modals.remove) this.closeModal("remove");
         else if (this.modals.purge) this.closeModal("purge");
         else if (this.modals.skill) this.closeModal("skill");
@@ -753,6 +1486,8 @@ createApp({
 
     menuDo(action) {
       this.menuOpen = false;
+      const trigger = this.$refs.menuTrigger;
+      if (trigger) trigger.focus();
       const actions = {
         create: this.openCreate,
         add: this.openAdd,
@@ -780,14 +1515,14 @@ createApp({
     },
 
     openInstall() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.install = true;
     },
 
     /* ----------------------------------------------------- skill actions */
 
     openCreate() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       const defScope = (this.activeScope && this.activeScope !== "all") ? this.activeScope : "global";
       this.modals.skill = {
         mode: "create",
@@ -798,7 +1533,7 @@ createApp({
     },
 
     async openEdit() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
       this.modals.skill = {
         mode: this.selectedName,
@@ -834,7 +1569,13 @@ createApp({
       m.errors = {};
       if (!m.form.name) m.errors.name = "Name is required.";
       if (!m.form.description) m.errors.description = "Description is required.";
-      if (Object.keys(m.errors).length) return;
+      if (Object.keys(m.errors).length) {
+        this.$nextTick(() => {
+          const firstInvalid = document.querySelector('[data-modal="skill"] .form-field.has-error input, [data-modal="skill"] .form-field.has-error textarea, [data-modal="skill"] .form-field.has-error select');
+          if (firstInvalid) firstInvalid.focus();
+        });
+        return;
+      }
 
       const payload = {};
       const payloadKeys = m.mode === "create"
@@ -932,7 +1673,7 @@ createApp({
     },
 
     confirmRemove(record) {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       if (!record) { this.toast("Select a skill first.", "err"); return; }
       // BUG-5: bind the modal to the record it was opened for.  The scope was
       // re-derived from live `this.selected` at confirm time, so a selection
@@ -990,7 +1731,7 @@ createApp({
     },
 
     confirmPurge() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.purge = {};
     },
 
@@ -1033,7 +1774,7 @@ createApp({
     /* --------------------------------------------------------- validate */
 
     openValidate() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.validate = {
         name: this.selectedName || "",
         loading: false,
@@ -1064,7 +1805,7 @@ createApp({
     /* ------------------------------------------------------- maintenance */
 
     openDoctor() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.doctor = { loading: true, report: null };
       api("/api/doctor" + (this.activeScope === "all" ? "?scope=all" : ""))
         .then((report) => { if (this.modals.doctor) this.modals.doctor.report = report; })
@@ -1080,7 +1821,7 @@ createApp({
     },
 
     openStats() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.stats = { loading: true, report: null };
       api("/api/stats")
         .then((report) => { if (this.modals.stats) this.modals.stats.report = report; })
@@ -1088,9 +1829,9 @@ createApp({
         .finally(() => { if (this.modals.stats) this.modals.stats.loading = false; });
     },
 
-    openHistory() {
-      this.modalRestoreFocus = document.activeElement;
-      this.modals.history = { name: "", rows: [], snapshots: [], loading: false };
+    openHistory(scopeOverride = null) {
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
+      this.modals.history = { name: "", rows: [], snapshots: [], loading: false, scope: scopeOverride || "" };
       this.loadHistory();
     },
 
@@ -1103,7 +1844,7 @@ createApp({
         m.rows = await api("/api/history?limit=200" + name);
         m.snapshots = [];
         if (m.name) {
-          const scope = (this.selected && this.selected.scope) ? this.selected.scope : "global";
+          const scope = m.scope || ((this.selected && this.selected.scope) ? this.selected.scope : "global");
           const snapshotResult = await api("/api/history?name=" + encodeURIComponent(m.name) + "&scope=" + encodeURIComponent(scope) + "&snapshots=1");
           m.snapshots = snapshotResult.snapshots || [];
         }
@@ -1117,7 +1858,8 @@ createApp({
     async rollbackSnapshot(name, snapshot) {
       this.busy = true;
       try {
-        const scope = (this.selected && this.selected.scope) ? this.selected.scope : "global";
+        const scope = (this.modals.history && this.modals.history.scope)
+          || ((this.selected && this.selected.scope) ? this.selected.scope : "global");
         const res = await api("/api/trash/" + encodeURIComponent(name) + "?snapshot=" + encodeURIComponent(snapshot) + "&scope=" + encodeURIComponent(scope), { method: "POST" });
         this.toast(`Rolled back "${res.name}" to snapshot ${snapshot}.`);
         await this.loadSkills();
@@ -1161,7 +1903,7 @@ createApp({
     /* -------------------------------------------------------- templates */
 
     openTemplates() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.templates = { loading: true, names: [] };
       api("/api/templates")
         .then((res) => { if (this.modals.templates) this.modals.templates.names = res.templates || []; })
@@ -1170,7 +1912,7 @@ createApp({
     },
 
     openNewTemplate() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.newtemplate = { name: "", body: "", error: "" };
     },
 
@@ -1196,9 +1938,9 @@ createApp({
 
     /* ------------------------------------------------------ import/export */
 
-    openImport() {
-      this.modalRestoreFocus = document.activeElement;
-      this.modals.import = { file: null, force: false, full: false };
+    openImport(full = false) {
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
+      this.modals.import = { file: null, force: false, full: !!full };
     },
 
     pickImportFile() {
@@ -1248,7 +1990,7 @@ createApp({
     },
 
     openSync() {
-      this.modalRestoreFocus = document.activeElement;
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
       const from = (this.selected && this.selected.scope) ? this.selected.scope : "global";
       const targets = (this.scopes || []).filter((s) => s.id !== from && s.writable);
