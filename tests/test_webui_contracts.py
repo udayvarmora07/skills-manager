@@ -452,6 +452,30 @@ console.log(JSON.stringify({locale:ctx.resolvedLocale, number:ctx.formatNumber(1
         self.assertEqual(values["locale"], "en-IN")
         self.assertEqual(values["number"], "12,34,567")
 
+    def test_regional_formatting_covers_secondary_counts_and_status_context(self):
+        html = _read(INDEX_HTML)
+        self.assertIn("Theme, text size, and regional formats are stored only in this browser.", html)
+        self.assertIn("formatNumber(budget.all_pct_window)", html)
+        self.assertIn("selected.tokens_pct != null ? formatNumber(selected.tokens_pct)", html)
+        self.assertNotIn("selected.tokens_pct != null ? selected.tokens_pct + '%'", html)
+        self.assertIn("formatNumber(Object.keys(catalog.profiles || {}).length)", html)
+        self.assertIn("Settings · {{ themeModeLabel }} theme · {{ textSize }} text · {{ resolvedLocale }} formats", html)
+        for expression in (
+            "{{ (profilePreview.summary || {}).observed || 0 }}",
+            "{{ (profilePreview.summary || {}).disabled || 0 }}",
+            "{{ (profilePreview.summary || {}).divergent || 0 }}",
+            "{{ (profilePreview.summary || {}).missing || 0 }}",
+            "{{ modals.doctor.report.skills_on_disk }}",
+            "{{ modals.doctor.report.db_rows }}",
+            "{{ modals.doctor.report.trash_count }}",
+            "{{ modals.doctor.report.templates_count }}",
+            "{{ modals.stats.report.total }}",
+            "{{ modals.stats.report.active }}",
+            "{{ modals.stats.report.disabled }}",
+            "{{ modals.stats.report.trashed }}",
+        ):
+            self.assertNotIn(expression, html)
+
     def test_theme_preference_listener_and_text_size_behavior(self):
         script = r'''
 const fs = require('fs'), vm = require('vm');
