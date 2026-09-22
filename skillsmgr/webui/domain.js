@@ -20,20 +20,42 @@ function esc(s) {
   }[c]));
 }
 
-function formatBytes(n) {
+function localizedNumber(value, locale, options = {}) {
+  try {
+    return new Intl.NumberFormat(locale || undefined, options).format(value);
+  } catch (e) {
+    return String(value);
+  }
+}
+
+function formatBytes(n, locale) {
   if (n === null || n === undefined) return "—";
-  if (n < 1024) return n + " B";
+  if (n < 1024) return localizedNumber(n, locale) + " B";
   const units = ["KB", "MB", "GB"];
   let v = n, i = -1;
   do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);
-  return v.toFixed(v >= 100 ? 0 : 1) + " " + units[i];
+  const fractionDigits = v >= 100 ? 0 : 1;
+  return localizedNumber(Number(v.toFixed(fractionDigits)), locale, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }) + " " + units[i];
 }
 
-function formatTokens(n) {
+function formatTokens(n, locale) {
   if (n == null) return "—";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-  return String(n);
+  if (n >= 1_000_000) {
+    return localizedNumber(Number((n / 1_000_000).toFixed(1)), locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }) + "M";
+  }
+  if (n >= 1000) {
+    return localizedNumber(Number((n / 1000).toFixed(1)), locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }) + "k";
+  }
+  return localizedNumber(n, locale);
 }
 
 function tokenPctClass(pct) {

@@ -12,6 +12,13 @@ const { createApp, nextTick } = Vue;
 createApp({
   data() {
     const savedTheme = localStorage.getItem("skillsmgr-theme");
+    const savedLocale = localStorage.getItem("skillsmgr-locale");
+    const localeOptions = [
+      { value: "en-US", label: "English (United States)" },
+      { value: "en-GB", label: "English (United Kingdom)" },
+      { value: "en-IN", label: "English (India)" },
+    ];
+    const localeValues = ["system", ...localeOptions.map((option) => option.value)];
     return {
       view: "overview",
       filter: "",
@@ -39,6 +46,9 @@ createApp({
       resolvedTheme: "light",
       systemTheme: "light",
       textSize: localStorage.getItem("skillsmgr-text-size") === "large" ? "large" : "standard",
+      localeOptions,
+      locale: localeValues.includes(savedLocale) ? savedLocale : "system",
+      resolvedLocale: "en-US",
       prefersReducedMotion: false,
       themeMediaQuery: null,
       themeMediaHandler: null,
@@ -382,6 +392,10 @@ createApp({
       this.applyTextSize(v);
       localStorage.setItem("skillsmgr-text-size", this.textSize);
     },
+    locale(v) {
+      this.applyLocale(v);
+      localStorage.setItem("skillsmgr-locale", this.locale);
+    },
     activeScope(v) {
       localStorage.setItem("skillsmgr-scope", v);
       this.selectedName = null;
@@ -448,6 +462,7 @@ createApp({
   mounted() {
     this.applyThemePreference(this.theme);
     this.applyTextSize(this.textSize);
+    this.applyLocale(this.locale);
     this.prefersReducedMotion = this.readReducedMotion();
     this.setupThemeListener();
     document.addEventListener("keydown", this.onKeydown);
@@ -463,8 +478,6 @@ createApp({
 
   methods: {
     renderMarkdown,
-    formatBytes,
-    formatTokens,
     tokenPctClass,
     tokenBarWidth,
     formatCompat,
@@ -472,6 +485,37 @@ createApp({
     groupLogicalSkills,
     deriveLogicalSkillIdentity,
     observedIdentity,
+
+    formatBytes(value) {
+      return formatBytes(value, this.resolvedLocale);
+    },
+
+    formatTokens(value) {
+      return formatTokens(value, this.resolvedLocale);
+    },
+
+    formatNumber(value, options = {}) {
+      if (value === null || value === undefined || value === "") return "—";
+      const numeric = typeof value === "number" ? value : Number(value);
+      if (!Number.isFinite(numeric)) return String(value);
+      try {
+        return new Intl.NumberFormat(this.resolvedLocale || undefined, options).format(numeric);
+      } catch (e) {
+        return String(value);
+      }
+    },
+
+    formatDate(value, options = {}) {
+      if (!value) return "—";
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      const dateOptions = { dateStyle: "medium", timeStyle: "short", ...options };
+      try {
+        return new Intl.DateTimeFormat(this.resolvedLocale || undefined, dateOptions).format(date);
+      } catch (e) {
+        return String(value);
+      }
+    },
 
     qualityStateLabel(record) {
       const states = (record && (record.instance_states || record.states)) || [];
@@ -1359,6 +1403,32 @@ createApp({
 
     normalizeThemePreference(value) {
       return ["light", "dark", "system"].includes(value) ? value : "system";
+    },
+
+    normalizeLocale(value) {
+      const supported = ["system", ...this.localeOptions.map((option) => option.value)];
+      return supported.includes(value) ? value : "system";
+    },
+
+    readSystemLocale() {
+      const browserLocale = (typeof navigator !== "undefined" && navigator.language)
+        || (typeof window !== "undefined" && window.navigator && window.navigator.language);
+      return browserLocale || "en-US";
+    },
+
+    applyLocale(value) {
+      const preference = this.normalizeLocale(value);
+      let resolved = preference === "system" ? this.readSystemLocale() : preference;
+      try {
+        new Intl.NumberFormat(resolved).format(1234);
+      } catch (e) {
+        resolved = "en-US";
+      }
+      this.resolvedLocale = resolved;
+      document.documentElement.dataset.locale = resolved;
+      document.documentElement.dataset.localePreference = preference;
+      // Keep the document language truthful until translated resources exist.
+      document.documentElement.lang = "en";
     },
 
     readSystemTheme() {

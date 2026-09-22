@@ -38,7 +38,7 @@
     </div>
 
     <div class="topbar-actions">
-      <span v-if="view === 'skills'" class="stat-pill">{{ activeScope === 'all' ? allScopesCount : totalCount }} skills<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
+      <span v-if="view === 'skills'" class="stat-pill">{{ formatNumber(activeScope === 'all' ? allScopesCount : totalCount) }} skills<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
       <button class="btn btn-secondary command-trigger" type="button" @click="toggleCommandPalette" title="Open commands" aria-controls="command-palette" :aria-expanded="!!modals.commands" aria-keyshortcuts="Control+K Meta+K">
         <svg class="command-trigger-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M5 12h9M5 17h6"/><path d="m17 15 2 2 3-3"/></svg>
         <span class="command-trigger-label">Commands</span>
@@ -136,10 +136,10 @@
       </section>
       <div id="compact-controls" class="compact-controls" :class="{ open: compactControlsOpen }">
 
-      <div class="rail-heading"><span>Agent scopes</span><span class="hint">{{ allScopesCount }} skills</span></div>
+      <div class="rail-heading"><span>Agent scopes</span><span class="hint">{{ formatNumber(allScopesCount) }} skills</span></div>
       <div class="scopebar" v-if="scopes && scopes.length">
-        <button class="scope-link" :class="{ active: activeScope === 'all' }" @click="activeScope = 'all'" :aria-pressed="activeScope === 'all'"><span>All scopes</span><strong>{{ allScopesCount }}</strong></button>
-        <button v-for="s in scopes.filter(Boolean)" :key="s.id" class="scope-link" :class="{ active: activeScope === s.id }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens'" @click="activeScope = s.id" :aria-pressed="activeScope === s.id"><span>{{ s.label }}</span><strong>{{ s.count }}</strong></button>
+        <button class="scope-link" :class="{ active: activeScope === 'all' }" @click="activeScope = 'all'" :aria-pressed="activeScope === 'all'"><span>All scopes</span><strong>{{ formatNumber(allScopesCount) }}</strong></button>
+        <button v-for="s in scopes.filter(Boolean)" :key="s.id" class="scope-link" :class="{ active: activeScope === s.id }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens'" @click="activeScope = s.id" :aria-pressed="activeScope === s.id"><span>{{ s.label }}</span><strong>{{ formatNumber(s.count) }}</strong></button>
       </div>
 
       <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + formatTokens(budget.window_tokens) + ' tok)'">
@@ -179,8 +179,8 @@
       </div>
 
       <div v-if="view === 'skills'" class="library-switch" aria-label="Skill list mode">
-        <button class="chip" :class="{ active: libraryMode === 'library' }" @click="setLibraryMode('library')" :aria-pressed="libraryMode === 'library'">Library <span class="chip-count">{{ logicalSkills.length }}</span></button>
-        <button class="chip" :class="{ active: libraryMode === 'instances' }" @click="setLibraryMode('instances')" :aria-pressed="libraryMode === 'instances'">Instances <span class="chip-count">{{ filteredSkills.length }}</span></button>
+        <button class="chip" :class="{ active: libraryMode === 'library' }" @click="setLibraryMode('library')" :aria-pressed="libraryMode === 'library'">Library <span class="chip-count">{{ formatNumber(logicalSkills.length) }}</span></button>
+        <button class="chip" :class="{ active: libraryMode === 'instances' }" @click="setLibraryMode('instances')" :aria-pressed="libraryMode === 'instances'">Instances <span class="chip-count">{{ formatNumber(filteredSkills.length) }}</span></button>
       </div>
       <div v-if="view === 'skills'" class="browse-switch" role="group" aria-label="Library presentation">
         <span class="browse-label">Browse as</span>
@@ -194,7 +194,7 @@
         </button>
       </div>
       <details v-if="view === 'skills'" class="tag-filter-details" :open="!!tagFilter">
-        <summary>Tags <span v-if="tagFilter" class="tag-filter-current">{{ tagFilter === '__untagged' ? 'Untagged' : '#' + tagFilter }}</span><span v-else class="hint">{{ tagNames.length }} available</span></summary>
+        <summary>Tags <span v-if="tagFilter" class="tag-filter-current">{{ tagFilter === '__untagged' ? 'Untagged' : '#' + tagFilter }}</span><span v-else class="hint">{{ formatNumber(tagNames.length) }} available</span></summary>
         <div class="tag-filter" aria-label="Tag filter">
           <button class="chip" :class="{ active: !tagFilter }" @click="setTagFilter('')" :aria-pressed="!tagFilter">All tags</button>
           <button class="chip" :class="{ active: tagFilter === '__untagged' }" @click="setTagFilter('__untagged')" :aria-pressed="tagFilter === '__untagged'">Untagged</button>
@@ -204,7 +204,7 @@
 
       <div v-if="view === 'skills'" class="listpane-head">
         <div><p class="eyebrow">{{ activeScope === 'all' ? 'Library' : (scopes.find(s => s.id === activeScope) || {}).label || activeScope }}</p><h2>{{ libraryMode === 'library' ? 'Skills' : 'Instances' }}</h2></div>
-        <span class="list-count">{{ visibleSkills.length }}</span>
+        <span class="list-count">{{ formatNumber(visibleSkills.length) }}</span>
       </div>
       <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
 
@@ -239,13 +239,13 @@
           <div v-if="browseMode === 'grid'" class="card-meta" aria-label="Observed identity and state">
             <span v-for="identity in identityItems(s)" :key="identity.key" class="identity-observation">
               <span class="identity-label" :title="identity.label">{{ identity.label }}</span>
-              <span class="identity-state" :class="identity.problem ? 'identity-state-warn' : 'identity-state-ok'" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + identity.count + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ identity.count }} observed</span></span>
+              <span class="identity-state" :class="identity.problem ? 'identity-state-warn' : 'identity-state-ok'" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
             </span>
           </div>
           <div v-else class="identity-summary" aria-label="Observed identity and state">
             <span v-for="identity in identityItems(s)" :key="identity.key" class="identity-observation">
               <span class="identity-label" :title="identity.label">{{ identity.label }}</span>
-              <span class="identity-state" :class="identity.problem ? 'identity-state-warn' : 'identity-state-ok'" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + identity.count + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ identity.count }} observed</span></span>
+              <span class="identity-state" :class="identity.problem ? 'identity-state-warn' : 'identity-state-ok'" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
             </span>
           </div>
           <div class="row-badges">
@@ -280,7 +280,7 @@
           <p>Profiles describe a desired set of existing skills and targets.</p>
         </div>
         <button v-for="(profile, name) in catalog.profiles" :key="name" class="sidepanel-row" type="button" @click="previewProfile(name)">
-          <strong>{{ name }}</strong><span>{{ profile.skills.length }} skills · {{ profile.targets.length || 'all targets' }}</span>
+          <strong>{{ name }}</strong><span>{{ formatNumber(profile.skills.length) }} skills · {{ profile.targets.length ? formatNumber(profile.targets.length) : 'all targets' }}</span>
         </button>
       </div>
 
@@ -296,7 +296,7 @@
         <div class="sidepanel-intro"><strong>Recovery / backups</strong><span class="hint">Global store only</span></div>
         <div v-if="!trashSkills.length" class="empty compact-empty"><h3>Trash is empty</h3><p>History and full migration tools remain available in this center.</p></div>
         <button v-for="t in filteredTrash" :key="t.trash_path" class="sidepanel-row" type="button" @click="selectedTrash = t">
-          <strong>{{ t.name }}</strong><span>{{ t.modified }} · {{ formatBytes(t.size_bytes) }}</span>
+          <strong>{{ t.name }}</strong><span>{{ formatDate(t.modified) }} · {{ formatBytes(t.size_bytes) }}</span>
         </button>
       </div>
 
@@ -338,7 +338,7 @@
             <span class="dot dot-muted"></span>
             <div class="row-main">
               <div class="row-name">{{ t.name }}</div>
-              <div class="row-desc">{{ formatBytes(t.size_bytes) }} · {{ t.modified }}</div>
+              <div class="row-desc">{{ formatBytes(t.size_bytes) }} · {{ formatDate(t.modified) }}</div>
             </div>
           </li>
           <li style="padding: 8px 16px;">
@@ -391,16 +391,16 @@
               <button class="btn btn-secondary" type="button" @click="openDoctor">Run health check</button>
             </div>
             <dl class="overview-metrics" aria-label="Library summary">
-              <div><dt>Logical skills</dt><dd>{{ overviewLogicalCount }}<small>deduplicated names</small></dd></div>
-              <div><dt>Active instances</dt><dd>{{ overviewActiveCount }}<small>enabled, parsed, addressable</small></dd></div>
-              <div><dt>Disabled</dt><dd>{{ overviewDisabledCount }}<small>will be skipped</small></dd></div>
-              <div><dt>Recovery</dt><dd>{{ trashCount }}<small>in global trash</small></dd></div>
+              <div><dt>Logical skills</dt><dd>{{ formatNumber(overviewLogicalCount) }}<small>deduplicated names</small></dd></div>
+              <div><dt>Active instances</dt><dd>{{ formatNumber(overviewActiveCount) }}<small>enabled, parsed, addressable</small></dd></div>
+              <div><dt>Disabled</dt><dd>{{ formatNumber(overviewDisabledCount) }}<small>will be skipped</small></dd></div>
+              <div><dt>Recovery</dt><dd>{{ formatNumber(trashCount) }}<small>in global trash</small></dd></div>
             </dl>
           </section>
 
           <div class="overview-columns">
             <section class="attention-queue" aria-labelledby="attention-title">
-              <div class="overview-section-head"><div><p class="eyebrow">Next actions</p><h2 id="attention-title">Attention queue</h2></div><span class="list-count">{{ overviewAttentionCount }}</span></div>
+              <div class="overview-section-head"><div><p class="eyebrow">Next actions</p><h2 id="attention-title">Attention queue</h2></div><span class="list-count">{{ formatNumber(overviewAttentionCount) }}</span></div>
               <p class="overview-section-note">Derived from observed instance state; no validation or provenance status is inferred here.</p>
               <ol v-if="overviewAttention.length" class="attention-list">
                 <li v-for="item in overviewAttention" :key="item.key" class="attention-item">
@@ -413,8 +413,8 @@
             </section>
 
             <aside class="overview-secondary" aria-label="Secondary overview information">
-              <section class="overview-compact" aria-labelledby="observed-title"><div class="overview-section-head"><h2 id="observed-title">Observed state</h2><button class="text-button" type="button" @click="switchView('skills')">Open Library</button></div><ul><li><span>Copies across roots</span><strong>{{ overviewInstanceCount }}</strong></li><li><span>Divergent groups</span><strong>{{ overviewDivergentGroups.length }}</strong></li><li><span>Malformed entries</span><strong>{{ overviewMalformedCount }}</strong></li><li><span>Unaddressable entries</span><strong>{{ overviewUnaddressableCount }}</strong></li></ul></section>
-              <section class="overview-compact" aria-labelledby="activity-title"><div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div><p v-if="loadingHistory" class="hint">Loading recent activity…</p><p v-else-if="!overviewHistory.length" class="hint">No history entries yet.</p><ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · {{ entry.at }}</span></div></li></ul></section>
+              <section class="overview-compact" aria-labelledby="observed-title"><div class="overview-section-head"><h2 id="observed-title">Observed state</h2><button class="text-button" type="button" @click="switchView('skills')">Open Library</button></div><ul><li><span>Copies across roots</span><strong>{{ formatNumber(overviewInstanceCount) }}</strong></li><li><span>Divergent groups</span><strong>{{ formatNumber(overviewDivergentGroups.length) }}</strong></li><li><span>Malformed entries</span><strong>{{ formatNumber(overviewMalformedCount) }}</strong></li><li><span>Unaddressable entries</span><strong>{{ formatNumber(overviewUnaddressableCount) }}</strong></li></ul></section>
+              <section class="overview-compact" aria-labelledby="activity-title"><div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div><p v-if="loadingHistory" class="hint">Loading recent activity…</p><p v-else-if="!overviewHistory.length" class="hint">No history entries yet.</p><ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · {{ formatDate(entry.at) }}</span></div></li></ul></section>
             </aside>
           </div>
         </template>
@@ -491,11 +491,11 @@
             </div>
             <div>
               <dt>Added</dt>
-              <dd>{{ selected.added_at || '—' }}</dd>
+              <dd>{{ formatDate(selected.added_at) }}</dd>
             </div>
             <div>
               <dt>Updated</dt>
-              <dd>{{ selected.updated_at || '—' }}</dd>
+              <dd>{{ formatDate(selected.updated_at) }}</dd>
             </div>
             <div>
               <dt>Compatibility</dt>
@@ -511,7 +511,7 @@
             </div>
             <div>
               <dt>Chars / Lines</dt>
-              <dd>{{ (selected.chars || 0).toLocaleString() }} chars · {{ selected.lines || 0 }} lines</dd>
+              <dd>{{ formatNumber(selected.chars || 0) }} chars · {{ formatNumber(selected.lines || 0) }} lines</dd>
             </div>
             <div v-if="selected.body_tokens != null">
               <dt>Body / Frontmatter</dt>
@@ -544,7 +544,7 @@
           <h3>Set up your local skill library</h3>
           <p>Skills Manager stays local: it reads the supported roots below and keeps the filesystem as the source of truth.</p>
           <ol class="onboarding-steps">
-            <li class="complete"><span class="step-mark">✓</span><span><strong>Consumer roots detected</strong><small>{{ onboardingRoots.length }} available root{{ onboardingRoots.length === 1 ? '' : 's' }}</small></span></li>
+            <li class="complete"><span class="step-mark">✓</span><span><strong>Consumer roots detected</strong><small>{{ formatNumber(onboardingRoots.length) }} available root{{ onboardingRoots.length === 1 ? '' : 's' }}</small></span></li>
             <li class="complete"><span class="step-mark">✓</span><span><strong>Library scan complete</strong><small>No skill documents found yet</small></span></li>
             <li><span class="step-mark">3</span><span><strong>Choose your first action</strong><small>Create, import, or add an existing folder</small></span></li>
           </ol>
@@ -605,7 +605,7 @@
           </section>
           <section class="quality-section" aria-labelledby="quality-size-title">
             <div class="section-label-row"><h2 id="quality-size-title">Content and context estimate</h2><span class="hint">observed estimate</span></div>
-            <dl class="meta compact-meta"><div><dt>Tokens</dt><dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'method unavailable' }})</span></dd></div><div><dt>Window share</dt><dd>{{ selected.tokens_pct != null ? selected.tokens_pct + '%' : 'not observed' }} of {{ selected.window || 'configured window' }}</dd></div><div><dt>Document size</dt><dd>{{ selected.chars != null ? selected.chars.toLocaleString() + ' chars' : 'not observed' }} · {{ selected.lines != null ? selected.lines + ' lines' : 'line count unavailable' }}</dd></div><div><dt>Body / frontmatter</dt><dd>{{ selected.body_tokens != null ? formatTokens(selected.body_tokens) : 'not observed' }} / {{ selected.frontmatter_tokens != null ? formatTokens(selected.frontmatter_tokens) : 'not observed' }}</dd></div></dl>
+            <dl class="meta compact-meta"><div><dt>Tokens</dt><dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'method unavailable' }})</span></dd></div><div><dt>Window share</dt><dd>{{ selected.tokens_pct != null ? selected.tokens_pct + '%' : 'not observed' }} of {{ selected.window || 'configured window' }}</dd></div><div><dt>Document size</dt><dd>{{ selected.chars != null ? formatNumber(selected.chars) + ' chars' : 'not observed' }} · {{ selected.lines != null ? formatNumber(selected.lines) + ' lines' : 'line count unavailable' }}</dd></div><div><dt>Body / frontmatter</dt><dd>{{ selected.body_tokens != null ? formatTokens(selected.body_tokens) : 'not observed' }} / {{ selected.frontmatter_tokens != null ? formatTokens(selected.frontmatter_tokens) : 'not observed' }}</dd></div></dl>
           </section>
           <section class="quality-section" aria-labelledby="quality-unavailable-title">
             <div class="section-label-row"><h2 id="quality-unavailable-title">Signals not observed</h2><span class="badge badge-warn">unavailable</span></div>
@@ -615,7 +615,7 @@
         <section v-else class="quality-overview" aria-labelledby="quality-title">
           <div class="detail-head"><div><h1 id="view-title" tabindex="-1">Quality</h1><p class="lead">Review validity, physical state, provenance, and size without collapsing independent evidence into a score.</p></div><div class="detail-actions quality-actions"><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="switchView('skills')">Inspect in Library</button></div></div>
           <p id="quality-title" class="hint">Select a skill to inspect its exact physical copy. Risk, eval, usefulness, trust, and effective-load signals remain explicitly unavailable unless an existing API provides them.</p>
-          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ qualitySummary.observed }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ qualitySummary.active }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ qualitySummary.disabled }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ qualitySummary.validityFlagged }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Divergent groups</dt><dd>{{ qualitySummary.divergent }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ qualitySummary.provenance }}<small>present when returned</small></dd></div></dl>
+          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ formatNumber(qualitySummary.observed) }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ formatNumber(qualitySummary.active) }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ formatNumber(qualitySummary.disabled) }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ formatNumber(qualitySummary.validityFlagged) }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Divergent groups</dt><dd>{{ formatNumber(qualitySummary.divergent) }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd></div></dl>
           <section class="quality-section"><h2>What this center can and cannot show</h2><ul class="quality-unavailable"><li><strong>Available</strong><span>Observed parser/addressability flags, physical copies and state, provenance fields when present, and token/size estimates.</span></li><li><strong>Not inferred</strong><span>No single quality score, safety/trust verdict, usefulness claim, or effective consumer load.</span></li></ul></section>
           <p v-if="!qualityRecords.length" class="empty compact-empty">No observed skills yet. Add or create a skill, then return here for independent evidence.</p>
         </section>
@@ -638,16 +638,16 @@
         <section v-if="Object.keys(catalog.profiles || {}).length" class="profile-preview" aria-labelledby="saved-profiles-title">
           <div class="section-label-row"><h2 id="saved-profiles-title">Saved profiles</h2><span class="hint">desired sets only</span></div>
           <div v-for="(profile, name) in catalog.profiles" :key="name" class="saved-profile-row">
-            <div><strong>{{ name }}</strong><span class="hint">{{ profile.skills.length }} skills · {{ profile.targets.length || 'all targets' }}</span></div>
+            <div><strong>{{ name }}</strong><span class="hint">{{ formatNumber(profile.skills.length) }} skills · {{ profile.targets.length ? formatNumber(profile.targets.length) : 'all targets' }}</span></div>
             <div class="detail-actions"><button class="btn btn-secondary" type="button" @click="previewProfile(name)">Preview</button><button class="btn btn-danger-ghost" type="button" @click="deleteProfile(name)">Delete</button></div>
           </div>
         </section>
         <section v-if="profilePreview" class="profile-preview" aria-live="polite">
           <div class="section-label-row"><h2>{{ profilePreview.name }}</h2><span class="hint">read-only desired vs observed</span></div>
           <dl class="meta profile-summary"><div><dt>Observed</dt><dd>{{ (profilePreview.summary || {}).observed || 0 }}</dd></div><div><dt>Disabled</dt><dd>{{ (profilePreview.summary || {}).disabled || 0 }}</dd></div><div><dt>Divergent</dt><dd>{{ (profilePreview.summary || {}).divergent || 0 }}</dd></div><div><dt>Missing</dt><dd>{{ (profilePreview.summary || {}).missing || 0 }}</dd></div></dl>
-          <p class="hint">Targets: {{ (profilePreview.targets || []).length ? (profilePreview.targets || []).join(', ') : 'all observed scopes' }} · {{ profileObservedCount }} observed physical instance{{ profileObservedCount === 1 ? '' : 's' }} in this preview.</p>
+          <p class="hint">Targets: {{ (profilePreview.targets || []).length ? (profilePreview.targets || []).join(', ') : 'all observed scopes' }} · {{ formatNumber(profileObservedCount) }} observed physical instance{{ profileObservedCount === 1 ? '' : 's' }} in this preview.</p>
           <ul class="profile-members">
-            <li v-for="member in profilePreview.members" :key="member.name"><strong>{{ member.name }}</strong><span class="tag" :class="member.state === 'missing' || member.state === 'divergent' ? 'tag-warn' : ''">{{ member.state }}</span><small>{{ member.instances.length }} observed instance{{ member.instances.length === 1 ? '' : 's' }}</small><code v-for="instance in member.instances" :key="instance.scope + '/' + instance.path">{{ instance.scope }} · {{ instance.path }}</code></li>
+            <li v-for="member in profilePreview.members" :key="member.name"><strong>{{ member.name }}</strong><span class="tag" :class="member.state === 'missing' || member.state === 'divergent' ? 'tag-warn' : ''">{{ member.state }}</span><small>{{ formatNumber(member.instances.length) }} observed instance{{ member.instances.length === 1 ? '' : 's' }}</small><code v-for="instance in member.instances" :key="instance.scope + '/' + instance.path">{{ instance.scope }} · {{ instance.path }}</code></li>
           </ul>
           <div class="detail-actions profile-actions"><button v-if="profileObservedCount" class="btn btn-primary" type="button" @click="openProfileBatch" :disabled="busy">Review enable plan</button></div>
           <p class="hint">Missing and divergent members stay visible and unresolved. Applying this bounded plan enables only the exact observed instances listed above; preview does not write to skills.</p>
@@ -682,7 +682,7 @@
           <pre v-if="install.review.inspection && install.review.inspection.risk" class="result-block">{{ JSON.stringify(install.review.inspection.risk, null, 2) }}</pre>
         </section>
         <section class="profile-preview" aria-labelledby="registry-inventory-title">
-          <div class="section-label-row"><h2 id="registry-inventory-title">Registry-backed skills</h2><span class="hint">{{ registryInventoryCount }} observed</span></div>
+          <div class="section-label-row"><h2 id="registry-inventory-title">Registry-backed skills</h2><span class="hint">{{ formatNumber(registryInventoryCount) }} observed</span></div>
           <p class="hint">This inventory reports existing <code>registry_provenance</code> fields only. It does not infer that an update is available.</p>
           <ul v-if="filteredRegistryInventory.length" class="profile-members"><li v-for="record in filteredRegistryInventory" :key="record.name + (record.registry_provenance.id || '')"><strong>{{ record.name }}</strong><span class="tag">{{ record.registry_provenance.id || record.registry_provenance.source || 'source known' }}</span><small>hash {{ record.registry_provenance.local_snapshot_hash || record.registry_provenance.registry_hash || 'not recorded' }}</small></li></ul>
           <p v-else class="hint">No registry-backed skills were observed.</p>
@@ -696,7 +696,7 @@
           <p class="hint">Trash restore and snapshot rollback are global Store operations. Full migration archives include global skills, trash, and templates; import remains explicit and can overwrite only when selected.</p>
           <div class="detail-actions recovery-actions"><button class="btn btn-primary" type="button" @click="openHistory('global')">Review history and snapshots</button><button class="btn btn-secondary" type="button" @click="openImport(true)">Import full archive</button><button class="btn btn-secondary" type="button" @click="exportArchive(true)">Export full backup</button><button v-if="selectedTrash" class="btn btn-secondary" type="button" @click="restoreTrash" :disabled="busy">Restore {{ selectedTrash.name }}</button></div>
         </section>
-        <section class="profile-preview" aria-labelledby="recovery-trash-title"><div class="section-label-row"><h2 id="recovery-trash-title">Global trash</h2><span class="hint">{{ trashCount }} item{{ trashCount === 1 ? '' : 's' }}</span></div><ul v-if="trashSkills.length" class="profile-members"><li v-for="item in filteredTrash" :key="item.trash_path"><strong>{{ item.name }}</strong><span class="hint">{{ item.modified }}</span><code>{{ item.trash_path }}</code><button class="btn btn-secondary" type="button" @click="selectedTrash = item">Select for restore</button></li></ul><p v-else class="hint">Global trash is empty. Existing history and archive transfer actions remain available above.</p></section>
+        <section class="profile-preview" aria-labelledby="recovery-trash-title"><div class="section-label-row"><h2 id="recovery-trash-title">Global trash</h2><span class="hint">{{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }}</span></div><ul v-if="trashSkills.length" class="profile-members"><li v-for="item in filteredTrash" :key="item.trash_path"><strong>{{ item.name }}</strong><span class="hint">{{ formatDate(item.modified) }}</span><code>{{ item.trash_path }}</code><button class="btn btn-secondary" type="button" @click="selectedTrash = item">Select for restore</button></li></ul><p v-else class="hint">Global trash is empty. Existing history and archive transfer actions remain available above.</p></section>
       </div>
 
       <div v-else-if="view === 'workspaces'" class="detail-inner">
@@ -714,7 +714,7 @@
           <div v-if="workspaces.project.skills_roots.length" class="root-observation"><span v-for="root in workspaces.project.skills_roots" :key="root.relative" class="tag" :class="root.exists ? 'tag-scope' : ''">{{ root.relative }} · {{ root.exists ? 'available' : 'missing' }}</span></div>
         </section>
         <section class="adapter-grid" aria-labelledby="adapter-title">
-          <div class="section-label-row"><h2 id="adapter-title">Adapter catalog</h2><span class="hint">{{ workspaces && workspaces.adapters.length || 0 }} adapters</span></div>
+          <div class="section-label-row"><h2 id="adapter-title">Adapter catalog</h2><span class="hint">{{ formatNumber(workspaces && workspaces.adapters.length || 0) }} adapters</span></div>
           <article v-for="adapter in ((workspaces && workspaces.adapters) || []).filter(Boolean)" :key="adapter.id" class="adapter-card">
             <div class="adapter-card-head"><h3>{{ adapter.label }}</h3><span class="badge" :class="adapter.status === 'verified' ? 'badge-ok' : 'badge-warn'">{{ adapter.status }}</span></div>
             <p class="hint">{{ Array.isArray(adapter.precedence.notes) ? adapter.precedence.notes.join(' ') : (adapter.precedence.notes || 'Precedence evidence is recorded.') }}</p>
@@ -749,9 +749,21 @@
           </fieldset>
           <div class="settings-type-preview"><span class="settings-type-sample">Aa</span><span>Skill names and descriptions stay readable at 200% browser zoom.</span></div>
         </section>
+        <section class="profile-editor settings-section" aria-labelledby="settings-locale-title">
+          <h2 id="settings-locale-title">Regional formats</h2>
+          <p id="settings-locale-hint" class="hint">Counts, file sizes, and timestamps follow the selected format. Interface copy remains English until translated resources are available.</p>
+          <label class="settings-select-option" for="settings-locale">
+            <span><strong>Format locale</strong><small>Use system defaults or a familiar regional convention.</small></span>
+            <select id="settings-locale" v-model="locale" aria-describedby="settings-locale-hint">
+              <option value="system">System default ({{ resolvedLocale }})</option>
+              <option v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+          <div class="settings-locale-preview" aria-live="polite"><strong>Preview</strong><span>{{ formatNumber(1234567) }} · {{ formatDate("2026-09-22T13:45:00Z") }}</span></div>
+        </section>
         <section class="profile-editor settings-section" aria-labelledby="settings-evidence-title">
           <h2 id="settings-evidence-title">Accessibility evidence</h2>
-          <dl class="meta compact-meta"><div><dt>App theme</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }} rendered</dd></div><div><dt>System preference</dt><dd>{{ systemThemeLabel }} dark-mode preference</dd></div><div><dt>Reduced motion</dt><dd>{{ prefersReducedMotion ? 'OS requests reduced motion' : 'OS has not requested reduced motion' }}</dd></div></dl>
+          <dl class="meta compact-meta"><div><dt>App theme</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }} rendered</dd></div><div><dt>System preference</dt><dd>{{ systemThemeLabel }} dark-mode preference</dd></div><div><dt>Reduced motion</dt><dd>{{ prefersReducedMotion ? 'OS requests reduced motion' : 'OS has not requested reduced motion' }}</dd></div><div><dt>Format locale</dt><dd>{{ resolvedLocale }} · regional formats only</dd></div></dl>
           <p class="hint">The app honors the current OS signals; it cannot change OS accessibility settings.</p>
         </section>
       </div>
@@ -766,7 +778,7 @@
         <p class="lead">Skills you removed. Restore one or empty the trash forever.</p>
         <div v-if="selectedTrash" class="meta" style="margin: 16px 0 0;">
           <div><dt>Trashed as</dt><dd><code>{{ selectedTrash.trash_path }}</code></dd></div>
-          <div><dt>Trashed at</dt><dd>{{ selectedTrash.modified }}</dd></div>
+          <div><dt>Trashed at</dt><dd>{{ formatDate(selectedTrash.modified) }}</dd></div>
           <div><dt>Size</dt><dd>{{ formatBytes(selectedTrash.size_bytes) }}</dd></div>
         </div>
         <div style="margin-top:16px; display:flex; gap:8px;">
@@ -778,15 +790,15 @@
 
   <!-- ========================================================= statusbar -->
   <footer class="statusbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
-    <span v-if="view === 'overview'">Overview · {{ overviewLogicalCount }} logical skills · {{ overviewAttentionCount }} attention item{{ overviewAttentionCount === 1 ? '' : 's' }}</span>
-    <span v-else-if="view === 'skills'">{{ activeScope === 'all' ? allScopesCount : totalCount }} total · {{ activeCount }} active · {{ disabledCount }} disabled<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
-    <span v-else-if="view === 'trash'">{{ trashCount }} trashed</span>
+    <span v-if="view === 'overview'">Overview · {{ formatNumber(overviewLogicalCount) }} logical skills · {{ formatNumber(overviewAttentionCount) }} attention item{{ overviewAttentionCount === 1 ? '' : 's' }}</span>
+    <span v-else-if="view === 'skills'">{{ formatNumber(activeScope === 'all' ? allScopesCount : totalCount) }} total · {{ formatNumber(activeCount) }} active · {{ formatNumber(disabledCount) }} disabled<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
+    <span v-else-if="view === 'trash'">{{ formatNumber(trashCount) }} trashed</span>
     <span v-else-if="view === 'profiles'">{{ Object.keys(catalog.profiles || {}).length }} profiles</span>
-    <span v-else-if="view === 'install'">{{ registryInventoryCount }} registry-backed skills observed</span>
-    <span v-else-if="view === 'recovery'">{{ trashCount }} global trash items</span>
-    <span v-else-if="view === 'quality'">Quality · {{ qualitySummary.observed }} observed copies · no combined score</span>
+    <span v-else-if="view === 'install'">{{ formatNumber(registryInventoryCount) }} registry-backed skills observed</span>
+    <span v-else-if="view === 'recovery'">{{ formatNumber(trashCount) }} global trash items</span>
+    <span v-else-if="view === 'quality'">Quality · {{ formatNumber(qualitySummary.observed) }} observed copies · no combined score</span>
     <span v-else-if="view === 'settings'">Settings · {{ themeModeLabel }} theme · {{ textSize }} text</span>
-    <span v-else>{{ workspaces && workspaces.adapters.length || 0 }} adapters</span>
+    <span v-else>{{ formatNumber(workspaces && workspaces.adapters.length || 0) }} adapters</span>
     <span class="spacer"></span>
     <span class="path">{{ dataDir }}</span>
     <span class="spacer"></span>
@@ -905,7 +917,7 @@
       <h2 id="purge-modal-title" class="sr-only">Empty trash permanently</h2>
       <div class="modal-head"><h2>Empty trash permanently</h2></div>
       <div class="modal-body">
-        <p>Permanently delete <strong>{{ trashSkills.length }}</strong> trashed skill(s)? This cannot be undone.</p>
+        <p>Permanently delete <strong>{{ formatNumber(trashSkills.length) }}</strong> trashed skill(s)? This cannot be undone.</p>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('purge')">Cancel</button>
@@ -937,7 +949,7 @@
             </div>
             <div v-else class="banner banner-error" style="margin:0 0 12px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
-              {{ modals.validate.result.issues.length }} issue(s) found.
+              {{ formatNumber(modals.validate.result.issues.length) }} issue(s) found.
             </div>
             <div v-for="(issue, i) in modals.validate.result.issues" :key="i" class="issue">
               <span class="badge" :class="issue.level === 'error' ? 'badge-warn' : ''">{{ issue.level }}</span>
@@ -979,7 +991,7 @@
             <dt>Templates count</dt><dd>{{ modals.doctor.report.templates_count }}</dd>
           </dl>
           <div v-if="modals.doctor.report.duplicates && modals.doctor.report.duplicates.length" style="margin-top:16px;">
-            <h3 style="margin:0 0 8px;">Same name in multiple scopes ({{ modals.doctor.report.duplicates.length }})</h3>
+            <h3 style="margin:0 0 8px;">Same name in multiple scopes ({{ formatNumber(modals.doctor.report.duplicates.length) }})</h3>
             <p class="muted" style="margin:0 0 8px;">Converge copies with Sync — pick the canonical copy as source.</p>
             <ul class="dupe-list">
               <li v-for="d in modals.doctor.report.duplicates" :key="d.name">
@@ -1016,7 +1028,7 @@
             <div class="form-field full" style="margin-bottom:8px;"><label>Categories</label></div>
             <dl class="kv">
               <template v-for="(count, cat) in modals.stats.report.categories" :key="cat">
-                <dt>{{ cat }}</dt><dd>{{ count }}</dd>
+                <dt>{{ cat }}</dt><dd>{{ formatNumber(count) }}</dd>
               </template>
             </dl>
           </template>
@@ -1047,7 +1059,7 @@
             <thead><tr><th>When</th><th>Skill</th><th>Action</th></tr></thead>
             <tbody>
               <tr v-for="r in (modals.history.rows || []).filter(Boolean)" :key="r.id">
-                <td>{{ r.at }}</td><td>{{ r.name }}</td><td>{{ r.action }}</td>
+                <td>{{ formatDate(r.at) }}</td><td>{{ r.name }}</td><td>{{ r.action }}</td>
               </tr>
             </tbody>
           </table>
@@ -1175,7 +1187,7 @@
         <div v-for="t in (modals.sync.targets || []).filter(Boolean)" :key="t.id" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
           <input type="checkbox" :id="'sync-'+t.id" v-model="modals.sync.picked[t.id]" style="accent-color:var(--accent);">
           <label :for="'sync-'+t.id" style="flex:1;cursor:pointer;"><strong>{{ t.label }}</strong> <span class="hint">— {{ t.path }}</span></label>
-          <span class="tag">{{ t.count }} skills · {{ formatTokens(t.tokens) }}</span>
+          <span class="tag">{{ formatNumber(t.count) }} skills · {{ formatTokens(t.tokens) }}</span>
         </div>
         <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;cursor:pointer;">
           <input type="checkbox" v-model="modals.sync.force" style="accent-color:var(--accent);"> Overwrite if already exists
@@ -1302,7 +1314,7 @@
       <div class="modal-head"><h2>Review {{ modals.batch.operation }} batch</h2><button class="modal-close" aria-label="Close" @click="closeModal('batch')">×</button></div>
       <div class="modal-body">
         <div class="preview-panel" role="status" aria-live="polite">
-          <strong>{{ modals.batch.plan ? modals.batch.plan.target_count : modals.batch.targets.length }} exact physical target(s)</strong>
+              <strong>{{ formatNumber(modals.batch.plan ? modals.batch.plan.target_count : modals.batch.targets.length) }} exact physical target(s)</strong>
           <span>This plan is partial-failure safe and cannot widen after review.</span>
           <span v-if="modals.batch.context && modals.batch.context.profileName">Profile {{ modals.batch.context.profileName }}: only currently observed physical instances are in scope; missing skills are not installed and divergent members remain unresolved.</span>
           <span v-if="modals.batch.context && modals.batch.context.unresolvedCount">Unresolved members: {{ modals.batch.context.unresolvedCount }} ({{ modals.batch.context.unresolvedMembers.join(', ') }}).</span>

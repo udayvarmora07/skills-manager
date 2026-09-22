@@ -844,6 +844,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .settings-option input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 .settings-option span { display: grid; gap: 1px; }
 .settings-option small { color: var(--text-muted); font-size: 0.75rem; }
+.settings-select-option { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px); gap: 12px; align-items: center; min-height: 44px; margin-top: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.settings-select-option > span { display: grid; gap: 1px; min-width: 0; }
+.settings-select-option small { color: var(--text-muted); font-size: 0.75rem; }
+.settings-select-option select { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; }
+.settings-select-option select:focus { border-color: var(--accent); background: var(--surface); }
+.settings-locale-preview { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.settings-locale-preview span { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: end; }
 .settings-preview, .settings-type-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
 .settings-preview-swatch { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 .settings-type-sample { font-size: 1.75rem; line-height: 1; font-weight: 700; color: var(--accent-text); }
@@ -1480,6 +1487,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .attention-item, .queue-clear { grid-template-columns: 28px minmax(0, 1fr); align-items: start; padding: 13px; }
   .attention-item .btn, .queue-clear .btn { grid-column: 2; justify-self: start; }
   .overview-secondary { gap: 16px; }
+  .settings-select-option { grid-template-columns: 1fr; align-items: stretch; }
+  .settings-locale-preview { align-items: flex-start; flex-direction: column; }
+  .settings-locale-preview span { text-align: start; }
   .detail-head { display: block; }
   .detail-actions { margin-top: 16px; }
   .detail-actions .btn { flex: 1; }
