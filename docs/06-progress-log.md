@@ -4,12 +4,366 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
-**Verification (current tree, 2026-09-20):** 787 unittest tests pass; Store/Web
-  smoke tests, docs, complexity (238 functions), frontend syntax, compilation,
-  CLI help, five-viewport browser harness, vendored Vue source hash, and diff
-  checks pass. Optional package artifact coverage is `UNAVAILABLE` because
-  `python3 -m build` is not installed. Earlier counts in dated entries remain
+## 2026-09-22 — UI navigation hierarchy pass
+
+**[NOTE]** Continued the screenshot-led UI/UX review on the current Vue
+frontend. The desktop rail now groups existing destinations into Workspace,
+Operations, and Preferences and adds restrained inline icon cues for faster
+scanning. On narrow screens the groups flatten into the existing snap-aligned
+tab strip, so no route or information architecture changed.
+
+The topbar now keeps Commands discoverable as an icon affordance on mobile,
+uses an explicit compact `SM` brand treatment before the 360px icon-only
+breakpoint, and gives the icon-only New skill and Actions controls stable
+accessible names and titles. Non-interactive programmatic view headings retain
+orientation focus without presenting an editor-like focus box. Reduced-motion
+behavior remains honored for skeletons and transitions. No backend/API/Store/
+schema/CLI/dependency/build behavior changed.
+
+**Verification (2026-09-22):** the frontend source contracts (61 tests), JS
+syntax checks, and fresh six-viewport browser harness pass with no runtime
+errors, failed requests, or horizontal overflow.
+
+## 2026-09-22 — UI hardening polish pass
+
+**[NOTE]** Continued the frontend review from the complete Flameshot evidence
+set and current overview, Library, mobile, profile, Install, and Recovery
+captures. The grid-card identity treatment now stacks the human-readable label
+above its observed state, preventing long state badges from squeezing scope or
+consumer names into unreadable vertical columns. Off-screen grid cards use
+native `content-visibility` containment so large local libraries can retain
+the same presentation without eagerly painting every card.
+
+The responsive pass adds readable mobile input sizing, touch-action hints,
+balanced headings, explicit color-scheme signaling, and a compact 320px brand
+mark. The brand returns to Overview; history and runner-install controls now
+have explicit visible-label associations; and mobile Install, Recovery, and
+Settings no longer spend the first screen repeating a context pane that the
+detail surface already explains. No backend/API/Store/schema/CLI/dependency/
+build behavior changed.
+
+**Verification (2026-09-22):** 830 unittest tests pass; frontend syntax,
+source contracts, documentation consistency, complexity, diff checks, and the
+fresh six-viewport browser harness pass with no runtime errors or overflow.
+
+## 2026-09-22 — UI interaction accessibility pass
+
+**[NOTE]** Continued the design and accessibility review at the interaction
+boundary. The Actions menu now exposes a labelled menu relationship, moves
+focus to its first available action, supports Arrow/Home/End movement and
+Escape dismissal, and restores the stable trigger when an action removes the
+focused menu item or opens a dialog. The custom archive drop zone now supports
+both Enter and Space activation. Modal close controls and metadata copy
+controls meet the existing touch-target contract, with the latter enlarged to
+44px on mobile. No backend/API/Store/schema/CLI/dependency/build behavior
+changed.
+
+**Verification (2026-09-22):** 831 unittest tests pass; Store/Web smoke tests,
+frontend source contracts, docs consistency, complexity, frontend syntax,
+vendored Vue integrity, the refreshed CDP menu interaction checks, and the
+six-viewport harness pass with no runtime errors, failed requests, or overflow.
+
+## 2026-09-22 — UI focus and announcement pass
+
+**[NOTE]** Continued the accessibility polish at the document-workspace
+boundary. Keyboard focus now has an explicit 2px accent outline with offset
+and scroll margin, while inputs retain their focus styling instead of
+overriding the global indicator. The detail pane is no longer a broad live
+region; existing headings, alerts, toasts, command status, and action previews
+remain the targeted announcement surfaces. No backend/API/Store/schema/CLI/
+dependency/build behavior changed.
+
+**Verification (2026-09-22):** 832 unittest tests pass; Store/Web smoke tests,
+frontend source contracts, docs consistency, complexity, frontend syntax,
+CLI help, diff checks, vendored Vue integrity, and the six-viewport CDP
+harness pass with no runtime errors, failed requests, or overflow. Current
+wheel/sdist package-data archive inspection also passes with the pinned build
+toolchain; the optional clean sdist-install probe remains unavailable because
+the checker’s fresh venv does not include setuptools.
+
+## 2026-09-21 — UI craft polish pass
+
+**[NOTE]** Reviewed the complete `.specs/evidence/flameshot-ui-2026-09-20`
+screenshot set and the current overview, Library grid, mobile, profile, install,
+and recovery captures against the project UI brief and existing frontend
+design guidance. The pass kept the current cool-neutral canvas, copper action
+color, sibling navigation, and no-build Vue architecture intact.
+
+The Library grid now keeps observed-identity labels and state badges in a
+bounded two-column row, with safe ellipsis and native hover titles for values
+that cannot fit. Mobile view navigation hides the scrollbar, uses snap-aligned
+tabs, and centers the active tab after navigation so deeper views remain
+discoverable. Mobile buttons, chips, search clear, and form controls now meet
+44px touch-target guidance; chip transitions are limited to the properties
+that actually change. No backend/API/Store/schema/CLI/dependency/build
+behavior changed.
+
+**Verification (2026-09-21):** 828 unittest tests pass; frontend syntax,
+source contracts, diff checks, and the six-viewport browser harness remain in
+the verification ladder. The implementation intentionally did not touch
+`store.py` or `webapp.py`, so Store/Web smoke coverage remains represented by
+the existing current-tree verification record above.
+
+## 2026-09-21 — Accessible Commands palette
+
+**[NOTE]** Shipped a frontend-only command palette in the existing Vue 3
+no-build workspace. The topbar Commands trigger and Ctrl/Cmd+K open a labelled
+dialog whose search input is a `role="combobox"` connected to a listbox with
+live result-count status, no-results guidance, Arrow/Home/End/Enter/Escape
+keyboard handling, and 44px result targets. The derived index covers the eight
+existing navigation views, existing global actions, and Edit/Validate/
+Enable-or-Disable/Sync/Remove only when a current Library record is available.
+Remove keeps the existing confirmation dialog; navigation and dialog commands
+transfer focus to their destination rather than behind the overlay, while
+closing a destination dialog returns to the original Commands opener. Active
+results scroll into the bounded list while input focus remains on the
+combobox; option rows have no tabbable descendants. Library navigation focuses
+the visible mobile/desktop destination, while the native Add folder picker
+restores the opener. Source contracts and the six-width browser harness now
+cover shortcut open, input focus,
+active-descendant navigation, safe close, destination focus, Tab exclusion,
+and no-overflow behavior. No backend/API/Store/schema/CLI/dependency/build
+behavior changed.
+
+**Verification (current tree, 2026-09-21):** 827 unittest tests pass; Store/Web
+  smoke tests, docs/source consistency, complexity (238 functions), frontend
+  syntax, Python compilation, CLI help, two consecutive six-viewport browser
+  harness runs, vendored Vue source integrity, `check_package_data.py` source
+  integrity, and diff checks pass. Full wheel/sdist package-data artifact
+  coverage also passed with
+  the pinned hash-verified toolchain: both artifacts contain six web UI files
+  and the correct vendored Vue source. Earlier counts in dated entries remain
   historical.
+
+## 2026-09-21 — Quality evidence center
+
+**[NOTE]** Shipped the frontend-only Quality task center as a top-level view
+before Settings. It keeps persistent search useful, shows a read-only overview
+when no skill is selected, and uses the existing Library selection/detail seam
+for exact skill inspection. Evidence is intentionally independent: observed
+specification/addressability state, physical-copy state and divergence,
+provenance fields when present, and content/token estimates are shown in
+separate sections.
+
+The center does not create a score or infer safety, trust, usefulness,
+effective consumer load, or validation results. Risk/eval/effective-load areas
+say explicitly when the current APIs provide no evidence. Existing Validate,
+Doctor, Stats, and Library inspection actions remain the direct
+next steps, with responsive/mobile, keyboard, loading, empty, and error states
+covered by the existing workspace patterns. No backend/API/Store/schema/CLI/
+dependency/build behavior changed.
+
+## 2026-09-21 — Settings and accessibility controls
+
+**[NOTE]** Shipped roadmap Task 5 in the existing Vue frontend. Settings is now
+a task-center view with native radio controls for explicit `system`, `light`,
+and `dark` theme preferences plus Standard/Large text sizing. Existing saved
+`skillsmgr-theme` values `light` and `dark` remain explicit; an absent or
+unknown value defaults to System. System mode resolves to the current
+`(prefers-color-scheme: dark)` result and updates live, with both modern
+`addEventListener` and legacy `addListener` paths cleaned up on unmount.
+
+The topbar theme button cycles System → Light → Dark → System and announces the
+current resolved mode and next choice. Text size is local-only via a root data
+attribute, with 44px option targets and fixed sizing that remains compatible
+with browser zoom. The external same-origin `preferences.js` bootstrap resolves
+saved theme/text-size values before `styles.css`; no inline script or CSP change
+was needed. Settings reports system
+theme and reduced-motion signals as evidence only and does not claim to change
+OS settings. No backend/API/Store/schema/CLI/dependency/build behavior changed.
+
+## 2026-09-21 — Install/update inbox and Recovery/backups center
+
+**[NOTE]** Shipped roadmap Task 4 in the existing Vue frontend. Install and
+Recovery are now task-oriented navigation views rather than Actions-modal-only
+workflows. Install composes existing `registry_provenance` inventory as
+registry-backed skills (not deduplicated sources) and explicit
+browse/search/curated/fetch review actions; its persistent search filters skill
+names and provenance identifiers and it does not infer that an update exists
+from local metadata. Registry fetch now stops at the backend's
+validated, expiring review id and displays expiry, validation warnings,
+advisory risk findings, and hashes before offering the separate
+`Trust and install reviewed snapshot` action. The commit sends only
+`{fetch:true, review_id, trust_confirmed:true}` and therefore performs no second
+network fetch. The trust action remains inside the exact returned review
+evidence; a new request retires the previous review. Recovery is the single
+exposed recovery navigation entry, and its history/snapshot action forces
+global scope even when Library has an agent scope selected.
+
+Recovery composes existing global trash restore, history/snapshot rollback,
+full archive import, and full backup export entry points. The UI labels the
+global-store-only boundary and keeps agent-scope trash out of the center. No
+backend/API/Store/schema/CLI/dependency/build behavior changed.
+
+## 2026-09-21 — Profile quick apply with exact preview
+
+**[NOTE]** Shipped roadmap Task 3 in the existing Vue web UI. Profile detail
+now shows observed/disabled/divergent/missing member counts, configured targets,
+and exact observed scope/path evidence. `Review enable plan` is available only
+when observed physical instances exist. It derives and deduplicates exact
+`{name, scope, path}` targets from the read-only profile preview and opens the
+existing enable batch modal with profile context. Missing and divergent members
+remain visibly unresolved.
+
+Batch preview and execute now use a frozen modal target snapshot, so Library
+selection/filter changes cannot widen a reviewed plan and profile instances
+outside the current Library scope remain exact. The backend remains unchanged:
+its existing preview/execute seams re-resolve targets and enforce the plan id.
+The modal explains Disabled → Active versus Active → No state change, recovery,
+partial-failure behavior, and unresolved profile members. Successful profile
+execution refreshes its preview. No API, Store, schema, CLI, dependency, or
+build behavior changed.
+
+The interactive handoff keeps the computed unresolved-member list as a
+property when opening the batch modal; a runtime contract covers the exact
+enable targets and profile context. The compact mobile disclosure is labelled
+as scope controls because it contains agent-scope and context-budget controls,
+not only Library filters.
+
+## 2026-09-21 — Observed identity and state on logical Library skills
+
+**[NOTE]** Shipped the second proposed Library follow-on in the current
+working tree. A pure frontend domain derivation now combines existing skill
+rows with scope descriptors to label observed agent/consumer/workspace
+identity and explicit Active, Disabled, Malformed, Unaddressable, or
+Divergent state. Aliased physical roots retain their logical collapse for
+selection while their distinct observed scope identities remain visible.
+Instances mode and detail drill-down remain exact and scope-qualified. The
+implementation makes no effective/winning precedence, desired-state,
+deployment, or project-presence claim. Node-backed contracts cover aliases,
+unknown consumers, project labels, state text, accessible wrapping, and the
+no-precedence boundary; the six-viewport browser harness and focused frontend
+suite pass.
+
+## 2026-09-21 — Hybrid Library browse presentation
+
+**[NOTE]** Shipped the first proposed Library follow-on: the existing list
+remains the first-run presentation, and users can opt into a compact grid of
+document/index cards. The choice alone is persisted locally as
+`skillsmgr-browse-mode`; no backend, REST, Store, SQLite, dependency, or build
+behavior changed. Grid and list share the existing filters, logical versus
+instance mode, exact physical batch selection, keyboard Enter/Space activation,
+detail drill-down, and mobile list → detail navigation. Source-contract tests
+cover the default, opt-in, accessibility, drill-down, and batch semantics.
+Automated visual or human usability validation is not inferred from these
+source checks.
+
+## 2026-09-21 — Overview-first operator surface (Milestone 58)
+
+**[NOTE]** Shipped in the current working tree: the local Vue UI now opens on
+an action-first Overview. It derives logical skill, observed instance, active,
+disabled, divergent, malformed, unaddressable, global-trash, and recent
+history observations from existing frontend data and `GET /api/history`; no
+new backend behavior was added. The dominant attention queue routes into the
+existing Library, Install, Doctor, and Recovery workflows, and the empty first-run
+state offers Create, Add folder, Import, and health-check actions.
+
+The shell now labels Skills as **Library**, keeps Profiles, Workspaces, and
+Recovery reachable, hides the Library list pane on desktop Overview,
+and presents Overview as one scroll surface on narrow screens. A visible skip
+link, focusable Overview heading, existing modal focus lifecycle, and reduced
+motion/responsive tokens remain in force.
+
+The developer browser harness now isolates both `HOME` and
+`SKILLS_MANAGER_DATA`, seeds active/disabled/divergent/malformed/unaddressable,
+long-content, history, and recoverable fixtures through existing filesystem
+behavior, captures 1440×900, and waits for a stable Vue-rendered Overview before
+capture. Final evidence is recorded at
+`.specs/evidence/ui-overview-2026-09-21-final/` with six viewport captures and
+`scenarios/` captures for empty, search, form validation, error/success
+feedback, divergent detail, destructive confirmation, disabled filtering,
+recovery, and dark theme. Implementation-agent visual inspection and stateful
+CDP automation are complete with zero console/runtime errors, failed requests,
+or page overflow. Human participant/usability and external communication
+approval remain pending; task-center, Settings, and deeper provenance/quality
+work are proposed follow-ons rather than shipped behavior. The hybrid Library
+browse presentation is shipped in the dated entry above.
+
+The final acceptance pass also corrected union counting for malformed or
+unaddressable observations, kept active counts limited to enabled/parsed/
+addressable instances, routed global search without stealing focus, made
+readiness and load-error states honest, associated form errors and focused the
+first invalid field, made detail branches exclusive, made attention deep links
+race-safe, gave modal focus restoration one owner, and cleared stale detail when
+the disabled filter is opened.
+
+## 2026-09-20 — Competitive comparison documentation refresh
+
+Refreshed the strategy and delivery documents against upstream
+[`6ae02e39d9efea0faf75e643b8205f97833a593d`](https://github.com/xingkongliang/skills-manager/commit/6ae02e39d9efea0faf75e643b8205f97833a593d),
+version `1.40.0`, observed 2026-09-20. The snapshot records the volatile public
+signal and current Rust/frontend/dependency inventory, while retaining the
+2026-09-15 comparison as history.
+
+The architecture verdict keeps the filesystem-authoritative Python + loopback
+API + vendored Vue/no-build stack canonical; the current Chromium app-mode
+`desktop_launcher` is the preferred zero-dependency desktop experience. Tauri
+packaging/OS integration is only a future DEC-09 experiment if installer, tray,
+keychain, or signed-updater demand is evidenced. No React/Rust rewrite is
+planned.
+
+Added proposed Now/Next/Evidence-gated follow-ons to `ROADMAP.md` and the UX
+delivery plan: Overview/dashboard, task navigation, hybrid Library browsing,
+agent/workspace identity, profile preview/apply, Install/update and Recovery
+centers, Settings/accessibility, command palette, later i18n, and a gated
+packaging experiment. This was documentation-only: no runtime, API, schema, CLI,
+dependency, or implementation behavior changed, and no human evidence claim was
+made.
+
+## 2026-09-20 — Web workspace redesign implementation
+
+Reshaped the existing Vue frontend into sibling navigation-rail, list-pane,
+and document-pane regions. Scope links now show count-only agent context;
+skill rows use a grid with wrapped badges below the full-width name and
+description; technical metadata is behind a native Skill details disclosure;
+and the light/dark tokens now use cool neutral surfaces with a readable copper
+accent. Added a visible New skill action, grouped the existing Actions menu,
+and tightened import/modal sizing without changing the REST or Store seams.
+
+Responsive behavior now keeps list/detail horizontal through tablet widths and
+uses a full-height list → detail flow on phones. Profiles, Workspaces, and
+Trash enter their detail workspace on mobile; empty onboarding remains
+reachable. Dialog focus trapping recognizes visible controls and disclosure
+summaries, and the slash shortcut does not steal focus from an open modal.
+
+Persistent decisions are recorded in `.ui-craft/brief.md`,
+`.ui-craft/tokens.md`, and `.specs/reports/ui-redesign-2026-09-20.md`.
+Human visual review remains separate from automated rendered checks.
+
+## 2026-09-20 — DEL-11 local capture refresh
+
+Ran the current-build browser harness with
+`--screenshots-dir .specs/evidence/del-11-2026-09-20-run4`. The 320, 400, 640,
+900, and 1280 px probes all reported the expected `Skills Manager` title, zero
+console/runtime/network failures, and no horizontal overflow. The five PNGs
+are local automated preparation for external communication; all five were
+visually inspected by the implementation agent with no obvious shell clipping.
+This does not claim human external review, adoption evidence, or any of the
+five consented human usability sessions.
+
+## 2026-09-20 — DEL-11 review packet
+
+Added `REVIEW.md` beside the run4 PNGs with the current commit, exact capture
+command, SHA-256 hashes, operator-tool provenance, and a human approval
+checklist. The packet intentionally remains pending: these files are
+viewport-health captures from the disposable browser fixture, not a claim that
+all four proof-story scenes or the consented-participant gate are complete.
+
+## 2026-09-20 — DEL-11 proof-scene candidate packet
+
+Generated four fresh page-only 1280x900 captures from disposable synthetic
+data: Logical Library, Effective-state evidence, Quality and trust, and
+Recovery. Labeled copies carry the date, source-build prefix, viewport, scene,
+and pending-review status. `REVIEW.md` records raw/labeled SHA-256 hashes and
+the Flameshot/Pillow operator-tool provenance. The packet remains pending
+human communication approval and makes no adoption or participant claim.
+
+## 2026-09-20 — DEL-11 candidate polish
+
+Recaptured the four page-only scenes with the owner-only disposable fixture at
+`/tmp/skills-manager-external-demo-20260920`, replacing random temporary paths
+in the visible UI with a clearly synthetic path. Refreshed the labeled PNGs and
+their SHA-256 records. Human communication approval remains pending.
 
 ## 2026-09-20 — Execution-queue reconciliation
 

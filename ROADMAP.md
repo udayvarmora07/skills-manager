@@ -10,6 +10,31 @@ reproducible proof-story procedure, and a design-partner protocol; it does not
 claim screenshots, human sessions, adoption metrics, hosted sync, or team
 governance until those have dated evidence and approvals.
 
+## Proposed after the 2026-09-20 comparison refresh
+
+The comparison-derived follow-ons are proposals only; implementation detail and
+approval labels live in [docs/15-product-ux-delivery-plan-2026-09-15.md](docs/15-product-ux-delivery-plan-2026-09-15.md),
+with strategy and architecture rationale in [docs/14-competitive-product-business-strategy-2026-09-15.md](docs/14-competitive-product-business-strategy-2026-09-15.md).
+
+### Now
+
+- [x] Shipped 2026-09-21: Overview/dashboard for observed invalid, divergent, disabled, recovery, and recent work, with direct routes into existing surfaces. Human visual/usability validation remains pending.
+- [x] Shipped 2026-09-21: task-oriented navigation entry points for Overview, Library, Quality, and Settings, with Quality grounded in independent observed evidence rather than a combined score.
+- [x] Shipped 2026-09-21: optional hybrid grid/list Library browse mode; list remains the default, grid is a local presentation preference, and both paths retain filters, exact physical selection, keyboard activation, detail drill-down, and mobile list-to-detail behavior.
+- [x] Shipped 2026-09-21: logical Library rows and grid cards now show observed agent/consumer/workspace identity with explicit active, disabled, malformed/unaddressable, or divergent state; exact scope-qualified Instances/detail targeting remains unchanged and no precedence/effective-state claim is made.
+- [x] Shipped 2026-09-21: profile quick apply with an exact, preview-locked enable plan over currently observed physical instances; missing and divergent members remain visibly unresolved.
+- [x] Shipped 2026-09-21: task-oriented Install/update inbox and single Recovery/backups center composed from existing registry review, provenance, trash, history, import, and export seams; registry-backed skill search is evidence-only, registry fetch and trust remain two explicit phases, and Recovery history is global-scoped.
+- [x] Shipped 2026-09-21: Settings/accessibility controls with live System/Light/Dark theme resolution, a CSP-safe pre-paint preference bootstrap, Standard/Large rem-scaled UI text, and local-only preferences.
+- [x] Shipped 2026-09-21: accessible frontend-only Commands palette with Ctrl/Cmd+K, searchable available navigation and existing actions, selected-record availability filtering, labelled combobox/listbox results, and modal-aware focus transfer.
+
+### Next
+
+- [ ] Proposed: internationalization follows IA stabilization.
+
+### Evidence-gated
+
+- [ ] Proposed: optional packaged desktop experiment through DEC-09 only, if installer/tray/keychain/signed-updater demand is evidenced.
+
 - [x] **Spec-lint+** (shipped 2026-09-05): name regex rejects `--`; `description_score()` use-context/filler scoring + warnings; body line + token (>5000) warnings; `scripts/`/`references/`/`assets/` layout checks — mapped to the official [best practices](https://agentskills.io/skill-creation/best-practices).
 - [x] **Cross-scope dedup**: same-name skills across scopes detected (`doctor --scope all`, doctor modal), diff via descriptions-differ flag, converge with existing `sync`.
 - [x] **Token budget view**: per-skill/per-scope startup footprint in CLI (`tokens --scope all`) + UI (budget bar, `?window=` selector).

@@ -1,16 +1,237 @@
 # Task Checklist — Skills Manager
 
-**Version 0.8.0**
+**Version 0.8.1**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
-## Current state — 2026-09-20 (authoritative; older milestones below are dated records)
+## UI redesign slice — 2026-09-20
+
+- [x] Reworked the web workspace into sibling navigation-rail, list-pane, and
+  detail-pane regions without changing backend contracts.
+- [x] Added readable scope counts, wrapped row badges, native skill metadata
+  disclosure, visible New skill action, authored light/dark tokens, and bounded
+  modal/import surfaces.
+- [x] Fixed mobile navigation for profiles, workspaces, trash, and empty
+  onboarding; preserved row targeting and modal focus restoration.
+- [x] Added `.ui-craft/brief.md`, `.ui-craft/tokens.md`, and the implementation
+  note `.specs/reports/ui-redesign-2026-09-20.md`.
+- [x] Implementation-agent visual inspection and stateful CDP automation are
+  complete for final current-build evidence at
+  `.specs/evidence/ui-overview-2026-09-21-final/`: six viewport captures
+  (320, 400, 640, 900, 1280, and 1440 px) plus `scenarios/` captures for
+  empty, search, form validation, error/success feedback, divergent detail,
+  destructive confirmation, disabled filtering, recovery, and dark theme.
+  The probes reported zero console/runtime errors, failed requests, or page
+  overflow. This is implementation-agent and automated evidence only; human
+  participant/usability and external communication approval remain pending.
+
+## Library browse slice — 2026-09-21
+
+- [x] Added an optional compact document/index-card grid for the Library while
+  keeping list presentation as the first-run default.
+- [x] Persisted only the explicit browse presentation choice in localStorage;
+  filters, logical/instance mode, exact physical batch targets, keyboard
+  activation, detail drill-down, and narrow-screen list → detail navigation
+  continue to use the existing state and handlers.
+- [x] Added source-contract coverage for list default, grid opt-in,
+  accessibility/keyboard behavior, shared drill-down, and batch selection.
+- [x] Kept the implementation in the current Vue 3 no-build frontend and
+  vanilla CSS; no backend/API/Store/schema/runtime dependency changed.
+
+## Observed identity slice — 2026-09-21
+
+- [x] Shipped observed agent/consumer/workspace identity and state summaries on
+  logical Library rows and grid cards, including active, disabled,
+  malformed/unaddressable, and divergent observations.
+- [x] Kept resolved physical alias grouping and exact scope-qualified Instances
+  mode/detail targeting intact; identity summaries are derived only from the
+  existing `/api/skills` records and `/api/scopes` descriptors.
+- [x] Added Node-backed domain/source contracts for aliased roots, unknown
+  consumers, project/workspace labels, observed states, accessible wrapping,
+  and no precedence/effective-state claims.
+
+## Profile quick-apply slice — 2026-09-21
+
+- [x] Shipped profile detail counts for observed, disabled, divergent, and
+  missing members, configured targets, and exact observed instance scope/path
+  evidence.
+- [x] Added `Review enable plan` for profiles with observed physical instances;
+  it derives deduplicated `{name, scope, path}` targets and keeps missing and
+  divergent members visibly unresolved.
+- [x] Frozen batch-modal target snapshots are reused by preview and execute for
+  both normal Library batches and profile apply; successful profile execution
+  refreshes its read-only preview.
+- [x] Added source/behavior contracts for snapshot use, target derivation,
+  unresolved visibility, exact before→after text, recovery policy, and refresh;
+  the profile action contract exercises computed unresolved-member data and the
+  exact enable target/context handoff.
+- [x] Kept the implementation in the existing Vue frontend and REST seams; no
+  backend/API/Store/schema/CLI/dependency/build change was made.
+
+## Install/update and Recovery centers — 2026-09-21
+
+- [x] Added task-oriented Install and Recovery navigation views composed from
+  existing registry, provenance, trash, history, import, and export seams.
+- [x] Install inventory reports existing `registry_provenance` fields only and
+  does not claim an update without registry evidence.
+- [x] Corrected registry fetch to the honest two-step boundary: the first
+  request creates a review id/evidence, and only a separate explicit trust
+  request with `{fetch:true, review_id, trust_confirmed:true}` commits it.
+- [x] Added review evidence for expiry, validation warnings, advisory risk, and
+  registry/snapshot hashes, plus a clear global-store-only Recovery boundary.
+- [x] Added source and Node behavior contracts for navigation, no false update
+  claims, and the exact two-step request payloads; no backend/API/Store/schema/
+  CLI/dependency/build change was made.
+- [x] Acceptance pass keeps Recovery as the single recovery nav entry, makes
+  Install/Recovery persistent search meaningful, labels inventory as
+  registry-backed skills, binds trust to returned review evidence, retires
+  stale reviews on a new request, and forces Recovery history/snapshots to the
+  global scope.
+
+## Settings and accessibility controls — 2026-09-21
+
+- [x] Added a Settings task-center view with native, keyboard-accessible theme
+  and text-size controls, a compact preview, and honest system/reduced-motion
+  evidence.
+- [x] Theme preference is persisted locally as `system`, `light`, or `dark`;
+  legacy saved `light`/`dark` values remain explicit choices. System mode
+  follows `(prefers-color-scheme: dark)` live with modern and legacy listener
+  cleanup; the topbar control cycles modes with an accurate label.
+- [x] Added persisted Standard/Large text sizing through a root data attribute,
+  44px option targets, and rem-scaled CSS. The external CSP-safe bootstrap
+  applies persisted theme and text-size preferences before CSS paint, while
+  system mode follows the OS when no preference is saved. No backend/API/Store/
+  schema/CLI/dependency/build behavior changed.
+- [x] Added source and Node contracts for localStorage migration, matchMedia
+  changes/listener cleanup, native labels, touch targets, and 200% zoom copy.
+
+## Quality evidence center — 2026-09-21
+
+- [x] Added a top-level Quality task center before Settings with persistent
+  search, a read-only overview, and exact skill selection/drill-down through
+  the existing Library detail seam.
+- [x] Composed independent observed evidence for specification/addressability,
+  physical-copy state/divergence, provenance when present, and token/size
+  estimates; risk, eval/usefulness, trust, and effective-load signals remain
+  explicitly unavailable when the current APIs cannot prove them.
+- [x] Reused existing Validate, Doctor, Stats, and Library
+  actions with loading, empty, error, keyboard, mobile, and 44px-target paths.
+- [x] Added source and Node behavior contracts for evidence boundaries, Quality
+  search, summary derivation, and exact Library drill-down; no backend/API/
+  Store/schema/CLI/dependency/build behavior changed.
+
+## Command palette — 2026-09-21
+
+- [x] Added a visible topbar Commands trigger and Ctrl/Cmd+K toggle using the
+  existing modal, inert, and focus-restoration system.
+- [x] Added an accessible combobox/listbox palette with initial search focus,
+  result-count status, no-results guidance, Arrow/Home/End/Enter/Escape
+  handling, 44px result targets, active-result scrolling, and updated keyboard
+  help. Options remain non-tabbable rows under the combobox active-descendant
+  model, including pointer selection.
+- [x] Indexed only existing navigation, global, and currently available
+  selected-record actions; Remove continues through its existing confirmation,
+  and command execution transfers focus to the destination or new dialog.
+- [x] Added frontend source/behavior contracts and six-viewport browser-harness
+  coverage for Home/End visibility, navigation-heading focus, dialog focus
+  return, and option-row Tab exclusion. No backend/API/Store/schema/CLI/
+  dependency/build behavior changed.
+
+## UI craft polish pass — 2026-09-21
+
+- [x] Reviewed the complete `.specs/evidence/flameshot-ui-2026-09-20` screenshot
+  set plus the current overview, Library grid, mobile, profile, install, and
+  recovery captures against the project UI brief and design-system guidance.
+- [x] Reworked observed-identity rows so labels and state badges remain readable
+  in narrow grid cards, with safe ellipsis and full hover titles for truncated
+  values.
+- [x] Made the active mobile view tab scroll into view after navigation and
+  added hidden scrollbars/snap alignment so the compact navigation remains
+  discoverable without changing the information architecture.
+- [x] Raised mobile interactive controls and form fields to 44px touch targets,
+  replaced broad chip transitions with explicit properties, and added source
+  contracts for the visual behavior. No backend/API/Store/schema/CLI/
+  dependency/build behavior changed.
+- [x] Verification for this pass is recorded in `docs/06-progress-log.md`.
+
+## UI hardening polish pass — 2026-09-22
+
+- [x] Changed grid-card identity metadata to a readable label-then-state
+  rhythm so long observed-state badges cannot compress scope or consumer names
+  into vertical text; deferred off-screen cards for large local libraries.
+- [x] Added the mobile readable-input baseline, touch-action hints, balanced
+  headings, explicit light/dark color-scheme signaling, and a compact 320px
+  brand treatment that keeps the workspace identity visible without crowding
+  actions.
+- [x] Made the brand control return to Overview, associated previously unlabeled
+  history/install controls with visible labels, and removed duplicate context
+  panes from mobile Install, Recovery, and Settings flows.
+- [x] Added source contracts for the responsive, semantic, and performance
+  behavior. No backend/API/Store/schema/CLI/dependency/build behavior changed.
+- [x] Verification for this pass is recorded in `docs/06-progress-log.md`.
+
+## UI interaction accessibility pass — 2026-09-22
+
+- [x] Added complete Actions-menu keyboard behavior: labelled menu ownership,
+  first-item focus on open, Arrow/Home/End navigation, Escape close, and
+  stable trigger focus when a menu item opens a dialog or starts an action.
+- [x] Added Space activation to the custom archive drop zone and raised modal
+  close/copy controls to the existing touch-target standard, including the
+  mobile 44px treatment.
+- [x] Added source contracts for the menu, drop zone, and touch-target
+  behavior. No backend/API/Store/schema/CLI/dependency/build behavior changed.
+- [x] Extended the existing CDP browser harness to verify menu open focus,
+  ArrowDown movement, Escape dismissal, trigger focus restoration, and the
+  no-overflow six-viewport matrix.
+- [x] Re-ran the full verification ladder and refreshed current viewport
+  evidence for this pass.
+
+## UI focus and announcement pass — 2026-09-22
+
+- [x] Replaced the global outline suppression with an explicit 2px accent
+  focus outline, offset, scroll margin, and theme-aware focus halo; field and
+  command-palette focus states now preserve that keyboard indicator.
+- [x] Removed the broad live region from the detail document pane so screen
+  readers receive focused headings and targeted status/alert announcements
+  instead of re-reading the whole workspace for every change.
+- [x] Added source contracts for focus appearance and targeted announcements.
+  No backend/API/Store/schema/CLI/dependency/build behavior changed.
+- [x] Re-ran the current-tree ladder and refreshed viewport evidence before
+  closing this pass.
+
+## UI navigation hierarchy pass — 2026-09-22
+
+- [x] Grouped the desktop navigation rail into Workspace, Operations, and
+  Preferences with icon cues while keeping the existing view routes and
+  `aria-current` state.
+- [x] Added compact mobile affordances for Commands, New skill, and Actions;
+  the brand now uses a stable short mark at narrow widths instead of a clipped
+  wordmark, while full labels and accessible names remain available.
+- [x] Kept navigation groups flat and horizontally scrollable on phones,
+  preserved 44px touch targets, and added a non-interactive heading focus
+  treatment so orientation focus does not look like an editable control.
+- [x] Added source-contract coverage and refreshed the six-viewport browser
+  harness. No backend/API/Store/schema/CLI/dependency/build behavior changed.
+
+## Documentation milestone — 2026-09-20 comparison refresh
+
+- [x] Reconciled the competitive snapshot to upstream commit
+  `6ae02e39d9efea0faf75e643b8205f97833a593d` / version `1.40.0`, preserving the
+  2026-09-15 observation as history.
+- [x] Recorded the canonical local-web architecture verdict, the preferred
+  Chromium app-mode launcher, and the evidence-gated DEC-09 packaging option.
+- [x] Added the proposed follow-on sequence to @docs/15-product-ux-delivery-plan-2026-09-15.md
+  and ROADMAP.md. These are proposals, not active implementation checkboxes.
+- [x] Refreshed @docs/08-web-ui.md and @docs/06-progress-log.md without changing
+  runtime, API, schema, CLI, dependency, or product behavior.
+
+## Current state — 2026-09-22 (authoritative; older milestones below are dated records)
 
 - **DEL-00: DONE (2026-09-18).** The pre-existing registry network/provenance
   batch is identified and kept separate from the product UX work. The current
-  tree passes 787 unittest tests, both smoke suites, compile, docs, complexity,
+  tree passes 833 unittest tests, both smoke suites, compile, docs, complexity,
   CLI help, package-data source integrity, frontend syntax, diff checks, and
-  the five-viewport browser harness. A non-failing browser client-disconnect
+  the six-viewport browser harness with menu keyboard checks. A non-failing browser client-disconnect
   traceback is recorded for DEL-03. Recovery artefacts are recorded in
   `.specs/reports/del-00-step-1-2026-09-18.md`; no staging or commit was done.
 
@@ -58,6 +279,50 @@
   External screenshots and real consented participant sessions remain
   intentionally human-gated.
 
+- **DEL-11 local capture refresh (2026-09-20).** A further current-build
+  browser-harness run produced five PNGs at
+  `.specs/evidence/del-11-2026-09-20-run4/`; all five viewports reported zero
+  console/runtime/network failures and no horizontal overflow. All five PNGs
+  were visually inspected by the implementation agent with no obvious shell
+  clipping. This remains local automated preparation only and does not close
+  the externally reviewed screenshot or consented-participant gates.
+
+- **DEL-11 review packet (2026-09-20).** Added
+  `.specs/evidence/del-11-2026-09-20-run4/REVIEW.md` with the capture commit,
+  command, SHA-256 hashes, tool provenance, and an explicit human approval
+  checklist. The packet remains pending human review and does not claim that
+  the current viewport-health captures are the complete four-scene external
+  communication set.
+
+- **DEL-11 proof-scene candidates (2026-09-20).** Created four fresh
+  page-only 1280x900 candidates from disposable synthetic data for the
+  Logical Library, Effective-state evidence, Quality and trust, and Recovery
+  scenes. Labeled copies with date/build/viewport footers and raw/labeled
+  SHA-256 hashes are recorded in
+  `.specs/evidence/del-11-2026-09-20-proof-scenes/REVIEW.md`. This is still a
+  candidate packet; human communication approval remains open.
+
+- **DEL-11 candidate polish (2026-09-20).** Recaptured all four scenes with
+  the stable owner-only fixture root
+  `/tmp/skills-manager-external-demo-20260920` so visible paths are clearly
+  synthetic rather than random temporary internals. Refreshed the labeled
+  PNGs and manifest hashes; the human review gate remains pending.
+
+- **Overview final evidence and acceptance corrections (2026-09-21): DONE.**
+  The implementation-agent visual inspection and stateful CDP pass cover
+  `.specs/evidence/ui-overview-2026-09-21-final/`, including six viewport
+  captures and the `scenarios/` set for empty, search, form validation,
+  error/success feedback, divergent detail, destructive confirmation, disabled
+  filtering, recovery, and dark theme. The pass found zero console/runtime
+  errors, failed requests, or page overflow. Shipped corrections include
+  union-counted malformed/unaddressable attention, honest enabled/parsed/
+  addressable active counts, global-search routing without focus theft,
+  settled readiness and load-error states, form error associations with first
+  invalid focus, exclusive detail rendering, race-safe attention deep links,
+  single-owner modal focus restoration, and disabled-route stale-detail
+  clearing. Human participant/usability and external communication approval
+  remain pending and are not inferred from this local evidence.
+
 - **DEL-09 Git/review/apply integration: DONE (2026-09-20).** `backup_sync.py`
   now reads safe Git remote metadata and fetches through Git's configured
   credential helper/SSH agent without receiving or persisting credentials. It
@@ -93,11 +358,14 @@
   consented human sessions; they remain human-gated and are not fabricated by
   automated runs.
 
-- **Current-tree verification: DONE (2026-09-20).** The final ladder passes:
-  787 unittest tests, both smoke suites, Python compilation, docs consistency,
-  complexity at 238 functions, frontend syntax, CLI help, and all five browser
-  harness viewports. Vendored Vue source integrity passes; package artifact
-  inspection remains `UNAVAILABLE` because `python3 -m build` is not installed.
+- **Current-tree verification: DONE (2026-09-22).** The final ladder passes:
+  831 unittest tests, both Store/Web smoke suites, JavaScript syntax, Python
+  compilation, complexity at 238 functions, documentation/source consistency,
+  vendored Vue integrity, CLI help, all six browser-harness viewports with
+  menu keyboard checks, and `git diff --check`. The pinned temporary build
+  toolchain also builds and inspects the current wheel and sdist with all six
+  web UI files; the optional clean sdist-install probe remains unclaimed
+  because its fresh venv does not include setuptools.
 
 ## Milestone 75 — DEL-07 read-only source locks and update preview (2026-09-19)
 
@@ -1611,6 +1879,31 @@ probed on a hermetic temporary data dir.
   OK**, both smokes, `check_docs.py`, `check_complexity.py` (216 functions),
   `node --check` on both frontend files, CLI help, `check_package_data.py`
   (`UNAVAILABLE`, standing).
+
+## Milestone 58 — Overview operator surface (2026-09-21)
+
+**[NOTE]** This frontend-only slice keeps Vue 3, the standard-library backend,
+and the filesystem as source of truth. It adds no endpoint, Store method,
+schema value, runtime dependency, or build step.
+
+- [x] Added an Overview-first application shell with Library naming, preserved
+  Profiles, Workspaces, Recovery navigation, and hidden the Library
+  list pane while Overview is open on desktop.
+- [x] Added derived logical-skill, instance, active, disabled, divergent,
+  malformed, unaddressable, recovery, and recent-history observations. The
+  attention queue routes only to existing Library, Install, Doctor, and Trash
+  surfaces; it does not invent validation or provenance results.
+- [x] Added first-run Overview actions for Create, Add folder, Import, and a
+  read-only health check, plus skip-link and programmatic heading focus paths.
+- [x] Hardened the developer browser harness with isolated HOME/data roots,
+  realistic filesystem fixtures, a 1440px viewport, and stable Vue readiness
+  polling. Implementation-agent visual inspection and stateful CDP automation
+  are complete; human participant/usability and external communication approval
+  remain pending.
+- [x] Shipped follow-on: task-center, Settings, and bounded Quality surfaces
+  now compose existing seams; deeper provenance/quality evidence remains
+  evidence-gated. The hybrid Library browse slice is shipped in the
+  2026-09-21 Library browse milestone above.
 
 ## Milestone 57 — Docs gate hardened + whole-repo lint pass (2026-09-11)
 

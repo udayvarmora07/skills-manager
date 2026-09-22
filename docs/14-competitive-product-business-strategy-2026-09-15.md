@@ -1,6 +1,6 @@
 # Competitive Product and Business Strategy — 2026-09-15
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest**: Dated competitive analysis and product/business strategy for
 Skills Manager. It compares the current repository with
@@ -14,7 +14,9 @@ work. This document is planning, not proof that a proposed feature has shipped.
 
 **[SPEC]**
 
-This document is the strategy baseline produced from the 2026-09-15 research.
+This document is the strategy baseline produced from the 2026-09-15 research and
+refreshed on 2026-09-20. The original observation remains historical; the
+refresh below is the current comparison snapshot.
 The repository root `ROADMAP.md` remains the public delivery-status authority;
 `task.md` remains the execution checklist; source and the owning technical docs
 remain authoritative for current behavior.
@@ -41,11 +43,47 @@ recoverability, adversarial hardening, migration safety, and advisory quality
 evaluation. The product plan should borrow the competitor's understandable
 workflows while preserving this project's governance and trust moat.
 
-The immediate product problem is not missing feature count. It is that the UI
-exposes physical copies before it explains the logical library. A default
-all-scope view can make one skill copied into several roots look like several
-separate products and can make duplicate document bytes look like model context.
-Fixing that mental model is the highest-leverage product change.
+The highest-leverage mental-model change identified in the original comparison
+is now shipped: the UI leads with a logical library and reveals physical copies
+on demand, with responsive foundations and onboarding around it. The current
+highest-leverage work is task-oriented Overview/Install/Quality/Backups/Settings
+information architecture and direct access to the existing evidence, review,
+apply, snapshot, and recovery seams.
+
+### 2026-09-20 comparison refresh
+
+**[NOTE]**
+
+The upstream comparison was refreshed against commit
+[`6ae02e39d9efea0faf75e643b8205f97833a593d`](https://github.com/xingkongliang/skills-manager/commit/6ae02e39d9efea0faf75e643b8205f97833a593d),
+observed on 2026-09-20. The competitor reports version `1.40.0`, 4,864 GitHub
+stars, 416 forks, 195 issues, and 22 pull requests. These public counters are
+volatile adoption signals, not measures of quality. The refreshed inventory is
+60 Rust files / 42,640 lines, 63 frontend TypeScript/TSX/CSS files / 19,004
+lines, 122 commands, 526 Rust tests, and a package manifest with 22 runtime and
+15 development JavaScript dependencies.
+
+The current product truth is materially better than the September baseline in
+the user-facing layer: logical-library grouping, onboarding, tags/batches/
+profiles, adapter and project observation, registry/provenance review, source
+review/apply, backup review/apply, and redesigned responsive UI foundations are
+shipped. Remaining gaps are task-oriented Overview/Install/Quality/Backups/
+Settings information architecture; stronger visual agent/workspace identity;
+unified task centers; source/update inbox UI; consumer installers and OS
+integration; and human evidence. The last item remains an evidence gate, not a
+feature claim.
+
+### Architecture verdict
+
+**[SPEC]**
+
+Keep the filesystem-authoritative Python backend, loopback API, vendored Vue,
+and no-build frontend as the canonical architecture. The existing
+`desktop_launcher.py` Chromium app-mode window is the preferred zero-dependency
+desktop experience. React is not the advantage to copy; Tauri packaging and OS
+integration are the potential advantages. A Tauri/sidecar experiment is only a
+future DEC-09 option if installer, tray, keychain, or signed-updater demand is
+demonstrated. This refresh does not authorize a React/Rust rewrite.
 
 ## Research scope and evidence rules
 
@@ -75,21 +113,21 @@ willingness to pay.
 | Dimension | `xingkongliang/skills-manager` | This project |
 |---|---|---|
 | Product shape | Cross-platform Tauri desktop application plus standalone CLI | Python CLI plus local loopback web UI |
-| Public version observed | `1.39.0` | Published distribution `skill-control-plane` `1.0.1` |
+| Public version observed | `1.40.0` (2026-09-20 refresh; `1.39.0` remains the 2026-09-15 historical observation) | Published distribution `skill-control-plane` `1.0.1` |
 | License | MIT | MIT |
-| Repository signal on 2026-09-15 | 4,743 stars, 406 forks, 205 open issues, 24 contributors | 0 stars, 0 forks, 1 open issue in the public repository snapshot |
+| Repository signal | 4,864 stars, 416 forks, 195 issues, 22 pull requests (2026-09-20; volatile, not quality) | 0 stars, 0 forks, 1 open issue in the public repository snapshot |
 | Runtime stack | React 19, TypeScript, Vite, Tailwind, Tauri 2, Rust, SQLite | Python standard library backend/CLI, vendored Vue 3, SQLite rebuildable index, no frontend build step |
 | Distribution | Homebrew, macOS DMG, Windows EXE/MSI, Linux AppImage/DEB/RPM, CLI binaries | PyPI package; browser-canonical UI; unbundled optional desktop launcher |
 | Agent reach | 54 built-in agents plus custom tools/paths | Seven named agent filesystem scopes, generic agents scope, global and project-local discovery |
 | Primary strength | Discovery, installation, cross-agent deployment, presets, desktop convenience | Validation, resolution explanation, safety, recovery, migrations, eval evidence, low-dependency operation |
-| Primary gap | Limited first-party authoring/governance depth visible in the inspected product | Logical-library UX, onboarding, batch organization, provenance/update workflow, consumer packaging |
+| Primary gap | Limited first-party authoring/governance depth visible in the inspected product | Task-oriented Overview/Install/Quality/Backups/Settings IA, stronger agent/workspace identity, unified task centers, source/update inbox, consumer installers/OS integration, and human evidence |
 
-Approximate source inventory observed in the competitor was 59 Rust files with
-42,294 lines and 62 TypeScript/TSX files with 18,894 TypeScript/TSX/CSS lines,
-with 122 Tauri invoke commands and 521 Rust test attributes. The current local
-tree contained about 29 Python files with 12,268 lines, a 2,833-line frontend,
-and 685 discovered `unittest` test methods at the time of research. These figures
-describe implementation scale only.
+The 2026-09-20 competitor inventory is 60 Rust files / 42,640 lines, 63
+frontend TypeScript/TSX/CSS files / 19,004 lines, 122 commands, 526 Rust tests,
+and 22 runtime + 15 development JavaScript dependencies. The 2026-09-15
+inventory (59 Rust files / 42,294 lines; 62 frontend files / 18,894 lines; 521
+Rust tests) remains historical. These figures describe implementation scale
+only.
 
 ## Competitive product profiles
 
@@ -153,13 +191,14 @@ The current project already supplies a deeper integrity and authoring layer:
 - stdlib-only operation, vendored frontend runtime, and a comprehensive
   contract/regression suite.
 
-That is a credible foundation for a safety-sensitive control plane, but the
-current UI makes users understand scopes and physical instances too early. In a
-research dataset with 1,888 scope instances, the default all-scope view showed
-mostly repeated copies and a 4.7-million-token aggregate. At 400 px width, scope
-chips and the token panel consumed the capped sidebar area before any skill row
-was visible. Those figures describe the inspected dataset, not a universal
-benchmark.
+That is a credible foundation for a safety-sensitive control plane. The
+2026-09-20 redesign fixes the logical-first and responsive foundations that the
+original inspection found lacking. The historical dataset still matters as
+motivation: 1,888 scope instances produced mostly repeated copies and a
+4.7-million-token aggregate, and at 400 px the old scope chips/token panel could
+consume the capped sidebar before a skill row was visible. Those figures are
+historical observations, not a current UI claim or universal benchmark. The
+remaining product issue is fragmented workflows and actions, not a hidden list.
 
 ## Capability comparison and response
 
@@ -167,20 +206,36 @@ benchmark.
 
 | Capability | Competitive read | Strategic response |
 |---|---|---|
-| Logical library | Competitor presents one skill with agent badges | Make this the default local mental model; retain physical instances as an advanced drill-down |
+| Logical library | Competitor presents one skill with agent badges | Shipped as the local default; next improve agent identity and direct paths from logical cards to evidence and instances |
 | Desktop installation | Competitor is materially stronger | Improve install/launch convenience incrementally; do not rewrite in Tauri to imitate it |
 | Agent breadth | Competitor is broader | Build a declarative verified/experimental/custom adapter catalog before adding many hard-coded roots |
 | Authoring | Current project is stronger | Make create/edit/preview/templates a visible differentiator |
 | Validation and safety | Current project is stronger | Promote this to primary positioning and Quality navigation |
 | Effective resolution | Current project has evidence-based diagnostics | Turn the explanation into understandable UI without persisting guessed state |
-| Tags, presets, batches | Competitor is stronger | Add organization and bulk workflows after the logical-library model is stable |
-| Projects/workspaces | Competitor is stronger | Add explicit workspace views with precedence evidence, gated by ADR-002 |
-| Source/update flow | Competitor is stronger | Add provenance, upstream diff, and staged update preview before one-click updates |
-| Marketplace | Competitor is stronger | Enter through trust-ranked preview and validation, not generic popularity search |
-| Backup/multi-device | Competitor is stronger | Prototype Git-backed local-first backup after conflict semantics are specified |
+| Tags, presets, batches | Competitor remains stronger in ergonomics | Foundations are shipped; next add profile quick apply/preview and task-center access without implying automatic deployment |
+| Projects/workspaces | Competitor is stronger in visual identity | Read-only adapter/project observation is shipped; next make agent/workspace status legible without guessing precedence |
+| Source/update flow | Competitor is stronger in inbox ergonomics | Review/apply foundations are shipped; next compose a source/update inbox around provenance, diffs, and existing approval gates |
+| Marketplace | Competitor is stronger in breadth | Registry browse/review foundations are shipped; next add trust-ranked access and validation, never popularity-as-trust |
+| Backup/multi-device | Competitor is stronger in convenience | Local backup review/apply and recovery foundations are shipped; next add a Recovery center, not automatic multi-device sync |
 | Evals/governance | Current project is stronger | Make Quality reports and policy evidence the path to Team revenue |
-| Localization/accessibility | Competitor has broader settings | Add after navigation and responsive behavior are corrected; keep WCAG behavior explicit |
-| Operational simplicity | Current project is stronger | Preserve stdlib, no-build, loopback, and rebuildable-index constraints as product advantages |
+| Localization/accessibility | Competitor has broader settings | Responsive/accessibility foundations are shipped; next add text-size/system-theme settings, then i18n after IA stabilizes |
+| Operational simplicity | Current project is stronger | Preserve stdlib, no-build, loopback, filesystem authority, and rebuildable-index constraints as product advantages |
+
+## Ideas to adopt and avoid from the refresh
+
+**[SPEC]**
+
+Adopt selectively: a hybrid list/document library with an optional grid browse
+mode; a useful Overview/dashboard; task-oriented navigation; visible agent and
+workspace identity/status; preset/profile quick apply with an exact preview;
+dedicated Install, Recovery, and Settings surfaces; and a source/update inbox.
+Text-size controls and internationalization are later accessibility and reach
+work, after the information architecture stabilizes.
+
+Avoid: a fixed 1100px desktop assumption; icon or tag overload; popularity as a
+trust proxy; a feature-parity chase; and any new source of truth. Every proposed
+surface must reuse the filesystem-authoritative data and existing review/apply
+seams unless a separately approved architecture decision says otherwise.
 
 ## Strategic positioning
 
@@ -522,9 +577,16 @@ prompts, secrets, filesystem paths, or eval outputs by default.
 External sources inspected:
 
 - [competitor repository](https://github.com/xingkongliang/skills-manager)
-- [competitor tree at the inspected revision](https://github.com/xingkongliang/skills-manager/tree/b19706df9f993bfbe3b87d9a32a720f3e75506da)
+- [2026-09-20 competitor commit](https://github.com/xingkongliang/skills-manager/commit/6ae02e39d9efea0faf75e643b8205f97833a593d)
+- [historical 2026-09-15 competitor tree](https://github.com/xingkongliang/skills-manager/tree/b19706df9f993bfbe3b87d9a32a720f3e75506da)
+- [competitor README at refresh](https://github.com/xingkongliang/skills-manager/blob/6ae02e39d9efea0faf75e643b8205f97833a593d/README.md)
+- [competitor package manifest](https://github.com/xingkongliang/skills-manager/blob/6ae02e39d9efea0faf75e643b8205f97833a593d/package.json)
+- [competitor Rust manifest](https://github.com/xingkongliang/skills-manager/blob/6ae02e39d9efea0faf75e643b8205f97833a593d/src-tauri/Cargo.toml)
+- [competitor Tauri configuration](https://github.com/xingkongliang/skills-manager/blob/6ae02e39d9efea0faf75e643b8205f97833a593d/src-tauri/tauri.conf.json)
 - [competitor releases](https://github.com/xingkongliang/skills-manager/releases)
 - [competitor website](https://skillsmanager.dev/)
+- [Tauri sidecar documentation](https://v2.tauri.app/develop/sidecar/)
+- [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 Local source anchors:
 

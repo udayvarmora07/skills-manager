@@ -1,6 +1,6 @@
 # Product, UX, and Delivery Plan — 2026-09-15
 
-**Version 1.1.0**
+**Version 1.2.0**
 
 **AI manifest**: Implementation-ready planning companion to
 @docs/14-competitive-product-business-strategy-2026-09-15.md. It translates
@@ -13,8 +13,10 @@ and does not supersede `ROADMAP.md`, `task.md`, an owning ADR, or source.
 
 **[SPEC]**
 
-Status: **proposed delivery plan**. Use it to cut small, approved milestones;
-do not implement it as one batch. For each accepted workstream:
+Status: **mixed-status dated delivery plan**. Foundation status is authoritative
+only where `task.md` and source corroborate it; comparison-derived follow-ons
+remain proposed. Use this plan to cut small, approved milestones; do not
+implement it as one batch. For each accepted workstream:
 
 1. confirm the approval classification and decision prerequisites;
 2. add a bounded milestone to `task.md`;
@@ -24,8 +26,49 @@ do not implement it as one batch. For each accepted workstream:
 6. run the repository's current verification ladder before completion.
 
 The current worktree contained extensive pre-existing modifications during this
-planning pass. **DEL-00 stabilization is therefore a prerequisite to feature
-work.** This plan itself makes documentation-only changes.
+planning pass. This plan itself makes documentation-only changes; current
+implementation status is reconciled below rather than inferred from the plan.
+
+### 2026-09-21 Overview slice
+
+**[NOTE]** The Overview row in the target information architecture is now
+shipped as a frontend-derived operator surface. It opens by default,
+shows observed logical/instance health signals and recent history, and routes
+to existing Library, Install, Doctor, and Trash workflows. The first-run state
+offers Create, Add folder, Import, and health-check actions. The Library rail
+label is now Library while Profiles, Workspaces, and Trash / Recovery remain
+available. At this overview milestone, standalone Quality, Backups, Settings,
+hybrid Library, and provenance workflows were still proposed task-center work.
+The subsequent 2026-09-21 frontend slices shipped Quality, Install/Recovery,
+Settings, hybrid Library, and bounded provenance presentation over those seams.
+Implementation-agent visual inspection and stateful CDP
+automation are complete in
+`.specs/evidence/ui-overview-2026-09-21-final/`, with six viewport captures and
+`scenarios/` captures for empty, search, form validation, error/success
+feedback, divergent detail, destructive confirmation, disabled filtering,
+recovery, and dark theme. The probes reported zero console/runtime errors,
+failed requests, or page overflow. Human participant/usability and external
+communication approval remain open and are not inferred from local evidence.
+
+The acceptance pass corrected union counting for malformed or unaddressable
+observations, honest enabled/parsed/addressable active counts, focus-preserving
+global search routing, settled readiness and load-error states, form error
+associations with first-invalid focus, exclusive detail rendering, race-safe
+attention deep links, single-owner modal focus restoration, and stale-detail
+clearing for the disabled filter.
+
+### 2026-09-20 status reconciliation
+
+**[NOTE]**
+
+The task records show DEL-00 through DEL-09 foundations shipped, including the
+responsive redesign, logical Library, onboarding, organization, adapter/project
+observation, source review/apply, registry review/commit, and backup review/apply
+seams. DEL-10 is shipped only as a narrow offline integrity/policy foundation;
+it is not a team workflow. DEL-11 local evidence is shipped as automated capture
+and candidate packets, while external communication review and human usability
+evidence remain open. No plan item below should be read as implementation proof
+without matching task/source evidence.
 
 ## Planning vocabulary and approval classes
 
@@ -206,6 +249,13 @@ panels for:
 - local/upstream or instance-to-instance diff;
 - advisory eval results and with/without delta;
 - size/token estimates.
+
+The shipped Quality center implements the bounded subset currently evidenced by
+the REST payloads: observed specification/addressability state, physical-copy
+state and divergence, provenance fields when present, and content/token
+estimates. Risk, eval/usefulness, trust, and effective-load signals are shown
+as unavailable when the current APIs do not provide them; no verdict is
+inferred and no single score is rendered.
 
 Replace the current ambiguous aggregate token presentation with four named
 measurements:
@@ -620,9 +670,49 @@ Acceptance criteria:
 - a design-partner brief defines cohort, pilot workflow, data handling, success,
   and exit conditions.
 
-## Backlog priority matrix
+## Comparison-derived follow-on backlog
 
 **[SPEC]**
+
+These are proposed slices after the 2026-09-20 comparison refresh. Approval
+labels describe the likely boundary; none is shipped by this document.
+
+| Priority | Follow-on | User outcome | Reuse / approval | Acceptance signal |
+|---|---|---|---|---|
+| Now | Overview/dashboard | See invalid, divergent, pending, and recent work immediately | Frontend-only composition over existing stats/doctor/history; `DERIVED` | A fixture with mixed states produces actionable cards that deep-link to existing surfaces |
+| Now | Task-oriented navigation | Find Library, Install, Quality, Recovery, and Settings by job | Frontend-only shell/route presentation; `DERIVED` | Keyboard and mobile navigation expose each task without changing API contracts |
+| Now | Hybrid Library grid/list | Browse visually or inspect a precise document view | Frontend-only view mode over logical groups; `DERIVED` | List remains default, grid is optional, and both preserve instance drill-down |
+| Now | Agent/workspace identity | Understand where a skill is active, disabled, or observed | Existing scopes/workspaces payloads; `DERIVED` | Each logical card names agent/workspace state without claiming undocumented precedence |
+| Next | Profile quick apply/preview | Preview an exact set before applying it | Existing profile and batch preview/apply seams; `EXISTING` | Preview shows targets, diffs, and recovery before any mutation |
+| Shipped | Quality evidence center | Inspect independent validity, physical state, provenance, and size evidence | Existing skill/scopes/stats seams; frontend-only | Search and exact drill-down preserve evidence boundaries and label unavailable signals |
+| Shipped | Install and update center | Review source, provenance, and pending updates in one task center | Existing registry/source-lock review/apply; frontend-only | No network commit occurs without the current review/trust gates |
+| Shipped | Recovery center | Review backups, trash, snapshots, and restore choices together | Existing backup/trash/history/source-lock seams; frontend-only | A recovery fixture can restore or explain every listed artifact without a new truth source |
+| Shipped | Settings and accessibility | Change text size and system-theme behavior predictably | Frontend-only preferences; `DERIVED` | Text-size modes and theme preference remain usable at all harness widths |
+| Shipped | Command palette | Reach existing actions without hunting through menus | Frontend-only action index; `DERIVED` | Keyboard search exposes only available, permission-safe actions |
+| Later | Internationalization | Use the core workflows in additional locales | Frontend-only resource layer after IA stabilizes; `DERIVED` initially | English remains complete and locale expansion has no clipped labels |
+| Evidence-gated | Optional packaged desktop experiment | Evaluate installer/tray/keychain/updater value | DEC-09; `ASK-CONSTRAINT`/`ADR` if packaging changes locked runtime assumptions | Design-partner evidence justifies a bounded Tauri/sidecar spike before any packaging rewrite |
+
+### Recommended sequence
+
+**[SPEC]**
+
+1. **A — Shell, dashboard, and navigation:** establish the task-oriented
+   Overview and the Library/Install/Quality/Backups/Settings information scent.
+2. **B — Library and agent identity:** add optional grid browsing and make
+   agent/workspace status legible while preserving logical-first grouping.
+3. **C — Task centers:** compose profile preview/apply, Install/update inbox,
+   and Recovery around existing review, snapshot, and recovery contracts.
+4. **D — Accessibility and localization:** add text-size/system-theme settings
+   and command palette polish; i18n follows once IA and labels are stable.
+5. **E — Packaging experiment:** only after evidence and DEC-09 approval,
+   evaluate an optional packaged desktop path; do not rewrite the canonical app.
+
+## Historical backlog priority matrix
+
+**[SPEC]**
+
+The matrix below is retained as the dated 2026-09-15 sequencing record; the
+current proposed backlog and sequence are authoritative for post-refresh work.
 
 | Priority | Work | Why now | Start gate |
 |---|---|---|---|
@@ -850,7 +940,11 @@ A milestone is done only when:
 
 **[SPEC]**
 
-Complete DEL-00, then write a small approved execution milestone for DEL-01 and
-the first read-only DEL-02 slice. Do not begin profiles, source persistence,
-network discovery, hosted sync, or team governance until their decision-register
-entries are resolved.
+DEL-00 through DEL-09 foundations are recorded as shipped, the Overview and
+task-oriented navigation slice is now shipped in the current tree, DEL-10
+remains a narrow integrity/policy foundation, and DEL-11 remains human-gated
+beyond local evidence. The next action is to continue evidence-gated refinement
+of the shipped Library, Quality, Install/Recovery, and Settings centers. Human
+visual/usability validation of the shipped Overview remains open. Do not infer backend, schema, CLI, dependency, hosted,
+or packaging authorization from this plan; retain the existing approval labels
+and gate any optional desktop experiment through DEC-09.
