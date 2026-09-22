@@ -28,7 +28,7 @@ from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
 
 ROOT = Path(__file__).resolve().parent
-VIEWPORTS = ((320, 700), (400, 800), (640, 900), (900, 800), (1280, 900))
+VIEWPORTS = ((320, 700), (400, 800), (640, 900), (900, 800), (1280, 900), (1440, 900))
 
 
 def _chrome() -> str:
@@ -95,7 +95,124 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   await new Promise(resolve => ws.onopen=resolve);
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false}); await send('Page.navigate',{url});
-  await new Promise(r=>setTimeout(r,1200));
+  const readyExpression = `(() => {
+    const app = document.querySelector('#app');
+    const overview = document.querySelector('[data-overview-ready="true"]');
+    const heading = document.querySelector('#overview-title');
+    const representative = overview && (overview.querySelector('.overview-health') || overview.querySelector('[data-overview-empty="true"]'));
+    return {ready: !!app && !app.hasAttribute('v-cloak') && !!heading && !!representative, marker: overview ? overview.innerText.slice(0, 400) : ''};
+  })()`;
+  let previousMarker = null, stableChecks = 0, ready = false, lastState = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const probe = await send('Runtime.evaluate', {expression: readyExpression, returnByValue:true});
+    const state = probe.result && probe.result.result && probe.result.result.value;
+    lastState = state;
+    if (state && state.ready && state.marker === previousMarker) stableChecks += 1;
+    else stableChecks = 0;
+    previousMarker = state ? state.marker : null;
+    if (state && state.ready && stableChecks >= 2) { ready = true; break; }
+    await new Promise(r=>setTimeout(r,100));
+  }
+  if (!ready) throw new Error('Vue overview did not reach a stable rendered state: ' + JSON.stringify({lastState, errors, failed}));
+  await send('Runtime.evaluate', {expression:`(() => { const trigger=document.querySelector('[aria-label="Open actions menu"]'); if (trigger) { trigger.focus(); trigger.click(); } return !!trigger; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,80));
+  const menuOpen = await send('Runtime.evaluate', {expression:`(() => { const menu=document.querySelector('#actions-menu'); const items=[...document.querySelectorAll('#actions-menu [role="menuitem"]:not([disabled])')]; return {open:!!menu, focusedFirst:!!(items[0] && document.activeElement === items[0]), count:items.length}; })()`, returnByValue:true});
+  const menuOpenState = menuOpen.result && menuOpen.result.result && menuOpen.result.result.value;
+  if (!menuOpenState || !menuOpenState.open || !menuOpenState.focusedFirst || !menuOpenState.count) errors.push('Actions menu did not open with focus on its first available item');
+  await send('Runtime.evaluate', {expression:`(() => { const item=document.activeElement; if (item) item.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})); return true; })()`, returnByValue:true});
+  const menuArrow = await send('Runtime.evaluate', {expression:`(() => { const items=[...document.querySelectorAll('#actions-menu [role="menuitem"]:not([disabled])')]; return {focusedSecond:!!(items[1] && document.activeElement === items[1])}; })()`, returnByValue:true});
+  const menuArrowState = menuArrow.result && menuArrow.result.result && menuArrow.result.result.value;
+  if (!menuArrowState || !menuArrowState.focusedSecond) errors.push('Actions menu ArrowDown did not move focus to the next available item');
+  await send('Runtime.evaluate', {expression:`(() => { const menu=document.querySelector('#actions-menu'); if (menu) menu.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,80));
+  const menuClosed = await send('Runtime.evaluate', {expression:`(() => ({open:!!document.querySelector('#actions-menu'),trigger:document.activeElement === document.querySelector('[aria-label="Open actions menu"]')}))()`, returnByValue:true});
+  const menuClosedState = menuClosed.result && menuClosed.result.result && menuClosed.result.result.value;
+  if (!menuClosedState || menuClosedState.open || !menuClosedState.trigger) errors.push('Actions menu did not close safely or return focus to its trigger');
+  await send('Runtime.evaluate', {expression:`(() => { const trigger=document.querySelector('.command-trigger'); if (trigger) trigger.focus(); document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true})); return true; })()`, returnByValue:true});
+  let commandReady = false, commandState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const command = await send('Runtime.evaluate', {expression:`(() => { const dialog=document.querySelector('[data-modal="commands"]'); const input=document.querySelector('#command-palette-input'); const status=document.querySelector('#command-palette-status'); return {dialog:!!dialog, focused:document.activeElement === input, results:document.querySelectorAll('#command-palette-results [role="option"]').length, status:status ? status.textContent.trim() : ''}; })()`, returnByValue:true});
+    commandState = command.result && command.result.result && command.result.result.value;
+    if (commandState && commandState.dialog && commandState.focused && commandState.results > 0 && /command/.test(commandState.status)) { commandReady = true; break; }
+    await new Promise(r=>setTimeout(r,50));
+  }
+  if (!commandReady) errors.push('Commands shortcut did not open a focused, populated command palette: ' + JSON.stringify(commandState));
+  const commandKeyboard = await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (!input) return {active:'',end:'',home:'',endVisible:false,homeVisible:false}; input.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true})); return true; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,220));
+  const commandEnd = await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); const options=[...document.querySelectorAll('#command-palette-results [role="option"]')]; const activeId=input && input.getAttribute('aria-activedescendant') || ''; const active=activeId ? document.getElementById(activeId) : null; const list=document.querySelector('#command-palette-results'); const epsilon=0.5; const optionVisible=!!(active && list && active.getBoundingClientRect().top >= list.getBoundingClientRect().top - epsilon && active.getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + epsilon); return {active:document.activeElement && document.activeElement.id,end:activeId,last:options.length ? options[options.length - 1].id : '',endVisible:optionVisible}; })()`, returnByValue:true});
+  const commandHome = await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (input) input.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true})); return true; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,220));
+  const commandHomeState = await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); const options=[...document.querySelectorAll('#command-palette-results [role="option"]')]; const activeId=input && input.getAttribute('aria-activedescendant') || ''; const active=activeId ? document.getElementById(activeId) : null; const list=document.querySelector('#command-palette-results'); const epsilon=0.5; const optionVisible=!!(active && list && active.getBoundingClientRect().top >= list.getBoundingClientRect().top - epsilon && active.getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + epsilon); return {active:document.activeElement && document.activeElement.id,home:activeId,first:options.length ? options[0].id : '',homeVisible:optionVisible}; })()`, returnByValue:true});
+  const commandKeyboardState = {end: commandEnd.result && commandEnd.result.result && commandEnd.result.result.value, home: commandHomeState.result && commandHomeState.result.result && commandHomeState.result.result.value};
+  if (!commandKeyboardState.end || commandKeyboardState.end.active !== 'command-palette-input' || commandKeyboardState.end.end !== commandKeyboardState.end.last || !commandKeyboardState.end.endVisible || !commandKeyboardState.home || commandKeyboardState.home.active !== 'command-palette-input' || commandKeyboardState.home.home !== commandKeyboardState.home.first || !commandKeyboardState.home.homeVisible) errors.push('Commands palette did not retain input focus and keep Home/End options visible');
+  const commandTab = await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (input) { input.focus(); input.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true})); } return {focus:document.activeElement && document.activeElement.id,option:!!(document.activeElement && document.activeElement.closest('[role="option"]')),interactive:document.querySelectorAll('[role="option"] button, [role="option"] input, [role="option"] a, [role="option"][tabindex]:not([tabindex="-1"])').length}; })()`, returnByValue:true});
+  const commandTabState = commandTab.result && commandTab.result.result && commandTab.result.result.value;
+  if (!commandTabState || commandTabState.option || commandTabState.interactive) errors.push('Tab entered a command option row');
+  await send('Runtime.evaluate', {expression:`(() => { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,100));
+  const commandClosed = await send('Runtime.evaluate', {expression:`(() => ({open:!!document.querySelector('[data-modal="commands"]'),focus:document.activeElement && document.activeElement.className || '',trigger:document.querySelector('.command-trigger') === document.activeElement}))()`, returnByValue:true});
+  const commandClosedState = commandClosed.result && commandClosed.result.result && commandClosed.result.result.value;
+  if (!commandClosedState || commandClosedState.open || !commandClosedState.trigger) errors.push('Commands palette did not close safely or return focus to its trigger');
+  await send('Runtime.evaluate', {expression:`(() => { const trigger=document.querySelector('.command-trigger'); if (trigger) trigger.click(); return true; })()`, returnByValue:true});
+  let settingsReady = false, settingsState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const state = await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (!input) return {open:false}; const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; set.call(input,'settings'); input.dispatchEvent(new Event('input',{bubbles:true})); return {open:true,focus:document.activeElement === input}; })()`, returnByValue:true});
+    settingsState = state.result && state.result.result && state.result.result.value;
+    if (settingsState && settingsState.open && settingsState.focus) { settingsReady = true; break; }
+    await new Promise(r=>setTimeout(r,50));
+  }
+  if (settingsReady) {
+    await new Promise(r=>setTimeout(r,50));
+    await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (input) input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); return true; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,100));
+    const settingsFocus = await send('Runtime.evaluate', {expression:`(() => ({view:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(), focused:document.activeElement && document.activeElement.id}))()`, returnByValue:true});
+    const settingsFocusState = settingsFocus.result && settingsFocus.result.result && settingsFocus.result.result.value;
+    if (!settingsFocusState || settingsFocusState.view !== 'Settings' || settingsFocusState.focused !== 'view-title') errors.push('Settings command did not focus its destination heading');
+  } else errors.push('Settings command palette did not open');
+  const settingsTrigger = await send('Runtime.evaluate', {expression:`(() => { const trigger=document.querySelector('.command-trigger'); if (trigger) trigger.click(); return true; })()`, returnByValue:true});
+  if (settingsTrigger.result && settingsTrigger.result.result && settingsTrigger.result.result.value) {
+    await new Promise(r=>setTimeout(r,50));
+    await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; if (input) { set.call(input,'create'); input.dispatchEvent(new Event('input',{bubbles:true})); } return true; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,50));
+    await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (input) input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); return true; })()`, returnByValue:true});
+    let createReady = false, createState = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const state = await send('Runtime.evaluate', {expression:`(() => ({dialog:!!document.querySelector('[data-modal="skill"]'),commands:!!document.querySelector('[data-modal="commands"]')}))()`, returnByValue:true});
+      createState = state.result && state.result.result && state.result.result.value;
+      if (createState && createState.dialog && !createState.commands) { createReady = true; break; }
+      await new Promise(r=>setTimeout(r,50));
+    }
+    if (!createReady) errors.push('Create command did not open its destination dialog');
+    await send('Runtime.evaluate', {expression:`(() => { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,100));
+    const createClosed = await send('Runtime.evaluate', {expression:`(() => ({dialog:!!document.querySelector('[data-modal="skill"]'),trigger:document.querySelector('.command-trigger') === document.activeElement}))()`, returnByValue:true});
+    const createClosedState = createClosed.result && createClosed.result.result && createClosed.result.result.value;
+    if (!createClosedState || createClosedState.dialog || !createClosedState.trigger) errors.push('Closing Create did not return focus to Commands trigger: ' + JSON.stringify(createClosedState));
+  }
+  const libraryTrigger = await send('Runtime.evaluate', {expression:`(() => { const trigger=document.querySelector('.command-trigger'); if (trigger) trigger.click(); return !!trigger; })()`, returnByValue:true});
+  if (libraryTrigger.result && libraryTrigger.result.result && libraryTrigger.result.result.value) {
+    await new Promise(r=>setTimeout(r,80));
+    await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; if (input) { set.call(input,'library'); input.dispatchEvent(new Event('input',{bubbles:true})); } return true; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,80));
+    await send('Runtime.evaluate', {expression:`(() => { const input=document.querySelector('#command-palette-input'); if (input) input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); return true; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,140));
+    const libraryFocus = await send('Runtime.evaluate', {expression:`(() => ({view:document.querySelector('#library-view-title') ? 'skills' : '', focused:document.activeElement && document.activeElement.id, visible:!!(document.querySelector('#library-view-title') && document.querySelector('#library-view-title').getClientRects().length)}))()`, returnByValue:true});
+    const libraryFocusState = libraryFocus.result && libraryFocus.result.result && libraryFocus.result.result.value;
+    if (!libraryFocusState || libraryFocusState.view !== 'skills' || libraryFocusState.focused !== 'library-view-title' || !libraryFocusState.visible) errors.push('Library command did not focus the visible Library destination');
+  }
+  const qualityTab = await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Quality'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+  const qualityTabFound = !!(qualityTab.result && qualityTab.result.result && qualityTab.result.result.value);
+  if (!qualityTabFound) errors.push('Quality navigation tab was not found');
+  let qualityReady = false;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const quality = await send('Runtime.evaluate', {expression:`(() => ({view: document.querySelector('#view-title') ? document.querySelector('#view-title').textContent.trim() : '', evidence: !!document.querySelector('.quality-overview, .quality-section'), overflow: document.documentElement.scrollWidth > window.innerWidth}))()`, returnByValue:true});
+    const state = quality.result && quality.result.result && quality.result.result.value;
+    if (state && state.view === 'Quality' && state.evidence && !state.overflow) { qualityReady = true; break; }
+    await new Promise(r=>setTimeout(r,50));
+  }
+  if (!qualityReady) errors.push('Quality view did not render bounded evidence without overflow');
+  await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,100));
   if (screenshot) {
     const capture = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:true});
     require('fs').writeFileSync(screenshot, Buffer.from(capture.result.data, 'base64'));
@@ -127,10 +244,35 @@ def run() -> int:
         screenshot_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(screenshot_dir, 0o700)
     with tempfile.TemporaryDirectory(prefix="skillsmgr-browser-") as directory:
-        os.environ["SKILLS_MANAGER_DATA"] = directory
-        store = Store()
+        root = Path(directory)
+        home = root / "home"
+        data_dir = root / "data"
+        home.mkdir(parents=True, exist_ok=True)
+        os.environ["HOME"] = str(home)
+        os.environ["XDG_DATA_HOME"] = str(home / ".local" / "share")
+        os.environ["SKILLS_MANAGER_DATA"] = str(data_dir)
+        store = Store(data_dir)
         store.init_db()
-        store.create("browser-probe", "A browser harness fixture skill")
+        store.create("browser-probe", "A browser harness fixture skill", body="# Browser probe\n\nA healthy active fixture.\n")
+        store.create("disabled-probe", "A disabled fixture skill")
+        store.disable("disabled-probe")
+        store.create("recoverable-probe", "A recoverable fixture skill")
+        store.remove("recoverable-probe")
+        store.create("long-context-skill-name-for-responsive-proof", "A deliberately long description that checks wrapping and reflow without hiding the action text on narrow screens.", body="# Long context\n\nThis fixture keeps the overview and Library honest at narrow widths.\n")
+        # Scope fixtures use the existing filesystem adapter so aggregate
+        # observations exercise the same path as a real installation.
+        from skillsmgr import scopes
+
+        scopes.set_global_store(store)
+        scopes.create_skill("agents", "browser-probe", "A divergent agent copy of the browser probe", body="# Browser probe\n\nDivergent copy.\n")
+        scope = next((item for item in scopes.known_scopes() if item.id == "agents"), None)
+        if scope:
+            malformed = scope.base / "malformed-observed"
+            malformed.mkdir(parents=True, exist_ok=True)
+            (malformed / "SKILL.md").write_text("---\nname: [broken\n---\n", encoding="utf-8")
+            unaddressable = scope.base / "not addressable"
+            unaddressable.mkdir(parents=True, exist_ok=True)
+            (unaddressable / "SKILL.md").write_text("---\nname: not-addressable\ndescription: observed\n---\n", encoding="utf-8")
         server = WebAppServer(store, port=0)
         server_thread = Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
