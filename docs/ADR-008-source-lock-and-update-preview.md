@@ -1,16 +1,19 @@
 # ADR-008 — Read-only Source Locks and Update Preview
 
-**Version 1.1.0**
+**Version 1.2.0**
 
-**AI manifest:** Decision record for DEL-07 source locks. It defines the
-filesystem-owned evidence boundary and the review-first local update operation
-without adding SQLite state or a new public Store method.
+**AI manifest:** Decision record for DEL-07 source locks and the approved
+filesystem-owned safe local update caller. It defines the evidence boundary,
+review-first local update operation, and rollback workflow without adding
+SQLite state or a new public Store method.
 
 ## Status
 
-Accepted — September 20, 2026. The live workflow is implemented as an explicit
-prepare/review → snapshot/apply → rollback seam in `source_lock.py`. It remains
-caller-driven: no background update, network fetch, or implicit approval exists.
+Accepted — September 22, 2026. The live workflow is implemented as an explicit
+prepare/review → snapshot/apply → rollback seam in `source_lock.py`, composed
+by the approved `source_update.py` service and its CLI/REST/UI adapters. It
+remains caller-driven: no background update, network fetch, or implicit
+approval exists.
 
 ## Decision
 
@@ -50,10 +53,14 @@ the complete current tree, atomically swaps the candidate tree into place, and
 returns a rollback path. `restore_source_snapshot()` requires a separate
 explicit approval.
 
-The workflow still adds no CLI command, Store method, SQLite column/schema
-value, network request, cache write, or REST mutation. Callers can use the
-module seam from a future review UI without weakening the filesystem source of
-truth.
+The approved caller surface adds `skills-mgr update preview|apply|snapshots`,
+the corresponding local REST routes, and a review-first web UI. The service
+adds no Store method, SQLite column/schema value, network request, cache write,
+or background job. It stages candidate bytes under private expiring review
+artifacts, preserves active/disabled state, strips untrusted manager sidecars,
+retains five whole-tree recovery snapshots per exact target, and requires a
+separate previewed rollback review. These callers do not weaken the
+filesystem source of truth.
 
 The preview and sidecar are not a source-authentication service. Local, Git,
 archive, and registry identity values are accepted as bounded evidence; a
@@ -66,5 +73,7 @@ verified remote hash semantics.
 `tests/test_source_lock_contracts.py` covers identity validation, sidecar
 exclusion, whole-tree additions/removals, line-ending-only versus real changes,
 missing and symlinked sources, validation blocking, advisory risk evidence,
-review staleness, atomic snapshot/apply, sidecar persistence, and explicit
-rollback.
+review staleness, atomic snapshot/apply, sidecar persistence, explicit
+rollback, and bounded per-file/total diff evidence. The durable caller
+workflow is covered by `tests/test_source_update_contracts.py`, CLI contracts,
+REST contracts, and web UI source contracts.

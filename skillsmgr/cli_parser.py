@@ -275,6 +275,33 @@ def build_parser(commands) -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_install"])
 
+    update = sub.add_parser("update", help="review and safely apply a local skill source update")
+    update_sub = update.add_subparsers(dest="update_command", metavar="ACTION")
+    p = update_sub.add_parser("preview", help="preview a local folder or retained snapshot")
+    p.add_argument("name")
+    source_group = p.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--from", dest="source_dir", metavar="DIR", help="local candidate directory")
+    source_group.add_argument("--snapshot", dest="snapshot_id", metavar="SNAPSHOT_ID", help="retained recovery snapshot")
+    add_scope_arg(p)
+    p.add_argument("--target-path", metavar="PATH")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=commands["cmd_update"])
+    p = update_sub.add_parser("apply", help="apply one reviewed update")
+    p.add_argument("name")
+    p.add_argument("review_id")
+    add_scope_arg(p)
+    p.add_argument("--target-path", metavar="PATH")
+    p.add_argument("--yes", action="store_true", required=True, help="confirm the displayed review")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=commands["cmd_update"])
+    p = update_sub.add_parser("snapshots", help="list retained recovery snapshots")
+    p.add_argument("name")
+    add_scope_arg(p)
+    p.add_argument("--target-path", metavar="PATH")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=commands["cmd_update"])
+    update.set_defaults(func=commands["cmd_update"])
+
     p = sub.add_parser(
         "webui",
         aliases=["gui"],

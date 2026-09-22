@@ -26,7 +26,7 @@ from .diagnostics import diagnose as _diagnose
 # pins that import path.  It is not dead code (BUG-15).
 from .web_security import RequestError, validate_request  # noqa: F401
 from .web_serialization import json_bytes, parse_json_object
-from .web_upload import MAX_UPLOAD_PARTS, parse_multipart, upload_folder
+from .web_upload import MAX_UPLOAD_PARTS, parse_multipart, staged_single_skill, upload_folder
 
 _WEBUI_DIR = Path(__file__).resolve().parent / "webui"
 _STATIC_TYPES = {
@@ -463,7 +463,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         self._send(status, _json_bytes(obj))
 
     def _send_error(self, status: int, message: str) -> None:
-        self._send_json({"error": message}, status)
+        payload = getattr(message, "as_dict", lambda: {"error": str(message)})()
+        self._send_json(payload, status)
 
     def _drain_body(self, length: int) -> None:
         """Read and discard an over-limit body before sending its error."""
@@ -577,7 +578,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if isinstance(exc, SkillNotFound):
             self._send_error(404, str(exc))
         elif isinstance(exc, StoreError):
-            self._send_error(getattr(exc, "status", 400), str(exc))
+            self._send_error(getattr(exc, "status", 400), exc)
         elif isinstance(exc, ValueError):
             self._send_error(400, str(exc))
         else:
@@ -631,11 +632,28 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     # -- GET routes -------------------------------------------------------
 
+    def _route_source_update_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        from .source_update import list_update_snapshots, read_update_review
+
+        if len(parts) == 4 and parts[:3] == ["api", "source-updates", "reviews"]:
+            self._send_json(read_update_review(self.store.data_dir, parts[3]))
+            return True
+        if parts == ["api", "source-updates", "snapshots"]:
+            name = (qs.get("name", [""])[0] or "").strip()
+            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+            target_path = qs.get("target_path", [None])[0] or None
+            snapshots = list_update_snapshots(self.store.data_dir, name, scope, target_path=target_path)
+            self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
+            return True
+        return False
+
     def _route_get(self):
         parts = self._parts()
         if self._serve_static():
             return
         qs = parse_qs(urlparse(self.path).query)
+        if self._route_source_update_get(parts, qs):
+            return
         if parts == ["api", "scopes"]:
             from .scopes import list_scopes as _list_scopes
 
@@ -1048,9 +1066,62 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return self._route_catalog_post(parts)
         return False
 
+    @staticmethod
+    def _multipart_fields(file_parts: list[dict]) -> tuple[dict, list[dict]]:
+        fields: dict[str, str] = {}
+        files: list[dict] = []
+        for part in file_parts:
+            if part.get("filename"):
+                files.append(part)
+            else:
+                fields[part.get("name", "")] = (part.get("content") or b"").decode("utf-8")
+        return fields, files
+
+    def _route_source_update_post(self, parts: list[str]) -> bool:
+        from .source_update import commit_update_review, prepare_local_update, prepare_snapshot_update
+
+        if parts == ["api", "source-updates", "reviews"]:
+            content_type = self.headers.get("Content-Type", "")
+            if not content_type.lower().startswith("multipart/form-data"):
+                raise RequestError(415, "multipart/form-data request body required")
+            boundary = re.search(r"boundary=([^;]+)", content_type)
+            if not boundary:
+                raise StoreError("multipart boundary missing")
+            fields, files = self._multipart_fields(
+                _parse_multipart(self._read_body(), boundary.group(1).strip('"'))
+            )
+            with staged_single_skill(files) as source_dir:
+                result = prepare_local_update(
+                    self.store.data_dir, fields.get("name", ""), fields.get("scope", "global"),
+                    source_dir, target_path=fields.get("target_path") or None,
+                    source_value="browser-upload",
+                )
+            self._send_json(result, 201 if result.get("review_state") == "pending" else 200)
+            return True
+        if parts == ["api", "source-updates", "reviews", "from-snapshot"]:
+            data = self._body_json()
+            result = prepare_snapshot_update(
+                self.store.data_dir, data.get("name", ""), data.get("scope", "global"),
+                data.get("snapshot_id", ""), target_path=data.get("target_path"),
+            )
+            self._send_json(result, 201 if result.get("review_state") == "pending" else 200)
+            return True
+        if len(parts) == 5 and parts[:3] == ["api", "source-updates", "reviews"] and parts[4] == "commit":
+            data = self._body_json()
+            result = commit_update_review(
+                self.store.data_dir, parts[3], name=data.get("name", ""),
+                scope=data.get("scope", "global"), target_path=data.get("target_path"),
+                approve=data.get("approve") is True,
+            )
+            self._send_json(result)
+            return True
+        return False
+
     def _route_post(self):
         parts = self._parts()
         qs = parse_qs(urlparse(self.path).query)
+        if self._route_source_update_post(parts):
+            return
         if self._route_new_post(parts):
             return
         if parts == ["api", "sync"]:
@@ -1266,6 +1337,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     # -- DELETE routes ----------------------------------------------------
 
+    def _route_source_update_delete(self, parts: list[str]) -> bool:
+        from .source_update import cancel_update_review
+
+        if len(parts) == 4 and parts[:3] == ["api", "source-updates", "reviews"]:
+            self._send_json(cancel_update_review(self.store.data_dir, parts[3]))
+            return True
+        return False
+
     def _delete_route(self, parts: list[str], qs: dict[str, list[str]]) -> None:
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
             purge = qs.get("purge", ["0"])[0] in ("1", "true", "yes")
@@ -1284,7 +1363,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_error(404, "unknown endpoint")
 
     def _route_delete(self):
-        self._delete_route(self._parts(), parse_qs(urlparse(self.path).query))
+        parts = self._parts()
+        if self._route_source_update_delete(parts):
+            return
+        self._delete_route(parts, parse_qs(urlparse(self.path).query))
 
     # -- PUT routes -------------------------------------------------------
 

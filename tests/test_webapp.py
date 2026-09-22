@@ -82,6 +82,37 @@ class WebAppTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["name"], "demo")
 
+    def test_safe_local_update_rest_review_apply_and_snapshots(self):
+        boundary = "skillsmgr-update-test"
+        document = b"---\nname: demo\ndescription: Demo skill\n---\nupdated\n"
+        body = b"".join([
+            b"--" + boundary.encode() + b"\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\ndemo\r\n",
+            b"--" + boundary.encode() + b"\r\nContent-Disposition: form-data; name=\"scope\"\r\n\r\nglobal\r\n",
+            b"--" + boundary.encode() + b"\r\nContent-Disposition: form-data; name=\"files\"; filename=\"SKILL.md\"\r\n\r\n",
+            document,
+            b"\r\n--" + boundary.encode() + b"--\r\n",
+        ])
+        status, body, _ = self._request(
+            "POST", "/api/source-updates/reviews", body=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        self.assertEqual(status, 201)
+        review = json.loads(body)
+        self.assertEqual(review["review_state"], "pending")
+        self.assertEqual(review["source"]["value"], "browser-upload")
+        self.assertNotIn("skillsmgr-update-", json.dumps(review))
+        status, body, _ = self._request(
+            "POST", f"/api/source-updates/reviews/{review['review_id']}/commit",
+            body={"name": "demo", "scope": "global", "approve": True},
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertTrue(result["committed"])
+        status, body, _ = self._request("GET", "/api/source-updates/snapshots?name=demo&scope=global")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(body)["snapshots"]), 1)
+
     def test_long_query_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self._get("/api/search?q=" + "x" * 300)

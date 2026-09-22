@@ -1,10 +1,10 @@
 # CLI Surface — Skills Manager
 
-**Version 0.5.0**
+**Version 0.6.0**
 
-**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against the parser/handler modules (`cli_parser.py`, `cli_handlers.py`, `cli_output.py` behind the stable `cli.py` adapter) plus live invocations on 2026-09-20. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
+**AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against the parser/handler modules (`cli_parser.py`, `cli_handlers.py`, `cli_output.py` behind the stable `cli.py` adapter) plus live invocations on 2026-09-22. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
 
-**[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
+**[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
 
 ## Exit codes
 
@@ -185,6 +185,39 @@ materialized in a private temporary directory, fully validated, and scanned
 with the advisory `risk_scan()` heuristic. Validation errors fail before any
 managed-file mutation; warnings and risk findings are returned under the JSON
 `inspection` block and are never a safety certification.
+
+### `update preview NAME (--from DIR | --snapshot SNAPSHOT_ID) [--scope SCOPE] [--target-path PATH] [--json]`
+
+Create a private, expiring review for one exact observed local skill instance.
+`--from` and `--snapshot` are mutually exclusive and exactly one is required;
+`--scope all` is rejected. Recursive scopes require `--target-path` when the
+name has multiple observed physical instances. The preview never mutates the
+target or caller source. JSON includes target/source identity, current and
+candidate hashes, bounded added/removed/changed/line-ending-only evidence,
+validation errors/warnings, advisory risk findings, activation preservation,
+snapshot policy, and the 32-character review id. Invalid or no-change previews
+are non-committable; valid no-change exits 0, while blocked/unreadable input
+exits 1.
+
+### `update apply NAME REVIEW_ID [--scope SCOPE] [--target-path PATH] --yes [--json]`
+
+Apply only the staged candidate bound to the returned review id. `--yes` is
+mandatory and confirms review of the displayed evidence; it is not a trust or
+safety claim. The service rechecks the candidate and target hashes, snapshots
+the complete current tree, atomically replaces the exact instance, persists a
+source-lock sidecar, and resyncs the global index only after filesystem success.
+Stale, expired, cancelled, committed, mismatched, or replayed reviews fail
+without changing target bytes. Successful JSON includes the opaque snapshot id;
+post-commit index/review/retention failures are reported as
+`committed_with_warning` with recovery guidance.
+
+### `update snapshots NAME [--scope SCOPE] [--target-path PATH] [--json]`
+
+List the newest five retained source-update snapshots for one exact observed
+target. The JSON list reports opaque snapshot id, creation time, source review
+id, tree hash, activation state, and readability. A snapshot is never applied
+directly: `update preview --snapshot SNAPSHOT_ID` creates a normal rollback
+review, which must be separately approved and applied.
 
 ### `webui [--host H] [--port P] [--no-browser]` (alias: `gui`)
 Launch the local web UI (see @docs/08-web-ui.md). Defaults: `127.0.0.1:8765`, opens browser unless `--no-browser`.

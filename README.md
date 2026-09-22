@@ -26,6 +26,7 @@ The [Agent Skills](https://agentskills.io) format (`SKILL.md`) is now an open st
 | Manage across **all** your agents | ✅ (`--scope all`) | single-target | — |
 | Sync + dedup between agents | ✅ | — | — |
 | Version history + trash/rollback | ✅ | — | — |
+| Review-first local update + rollback | ✅ (`update`) | — | — |
 | Token-footprint budgeting | ✅ (`tokens`) | — | — |
 | Local web UI | ✅ | — | — |
 
@@ -72,6 +73,7 @@ skills-mgr search "deploy" --scope all   # scored search across agents
 skills-mgr tokens --scope all            # context-footprint budgeting
 skills-mgr validate --all                # spec lint incl. description/body guidance
 skills-mgr export                        # timestamped backup tarball
+skills-mgr update preview my-workflow --from ./my-workflow-candidate
 skills-mgr install vercel-labs/agent-skills --dry-run   # preview remote install
 ```
 
@@ -167,7 +169,7 @@ install or edit, and are never written to SQLite.
 
 ## CLI reference
 
-37 invocable names: 27 top-level commands + 7 `trash`/`templates`/`db` subcommands + 3 `ls`/`rm`/`gui` aliases. Exit codes: `0` ok · `1` error · `2` usage · `130` interrupt. `--json` on data commands.
+41 invocable names: 28 top-level commands + 10 subcommands (7 `trash`/`templates`/`db` actions and 3 `update` actions) + 3 `ls`/`rm`/`gui` aliases. Exit codes: `0` ok · `1` error · `2` usage · `130` interrupt. `--json` on data commands.
 
 Full surface: [`docs/03-cli-surface.md`](docs/03-cli-surface.md).
 

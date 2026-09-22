@@ -4,6 +4,19 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Safe local source update implementation plan — 2026-09-22
+
+- [x] Select one high-leverage feature from the whole-project audit and define
+  its bounded product scope.
+- [x] Create an implementation-ready Luna Max handoff covering architecture,
+  CLI and REST contracts, UI behavior, persistence, concurrency, failures,
+  phases, tests, acceptance criteria, and definition of done.
+- [x] Owner approval: add the proposed top-level `update` CLI command with
+  `preview`, `apply`, and `snapshots` subcommands.
+- [x] Implement `docs/19-safe-local-source-update-implementation-plan.md` in
+  phased source-lock, service, CLI, REST, UI, documentation, and verification
+  slices.
+
 ## UI redesign slice — 2026-09-20
 
 - [x] Reworked the web workspace into sibling navigation-rail, list-pane, and

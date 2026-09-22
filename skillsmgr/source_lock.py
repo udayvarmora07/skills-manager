@@ -28,6 +28,7 @@ MAX_SOURCE_FILE_BYTES = 4 * 1024 * 1024
 MAX_SOURCE_TOTAL_BYTES = 16 * 1024 * 1024
 MAX_SOURCE_PATH_DEPTH = 16
 MAX_DIFF_LINES = 200
+MAX_TOTAL_DIFF_LINES = 1000
 _PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
 SOURCE_LOCK_FILENAME = ".skillsmgr-source-lock.json"
 MAX_SOURCE_LOCK_BYTES = 32 * 1024
@@ -288,31 +289,71 @@ def _line_ending_only(left: bytes, right: bytes) -> bool:
     return left != right and left.replace(b"\r\n", b"\n") == right.replace(b"\r\n", b"\n")
 
 
-def _text_diff(left: bytes, right: bytes) -> list[str]:
+def _looks_binary(raw: bytes) -> bool:
+    """Treat NUL/control-bearing payloads as binary, even when UTF-8 decodes."""
+    return b"\x00" in raw or any(
+        byte < 0x09 or byte in (0x0B, 0x0C, 0x7F) or 0x0E <= byte < 0x20
+        for byte in raw
+    )
+
+
+def _text_diff(left: bytes, right: bytes) -> tuple[list[str], bool]:
+    if _looks_binary(left) or _looks_binary(right):
+        return ["binary content differs; inspect the raw file hashes and sizes"], False
     try:
         before = left.decode("utf-8").splitlines(keepends=True)
         after = right.decode("utf-8").splitlines(keepends=True)
     except UnicodeDecodeError:
-        return ["binary content differs; inspect the raw file hashes and sizes"]
+        lines = ["binary content differs; inspect the raw file hashes and sizes"]
+        return lines, False
     lines = list(difflib.unified_diff(before, after, "current", "candidate"))
-    return [line.rstrip("\n") for line in lines[:MAX_DIFF_LINES]]
+    truncated = len(lines) > MAX_DIFF_LINES
+    return [line.rstrip("\n") for line in lines[:MAX_DIFF_LINES]], truncated
 
 
 def _compare_manifests(current: dict, candidate: dict) -> dict:
     old = {item["path"]: item for item in current["files"]}
     new = {item["path"]: item for item in candidate["files"]}
     changes = []
+    diff_lines_returned = 0
+    diff_total_truncated = False
     for path in sorted(set(old) | set(new)):
         before = old.get(path)
         after = new.get(path)
         if before is None:
-            changes.append({"path": path, "status": "added", "candidate": after["sha256"], "bytes": after["bytes"]})
+            changes.append({
+                "path": path,
+                "status": "added",
+                "candidate": after["sha256"],
+                "bytes": after["bytes"],
+                "diff_truncated": False,
+            })
             continue
         if after is None:
-            changes.append({"path": path, "status": "removed", "current": before["sha256"], "bytes": before["bytes"]})
+            changes.append({
+                "path": path,
+                "status": "removed",
+                "current": before["sha256"],
+                "bytes": before["bytes"],
+                "diff_truncated": False,
+            })
             continue
         if before["sha256"] == after["sha256"]:
             continue
+        diff, per_file_truncated = _text_diff(before["_raw"], after["_raw"])
+        line_ending_only = (
+            not _looks_binary(before["_raw"])
+            and not _looks_binary(after["_raw"])
+            and _line_ending_only(before["_raw"], after["_raw"])
+        )
+        remaining = max(0, MAX_TOTAL_DIFF_LINES - diff_lines_returned)
+        if len(diff) > remaining:
+            diff = diff[:remaining]
+            diff_total_truncated = True
+            diff_truncated = True
+        else:
+            diff_truncated = per_file_truncated
+        diff_lines_returned += len(diff)
         changes.append({
             "path": path,
             "status": "changed",
@@ -320,13 +361,14 @@ def _compare_manifests(current: dict, candidate: dict) -> dict:
             "candidate": after["sha256"],
             "current_bytes": before["bytes"],
             "candidate_bytes": after["bytes"],
-            "line_ending_only": _line_ending_only(before["_raw"], after["_raw"]),
+            "line_ending_only": line_ending_only,
             "explanation": (
                 "only CRLF/LF line endings differ"
-                if _line_ending_only(before["_raw"], after["_raw"])
+                if line_ending_only
                 else "raw file content differs"
             ),
-            "diff": _text_diff(before["_raw"], after["_raw"]),
+            "diff": diff,
+            "diff_truncated": diff_truncated,
         })
     return {
         "changed_files": changes,
@@ -334,6 +376,8 @@ def _compare_manifests(current: dict, candidate: dict) -> dict:
         "removed": [item["path"] for item in changes if item["status"] == "removed"],
         "changed": [item["path"] for item in changes if item["status"] == "changed"],
         "line_ending_only": [item["path"] for item in changes if item.get("line_ending_only")],
+        "diff_lines_returned": diff_lines_returned,
+        "diff_total_truncated": diff_total_truncated,
     }
 
 
@@ -645,7 +689,8 @@ def restore_source_snapshot(current: str | Path, snapshot: str | Path, *, approv
 
 
 __all__ = [
-    "MAX_SOURCE_FILES", "SOURCE_LOCK_FILENAME", "SourceLockError", "commit_local_update",
+    "MAX_SOURCE_FILES", "MAX_TOTAL_DIFF_LINES", "SOURCE_LOCK_FILENAME", "SourceLockError",
+    "commit_local_update",
     "local_manifest", "preview_local_update", "read_source_lock", "restore_source_snapshot",
     "review_local_update", "source_identity", "source_lock_record", "source_lock_status",
     "write_source_lock",

@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.8.0**
+**Version 0.9.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -23,7 +23,7 @@ webapp.py (http.server ThreadingHTTPServer, 127.0.0.1)
 store.py ──> filesystem (source of truth) + SQLite index
 ```
 
-- **Backend**: `skillsmgr/webapp.py`. Stdlib only. Serves the static frontend from `skillsmgr/webui/` and a REST API under `/api/`. Request security, JSON serialization/body parsing, and multipart folder-upload staging live in private `web_security.py`, `web_serialization.py`, and `web_upload.py` modules; `webapp.py` keeps the route and compatibility interfaces. Scope-aware endpoints delegate to the `scopes` layer (`skillsmgr/scopes.py`), which reads/writes agent skill dirs directly (no DB).
+- **Backend**: `skillsmgr/webapp.py`. Stdlib only. Serves the static frontend from `skillsmgr/webui/` and a REST API under `/api/`. Request security, JSON serialization/body parsing, and multipart folder-upload staging live in private `web_security.py`, `web_serialization.py`, and `web_upload.py` modules; `webapp.py` keeps the route and compatibility interfaces. Safe local source updates delegate to the filesystem-owned `source_update.py` review/snapshot service; scope-aware endpoints delegate to the `scopes` layer (`skillsmgr/scopes.py`), which reads/writes agent skill dirs directly (no DB).
 - **Frontend**: `skillsmgr/webui/` — `index.html`, `styles.css`, `domain.js`, `app.js`, `static/vendor/vue.global.prod.js` (Vue 3.5.13, vendored so the app works offline). `domain.js` owns transport/formatting/frontmatter/escaped Markdown rendering behind a small browser-global seam; `app.js` owns Vue state and workflows. The split is plain script loading and keeps the no-build contract.
 - **No build step**: Vue global production build, plain CSS, plain JS. No npm, no bundler, no CDN at runtime.
 
@@ -188,6 +188,30 @@ new persistence or authority.
 | POST | `/api/skills/<name>/disable[?scope=SCOPE]` | — | `{name, disable: true}` |
 | POST | `/api/skills/<name>/enable[?scope=SCOPE]` | — | `{name, enable: true}` |
 | DELETE | `/api/skills/<name>?purge=0\|1[&scope=SCOPE]` | — | Store.remove / scopes.remove_skill result |
+
+### Safe local source updates
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/source-updates/reviews` | bounded `multipart/form-data` with `name`, `scope`, optional `target_path`, and exactly one uploaded skill tree | `201` pending review, or `200` blocked/no-change evidence |
+| POST | `/api/source-updates/reviews/from-snapshot` | JSON `{name, scope, target_path?, snapshot_id}` | rollback review using the same validation/diff pipeline |
+| GET | `/api/source-updates/reviews/<review_id>` | — | public review evidence; no staged private path |
+| POST | `/api/source-updates/reviews/<review_id>/commit` | JSON `{name, scope, target_path?, approve: true}` | atomic apply result, source-lock evidence, and opaque snapshot id |
+| DELETE | `/api/source-updates/reviews/<review_id>` | — | cancellation of a pending review |
+| GET | `/api/source-updates/snapshots?name=NAME&scope=SCOPE[&target_path=PATH]` | — | newest five exact-target recovery snapshots |
+
+Update review responses include target/source identity, hashes, bounded
+added/removed/changed/line-ending-only/binary diff evidence, validation,
+advisory risk policy/findings, activation preservation, expiry, and snapshot
+policy. A review is private and expires after 24 hours. Applying requires the
+exact reviewed name/scope/path and explicit `approve: true`; a second apply
+cannot mutate the target. `409` indicates a target or staged candidate changed
+after review, `404` an unavailable review/snapshot/target, `413` a bounded
+upload/artifact limit, and `415` the wrong JSON/multipart type. All responses
+retain `Cache-Control: no-store` and the existing loopback security headers.
+Global index reconciliation happens only after filesystem success; post-commit
+warnings identify the committed filesystem state and recovery snapshot rather
+than reporting a false rollback.
 
 ### Search / maintenance
 
@@ -368,7 +392,8 @@ workflows; Skip hides it only in memory, and the empty state can restart it.
   `lang="en"` until translated resources exist, so a regional format choice
   never falsely claims translated interface copy.
 - **Domain seam (`domain.js`)**: `api()` fetch wrapper, formatting/token helpers, raw frontmatter enrichment, and hand-rolled escaped Markdown rendering; all load before `app.js` without a bundler.
-- **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). The scope query string is built inline per call (`"?scope=" + encodeURIComponent(scope)`); the former `_scopeParam`/`_scopeQs` helpers were dead code and were removed (`BUG-15`).
+- **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Source updates use a frozen exact target, multipart review, explicit confirmation, and snapshot-backed rollback. The scope query string is built inline per call (`"?scope=" + encodeURIComponent(scope)`); the former `_scopeParam`/`_scopeQs` helpers were dead code and were removed (`BUG-15`).
+- **Source update state**: `update` stores the pending review, exact `{name, scope, physical_path}` target, candidate source identity, bounded change evidence, validation/risk results, review expiry, and recovery snapshot evidence. `recoverySnapshots` is loaded for the selected physical instance; apply and rollback both require a fresh review and explicit confirmation.
 - **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), exact visible-set selection and tag changes, `prepareBatch`/`executeBatch` (preview-locked enable/disable/remove/sync), `saveProfile`/`previewProfile`/`openProfileBatch`/`deleteProfile`, `openInstallCenter`/`openRecoveryCenter`, `loadWorkspaces` (read-only adapter/project evidence), `inspectQualityInLibrary` (reuse exact Library selection/detail), `openInstall`/`runInstall` (build/run `skills add` or browse/search/curate/fetch skills.sh), `runRegistry` (cache-aware reads and explicit provenance fetch), `commitRegistryReview` (separate no-network trust commit), and escaped editor preview. Install reports existing `registry_provenance` as registry-backed skills (not deduplicated sources) and makes no update claim without registry evidence; persistent search filters names and provenance identifiers. Registry fetch sends `{fetch:true, source}` and shows review id/expiry/validation/risk/hash evidence; the separate `{fetch:true, review_id, trust_confirmed:true}` action commits only the exact returned review, with a new request retiring the old review. Recovery is the single exposed recovery navigation entry and composes global-only trash restore, history/snapshot rollback, full archive import, and full backup export; its history modal forces global scope. Profile detail shows observed/disabled/divergent/missing counts, configured targets, and each instance scope/path; `Review enable plan` is offered only when at least one observed instance exists. The plan explains Disabled → Active and Active → No state change outcomes, unresolved members, and recovery/partial-failure behavior. Quality actions route to existing Validate, Doctor, and Stats modals without inventing new evidence.
 - **Markdown**: block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
 - **Keyboard**: `/` focuses search; `Ctrl/Cmd+K` toggles Commands only when no other dialog is open; its combobox keeps focus while Arrow Up/Down, Home/End, and Enter navigate or execute available results. `?` opens shortcut help; `Esc` closes menus/modals; `Tab` is trapped within the active dialog and focus returns to its opener. Destructive dialogs focus the safer cancel action first. Settings uses native radio groups and a labelled regional-format select with visible labels and 44px option rows. Dialog backgrounds expose `inert`/`aria-hidden` while open, with labelled dialogs and live status/error announcements.

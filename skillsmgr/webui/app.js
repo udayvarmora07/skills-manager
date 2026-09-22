@@ -60,6 +60,8 @@ createApp({
       loadingList: true,
       loadingDetail: false,
       loadingTrash: false,
+      loadingRecoverySnapshots: false,
+      recoverySnapshots: [],
       loadingHistory: true,
       overviewHistory: [],
       loadingWorkspaces: false,
@@ -96,6 +98,7 @@ createApp({
         sync: null,
         install: null,
         batch: null,
+        update: null,
         help: null,
         commands: null,
       },
@@ -170,6 +173,17 @@ createApp({
     selectedDisabled() {
       return this.selected ? !!this.selected.disabled : false;
     },
+    updateTargetAvailable() {
+      const target = this.selected;
+      return !!(target
+        && target.name
+        && target.scope
+        && target.scope !== "all"
+        && target.addressable !== false
+        && target.root_availability === "writable"
+        && (target.physical_path || target.path)
+        && target.physical_root);
+    },
     activeModal() {
       return Object.keys(this.modals).find((key) => this.modals[key]) || null;
     },
@@ -205,6 +219,7 @@ createApp({
           { id: "selected-validate", label: "Validate", title: `Validate ${this.selectedName}`, category: "Selected skill", keywords: "check lint", action: "openValidate", focusDestination: true },
           { id: "selected-toggle", label: this.selectedDisabled ? "Enable" : "Disable", title: `${this.selectedDisabled ? "Enable" : "Disable"} ${this.selectedName}`, category: "Selected skill", keywords: "active disabled toggle", action: "toggleSelected" },
           { id: "selected-sync", label: "Sync", title: `Sync ${this.selectedName} to agents`, category: "Selected skill", keywords: "copy agents scopes", action: "openSync", focusDestination: true },
+          ...(this.updateTargetAvailable ? [{ id: "selected-update", label: "Update from folder", title: `Review a local update for ${this.selectedName}`, category: "Selected skill", keywords: "source diff replace review rollback", action: "openUpdate", focusDestination: true }] : []),
           { id: "selected-remove", label: "Remove", title: `Remove ${this.selectedName}`, category: "Selected skill", keywords: "trash delete", action: "removeSelected", focusDestination: true },
         );
       }
@@ -691,6 +706,186 @@ createApp({
       this.switchView("recovery");
     },
 
+    updateTarget(record = this.selected) {
+      if (!record) return null;
+      return {
+        name: record.name,
+        scope: record.scope,
+        consumer: record.consumer || observedIdentity(record, this.scopes).consumerLabel,
+        physical_path: record.physical_path || record.path,
+        physical_root: record.physical_root,
+        disabled: !!record.disabled,
+        activation_state: record.disabled ? "disabled" : "active",
+      };
+    },
+
+    openUpdate() {
+      if (!this.updateTargetAvailable) {
+        this.toast("This exact skill instance is not addressable and writable.", "err");
+        return;
+      }
+      this.openModal("update", {
+        mode: "local", target: this.updateTarget(this.selected), files: [], review: null,
+        error: null, loading: false, confirmingClose: false, confirmed: false,
+        success: null, snapshotId: null,
+      });
+    },
+
+    updateReviewIsBlocked(review) {
+      return !!(review && (review.review_state === "blocked"
+        || review.review_state === "no-change"
+        || (review.validation && review.validation.valid === false)));
+    },
+
+    updateReviewCanApply(modal = this.modals.update) {
+      return !!(modal && modal.review
+        && modal.review.review_state === "pending"
+        && modal.review.validation && modal.review.validation.valid !== false
+        && modal.review.comparison && (modal.review.comparison.changed_files || []).length
+        && modal.confirmed && !modal.loading);
+    },
+
+    async onUpdateFiles(event) {
+      const modal = this.modals.update;
+      if (!modal) return;
+      const files = [...((event && event.target && event.target.files) || [])];
+      modal.files = files;
+      modal.review = null;
+      modal.error = null;
+      modal.confirmed = false;
+      if (files.length) await this.prepareUpdateReview();
+    },
+
+    async prepareUpdateReview() {
+      const modal = this.modals.update;
+      if (!modal || !modal.files || !modal.files.length) return;
+      modal.loading = true;
+      modal.error = null;
+      modal.review = null;
+      modal.confirmed = false;
+      try {
+        const form = new FormData();
+        form.append("name", modal.target.name);
+        form.append("scope", modal.target.scope);
+        form.append("target_path", modal.target.physical_path);
+        for (const file of modal.files) {
+          form.append("files", file, file.webkitRelativePath || file.name);
+        }
+        modal.review = await api("/api/source-updates/reviews", { method: "POST", body: form });
+        this.toast(modal.review.review_state === "pending"
+          ? "Private update review ready. Inspect the evidence before applying."
+          : `Update review is ${modal.review.review_state}.`, modal.review.review_state === "pending" ? "info" : "err");
+      } catch (e) {
+        modal.error = e.message;
+        this.toast("Could not prepare update review: " + e.message, "err");
+      } finally {
+        if (this.modals.update === modal) modal.loading = false;
+      }
+    },
+
+    async prepareSnapshotReview(snapshot) {
+      const modal = this.modals.update;
+      if (!modal || !snapshot || !snapshot.snapshot_id) return;
+      modal.loading = true;
+      modal.error = null;
+      try {
+        modal.review = await api("/api/source-updates/reviews/from-snapshot", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: modal.target.name, scope: modal.target.scope,
+            target_path: modal.target.physical_path, snapshot_id: snapshot.snapshot_id }),
+        });
+        this.toast("Rollback review ready. Review the reverse diff before applying.", "info");
+      } catch (e) {
+        modal.error = e.message;
+        this.toast("Could not prepare rollback review: " + e.message, "err");
+      } finally {
+        if (this.modals.update === modal) modal.loading = false;
+      }
+    },
+
+    openRollbackReview(snapshot) {
+      if (!this.updateTargetAvailable || !snapshot || snapshot.available === false) {
+        this.toast("Select an exact writable target with an available snapshot first.", "err");
+        return;
+      }
+      const target = this.updateTarget(this.selected);
+      this.openModal("update", {
+        mode: "snapshot", snapshot, target, files: [], review: null, error: null,
+        loading: false, confirmingClose: false, confirmed: false, success: null, snapshotId: null,
+      });
+      this.prepareSnapshotReview(snapshot);
+    },
+
+    async applyUpdateReview() {
+      const modal = this.modals.update;
+      if (!this.updateReviewCanApply(modal)) return;
+      modal.loading = true;
+      modal.error = null;
+      try {
+        const result = await api("/api/source-updates/reviews/" + encodeURIComponent(modal.review.review_id) + "/commit", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: modal.target.name, scope: modal.target.scope,
+            target_path: modal.target.physical_path, approve: true }),
+        });
+        modal.success = result;
+        modal.snapshotId = result.snapshot_id || null;
+        this.toast(`Update applied to ${modal.target.name}; recovery snapshot ${modal.snapshotId || "created"}.`, "ok");
+        await Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash(), this.loadRecoverySnapshots()]);
+      } catch (e) {
+        modal.error = e.message;
+        this.toast("Update was not applied: " + e.message, "err");
+      } finally {
+        if (this.modals.update === modal) modal.loading = false;
+      }
+    },
+
+    requestCloseUpdate() {
+      const modal = this.modals.update;
+      if (!modal) return;
+      if (modal.review && modal.review.review_state === "pending" && !modal.success) {
+        modal.confirmingClose = true;
+        return;
+      }
+      this.closeModal("update");
+    },
+
+    async cancelUpdateReview() {
+      const modal = this.modals.update;
+      if (!modal || !modal.review || !modal.review.review_id) {
+        this.closeModal("update");
+        return;
+      }
+      try {
+        await api("/api/source-updates/reviews/" + encodeURIComponent(modal.review.review_id), { method: "DELETE" });
+        this.toast("Pending update review cancelled.", "info");
+        this.closeModal("update");
+      } catch (e) {
+        modal.error = "Review cancellation failed: " + e.message;
+        this.toast(modal.error, "err");
+      }
+    },
+
+    async loadRecoverySnapshots() {
+      const target = this.updateTarget(this.selected);
+      if (!target || !this.updateTargetAvailable) {
+        this.recoverySnapshots = [];
+        return;
+      }
+      this.loadingRecoverySnapshots = true;
+      try {
+        const query = "?name=" + encodeURIComponent(target.name)
+          + "&scope=" + encodeURIComponent(target.scope)
+          + "&target_path=" + encodeURIComponent(target.physical_path);
+        const result = await api("/api/source-updates/snapshots" + query);
+        this.recoverySnapshots = Array.isArray(result) ? result : (result.snapshots || []);
+      } catch (e) {
+        this.recoverySnapshots = [];
+        this.toast("Could not load source snapshots: " + e.message, "err");
+      } finally {
+        this.loadingRecoverySnapshots = false;
+      }
+    },
+
     async loadWorkspaces() {
       this.loadingWorkspaces = true;
       try {
@@ -947,8 +1142,16 @@ createApp({
           }
         }
         if (mySeq !== this.detailSeq) return;
+        const observed = [...(this.skills || []), ...(this.allSkills || [])].find((item) =>
+          item && item.name === name && (!effScope || effScope === "all" || item.scope === effScope));
+        if (observed) {
+          for (const key of ["scope", "scope_label", "physical_root", "physical_path", "root_availability", "addressable", "consumer", "disabled", "path"]) {
+            if (record[key] == null && observed[key] != null) record[key] = observed[key];
+          }
+        }
         this.selected = record;
         this.selectedName = name;
+        if (this.view === "recovery") this.loadRecoverySnapshots();
       } catch (e) {
         if (mySeq !== this.detailSeq) return;
         this.toast("Could not load skill: " + e.message, "err");
@@ -1008,6 +1211,7 @@ createApp({
       this.mobileDetailOpen = false;
       this.compactControlsOpen = false;
       if (v === "trash" || v === "recovery") this.loadTrash();
+      if (v === "recovery") this.loadRecoverySnapshots();
       else if (v === "install") this.loadSkills();
       else if (v === "workspaces") this.loadWorkspaces();
       // BUG-4: entering the skills view with a live query must re-apply it, or
@@ -1544,6 +1748,7 @@ createApp({
         else if (this.modals.sync) this.closeModal("sync");
         else if (this.modals.install) this.closeModal("install");
         else if (this.modals.batch) this.closeModal("batch");
+        else if (this.modals.update) this.requestCloseUpdate();
         else if (this.modals.help) this.closeModal("help");
       }
     },
@@ -1566,6 +1771,7 @@ createApp({
         validate: this.openValidate,
         remove: () => this.selectedName && this.confirmRemove(this.selected),
         sync: this.openSync,
+        update: this.openUpdate,
         install: this.openInstall,
         help: () => this.openModal("help", {}),
         import: this.openImport,

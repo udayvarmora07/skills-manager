@@ -59,3 +59,4 @@
   @docs/15-product-ux-delivery-plan-2026-09-15.md. Architecture-specific
   questions remain in their ADRs. Resolved questions are recorded in
   06-progress-log.md.
+| @docs/19-safe-local-source-update-implementation-plan.md | Implementation-ready Luna Max handoff for exact-target local update review, apply, snapshots, and previewed rollback | Before implementing or reviewing the safe local source-update feature |

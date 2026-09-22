@@ -125,6 +125,8 @@ def validate_cli_names(args) -> None:
         names.append(args.name)
     elif command == "tokens" and getattr(args, "name", None):
         names.append(args.name)
+    elif command == "update" and getattr(args, "name", None):
+        names.append(args.name)
     elif command == "validate" and not getattr(args, "path", None):
         names.extend(getattr(args, "names", []) or [])
     elif command == "trash" and getattr(args, "trash_command", None) == "restore":
@@ -204,6 +206,9 @@ def validate_cli_combinations(args) -> None:
             raise StoreError("install --fetch requires a registry skill id")
         if getattr(args, "review", None) and not getattr(args, "trust_confirmed", False):
             raise StoreError("install --fetch --review requires --trust-confirmed after reviewing the source")
+    elif command == "update":
+        if scope_from_args(args) == "all":
+            raise StoreError("update mutations cannot use --scope all; choose one exact scope")
 
 
 def make_store(args) -> Store:
@@ -1507,6 +1512,92 @@ def cmd_gui(args, store: Store) -> int:
     )
 
 
+def _update_preview_text(result: dict) -> None:
+    """Render safe, ordered human-readable evidence for one update review."""
+    target = result.get("target") or {}
+    source = result.get("source") or {}
+    print(f"target: {_display(str(target.get('name', '-')))}")
+    print(f"scope: {_display(str(target.get('scope', '-')))}")
+    print(f"path: {_display(str(target.get('physical_path', '-')))}")
+    print(f"source: {_display(str(source.get('kind', '-')))} {_display(str(source.get('value', '-')))}")
+    print(f"review: {_display(str(result.get('review_state', '-')))}")
+    if result.get("review_expires_at"):
+        print(f"expires: {_display(str(result['review_expires_at']))}")
+    print(f"current hash: {_display(str(result.get('current_hash', '-')))}")
+    print(f"candidate hash: {_display(str(result.get('candidate_hash', '-')))}")
+    comparison = result.get("comparison") or {}
+    for key in ("added", "removed", "changed", "line_ending_only"):
+        values = comparison.get(key) or []
+        print(f"{key.replace('_', ' ')}: {', '.join(_display(str(value)) for value in values) or '-'}")
+    validation = result.get("validation") or {}
+    print(f"validation: {'valid' if validation.get('valid') else 'blocked'}")
+    for item in (validation.get("errors") or []) + (validation.get("warnings") or []):
+        print(f"  {_display(str(item.get('level', 'notice')))}: {_display(str(item.get('message', item)))}")
+    risk = result.get("risk") or {}
+    print(f"risk: {_display(str(risk.get('policy', 'advisory-only')))}")
+    for finding in risk.get("findings") or []:
+        print(f"  {_display(str(finding))}")
+    print(f"activation preserved: {'yes' if result.get('activation_preserved') else 'no'}")
+    print(f"snapshot required: {'yes' if result.get('snapshot_required_before_commit') else 'no'}")
+    print(f"commit allowed: {'yes' if result.get('commit_allowed') else 'no'}")
+    if result.get("review_id"):
+        print(f"apply with: skills-mgr update apply {_display(str(target.get('name', 'NAME')))} {result['review_id']} --scope {_display(str(target.get('scope', 'global')))} --yes")
+
+
+def cmd_update(args, store: Store) -> int:
+    """Run the approved local source-update review/apply/snapshot surface."""
+    from . import source_update
+
+    scope = scope_from_args(args)
+    if scope == "all":
+        raise StoreError("update mutations cannot use --scope all; choose one exact scope")
+    operation = getattr(args, "update_command", None)
+    if operation == "preview":
+        if args.source_dir:
+            result = source_update.prepare_local_update(
+                store.data_dir, args.name, scope, args.source_dir, target_path=args.target_path
+            )
+        else:
+            result = source_update.prepare_snapshot_update(
+                store.data_dir, args.name, scope, args.snapshot_id, target_path=args.target_path
+            )
+        if args.json:
+            _print_json(result)
+        else:
+            _update_preview_text(result)
+        return EXIT_ERROR if result.get("review_state") in {"blocked", "source-unavailable", "target-unavailable"} else EXIT_OK
+    if operation == "apply":
+        result = source_update.commit_update_review(
+            store.data_dir,
+            args.review_id,
+            name=args.name,
+            scope=scope,
+            target_path=args.target_path,
+            approve=True,
+        )
+        if args.json:
+            _print_json(result)
+        else:
+            print(f"applied reviewed update to {_display(args.name)}")
+            print(f"snapshot: {_display(str(result.get('snapshot_id', '-')))}")
+            if result.get("warning"):
+                print(f"warning: {_display(str(result['warning']))}")
+        return EXIT_OK
+    if operation == "snapshots":
+        result = source_update.list_update_snapshots(
+            store.data_dir, args.name, scope, target_path=args.target_path
+        )
+        if args.json:
+            _print_json(result)
+        else:
+            if not result:
+                print("no source-update snapshots")
+            for snapshot in result:
+                print(f"{_display(str(snapshot.get('snapshot_id', '-')))}  {_display(str(snapshot.get('created_at', '-')))}  {_display(str(snapshot.get('activation_state', '-')))}")
+        return EXIT_OK
+    raise StoreError("update requires preview, apply, or snapshots")
+
+
 COMMANDS = {
     "cmd_init": cmd_init,
     "cmd_list": cmd_list,
@@ -1538,4 +1629,5 @@ COMMANDS = {
     "cmd_tokens": cmd_tokens,
     "cmd_install": cmd_install,
     "cmd_gui": cmd_gui,
+    "cmd_update": cmd_update,
 }

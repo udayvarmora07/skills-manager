@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from contextlib import contextmanager
 from email.parser import BytesParser
 from email.policy import compat32 as _email_policy
 from email.utils import collapse_rfc2231_value, unquote
@@ -201,5 +202,51 @@ def upload_folder(
             except StoreError as exc:
                 skipped.append(f"{source_dir.name}: {exc}")
         return {"imported": imported, "skipped": skipped}
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+
+
+@contextmanager
+def staged_single_skill(
+    file_parts: list[dict],
+    *,
+    max_parts: int = MAX_UPLOAD_PARTS,
+    max_bytes: int = MAX_UPLOAD_BYTES,
+):
+    """Yield one bounded uploaded skill root for review-first operations.
+
+    Unlike ``upload_folder`` this helper never installs anything. It accepts a
+    single directory tree, requires exactly one primary skill document, and
+    removes the temporary bytes when the caller has copied them into its own
+    durable review artifact.
+    """
+    if len(file_parts) > max_parts:
+        raise StoreError(f"too many upload parts (max {max_parts})")
+    if sum(len(part.get("content") or b"") for part in file_parts) > max_bytes:
+        raise StoreError("upload too large")
+    names = [part.get("filename") for part in file_parts if part.get("filename")]
+    primary = [name for name in names if PurePosixPath(name).name in {"SKILL.md", "SKILL.md.disabled"}]
+    if len(primary) != 1:
+        raise StoreError("upload must contain exactly one SKILL.md or SKILL.md.disabled")
+    root_name = PurePosixPath(primary[0]).parent
+    if str(root_name) in ("", "."):
+        root_name = PurePosixPath(".")
+    if any(PurePosixPath(name).parts[:len(root_name.parts)] != root_name.parts for name in names):
+        raise StoreError("upload must contain exactly one skill root")
+    tmp_root = Path(tempfile.mkdtemp(prefix="skillsmgr-update-"))
+    try:
+        for part in file_parts:
+            rel = part.get("filename")
+            if not rel or rel.startswith("/") or "\\" in rel or ".." in PurePosixPath(rel).parts:
+                raise StoreError("uploaded file path is unsafe")
+            target = _stage_path(tmp_root, rel).resolve()
+            if not _contained(target, tmp_root):
+                raise StoreError("uploaded file path escapes its staging root")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(part.get("content") or b"")
+        yield tmp_root if str(root_name) == "." else tmp_root / root_name
+    except (OSError, ValueError) as exc:
+        reason = getattr(exc, "strerror", None) or "unsupported file name"
+        raise StoreError(f"cannot stage uploaded file: {reason}") from exc
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)

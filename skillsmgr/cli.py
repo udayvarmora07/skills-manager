@@ -36,6 +36,7 @@ from .cli_handlers import (
     cmd_import,
     cmd_init,
     cmd_install,
+    cmd_update,
     cmd_list,
     cmd_open,
     cmd_remove,
@@ -154,5 +155,6 @@ __all__ = [
     "cmd_scopes",
     "cmd_tokens",
     "cmd_install",
+    "cmd_update",
     "cmd_gui",
 ]

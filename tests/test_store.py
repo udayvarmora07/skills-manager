@@ -719,7 +719,10 @@ class TestValidatorLoaderScopes(unittest.TestCase):
             self.assertTrue(record["observed_at"].endswith("Z"))
 
     def test_known_scopes_include_all_agents(self):
-        ids = {s.id for s in known_scopes()}
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
+            os.environ, {"SKILLS_MANAGER_DATA": directory}, clear=False
+        ):
+            ids = {s.id for s in known_scopes()}
         self.assertTrue(
             {
                 "global",

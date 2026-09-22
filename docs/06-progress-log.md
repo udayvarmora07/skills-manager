@@ -4,6 +4,39 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-22 — Safe local source update implementation complete
+
+**[SPEC]** Owner approval was received to ship the exact top-level `update`
+  CLI surface from the safe local source-update plan: `preview`, `apply`, and
+  `snapshots`. The complete vertical slice preserves the filesystem source of
+  truth, stdlib-only runtime, unchanged SQLite schema, and no new public Store
+  method. It includes bounded binary-safe diff evidence, private durable review
+  artifacts, exact target binding, activation preservation, snapshot-backed
+  atomic apply, previewed rollback, CLI/REST/UI surfaces, and browser-upload
+  source redaction.
+
+  Final current-tree evidence: `856` unittest tests, `smoke_store.py`,
+  `smoke_web.py`, `check_docs.py`, `check_complexity.py` (`254` tracked
+  functions), `browser_harness.py` across 320/400/640/900/1280/1440px, Node
+  syntax checks, and `git diff --check` all pass. `check_package_data.py`
+  passes the vendored Vue/package-data integrity checks; the optional pinned
+  package build is recorded as unavailable because `python3 -m build` is not
+  installed. A human visual sign-off for SU-22 remains explicitly pending.
+
+## 2026-09-22 — Safe local source update implementation plan ready
+
+**[NOTE]** Added `docs/19-safe-local-source-update-implementation-plan.md` as
+  the single Luna Max handoff for the selected safe local source-update feature.
+  The plan binds updates to an exact observed instance, copies candidate bytes
+  into a private expiring review, preserves activation state, delegates atomic
+  replacement to `source_lock.py`, retains whole-tree snapshots, and makes
+  rollback pass through the same preview/apply workflow. It specifies the CLI,
+  REST, UI, filesystem records, failure semantics, concurrency ordering,
+  implementation phases, test matrix, acceptance criteria, and final
+  verification ladder. Owner approval for the proposed top-level `update` CLI
+  command was recorded on 2026-09-22; the implementation is complete and adds
+  no Store method or SQLite schema change.
+
 ## 2026-09-22 — UI regional formatting coverage audit
 
 **[NOTE]** Continued the screenshot-led UI/UX refinement with a complete

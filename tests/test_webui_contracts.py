@@ -970,6 +970,55 @@ console.log(JSON.stringify({overview, selected}));
         self.assertEqual(value["overview"], ["nav-install", "install-workflow"])
         self.assertEqual(value["selected"], ["selected-toggle"])
 
+    def test_safe_local_update_has_exact_target_review_and_explicit_apply(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        for phrase in (
+            "updateTargetAvailable",
+            "physical_path: record.physical_path || record.path",
+            "FormData()",
+            'api("/api/source-updates/reviews"',
+            'api("/api/source-updates/reviews/from-snapshot"',
+            'approve: true',
+            "loadRecoverySnapshots()",
+            "requestCloseUpdate",
+            "cancelUpdateReview",
+        ):
+            self.assertIn(phrase, source)
+        for phrase in (
+            'Update from folder',
+            'webkitdirectory',
+            'multipart data',
+            'Target identity',
+            'Source identity',
+            '>Changes</h3>',
+            '>Validity</h3>',
+            '>Advisory risk</h3>',
+            '>Recovery policy</h3>',
+            'Apply reviewed update',
+            'I reviewed the target, file changes, validation, and recovery snapshot policy.',
+            'Review rollback',
+            'Source snapshots',
+            'No changes detected. This review cannot be applied.',
+        ):
+            self.assertIn(phrase, html)
+        self.assertIn('<pre v-if="change.diff" class="update-diff" tabindex="0">{{ change.diff }}</pre>', html)
+        self.assertNotIn('<pre v-if="change.diff" class="update-diff" v-html=', html)
+        self.assertIn("overflow: auto;", css)
+        self.assertIn("white-space: pre;", css)
+
+    def test_safe_local_update_refreshes_all_evidence_and_freezes_snapshot_target(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        self.assertIn('mode: "snapshot"', source)
+        self.assertIn('target_path: modal.target.physical_path', source)
+        self.assertIn('this.loadScopes(), this.loadSkills(), this.loadTrash(), this.loadRecoverySnapshots()', source)
+        self.assertIn('class="tag">frozen exact target</span>', html)
+        self.assertIn('The private review will be cancelled. No installed bytes have changed.', html)
+        self.assertIn('rollback is another validated update', html)
+        self.assertIn('class="update-diff" tabindex="0"', html)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,6 +49,32 @@ class CliContractTests(unittest.TestCase):
         self.assertIsInstance(json.loads(out), list)
         self.assertEqual(err, "")
 
+    def test_safe_local_update_preview_apply_and_snapshot_listing(self):
+        code, _, err = self.invoke([
+            "create", "demo", "-d", "Use demo when testing.", "--body", "old body",
+        ])
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        source = Path(self.tmp.name) / "candidate"
+        source.mkdir()
+        (source / "SKILL.md").write_text(
+            "---\nname: demo\ndescription: Use demo when testing.\n---\nnew body\n",
+            encoding="utf-8",
+        )
+        code, out, err = self.invoke(["update", "preview", "demo", "--from", str(source), "--json"])
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        review = json.loads(out)
+        self.assertEqual(review["review_state"], "pending")
+        self.assertFalse(review["commit_allowed"])
+        code, out, err = self.invoke([
+            "update", "apply", "demo", review["review_id"], "--yes", "--json",
+        ])
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        result = json.loads(out)
+        self.assertTrue(result["committed"])
+        code, out, err = self.invoke(["update", "snapshots", "demo", "--json"])
+        self.assertEqual((code, err), (cli.EXIT_OK, ""))
+        self.assertEqual(len(json.loads(out)), 1)
+
     def test_trash_purge_human_output_reports_count(self):
         for name in ("old-one", "old-two"):
             code, _, err = self.invoke(["create", name, "-d", "Retired skill"])
