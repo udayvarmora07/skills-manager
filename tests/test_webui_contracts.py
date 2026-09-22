@@ -159,8 +159,8 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('<span class="sr-only">Open command palette</span>', html)
         self.assertNotIn('class="brand" type="button" @click="switchView(\'overview\')" aria-label=', html)
         self.assertNotIn('class="btn btn-secondary command-trigger" type="button" @click="toggleCommandPalette" aria-label=', html)
-        self.assertIn('<dd>{{ overviewLogicalCount }}<small>deduplicated names</small></dd>', html)
-        self.assertIn('<dd>{{ qualitySummary.provenance }}<small>present when returned</small></dd>', html)
+        self.assertIn('<dd>{{ formatNumber(overviewLogicalCount) }}<small>deduplicated names</small></dd>', html)
+        self.assertIn('<dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd>', html)
         self.assertIn('.overview-metrics small { display: block;', css)
 
     def test_browser_harness_is_hermetic_and_waits_for_stable_overview(self):
@@ -405,6 +405,52 @@ const context = {
         self.assertIn('type="radio"', html)
         self.assertIn('aria-describedby="settings-theme-hint"', html)
         self.assertIn('aria-describedby="settings-text-size-hint"', html)
+
+    def test_regional_format_preference_is_localized_without_false_translation_claims(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        domain = _read(ROOT / "skillsmgr" / "webui" / "domain.js")
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        self.assertIn('localStorage.getItem("skillsmgr-locale")', source)
+        self.assertIn('resolvedLocale: "en-US"', source)
+        self.assertIn("new Intl.NumberFormat", source)
+        self.assertIn("new Intl.DateTimeFormat", source)
+        self.assertIn("document.documentElement.lang = \"en\"", source)
+        self.assertIn("function localizedNumber", domain)
+        self.assertIn("Regional formats", html)
+        self.assertIn("Interface copy remains English until translated resources are available.", html)
+        self.assertIn('id="settings-locale"', html)
+        self.assertIn('aria-describedby="settings-locale-hint"', html)
+        self.assertIn("settings-locale-preview", css)
+        self.assertNotIn("toLocaleString()", html)
+
+        script = r'''
+const fs = require('fs'), vm = require('vm');
+const store = {};
+const sandbox = {
+  navigator: {language: 'en-IN'},
+  window: {SkillManagerDomain: {api(){}, formatBytes(){}, formatTokens(){}, tokenPctClass(){}, tokenBarWidth(){}, renderMarkdown(){}, parseFrontmatter(){}, formatCompat(){}, formatTools(){}, groupLogicalSkills(){}, deriveLogicalSkillIdentity(){}, observedIdentity(){}}},
+  Vue: {createApp(app){sandbox.app = app; return {mount(){}};}, nextTick(){}},
+  localStorage: {getItem(k){return store[k] || null;}, setItem(k,v){store[k]=String(v);}},
+  document: {addEventListener(){}, removeEventListener(){}, documentElement:{dataset:{}, lang:'en'}, querySelectorAll(){return [];}, querySelector(){return null;}},
+  setTimeout, clearTimeout
+};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+const ctx = {...sandbox.app.data(), ...sandbox.app.methods, $nextTick(){}};
+ctx.applyLocale('en-IN');
+const expectedDate = new Intl.DateTimeFormat('en-IN', {dateStyle:'medium', timeStyle:'short'}).format(new Date('2026-09-22T13:45:00Z'));
+if (ctx.resolvedLocale !== 'en-IN' || sandbox.document.documentElement.dataset.locale !== 'en-IN') throw new Error('regional locale failed');
+if (ctx.formatNumber(1234567) !== '12,34,567') throw new Error('regional number failed');
+if (ctx.formatDate('2026-09-22T13:45:00Z') !== expectedDate) throw new Error('regional date failed');
+if (ctx.normalizeLocale('not-supported') !== 'system') throw new Error('invalid locale was accepted');
+ctx.applyLocale('not-supported');
+if (ctx.resolvedLocale !== 'en-IN' || sandbox.document.documentElement.lang !== 'en') throw new Error('system fallback or language boundary failed');
+console.log(JSON.stringify({locale:ctx.resolvedLocale, number:ctx.formatNumber(1234567), date:ctx.formatDate('2026-09-22T13:45:00Z')}));
+'''
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+        values = json.loads(result.stdout)
+        self.assertEqual(values["locale"], "en-IN")
+        self.assertEqual(values["number"], "12,34,567")
 
     def test_theme_preference_listener_and_text_size_behavior(self):
         script = r'''
