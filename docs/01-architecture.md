@@ -2,7 +2,7 @@
 
 **Version 0.7.0**
 
-**AI manifest**: Current architecture and data-flow facts verified against source on September 22, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, registry network/cache/provenance boundary, bounded source-lock and backup/sync review/apply boundaries, offline HMAC manifest evidence, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and an 833-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
+**AI manifest**: Current architecture and data-flow facts verified against source on September 22, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, registry network/cache/provenance boundary, bounded source-lock and backup/sync review/apply boundaries, offline HMAC manifest evidence, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and an 834-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
 
 ## Repo map
 

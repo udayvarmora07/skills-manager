@@ -783,7 +783,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-metrics > div { min-width: 0; padding: 14px; background: var(--surface); }
 .overview-metrics dt { color: var(--text-muted); font-size: 0.75rem; }
 .overview-metrics dd { margin: 4px 0 1px; font-size: 1.5625rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.overview-metrics small { color: var(--text-muted); font-size: 0.6875rem; }
+.overview-metrics small { display: block; margin-top: 4px; color: var(--text-muted); font-size: 0.6875rem; font-weight: 400; }
 .overview-columns { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 28px; margin-top: 28px; }
 .overview-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .overview-section-head h2 { margin: 0; font-size: 1.25rem; }

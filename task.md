@@ -1,6 +1,6 @@
 # Task Checklist — Skills Manager
 
-**Version 0.8.1**
+**Version 0.8.2**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
@@ -213,6 +213,20 @@
 - [x] Added source-contract coverage and refreshed the six-viewport browser
   harness. No backend/API/Store/schema/CLI/dependency/build behavior changed.
 
+## UI semantic accessibility audit pass — 2026-09-22
+
+- [x] Corrected Overview and Quality metric summaries to use valid definition
+  list `dt`/`dd` pairs while preserving the existing visual hierarchy.
+- [x] Kept visible brand and Commands labels inside their accessible names at
+  desktop and compact mobile breakpoints, with screen-reader-only action
+  context where the visual label is hidden.
+- [x] Added a concise local-first page description and a source contract for
+  the semantic/accessibility treatment. No backend/API/Store/schema/CLI/
+  dependency/build behavior changed.
+- [x] Lighthouse snapshot audit now reports 100 Accessibility, 100 Best
+  Practices, 100 SEO, and 100 Agentic Browsing with zero failed audits; the
+  six-viewport browser harness remains green.
+
 ## Documentation milestone — 2026-09-20 comparison refresh
 
 - [x] Reconciled the competitive snapshot to upstream commit
@@ -229,7 +243,7 @@
 
 - **DEL-00: DONE (2026-09-18).** The pre-existing registry network/provenance
   batch is identified and kept separate from the product UX work. The current
-  tree passes 833 unittest tests, both smoke suites, compile, docs, complexity,
+  tree passes 834 unittest tests, both smoke suites, compile, docs, complexity,
   CLI help, package-data source integrity, frontend syntax, diff checks, and
   the six-viewport browser harness with menu keyboard checks. A non-failing browser client-disconnect
   traceback is recorded for DEL-03. Recovery artefacts are recorded in

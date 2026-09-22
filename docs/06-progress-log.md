@@ -4,6 +4,23 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-22 — UI semantic accessibility audit pass
+
+**[NOTE]** Continued the live UI/UX review with a Lighthouse/axe audit against
+the current local web app. Overview and Quality metric cards now use valid
+definition-list semantics without changing their visual rhythm. The brand and
+Commands controls keep their visible labels in their accessible names at
+desktop and compact mobile breakpoints, with screen-reader-only action context
+when a visual label is hidden. The document now also declares a concise
+local-first description. No backend/API/Store/schema/CLI/dependency/build
+behavior changed.
+
+**Verification (2026-09-22):** 834 unittest tests, JavaScript syntax,
+frontend source contracts, and the six-viewport browser harness pass with no
+runtime errors, failed requests, or horizontal overflow. Lighthouse snapshot
+reports 100 Accessibility, 100 Best Practices, 100 SEO, and 100 Agentic
+Browsing with zero failed audits.
+
 ## 2026-09-22 — UI navigation hierarchy pass
 
 **[NOTE]** Continued the screenshot-led UI/UX review on the current Vue

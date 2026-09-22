@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Skills Manager</title>
+  <meta name="description" content="A local-first workspace for inspecting, organizing, and safely managing AI coding-agent skills.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23b4531f'/><text x='50' y='70' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>S</text></svg>">
   <script src="/preferences.js"></script>
@@ -15,12 +16,13 @@
 
   <!-- ============================================================ topbar -->
   <header class="topbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
-    <button class="brand" type="button" @click="switchView('overview')" aria-label="Go to Overview" title="Go to Overview">
+    <button class="brand" type="button" @click="switchView('overview')" title="Go to Overview">
       <span class="brand-mark" aria-hidden="true">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       </span>
       <span class="brand-name">Skills Manager <span class="brand-sub">local</span></span>
       <span class="brand-short" aria-hidden="true">SM</span>
+      <span class="sr-only">Go to Overview</span>
     </button>
 
     <div class="searchwrap">
@@ -37,9 +39,10 @@
 
     <div class="topbar-actions">
       <span v-if="view === 'skills'" class="stat-pill">{{ activeScope === 'all' ? allScopesCount : totalCount }} skills<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
-      <button class="btn btn-secondary command-trigger" type="button" @click="toggleCommandPalette" aria-label="Open commands" title="Open commands" aria-controls="command-palette" :aria-expanded="!!modals.commands" aria-keyshortcuts="Control+K Meta+K">
+      <button class="btn btn-secondary command-trigger" type="button" @click="toggleCommandPalette" title="Open commands" aria-controls="command-palette" :aria-expanded="!!modals.commands" aria-keyshortcuts="Control+K Meta+K">
         <svg class="command-trigger-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M5 12h9M5 17h6"/><path d="m17 15 2 2 3-3"/></svg>
         <span class="command-trigger-label">Commands</span>
+        <span class="sr-only">Open command palette</span>
         <kbd aria-hidden="true">Ctrl/Cmd K</kbd>
       </button>
       <button class="btn btn-primary topbar-new" type="button" @click="openCreate" aria-label="Create a new skill" title="New skill">
@@ -388,10 +391,10 @@
               <button class="btn btn-secondary" type="button" @click="openDoctor">Run health check</button>
             </div>
             <dl class="overview-metrics" aria-label="Library summary">
-              <div><dt>Logical skills</dt><dd>{{ overviewLogicalCount }}</dd><small>deduplicated names</small></div>
-              <div><dt>Active instances</dt><dd>{{ overviewActiveCount }}</dd><small>enabled, parsed, addressable</small></div>
-              <div><dt>Disabled</dt><dd>{{ overviewDisabledCount }}</dd><small>will be skipped</small></div>
-              <div><dt>Recovery</dt><dd>{{ trashCount }}</dd><small>in global trash</small></div>
+              <div><dt>Logical skills</dt><dd>{{ overviewLogicalCount }}<small>deduplicated names</small></dd></div>
+              <div><dt>Active instances</dt><dd>{{ overviewActiveCount }}<small>enabled, parsed, addressable</small></dd></div>
+              <div><dt>Disabled</dt><dd>{{ overviewDisabledCount }}<small>will be skipped</small></dd></div>
+              <div><dt>Recovery</dt><dd>{{ trashCount }}<small>in global trash</small></dd></div>
             </dl>
           </section>
 
@@ -612,7 +615,7 @@
         <section v-else class="quality-overview" aria-labelledby="quality-title">
           <div class="detail-head"><div><h1 id="view-title" tabindex="-1">Quality</h1><p class="lead">Review validity, physical state, provenance, and size without collapsing independent evidence into a score.</p></div><div class="detail-actions quality-actions"><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="switchView('skills')">Inspect in Library</button></div></div>
           <p id="quality-title" class="hint">Select a skill to inspect its exact physical copy. Risk, eval, usefulness, trust, and effective-load signals remain explicitly unavailable unless an existing API provides them.</p>
-          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ qualitySummary.observed }}</dd><small>filesystem records</small></div><div><dt>Observed active</dt><dd>{{ qualitySummary.active }}</dd><small>not a validation verdict</small></div><div><dt>Disabled</dt><dd>{{ qualitySummary.disabled }}</dd><small>physical state</small></div><div><dt>Validity flagged</dt><dd>{{ qualitySummary.validityFlagged }}</dd><small>invalid/malformed/unaddressable</small></div><div><dt>Divergent groups</dt><dd>{{ qualitySummary.divergent }}</dd><small>copy comparison</small></div><div><dt>Provenance records</dt><dd>{{ qualitySummary.provenance }}</dd><small>present when returned</small></div></dl>
+          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ qualitySummary.observed }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ qualitySummary.active }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ qualitySummary.disabled }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ qualitySummary.validityFlagged }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Divergent groups</dt><dd>{{ qualitySummary.divergent }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ qualitySummary.provenance }}<small>present when returned</small></dd></div></dl>
           <section class="quality-section"><h2>What this center can and cannot show</h2><ul class="quality-unavailable"><li><strong>Available</strong><span>Observed parser/addressability flags, physical copies and state, provenance fields when present, and token/size estimates.</span></li><li><strong>Not inferred</strong><span>No single quality score, safety/trust verdict, usefulness claim, or effective consumer load.</span></li></ul></section>
           <p v-if="!qualityRecords.length" class="empty compact-empty">No observed skills yet. Add or create a skill, then return here for independent evidence.</p>
         </section>

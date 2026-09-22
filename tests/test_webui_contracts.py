@@ -151,6 +151,18 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn(".command-trigger-icon { display: block; }", css)
         self.assertIn(".actions-trigger .actions-label, .actions-trigger .actions-chevron { display: none; }", css)
 
+    def test_topbar_names_and_metric_definitions_are_accessible(self):
+        html = _read(INDEX_HTML)
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        self.assertIn('<meta name="description" content="A local-first workspace for inspecting, organizing, and safely managing AI coding-agent skills.">', html)
+        self.assertIn('<span class="sr-only">Go to Overview</span>', html)
+        self.assertIn('<span class="sr-only">Open command palette</span>', html)
+        self.assertNotIn('class="brand" type="button" @click="switchView(\'overview\')" aria-label=', html)
+        self.assertNotIn('class="btn btn-secondary command-trigger" type="button" @click="toggleCommandPalette" aria-label=', html)
+        self.assertIn('<dd>{{ overviewLogicalCount }}<small>deduplicated names</small></dd>', html)
+        self.assertIn('<dd>{{ qualitySummary.provenance }}<small>present when returned</small></dd>', html)
+        self.assertIn('.overview-metrics small { display: block;', css)
+
     def test_browser_harness_is_hermetic_and_waits_for_stable_overview(self):
         source = _read(ROOT / "browser_harness.py")
         self.assertIn('os.environ["HOME"]', source)
