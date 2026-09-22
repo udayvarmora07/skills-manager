@@ -54,6 +54,23 @@ python3 smoke_web.py
 node --check skillsmgr/webui/app.js   # if node is available
 ```
 
+Disposable static-analysis environment:
+
+```bash
+python3 -m venv /tmp/skillsmgr-analysis
+/tmp/skillsmgr-analysis/bin/python -m pip install ruff==0.16.8 bandit==1.9.4
+/tmp/skillsmgr-analysis/bin/ruff check --select F821,F822,F823 skillsmgr tests smoke_store.py smoke_web.py browser_harness.py desktop_launcher.py check_complexity.py check_docs.py check_package_data.py
+/tmp/skillsmgr-analysis/bin/bandit -r skillsmgr -q
+```
+
+Ruff and Bandit are disposable developer/CI tools, not runtime dependencies.
+Ruff is intentionally limited to undefined-name correctness. Bandit findings
+must be fixed or recorded with a named line-local suppression and a test
+anchor in `docs/STATIC-ANALYSIS.md`; a clean Bandit scan is advisory evidence,
+not a security proof. Package metadata uses SPDX `MIT` plus
+`license-files = ["LICENSE"]`, and `check_package_data.py` verifies those
+headers and exact license bytes in both artifacts.
+
 Building distributions locally must use the pinned, hash-verified toolchain
 (SEC-8) so your artifacts are the ones CI and the release job would produce:
 

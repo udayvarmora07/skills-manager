@@ -6,6 +6,7 @@ they do not mock the Store implementation or depend on a user's data directory.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 import os
@@ -51,6 +52,24 @@ class StoreContractCase(unittest.TestCase):
 
 
 class TestStoreConstructionAndCrud(StoreContractCase):
+    def test_concurrent_first_reads_bootstrap_schema_once(self):
+        fresh_dir = Path(self.tmp.name) / "fresh-read-store"
+        seed_store = Store(data_dir=fresh_dir)
+        seed_store.init_db()
+        seed_store.create("demo", "A useful skill")
+        fresh_store = Store(data_dir=fresh_dir)
+
+        with mock.patch.object(
+            Store,
+            "_bootstrap_schema",
+            wraps=Store._bootstrap_schema,
+        ) as bootstrap:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                rows = list(pool.map(lambda _item: fresh_store.list(), range(8)))
+
+        self.assertTrue(all([row["name"] for row in result] == ["demo"] for result in rows))
+        self.assertEqual(bootstrap.call_count, 1)
+
     def test_init_db_creates_layout_and_schema(self):
         self.assertTrue(self.store.skills_dir.is_dir())
         self.assertTrue(self.store.trash_dir.is_dir())

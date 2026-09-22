@@ -432,6 +432,54 @@ class ArchiveContractTests(unittest.TestCase):
         self.assertFalse((target.templates_dir / "two.md").exists())
         self.assertEqual(list(target.templates_dir.glob("*.skillsmgr-*")), [])
 
+    def test_full_payload_restore_failure_reports_original_error_and_keeps_backup(self):
+        # P0 trust gate: a rollback diagnostic must never raise the missing
+        # ``_diagnose`` NameError or erase the only recoverable old payload.
+        from skillsmgr import archive as archive_mod
+
+        source_root = self.root / "payload-source"
+        source_root.mkdir()
+        first_source = source_root / "one.md"
+        second_source = source_root / "two.md"
+        first_source.write_bytes(b"new one")
+        second_source.write_bytes(b"new two")
+        destination_root = self.root / "payload-destination"
+        destination_root.mkdir()
+        first_dest = destination_root / "one.md"
+        second_dest = destination_root / "two.md"
+        first_dest.write_bytes(b"old one")
+        unrelated = destination_root / "unrelated.txt"
+        unrelated.write_bytes(b"keep")
+
+        real_move = archive_mod.shutil.move
+        calls = {"count": 0}
+
+        def failing_move(source, destination, *args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 3:
+                raise OSError("injected later install failure")
+            if calls["count"] == 4:
+                raise OSError("injected rollback restore failure")
+            return real_move(source, destination, *args, **kwargs)
+
+        entries = [
+            ("templates", "one.md", first_source, first_dest),
+            ("templates", "two.md", second_source, second_dest),
+        ]
+        with mock.patch.object(archive_mod.shutil, "move", side_effect=failing_move):
+            with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                with self.assertRaisesRegex(archive_mod.ArchiveError, "injected later install failure"):
+                    archive_mod.restore_full_payload(entries, replace=True)
+                diagnostic = stderr.getvalue()
+
+        backup = destination_root / ".one.md.skillsmgr-backup"
+        self.assertIn("full-import rollback failed", diagnostic)
+        self.assertIn(str(backup), diagnostic)
+        self.assertNotIn("Traceback", diagnostic)
+        self.assertTrue(backup.is_file())
+        self.assertEqual(backup.read_bytes(), b"old one")
+        self.assertEqual(unrelated.read_bytes(), b"keep")
+
     def test_full_import_rejects_malformed_full_metadata_before_mutation(self):
         archive = self.root / "bad-full-metadata.zip"
         manifest = {

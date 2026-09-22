@@ -117,7 +117,7 @@ def verify_manifest(
         "key_id": hashlib.sha256(key_bytes).hexdigest()[:MAX_KEY_ID],
         "authenticity": "shared-secret group integrity only",
         "safety_verdict": False,
-        "secret_redacted": True,
+        "secret_redacted": True,  # nosec B105 - this is a boolean trust-report field, not a credential.
     }
     if digest in set(revoked_digests):
         result["reason"] = "revoked"

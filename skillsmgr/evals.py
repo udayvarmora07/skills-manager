@@ -517,7 +517,7 @@ def benchmark(cases: list[dict], runs: list[dict]) -> dict:
         "variants": variants,
         "delta": delta,
         "delta_meaning": f"{DEFAULT_VARIANT} case pass rate minus {BASELINE_VARIANT} case pass rate",
-        "pass_rate_meaning": "cases whose every assertion passed / graded cases",
+        "pass_rate_meaning": "cases whose every assertion passed / graded cases",  # nosec B105 - explanatory prose, never a secret.
         "ungraded_cases": sum(1 for case in cases if not (case.get("assertions") or [])),
         "policy": EVAL_POLICY,
         "advisory": True,

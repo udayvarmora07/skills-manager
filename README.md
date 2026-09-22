@@ -28,6 +28,7 @@ The [Agent Skills](https://agentskills.io) format (`SKILL.md`) is now an open st
 | Version history + trash/rollback | ✅ | — | — |
 | Review-first local update + rollback | ✅ (`update`) | — | — |
 | Token-footprint budgeting | ✅ (`tokens`) | — | — |
+| Deterministic read-only hygiene report | ✅ (`doctor --hygiene`) | — | — |
 | Local web UI | ✅ | — | — |
 
 ## Install
@@ -72,6 +73,7 @@ More:
 skills-mgr search "deploy" --scope all   # scored search across agents
 skills-mgr tokens --scope all            # context-footprint budgeting
 skills-mgr validate --all                # spec lint incl. description/body guidance
+skills-mgr doctor --hygiene --scope all --json  # bounded duplicate/drift/context evidence
 skills-mgr export                        # timestamped backup tarball
 skills-mgr update preview my-workflow --from ./my-workflow-candidate
 skills-mgr install vercel-labs/agent-skills --dry-run   # preview remote install
@@ -103,7 +105,7 @@ skills-mgr webui --no-browser # server only
 skills-mgr webui --port 9000  # custom port
 ```
 
-Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, templates, tar export plus tar/ZIP import, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
+Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, read-only hygiene evidence, templates, tar export plus tar/ZIP import, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
 
 Want a window instead of a tab? The optional, unbundled `desktop_launcher.py` opens the same UI in a chromeless Chromium app window (zero new dependencies, loopback-only, falls back to your browser):
 

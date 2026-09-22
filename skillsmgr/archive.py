@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import paths, __version__
 from .atomic_io import tree_content_hash
+from .diagnostics import diagnose as _diagnose
 from .frontmatter import FrontmatterError, parse_frontmatter
 from .validator import validate_skill_name
 
@@ -275,7 +276,9 @@ def extract_members(tar: tarfile.TarFile, dest: Path, members: list[tuple[tarfil
     data_filter = getattr(tarfile, "data_filter", None)
     if callable(data_filter):
         try:
-            tar.extractall(dest, members=tar_members, filter=data_filter)
+            tar.extractall(  # nosec B202 - every member passed path/type/size/layout validation above.
+                dest, members=tar_members, filter=data_filter
+            )
         except (OSError, tarfile.TarError, ValueError) as exc:
             raise ArchiveError(f"invalid archive extraction: {exc}") from exc
         return

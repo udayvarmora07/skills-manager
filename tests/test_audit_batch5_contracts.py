@@ -426,9 +426,19 @@ class SdistMemberVisibilityTests(unittest.TestCase):
             for name in check_package_data.expected_webui_members()
         }
         with tempfile.TemporaryDirectory() as directory:
+            root = "skill_control_plane-1.0.1/"
+            members.update(
+                {
+                    root + "PKG-INFO": (
+                        b"Metadata-Version: 2.4\nName: skill-control-plane\nVersion: 1.0.1\n"
+                        b"License-Expression: MIT\nLicense-File: LICENSE\n\n"
+                    ),
+                    root + "LICENSE": (ROOT / "LICENSE").read_bytes(),
+                }
+            )
             sdist = self._sdist(
                 Path(directory),
-                {f"skill_control_plane-1.0.1/{name}": data for name, data in members.items()},
+                {root + name if not name.startswith(root) else name: data for name, data in members.items()},
             )
             report = check_package_data.inspect_archive(sdist)
             self.assertEqual(report.webui_members, check_package_data.expected_webui_members())

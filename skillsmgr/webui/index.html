@@ -29,7 +29,7 @@
       <span class="s-icon" aria-hidden="true">
         <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       </span>
-      <input ref="searchInput" v-model.trim="query" type="search"
+      <input ref="searchInput" v-model.trim="query" type="search" name="skill-search"
              :placeholder="view === 'recovery' ? 'Search recovery…' : (view === 'install' ? 'Search registry sources…' : (view === 'quality' ? 'Search quality evidence…' : (view === 'trash' ? 'Search trash…' : 'Search skills…')))"
              :aria-label="view === 'recovery' ? 'Search recovery' : (view === 'install' ? 'Search registry sources' : (view === 'quality' ? 'Search quality evidence' : (view === 'trash' ? 'Search trash' : 'Search skills')))" autocomplete="off" spellcheck="false"
              @keydown="onSearchKeydown">
@@ -145,7 +145,7 @@
       <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + formatTokens(budget.window_tokens) + ' tok)'">
         <div class="budgetbar-head">
           <span class="budgetbar-label">Context budget</span>
-          <select v-model="budgetWindow" class="budgetbar-select" aria-label="Context window">
+          <select v-model="budgetWindow" class="budgetbar-select" name="context-window" aria-label="Context window">
             <option value="claude">Claude 1M</option>
             <option value="claude-haiku">Claude Haiku 200k</option>
             <option value="gpt-5.6">GPT-5.6 1.05M</option>
@@ -212,7 +212,7 @@
         <li v-if="selectedCount" class="batchbar">
           <div><strong>{{ selectedCount }} selected</strong><span class="hint">exact physical instances</span></div>
           <button class="btn btn-secondary" type="button" @click="toggleSelectAll">{{ allVisibleSelected ? 'Clear visible' : 'Select visible' }}</button>
-          <input v-model.trim="batchTagInput" class="batch-tag-input" placeholder="tag, another-tag" aria-label="Tags to apply">
+          <input v-model.trim="batchTagInput" class="batch-tag-input" name="batch-tags" placeholder="tag, another-tag" aria-label="Tags to apply">
           <button class="btn btn-secondary" type="button" @click="updateBatchTags('add')">Add tags</button>
           <button class="btn btn-secondary" type="button" @click="updateBatchTags('remove')">Remove tags</button>
           <button class="btn btn-secondary" type="button" @click="openBatch('enable')">Enable</button>
@@ -227,7 +227,7 @@
             @click="libraryMode === 'library' ? selectLogicalSkill(s) : selectSkill(s)"
             @keydown.enter.self.prevent="libraryMode === 'library' ? selectLogicalSkill(s) : selectSkill(s)"
             @keydown.space.self.prevent="libraryMode === 'library' ? selectLogicalSkill(s) : selectSkill(s)" tabindex="0">
-          <input class="row-select" type="checkbox"
+          <input class="row-select" type="checkbox" name="skill-selection"
                  :checked="libraryMode === 'library' ? groupSelectionState(s) === 'all' : isSelected(s)"
                  :aria-label="'Select ' + s.name"
                  @click.stop @change="toggleSelection(s, $event.target.checked)">
@@ -321,6 +321,9 @@
 
       <div v-else-if="view === 'quality'" class="sidepanel" aria-label="Quality skills">
         <div class="sidepanel-intro"><strong>Quality</strong><span class="hint">Observed evidence, not a single score</span></div>
+        <div v-if="qualityHygieneLoading" class="quality-side-status" role="status">Loading hygiene evidence…</div>
+        <div v-else-if="qualityHygieneError" class="quality-side-status quality-side-error" role="alert">{{ qualityHygieneError }} <button class="text-button" type="button" @click="retryQualityHygiene">Retry</button></div>
+        <div v-else-if="qualityHygiene" class="quality-side-status">{{ formatNumber(qualityHygieneSummary.physical_instances) }} physical instances · {{ formatNumber(qualityHygieneFindings.length) }} findings</div>
         <div v-if="loadingList" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <div v-else-if="!filteredQualitySkills.length" class="empty compact-empty">
           <h3>{{ qualityRecords.length ? 'No matching skills' : 'No skills observed' }}</h3>
@@ -633,6 +636,52 @@
           <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ formatNumber(qualitySummary.observed) }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ formatNumber(qualitySummary.active) }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ formatNumber(qualitySummary.disabled) }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ formatNumber(qualitySummary.validityFlagged) }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Divergent groups</dt><dd>{{ formatNumber(qualitySummary.divergent) }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd></div></dl>
           <section class="quality-section"><h2>What this center can and cannot show</h2><ul class="quality-unavailable"><li><strong>Available</strong><span>Observed parser/addressability flags, physical copies and state, provenance fields when present, and token/size estimates.</span></li><li><strong>Not inferred</strong><span>No single quality score, safety/trust verdict, usefulness claim, or effective consumer load.</span></li></ul></section>
           <p v-if="!qualityRecords.length" class="empty compact-empty">No observed skills yet. Add or create a skill, then return here for independent evidence.</p>
+          <section class="quality-section quality-hygiene" aria-labelledby="quality-hygiene-title">
+            <div class="section-label-row"><h2 id="quality-hygiene-title">Skill Hygiene Report</h2><button class="btn btn-secondary" type="button" @click="retryQualityHygiene" :disabled="qualityHygieneLoading">{{ qualityHygieneLoading ? 'Refreshing…' : 'Refresh' }}</button></div>
+            <p class="hint">No combined quality score is produced. This report is deterministic, read-only evidence from the exact physical instances in the current scope; findings overlap by design and perform no cleanup.</p>
+            <div v-if="qualityHygieneError" class="quality-warning" role="alert">{{ qualityHygieneError }} <button class="btn btn-secondary" type="button" @click="retryQualityHygiene">Retry</button></div>
+            <div v-else-if="qualityHygieneLoading" class="skeleton" role="status"><div class="skel-row"></div><div class="skel-row"></div></div>
+            <template v-else-if="qualityHygiene">
+              <dl class="overview-metrics quality-hygiene-metrics" aria-label="Independent hygiene evidence summary">
+                <div><dt>Physical instances</dt><dd>{{ formatNumber(qualityHygieneSummary.physical_instances) }}<small>deduplicated paths</small></dd></div>
+                <div><dt>Errors</dt><dd>{{ formatNumber(qualityHygieneSummary.errors) }}<small>validator or structure</small></dd></div>
+                <div><dt>Warnings</dt><dd>{{ formatNumber(qualityHygieneSummary.warnings) }}<small>inspect deliberately</small></dd></div>
+                <div><dt>Exact duplicate groups</dt><dd>{{ formatNumber(qualityCategoryCount('same-name-identical') + qualityCategoryCount('exact-document-duplicate') + qualityCategoryCount('exact-instruction-duplicate')) }}<small>independent groups</small></dd></div>
+                <div><dt>Divergent name groups</dt><dd>{{ formatNumber(qualityCategoryCount('divergent-name')) }}<small>same-name drift</small></dd></div>
+                <div><dt>Near-duplicate candidates</dt><dd>{{ formatNumber(qualityCategoryCount('near-duplicate')) }}<small>heuristic only</small></dd></div>
+                <div><dt>Broken-reference findings</dt><dd>{{ formatNumber(qualityCategoryCount('broken-reference')) }}<small>validator evidence</small></dd></div>
+                <div><dt>Activation descriptions</dt><dd>{{ formatNumber(qualityCategoryCount('activation-description')) }}<small>existing guidance</small></dd></div>
+                <div><dt>Context over limit</dt><dd>{{ formatNumber(qualityCategoryCount('context-over-limit')) }}<small>body thresholds</small></dd></div>
+                <div><dt>Source-lock drift</dt><dd>{{ formatNumber(qualityCategoryCount('source-lock-drift') + qualityCategoryCount('source-lock-inaccessible')) }}<small>missing is unavailable</small></dd></div>
+                <div><dt>Degraded sections</dt><dd>{{ formatNumber((qualityHygiene.degraded || []).length) }}<small>partial evidence</small></dd></div>
+                <div><dt>Unavailable signals</dt><dd>{{ formatNumber((qualityHygiene.unavailable_signals || []).length) }}<small>not observed</small></dd></div>
+              </dl>
+              <div class="quality-hygiene-controls">
+                <label for="quality-severity-filter">Filter findings</label>
+                <select id="quality-severity-filter" name="quality-severity-filter" v-model="qualitySeverityFilter">
+                  <option value="all">All severities</option><option value="error">Errors</option><option value="warning">Warnings</option><option value="info">Informational</option><option value="unavailable">Unavailable</option>
+                </select>
+                <span class="hint" role="status">{{ formatNumber(filteredQualityHygieneFindings.length) }} matching finding{{ filteredQualityHygieneFindings.length === 1 ? '' : 's' }}</span>
+              </div>
+              <p v-if="!filteredQualityHygieneFindings.length" class="empty compact-empty">No findings match this filter. Unavailable signals remain listed separately below.</p>
+              <div v-for="group in qualityHygieneGroups" :key="group.category" class="quality-finding-group">
+                <h3>{{ group.category }}</h3>
+                <article v-for="finding in group.findings" :key="finding.id" class="quality-finding" :class="'quality-severity-' + finding.severity">
+                  <button class="quality-finding-toggle" type="button" @click="toggleQualityFinding(finding.id)" :aria-expanded="qualityFindingIsExpanded(finding.id) ? 'true' : 'false'" :aria-controls="'finding-' + finding.id">
+                    <span><strong>{{ finding.title }}</strong><small>{{ finding.severity }} · {{ finding.confidence }}</small></span><span aria-hidden="true">{{ qualityFindingIsExpanded(finding.id) ? '−' : '+' }}</span>
+                  </button>
+                  <div v-if="qualityFindingIsExpanded(finding.id)" class="quality-finding-detail" :id="'finding-' + finding.id">
+                    <p>{{ finding.explanation }}</p>
+                    <p v-if="finding.evidence && finding.evidence.reason" class="hint">{{ finding.evidence.reason }}</p>
+                    <ul class="quality-finding-instances"><li v-for="instance in finding.instances" :key="targetKey(instance)"><button class="text-button" type="button" @click="inspectHygieneInstance(instance, finding)">{{ finding.category === 'broken-reference' ? 'Open Validate: ' : '' }}{{ instance.scope }} / {{ instance.name }}</button><code>{{ instance.physical_path || instance.path || 'path unavailable' }}</code></li></ul>
+                    <p class="hint">Follow-up: {{ finding.recommendation }}</p>
+                  </div>
+                </article>
+              </div>
+              <section v-if="qualityHygiene.largest_instances && qualityHygiene.largest_instances.length" class="quality-section quality-largest" aria-labelledby="quality-largest-title"><h3 id="quality-largest-title">Largest context observations</h3><ul class="quality-finding-instances"><li v-for="instance in qualityHygiene.largest_instances" :key="targetKey(instance)"><span>{{ instance.name }} · {{ formatTokens(instance.tokens) }} tokens</span><code>{{ instance.physical_path || instance.path || 'path unavailable' }}</code></li></ul></section>
+              <section class="quality-section" aria-labelledby="quality-unavailable-report-title"><div class="section-label-row"><h3 id="quality-unavailable-report-title">Unavailable evidence</h3><span class="badge badge-warn">not observed</span></div><ul class="quality-unavailable"><li v-for="item in qualityHygiene.unavailable_signals" :key="item.signal + (item.name || '')"><strong>{{ item.signal }}</strong><span>{{ item.explanation }}</span></li></ul></section>
+            </template>
+          </section>
         </section>
       </div>
 
@@ -643,10 +692,10 @@
         <section class="profile-editor" aria-labelledby="profile-editor-title">
           <h2 id="profile-editor-title">Save a profile</h2>
           <div class="form-grid">
-            <div class="form-field"><label for="profile-name">Name</label><input id="profile-name" v-model.trim="profileForm.name" placeholder="release-ready"></div>
-            <div class="form-field"><label for="profile-description">Description</label><input id="profile-description" v-model.trim="profileForm.description" placeholder="Skills for a release workflow"></div>
-            <div class="form-field full"><label for="profile-skills">Skill names</label><input id="profile-skills" v-model.trim="profileForm.skills" placeholder="review, test, release"></div>
-            <div class="form-field full"><label for="profile-targets">Targets (optional)</label><input id="profile-targets" v-model.trim="profileForm.targets" placeholder="global, agents, claude-code"></div>
+            <div class="form-field"><label for="profile-name">Name</label><input id="profile-name" name="profile-name" v-model.trim="profileForm.name" placeholder="release-ready"></div>
+            <div class="form-field"><label for="profile-description">Description</label><input id="profile-description" name="profile-description" v-model.trim="profileForm.description" placeholder="Skills for a release workflow"></div>
+            <div class="form-field full"><label for="profile-skills">Skill names</label><input id="profile-skills" name="profile-skills" v-model.trim="profileForm.skills" placeholder="review, test, release"></div>
+            <div class="form-field full"><label for="profile-targets">Targets (optional)</label><input id="profile-targets" name="profile-targets" v-model.trim="profileForm.targets" placeholder="global, agents, claude-code"></div>
           </div>
           <button class="btn btn-primary" type="button" @click="saveProfile" :disabled="busy">Save profile</button>
         </section>
@@ -678,10 +727,10 @@
           <h2 id="install-center-title">Registry review</h2>
           <p class="hint">The first fetch only creates a private, expiring review. It does not install or claim an update. A separate trust action commits that reviewed snapshot without another network request.</p>
           <div class="form-grid">
-            <div class="form-field"><label for="center-registry-op">Operation</label><select id="center-registry-op" v-model="install.registryOp"><option value="browse">Browse leaderboard</option><option value="search">Search catalog</option><option value="curated">Curated catalog</option><option value="fetch">Fetch for review</option></select></div>
-            <div class="form-field" v-if="install.registryOp === 'browse'"><label for="center-registry-view">Leaderboard view</label><select id="center-registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select></div>
-            <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'"><label for="center-registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label><input id="center-registry-source" v-model.trim="install.source" placeholder="owner/repo/skill" spellcheck="false"></div>
-            <div class="form-field full"><label class="check-row"><input type="checkbox" v-model="install.allowStale"> Use an expired cache if the registry is unavailable</label></div>
+            <div class="form-field"><label for="center-registry-op">Operation</label><select id="center-registry-op" name="registry-operation" v-model="install.registryOp"><option value="browse">Browse leaderboard</option><option value="search">Search catalog</option><option value="curated">Curated catalog</option><option value="fetch">Fetch for review</option></select></div>
+            <div class="form-field" v-if="install.registryOp === 'browse'"><label for="center-registry-view">Leaderboard view</label><select id="center-registry-view" name="registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select></div>
+            <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'"><label for="center-registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label><input id="center-registry-source" name="registry-source" v-model.trim="install.source" placeholder="owner/repo/skill" spellcheck="false"></div>
+            <div class="form-field full"><label class="check-row"><input type="checkbox" name="registry-allow-stale" v-model="install.allowStale"> Use an expired cache if the registry is unavailable</label></div>
           </div>
           <div class="detail-actions">
             <button class="btn btn-secondary" type="button" :disabled="busy || !registryReady()" @click="runRegistry">{{ install.registryOp === 'fetch' ? 'Fetch review snapshot' : 'Load registry evidence' }}</button>
@@ -720,7 +769,7 @@
         </div>
         <div class="workspace-project-form">
           <label for="workspace-project">Project root (optional)</label>
-          <input id="workspace-project" v-model.trim="workspaceProject" placeholder="/path/inside/managed-data">
+          <input id="workspace-project" name="workspace-project" v-model.trim="workspaceProject" placeholder="/path/inside/managed-data">
           <button class="btn btn-secondary" type="button" @click="loadWorkspaces" :disabled="loadingWorkspaces">Check project</button>
         </div>
         <section v-if="workspaces" class="workspace-observation" aria-live="polite">
@@ -852,7 +901,7 @@
         <div class="form-grid">
           <div class="form-field" :class="{ 'has-error': !!modals.skill.errors.name }">
             <label for="f-name">Name</label>
-            <input id="f-name" v-model.trim="modals.skill.form.name" placeholder="my-skill-name"
+            <input id="f-name" name="skill-name" v-model.trim="modals.skill.form.name" placeholder="my-skill-name"
                    :readonly="modals.skill.mode !== 'create'" spellcheck="false"
                    :aria-invalid="modals.skill.errors.name ? 'true' : undefined"
                    :aria-describedby="modals.skill.mode === 'create' ? (modals.skill.errors.name ? 'f-name-hint f-name-error' : 'f-name-hint') : (modals.skill.errors.name ? 'f-name-error' : undefined)">
@@ -861,7 +910,7 @@
           </div>
           <div class="form-field" :class="{ 'has-error': !!modals.skill.errors.description }">
             <label for="f-desc">Description</label>
-            <input id="f-desc" v-model.trim="modals.skill.form.description" placeholder="What this skill does, in one sentence"
+            <input id="f-desc" name="skill-description" v-model.trim="modals.skill.form.description" placeholder="What this skill does, in one sentence"
                    :aria-invalid="modals.skill.errors.description ? 'true' : undefined"
                    :aria-describedby="modals.skill.errors.description ? 'f-description-error' : undefined">
             <span id="f-description-error" v-if="modals.skill.errors.description" class="field-error">{{ modals.skill.errors.description }}</span>
@@ -871,29 +920,29 @@
             <div class="form-grid form-grid-nested">
               <div class="form-field">
                 <label for="f-cat">Category</label>
-                <input id="f-cat" v-model.trim="modals.skill.form.category" placeholder="uncategorized">
+                <input id="f-cat" name="skill-category" v-model.trim="modals.skill.form.category" placeholder="uncategorized">
               </div>
               <div class="form-field">
                 <label for="f-ver">Version</label>
-                <input id="f-ver" v-model.trim="modals.skill.form.version" placeholder="1.0.0" spellcheck="false">
+                <input id="f-ver" name="skill-version" v-model.trim="modals.skill.form.version" placeholder="1.0.0" spellcheck="false">
               </div>
               <div class="form-field">
                 <label for="f-lic">License</label>
-                <input id="f-lic" v-model.trim="modals.skill.form.license" placeholder="MIT" spellcheck="false">
+                <input id="f-lic" name="skill-license" v-model.trim="modals.skill.form.license" placeholder="MIT" spellcheck="false">
               </div>
               <div class="form-field">
                 <label for="f-comp">Compatibility</label>
-                <input id="f-comp" v-model.trim="modals.skill.form.compatibility" placeholder="e.g. opencode >= 1.0" spellcheck="false">
+                <input id="f-comp" name="skill-compatibility" v-model.trim="modals.skill.form.compatibility" placeholder="e.g. opencode >= 1.0" spellcheck="false">
               </div>
               <div class="form-field full">
                 <label for="f-tools">Allowed tools (comma-separated)</label>
-                <input id="f-tools" v-model.trim="modals.skill.form.allowed_tools" placeholder="bash, read" spellcheck="false">
+                <input id="f-tools" name="skill-allowed-tools" v-model.trim="modals.skill.form.allowed_tools" placeholder="bash, read" spellcheck="false">
               </div>
             </div>
           </details>
           <div class="form-field">
             <label for="f-scope">Scope</label>
-            <select id="f-scope" v-model="modals.skill.form.scope">
+            <select id="f-scope" name="skill-scope" v-model="modals.skill.form.scope">
               <option value="global">Global</option>
               <option v-for="s in scopes" :key="s.id" :value="s.id">{{ s.label }}</option>
             </select>
@@ -901,7 +950,7 @@
           </div>
           <div class="form-field full">
             <label for="f-body">Body (SKILL.md content)</label>
-            <textarea id="f-body" v-model="modals.skill.form.body" rows="10" spellcheck="false" aria-describedby="f-body-hint"></textarea>
+            <textarea id="f-body" name="skill-body" v-model="modals.skill.form.body" rows="10" spellcheck="false" aria-describedby="f-body-hint"></textarea>
             <span id="f-body-hint" class="hint">Markdown instructions for the skill. Preview below.</span>
             <div class="markdown-preview" aria-label="Markdown preview" v-html="renderMarkdown(modals.skill.form.body)"></div>
           </div>
@@ -926,11 +975,11 @@
         <p>Move this skill to the trash, or delete it permanently.</p>
         <div class="form-grid" style="grid-template-columns:1fr;">
           <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;">
-            <input type="radio" v-model="modals.remove.mode" value="trash" style="margin-top:3px;accent-color:var(--accent);">
+            <input type="radio" name="remove-mode" v-model="modals.remove.mode" value="trash" style="margin-top:3px;accent-color:var(--accent);">
             <span><strong>Move to trash</strong><br><span class="hint" style="color:var(--text-muted);font-size:12.5px;">You can restore it later from the Trash tab.</span></span>
           </label>
           <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;">
-            <input type="radio" v-model="modals.remove.mode" value="purge" style="margin-top:3px;accent-color:var(--err);">
+            <input type="radio" name="remove-mode" v-model="modals.remove.mode" value="purge" style="margin-top:3px;accent-color:var(--err);">
             <span><strong style="color:var(--err);">Delete permanently</strong><br><span class="hint" style="color:var(--text-muted);font-size:12.5px;">This cannot be undone.</span></span>
           </label>
         </div>
@@ -969,7 +1018,7 @@
         <template v-else>
           <div class="form-field full" style="margin-bottom:12px;">
             <label for="v-name">Skill name</label>
-            <input id="v-name" v-model.trim="modals.validate.name" placeholder="my-skill-name" spellcheck="false">
+            <input id="v-name" name="validate-skill-name" v-model.trim="modals.validate.name" placeholder="my-skill-name" spellcheck="false">
           </div>
           <div v-if="modals.validate.error" class="banner banner-error" style="margin:0 0 12px;" role="alert">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
@@ -1199,7 +1248,7 @@
       <div class="modal-body">
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <label class="sr-only" for="history-skill">History skill</label>
-          <select id="history-skill" v-model="modals.history.name" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+          <select id="history-skill" name="history-skill" v-model="modals.history.name" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
             <option value="">All skills</option>
             <option v-for="s in skills" :key="s.name" :value="s.name">{{ s.name }}</option>
           </select>
@@ -1273,12 +1322,12 @@
         <div class="form-grid" style="grid-template-columns:1fr;">
           <div class="form-field" :class="{ 'has-error': !!modals.newtemplate.error }">
             <label for="t-name">Template name</label>
-            <input id="t-name" v-model.trim="modals.newtemplate.name" placeholder="my-template" spellcheck="false">
+            <input id="t-name" name="template-name" v-model.trim="modals.newtemplate.name" placeholder="my-template" spellcheck="false">
             <span v-if="modals.newtemplate.error" class="field-error">{{ modals.newtemplate.error }}</span>
           </div>
           <div class="form-field">
             <label for="t-body">Body (optional, empty uses default)</label>
-            <textarea id="t-body" v-model="modals.newtemplate.body" rows="8" spellcheck="false"></textarea>
+            <textarea id="t-body" name="template-body" v-model="modals.newtemplate.body" rows="8" spellcheck="false"></textarea>
           </div>
         </div>
       </div>
@@ -1307,14 +1356,14 @@
           <button class="btn btn-secondary" @click="modals.import.file = null">Choose different file</button>
         </div>
         <label v-if="modals.import.file" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;cursor:pointer;">
-          <input type="checkbox" v-model="modals.import.force" style="accent-color:var(--accent);">
+          <input type="checkbox" name="import-force" v-model="modals.import.force" style="accent-color:var(--accent);">
           Overwrite existing skills
         </label>
         <label v-if="modals.import.file" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:14px;cursor:pointer;">
-          <input type="checkbox" v-model="modals.import.full" style="accent-color:var(--accent);">
+          <input type="checkbox" name="import-full" v-model="modals.import.full" style="accent-color:var(--accent);">
           Full migration (restore trash and templates)
         </label>
-        <input ref="importInput" type="file" accept=".tar.gz,.tgz,.tar,.zip" style="display:none" @change="onImportPicked">
+        <input ref="importInput" type="file" name="import-archive" accept=".tar.gz,.tgz,.tar,.zip" style="display:none" @change="onImportPicked">
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('import')">Cancel</button>
@@ -1338,12 +1387,12 @@
           <span v-else>Existing target copies are skipped; choose overwrite only when the source is authoritative.</span>
         </div>
         <div v-for="t in (modals.sync.targets || []).filter(Boolean)" :key="t.id" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-          <input type="checkbox" :id="'sync-'+t.id" v-model="modals.sync.picked[t.id]" style="accent-color:var(--accent);">
+          <input type="checkbox" :id="'sync-'+t.id" :name="'sync-target-'+t.id" v-model="modals.sync.picked[t.id]" style="accent-color:var(--accent);">
           <label :for="'sync-'+t.id" style="flex:1;cursor:pointer;"><strong>{{ t.label }}</strong> <span class="hint">— {{ t.path }}</span></label>
           <span class="tag">{{ formatNumber(t.count) }} skills · {{ formatTokens(t.tokens) }}</span>
         </div>
         <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;cursor:pointer;">
-          <input type="checkbox" v-model="modals.sync.force" style="accent-color:var(--accent);"> Overwrite if already exists
+          <input type="checkbox" name="sync-force" v-model="modals.sync.force" style="accent-color:var(--accent);"> Overwrite if already exists
         </label>
       </div>
       <div class="modal-foot">
@@ -1363,7 +1412,7 @@
         <div class="form-grid">
           <div class="form-field full">
             <label for="install-mode">Workflow</label>
-            <select id="install-mode" v-model="install.mode">
+            <select id="install-mode" name="install-mode" v-model="install.mode">
               <option value="runner">Runner install</option>
               <option value="registry">skills.sh registry</option>
             </select>
@@ -1371,7 +1420,7 @@
           <template v-if="install.mode === 'registry'">
             <div class="form-field">
               <label for="registry-op">Registry operation</label>
-              <select id="registry-op" v-model="install.registryOp">
+              <select id="registry-op" name="install-registry-operation" v-model="install.registryOp">
                 <option value="browse">Browse leaderboard</option>
                 <option value="search">Search catalog</option>
                 <option value="curated">Curated catalog</option>
@@ -1380,29 +1429,29 @@
             </div>
             <div class="form-field" v-if="install.registryOp === 'browse'">
               <label for="registry-view">Leaderboard view</label>
-              <select id="registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select>
+              <select id="registry-view" name="install-registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select>
             </div>
             <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'">
               <label for="registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label>
-              <input id="registry-source" v-model.trim="install.source" :placeholder="install.registryOp === 'search' ? 'react native' : 'owner/repo/skill'" spellcheck="false">
+              <input id="registry-source" name="install-registry-source" v-model.trim="install.source" :placeholder="install.registryOp === 'search' ? 'react native' : 'owner/repo/skill'" spellcheck="false">
             </div>
             <div class="form-field" v-if="install.registryOp === 'browse'">
               <label for="registry-page">Page size</label>
-              <input id="registry-page" v-model.number="install.perPage" type="number" min="1" max="500">
+              <input id="registry-page" name="install-registry-page-size" v-model.number="install.perPage" type="number" min="1" max="500">
             </div>
             <div class="form-field full">
-              <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" v-model="install.allowStale" style="accent-color:var(--accent);"> Use an expired cache if the registry is unavailable</label>
+              <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-registry-allow-stale" v-model="install.allowStale" style="accent-color:var(--accent);"> Use an expired cache if the registry is unavailable</label>
               <span class="hint">Trust, audit status, and hashes remain explicit evidence; cache state is shown in the result. Fetch requires this explicit action and records provenance.</span>
             </div>
           </template>
           <template v-else>
           <div class="form-field full">
             <label for="install-source">Source</label>
-            <input id="install-source" v-model.trim="install.source" placeholder="vercel-labs/agent-skills or https://github.com/owner/repo" spellcheck="false">
+            <input id="install-source" name="install-source" v-model.trim="install.source" placeholder="vercel-labs/agent-skills or https://github.com/owner/repo" spellcheck="false">
           </div>
           <div class="form-field">
             <label for="install-runner">Runner</label>
-            <select id="install-runner" v-model="install.runner">
+            <select id="install-runner" name="install-runner" v-model="install.runner">
               <option value="npx">npx (npm)</option>
               <option value="pnpm">pnpm dlx</option>
               <option value="yarn">yarn dlx</option>
@@ -1412,24 +1461,24 @@
           </div>
           <div class="form-field">
             <label for="install-scope">Scope</label>
-            <select id="install-scope" v-model="install.scope">
+            <select id="install-scope" name="install-scope" v-model="install.scope">
               <option value="global">Global (-g)</option>
               <option value="project">Project</option>
             </select>
           </div>
           <div class="form-field full">
             <label for="install-agents">Agents (-a, repeatable)</label>
-            <input id="install-agents" v-model.trim="install.agentsText" placeholder="claude-code, cursor (leave empty for all detected)" spellcheck="false" @change="install.agents = (install.agentsText||'').split(',').map(s=>s.trim()).filter(Boolean)">
+            <input id="install-agents" name="install-agents" v-model.trim="install.agentsText" placeholder="claude-code, cursor (leave empty for all detected)" spellcheck="false" @change="install.agents = (install.agentsText||'').split(',').map(s=>s.trim()).filter(Boolean)">
             <span class="hint">Agents table: claude-code → ~/.agent/skills, codex → ~/.codex/skills, cursor → ~/.cursor/skills, etc. Empty = all.</span>
           </div>
           <div class="form-field">
             <label for="install-filter">Skill filter (-s)</label>
-            <input id="install-filter" v-model.trim="install.skillsFilter" placeholder="frontend-design or * for all">
+            <input id="install-filter" name="install-skill-filter" v-model.trim="install.skillsFilter" placeholder="frontend-design or * for all">
           </div>
           <div class="form-field">
             <label>Options</label>
-            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" v-model="install.copy" style="accent-color:var(--accent);"> Copy instead of symlink</label>
-            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" v-model="install.listOnly" style="accent-color:var(--accent);"> List only (dry-run, -l)</label>
+            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-copy" v-model="install.copy" style="accent-color:var(--accent);"> Copy instead of symlink</label>
+            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-list-only" v-model="install.listOnly" style="accent-color:var(--accent);"> List only (dry-run, -l)</label>
           </div>
           </template>
         </div>
@@ -1478,9 +1527,9 @@
         <div v-if="modals.batch.operation === 'sync'" class="form-field">
           <label>Sync targets</label>
           <template v-for="scope in scopes.filter((item) => item && item.id !== activeScope && item.writable)" :key="scope.id">
-            <label class="check-row"><input type="checkbox" v-model="modals.batch.toScopes[scope.id]"> {{ scope.label }} <span class="hint">{{ scope.path }}</span></label>
+            <label class="check-row"><input type="checkbox" :name="'batch-scope-'+scope.id" v-model="modals.batch.toScopes[scope.id]"> {{ scope.label }} <span class="hint">{{ scope.path }}</span></label>
           </template>
-          <label class="check-row"><input type="checkbox" v-model="modals.batch.force"> Overwrite existing copies (creates rollback snapshots)</label>
+          <label class="check-row"><input type="checkbox" name="batch-force" v-model="modals.batch.force"> Overwrite existing copies (creates rollback snapshots)</label>
         </div>
         <ul class="batch-target-list"><li v-for="target in (modals.batch.plan ? modals.batch.plan.targets : modals.batch.targets)" :key="target.scope + '/' + target.name + (target.physical_path || target.path)"><strong>{{ target.name }}</strong><span>{{ target.scope_label || target.scope }}</span><code>{{ target.physical_path || target.path }}</code><span v-if="modals.batch.operation === 'enable'" class="hint">{{ target.disabled ? 'Disabled → Active' : 'Active → No state change' }}</span></li></ul>
       </div>
@@ -1501,7 +1550,7 @@
       </div>
       <div class="modal-body">
         <label class="sr-only" for="command-palette-input">Search commands</label>
-        <input id="command-palette-input" ref="commandPaletteInput" class="command-palette-input" type="search"
+        <input id="command-palette-input" name="command-search" ref="commandPaletteInput" class="command-palette-input" type="search"
                v-model="commandPaletteQuery" role="combobox" aria-autocomplete="list" aria-label="Search commands"
                aria-controls="command-palette-results" :aria-expanded="true"
                :aria-activedescendant="commandPaletteActiveCommand ? 'command-option-' + commandPaletteActiveCommand.id : undefined"

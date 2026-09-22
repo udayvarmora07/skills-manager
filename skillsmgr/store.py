@@ -9,6 +9,7 @@ skills via :meth:`Store.resync` / :meth:`Store.db_rebuild`.
 
 from __future__ import annotations
 
+import copy
 import errno
 import io
 import json
@@ -18,6 +19,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import threading
 import time
 import zipfile
 import zlib
@@ -162,6 +164,51 @@ def _open_index_db(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def _db_file_identity(db_path: Path) -> tuple[int, int] | None:
+    """Return the device/inode pair for an index file, when it exists."""
+    try:
+        stat_result = db_path.stat()
+    except OSError:
+        return None
+    return stat_result.st_dev, stat_result.st_ino
+
+
+def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
+    """Share one identical read while it is in flight, never after it ends.
+
+    Filesystem-backed reads remain authoritative: this is deliberately an
+    in-flight fan-in only, not a completed-result cache.  Each caller receives
+    its own deep copy because scope enrichment and UI serialization annotate
+    the returned dictionaries after the read completes.
+    """
+    with flights_lock:
+        flight = flights.get(key)
+        if flight is None:
+            flight = {"event": threading.Event()}
+            flights[key] = flight
+            owner = True
+        else:
+            owner = False
+    if owner:
+        try:
+            result = copy.deepcopy(func())
+        except Exception as exc:
+            with flights_lock:
+                flight["error"] = exc
+                flights.pop(key, None)
+                flight["event"].set()
+            raise
+        with flights_lock:
+            flight["result"] = result
+            flights.pop(key, None)
+            flight["event"].set()
+        return copy.deepcopy(result)
+    flight["event"].wait()
+    if flight.get("error") is not None:
+        raise flight["error"]
+    return copy.deepcopy(flight["result"])
 
 
 def _trash_lock_dir(trash_dir: Path) -> Path:
@@ -328,14 +375,14 @@ def _live_index_totals(conn, live: list[str]) -> tuple[int, dict]:
         return 0, {}
     placeholders = ", ".join("?" for _ in live)
     disabled = conn.execute(
-        f"SELECT COUNT(*) AS c FROM skills WHERE disabled = 1 AND name IN ({placeholders})",
+        f"SELECT COUNT(*) AS c FROM skills WHERE disabled = 1 AND name IN ({placeholders})",  # nosec B608 - only internally generated '?' placeholders enter SQL text.
         live,
     ).fetchone()["c"]
     categories = {
         row["category"]: row["c"]
         for row in conn.execute(
             "SELECT category, COUNT(*) AS c FROM skills "
-            f"WHERE status = 'active' AND name IN ({placeholders}) "
+            f"WHERE status = 'active' AND name IN ({placeholders}) "  # nosec B608 - names remain DB-API parameters.
             "GROUP BY category ORDER BY c DESC, category",
             live,
         ).fetchall()
@@ -595,6 +642,42 @@ def _doctor_artifacts(data_dir: Path, trash_dir: Path, templates_dir: Path) -> d
     }
 
 
+def _doctor_record_differs(scanned: dict, indexed: dict) -> bool:
+    """Return whether a live filesystem record differs from its index row."""
+    return any(
+        scanned.get(key) != indexed.get(key)
+        for key in ("description", "body", "category", "license", "version", "disabled")
+    )
+
+
+def _doctor_is_clean(
+    integrity: str,
+    orphan_dirs: list[str],
+    stale_rows: list[str],
+    filesystem_index_drift: list[str],
+    undecodable_documents: list[str],
+    conflicting_documents: list[str],
+    transaction_artifacts: list[str],
+    temporary_files: list[str],
+    stale_snapshots: list[str],
+    trashed_names: set[str],
+    observed_trash_names: set[str],
+) -> bool:
+    """Return whether every doctor consistency signal is clear."""
+    return (
+        integrity == "ok"
+        and not orphan_dirs
+        and not stale_rows
+        and not filesystem_index_drift
+        and not undecodable_documents
+        and not conflicting_documents
+        and not transaction_artifacts
+        and not temporary_files
+        and not stale_snapshots
+        and not (trashed_names - observed_trash_names)
+    )
+
+
 def _normalize_archive_member_name(name: str) -> str:
     try:
         return _archive.normalize_member_name(name)
@@ -768,6 +851,17 @@ class Store:
         self.templates_dir = self.data_dir / "templates"
         self.backups_dir = self.data_dir / "backups"
         self.db_path = self.data_dir / "skills-manager.db"
+        # Read endpoints call _init_db() defensively because a Store may be
+        # constructed against a fresh data directory.  Re-running the schema
+        # script for every request turns a read into a SQLite writer and lets
+        # concurrent web requests contend on the database.  Keep that
+        # bootstrap state local to this Store, while the file identity check
+        # still notices a db_rebuild (or an external replacement).
+        self._db_init_lock = threading.Lock()
+        self._db_initialized = False
+        self._db_identity: tuple[int, int] | None = None
+        self._read_flights: dict = {}
+        self._read_flights_lock = threading.Lock()
 
     # ------------------------------------------------------------------ db
 
@@ -782,6 +876,13 @@ class Store:
         return _open_index_db(self.db_path)
 
     def _init_db(self) -> None:
+        self._ensure_store_dirs()
+        if self._db_is_current():
+            return
+        self._initialize_db_if_needed()
+
+    def _ensure_store_dirs(self) -> None:
+        """Create the private data directories needed by Store operations."""
         for path in (
             self.data_dir,
             self.skills_dir,
@@ -790,11 +891,29 @@ class Store:
             self.backups_dir,
         ):
             mkdir_private(path)
-        conn = self._connect()
-        try:
-            self._bootstrap_schema(conn)
-        finally:
-            conn.close()
+
+    def _db_is_current(self) -> bool:
+        """Return whether this Store has already bootstrapped this DB file."""
+        return self._db_initialized and _db_file_identity(self.db_path) == self._db_identity
+
+    def _initialize_db_if_needed(self) -> None:
+        """Bootstrap a missing or replaced DB under the shared index lock."""
+        with self._db_init_lock:
+            if self._db_is_current():
+                return
+            # Initialization is the only read-path operation that writes to
+            # SQLite.  Share the existing index lock with mutations and
+            # rebuilds so two Store instances/processes cannot bootstrap the
+            # same file at once.  The lock is re-entrant for callers already
+            # inside create/resync/db_rebuild critical sections.
+            with _mutation_lock(_index_lock_path(self.skills_dir)):
+                conn = self._connect()
+                try:
+                    self._bootstrap_schema(conn)
+                finally:
+                    conn.close()
+            self._db_identity = _db_file_identity(self.db_path)
+            self._db_initialized = self._db_identity is not None
 
     @staticmethod
     def _bootstrap_schema(conn: sqlite3.Connection) -> None:
@@ -1068,6 +1187,15 @@ class Store:
 
     def list(self) -> list[dict]:
         """Return installed skills (active and disabled) sorted by name."""
+        return _coalesced_read(
+            self._read_flights,
+            self._read_flights_lock,
+            ("list",),
+            self._list_uncached,
+        )
+
+    def _list_uncached(self) -> list[dict]:
+        """Return installed skills (active and disabled) sorted by name."""
         self._init_db()
         on_disk = self._skill_names_on_disk()
         conn = self._connect()
@@ -1181,6 +1309,15 @@ class Store:
             conn.close()
 
     def search(self, term: str) -> list[dict]:
+        """Case-insensitive search over name, description and body."""
+        return _coalesced_read(
+            self._read_flights,
+            self._read_flights_lock,
+            ("search", term),
+            lambda: self._search_uncached(term),
+        )
+
+    def _search_uncached(self, term: str) -> list[dict]:
         """Case-insensitive search over name, description and body."""
         from .search import rank_results
 
@@ -1902,6 +2039,15 @@ class Store:
             self._history(conn, name, "purge")
 
     def stats(self) -> dict:
+        """Return counts, sizes and a category breakdown."""
+        return _coalesced_read(
+            self._read_flights,
+            self._read_flights_lock,
+            ("stats",),
+            self._stats_uncached,
+        )
+
+    def _stats_uncached(self) -> dict:
         """Return counts, sizes and a category breakdown.
 
         Counts come from the filesystem (STORE-10): a row with no directory is
@@ -2202,6 +2348,15 @@ class Store:
 
     def doctor(self) -> dict:
         """Audit consistency between the filesystem tree and the database."""
+        return _coalesced_read(
+            self._read_flights,
+            self._read_flights_lock,
+            ("doctor",),
+            self._doctor_uncached,
+        )
+
+    def _doctor_uncached(self) -> dict:
+        """Audit consistency between the filesystem tree and the database."""
         self._init_db()
         scanned = {e["name"]: e for e in self._scan_dir(self.skills_dir)}
         conn = self._connect()
@@ -2224,47 +2379,30 @@ class Store:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
         finally:
             conn.close()
-        orphan_dirs = sorted(set(scanned) - active_names)
-        stale_rows = sorted(active_names - set(scanned))
-        # Documents that are not valid UTF-8 are reported as their own drift
-        # class (issue #13): the loader keeps the row readable with replacement
-        # characters, so it can match the index byte-for-replacement and would
-        # otherwise be invisible to the body comparison below.
-        undecodable_documents = sorted(
-            name for name, entry in scanned.items() if entry.get("decode_error")
-        )
-        # Directories holding both SKILL.md and SKILL.md.disabled are a real
-        # defect, not cosmetic drift: the next toggle destroys one document,
-        # and no automatic repair can choose which one the user meant.  Report
-        # them so ``ok`` is False and thereby observable.
-        conflicting_documents = sorted(
-            name for name, entry in scanned.items() if entry.get("document_conflict")
-        )
-        filesystem_index_drift = sorted(
-            name
-            for name in set(scanned) & active_names
-            if any(
-                scanned[name].get(key) != active_rows[name].get(key)
-                for key in ("description", "body", "category", "license", "version", "disabled")
-            )
-        )
+        drift = self._doctor_drift(scanned, active_names, active_rows)
+        orphan_dirs = drift["orphan_dirs"]
+        stale_rows = drift["stale_rows"]
+        undecodable_documents = drift["undecodable_documents"]
+        conflicting_documents = drift["conflicting_documents"]
+        filesystem_index_drift = drift["filesystem_index_drift"]
         artifacts = _doctor_artifacts(self.data_dir, self.trash_dir, self.templates_dir)
         transaction_artifacts = artifacts["transaction_artifacts"]
         temporary_files = artifacts["temporary_files"]
         stale_snapshots = artifacts["stale_snapshots"]
         trash_count = artifacts["trash_count"]
         templates_count = artifacts["templates_count"]
-        ok = (
-            integrity == "ok"
-            and not orphan_dirs
-            and not stale_rows
-            and not filesystem_index_drift
-            and not undecodable_documents
-            and not conflicting_documents
-            and not transaction_artifacts
-            and not temporary_files
-            and not stale_snapshots
-            and not (trashed_names - artifacts["trash_names"])
+        ok = _doctor_is_clean(
+            integrity,
+            orphan_dirs,
+            stale_rows,
+            filesystem_index_drift,
+            undecodable_documents,
+            conflicting_documents,
+            transaction_artifacts,
+            temporary_files,
+            stale_snapshots,
+            trashed_names,
+            artifacts["trash_names"],
         )
         return {
             "data_dir": str(self.data_dir),
@@ -2290,6 +2428,42 @@ class Store:
             "trash_count": trash_count,
             "templates_count": templates_count,
             "ok": ok,
+        }
+
+    @staticmethod
+    def _doctor_drift(
+        scanned: dict[str, dict],
+        active_names: set[str],
+        active_rows: dict[str, dict],
+    ) -> dict[str, list[str]]:
+        """Classify filesystem/index drift without reading the database."""
+        orphan_dirs = sorted(set(scanned) - active_names)
+        stale_rows = sorted(active_names - set(scanned))
+        # Documents that are not valid UTF-8 are reported as their own drift
+        # class (issue #13): the loader keeps the row readable with replacement
+        # characters, so it can match the index byte-for-replacement and would
+        # otherwise be invisible to the body comparison below.
+        undecodable_documents = sorted(
+            name for name, entry in scanned.items() if entry.get("decode_error")
+        )
+        # Directories holding both SKILL.md and SKILL.md.disabled are a real
+        # defect, not cosmetic drift: the next toggle destroys one document,
+        # and no automatic repair can choose which one the user meant.  Report
+        # them so ``ok`` is False and thereby observable.
+        conflicting_documents = sorted(
+            name for name, entry in scanned.items() if entry.get("document_conflict")
+        )
+        filesystem_index_drift = sorted(
+            name
+            for name in set(scanned) & active_names
+            if _doctor_record_differs(scanned[name], active_rows[name])
+        )
+        return {
+            "orphan_dirs": orphan_dirs,
+            "stale_rows": stale_rows,
+            "undecodable_documents": undecodable_documents,
+            "conflicting_documents": conflicting_documents,
+            "filesystem_index_drift": filesystem_index_drift,
         }
 
     def db_rebuild(self) -> dict:

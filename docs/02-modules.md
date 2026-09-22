@@ -2,7 +2,7 @@
 
 **Version 0.9.0**
 
-**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-20 (CLI 27+7+3=37 via `check_docs._command_inventory` + live parser; launcher executable discovery now rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; source-lock review/apply evidence, backup/sync planning, and offline HMAC evidence seams remain filesystem-owned; `Store`/`scopes`/`webapp` rows retain the request, locking, sanitization, and fail-closed contracts; package-data and workflow security gates are pinned). Keep this doc updated when module internals change.
+**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-22 (CLI 28+7+3=38 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; launcher executable discovery now rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
 
 ## `__init__.py`
 
@@ -18,7 +18,7 @@ The stable `cli.py` adapter exposes `main()`, `build_parser()`, command handler 
 
 ## `webapp.py`
 
-Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static files from `webui/`), `WebAppServer` (ThreadingHTTPServer, 127.0.0.1), `run()` entry (browser open, Ctrl+C handling). Internal policy modules keep request security (`web_security.py`), JSON serialization/body parsing (`web_serialization.py`), and multipart folder upload staging (`web_upload.py`) behind compatibility adapters in `webapp.py`. Scope-aware endpoints (`?scope=` on skills/search, `/api/scopes`, `/api/sync`, `/api/install`). Full endpoint table: @docs/08-web-ui.md.
+Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static files from `webui/`), `WebAppServer` (ThreadingHTTPServer, 127.0.0.1), `run()` entry (trusted optional browser open, Ctrl+C handling). Internal policy modules keep request security (`web_security.py`), JSON serialization/body parsing (`web_serialization.py`), and multipart folder upload staging (`web_upload.py`) behind compatibility adapters in `webapp.py`. Scope-aware endpoints (`?scope=` on skills/search, `/api/scopes`, `/api/sync`, `/api/install`). Full endpoint table: @docs/08-web-ui.md.
 
 ## `webui/` (frontend)
 
@@ -26,7 +26,7 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `store.py`
 
-`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Live skill directories are always recorded `status='active'` (stale `'trashed'` rows are reactivated via `_upsert_entry`/`resync`, including a post-sync resync when sync commits into the global scope). Text mutations use atomic sibling-temp writes, fsync, replacement, and the same-process per-skill lock shared by `create`/`edit`/`remove`/`disable`/`enable`/`restore` (`_with_skill_lock`); every mutation also takes the library-wide index lock at `<data>/skills/.skillsmgr-index-lock` (`_index_lock_path`) so a whole-tree scan cannot interleave, and `restore`/`purge_trash` additionally serialize on `<data>/trash/.trash-lock`; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar or ZIP members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, fail malformed streams as clean `StoreError`, preserve the original destination when commit staging fails, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. ZIP extraction uses explicit contained paths and rejects symlink-bit entries because ZIP has no equivalent safe extraction filter, and the compression-ratio budget is enforced per member as well as per archive. Per-skill commits are staged and failures are reported in `skipped`; a failed staging copy never removes the user's existing skill directory. A `--full` import validates every trash/template/catalog payload before any mutation, then installs them as one all-or-nothing transaction (`archive.restore_full_payload`) and reconciles the restored trash names into the index, so failures surface as `StoreError` with the previous state intact. `purge_trash` wraps filesystem failures as `StoreError`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_history()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+`Store` class (FS + SQLite index), exceptions `StoreError`, `SkillNotFound`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Live skill directories are always recorded `status='active'` (stale `'trashed'` rows are reactivated via `_upsert_entry`/`resync`, including a post-sync resync when sync commits into the global scope). Text mutations use atomic sibling-temp writes, fsync, replacement, and the same-process per-skill lock shared by `create`/`edit`/`remove`/`disable`/`enable`/`restore` (`_with_skill_lock`); every mutation also takes the library-wide index lock at `<data>/skills/.skillsmgr-index-lock` (`_index_lock_path`) so a whole-tree scan cannot interleave, and `restore`/`purge_trash` additionally serialize on `<data>/trash/.trash-lock`; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar or ZIP members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, fail malformed streams as clean `StoreError`, preserve the original destination when commit staging fails, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. ZIP extraction uses explicit contained paths and rejects symlink-bit entries because ZIP has no equivalent safe extraction filter, and the compression-ratio budget is enforced per member as well as per archive. Per-skill commits are staged and failures are reported in `skipped`; a failed staging copy never removes the user's existing skill directory. A `--full` import validates every trash/template/catalog payload before any mutation, then installs them as one all-or-nothing transaction (`archive.restore_full_payload`) and reconciles the restored trash names into the index; if a later payload fails and its old destination cannot be restored, the diagnostic names the surviving dotted backup while the original `StoreError` remains the public failure. `purge_trash` wraps filesystem failures as `StoreError`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
 
 ## `catalog.py`
 
@@ -67,6 +67,20 @@ Shared SKILL.md loader + directory scanner (`load_skill`, `scan_dir`) used by bo
 Pure, non-persisted document observations: portable versus client-extension
 frontmatter partitions, content/metadata SHA-256 hashes, observed timestamp, and
 scope/consumer provenance.
+
+## `hygiene.py`
+
+Read-only deterministic synthesis over observed scope records. `hygiene_report()`
+deduplicates resolved physical instances, reuses `validator.validate_skill()`,
+`validator.description_score()`, token estimates, and `source_lock_status()` to
+report structural/validation evidence, exact duplicate groups, same-name drift,
+bounded near-duplicate candidates, broken references, activation-description
+guidance, context limits, source-lock state, largest instances, degraded scans,
+and explicitly unavailable signals. `normalize_instruction_body()` owns the
+narrow exact-instruction comparison normalization; `near_duplicate_candidates()`
+uses bounded inverted-index features and weighted Jaccard scores. The module
+does not write files, SQLite, caches, history, or network state and exposes no
+Store method.
 
 ## `registry.py`
 
@@ -154,7 +168,7 @@ Private stdlib-only web policy modules. They own loopback **request** validation
 
 ## `diagnostics.py`
 
-Private stderr-only diagnostics for recovery and optional-enrichment failures; it does not change public return values or REST/CLI schemas.
+Private stderr-only diagnostics for recovery and optional-enrichment failures; it does not change public return values or REST/CLI schemas. CLI Doctor adds a bounded `degraded` entry when JSON enrichment is incomplete, while human output retains the base result and points to stderr diagnostics.
 
 ## `launcher_security.py`
 
@@ -334,6 +348,6 @@ TTY auto-detect; honors `NO_COLOR` and `FORCE_COLOR`; `color(text, code)` and st
 
 ## Smoke tests
 
-- `check_package_data.py` — verifies the complete web UI inside the built wheel and sdist; `--dist-dir` inspects the exact artifacts CI publishes and, with `--install`, also installs them into fresh temporary venvs. It always asserts the vendored Vue bundle against the recorded upstream version/sha256/size first (SEC-9) — including the copy inside each artifact — and it inspects **every** archive member, so a build shipping `tests/`, `docs/`, `.env`, a database or bytecode fails (BUG-13/SEC-13); `MANIFEST.in` prunes `tests` from the sdist. `browser_harness.py` — dev-only system-Chrome CDP probe (sandbox enabled, loopback-only ephemeral port, trusted executable discovery). `desktop_launcher.py` uses the same resolver.
+- `check_package_data.py` — verifies the complete web UI inside the built wheel and sdist; `--dist-dir` inspects the exact artifacts CI publishes and, with `--install`, also installs them into fresh temporary venvs. It asserts PEP 639 `License-Expression: MIT`, `License-File: LICENSE`, byte-identical license payloads, and no deprecated license classifier, then checks the vendored Vue bundle against the recorded upstream version/sha256/size (SEC-9) — including the copy inside each artifact — and inspects **every** archive member, so a build shipping `tests/`, `docs/`, `.env`, a database or bytecode fails (BUG-13/SEC-13); `MANIFEST.in` prunes `tests` from the sdist. `browser_harness.py` — dev-only system-Chrome CDP probe (sandbox enabled, loopback-only ephemeral port, trusted executable discovery). `desktop_launcher.py` uses the same resolver.
 - `smoke_store.py` — exercises the Store API (init, add, list, get, search, disable, enable, trash, restore, purge, export, import round-trip, stats, history, resync, db_rebuild). Must pass after any `store.py` change.
 - `smoke_web.py` — starts `WebAppServer` on an ephemeral port and hits every REST endpoint (static, CRUD, search, validate, toggle, stats/doctor/history, templates, export→import, trash/restore/purge, rebuild/resync, multipart upload, error paths). Must pass after any `webapp.py` change.

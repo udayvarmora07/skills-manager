@@ -4,6 +4,21 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### P0 trust gate and release metadata hardening
+
+- Fixed full-import rollback diagnostics so an `OSError` restoring a previous
+  payload reports the surviving dotted backup path without masking the
+  original `StoreError`.
+- Added a single pinned Ruff 0.16.8 CI gate for `F821`/`F822`/`F823`, completed
+  the dated Bandit 1.9.4 review, and replaced silent CLI/scope enrichment
+  failures with diagnostics and bounded degradation evidence.
+- Made documentation discovery deterministic across tracked Markdown,
+  first-party `docs/` plans, and an explicit top-level allowlist; hardened the
+  optional web opener against unsafe PATH entries.
+- Migrated packaging to SPDX/PEP 639 metadata and made artifact checks verify
+  `License-Expression`, `License-File`, deprecated-classifier removal, and
+  byte-identical `LICENSE` content.
+
 ### Web UI robustness
 
 Ported the remaining valid findings from the historical frontend test report:

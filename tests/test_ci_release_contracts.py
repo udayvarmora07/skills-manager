@@ -31,11 +31,14 @@ _THIRD_PARTY_PIN_RE = re.compile(
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _FIXTURE_ARTIFACT_STEM = "skill_control_plane-1.0.1"
 _FIXTURE_METADATA = (
-    "Metadata-Version: 2.1\n"
+    "Metadata-Version: 2.4\n"
     "Name: skill-control-plane\n"
     "Version: 1.0.1\n"
+    "License-Expression: MIT\n"
+    "License-File: LICENSE\n"
     "\n"
 ).encode("utf-8")
+_FIXTURE_LICENSE = (ROOT / "LICENSE").read_bytes()
 
 
 def _fixture_artifacts(dist_dir: Path) -> tuple[Path, Path, str]:
@@ -85,6 +88,34 @@ def _job_ids(text: str) -> list[str]:
 
 
 class CiWorkflowContractTests(unittest.TestCase):
+    def test_ci_has_one_pinned_narrow_ruff_undefined_name_gate(self):
+        text = _workflow_text("ci.yml")
+        action = "astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89"
+        self.assertEqual(text.count(action), 1)
+        self.assertIn("Ruff action v4.1.0 — reviewed 2026-09-22", text)
+        self.assertIn('version: "0.16.8"', text)
+        self.assertIn('args: "check --output-format=github"', text)
+        for source in (
+            "skillsmgr",
+            "tests",
+            "smoke_store.py",
+            "smoke_web.py",
+            "browser_harness.py",
+            "desktop_launcher.py",
+            "check_complexity.py",
+            "check_docs.py",
+            "check_package_data.py",
+        ):
+            self.assertIn(source, text)
+        self.assertNotIn("--fix", text)
+        self.assertNotIn("ruff format", text)
+
+    def test_ruff_configuration_is_only_the_three_undefined_name_rules(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('[tool.ruff]\ntarget-version = "py310"', pyproject)
+        self.assertIn('select = ["F821", "F822", "F823"]', pyproject)
+        self.assertNotIn("ruff", pyproject.split("[project]", 1)[1].split("[project.urls]", 1)[0].lower())
+
     def test_ci_matrix_covers_supported_interpreters(self):
         text = _workflow_text("ci.yml")
         self.assertIn('"3.10"', text)
@@ -183,11 +214,17 @@ class CrossPlatformContractTests(unittest.TestCase):
             dist_dir = Path(directory) / "dist"
             dist_dir.mkdir()
             wheel, sdist, sdist_root = _fixture_artifacts(dist_dir)
+            wheel_members = {
+                **members,
+                f"{_FIXTURE_ARTIFACT_STEM}.dist-info/METADATA": _FIXTURE_METADATA,
+                f"{_FIXTURE_ARTIFACT_STEM}.dist-info/licenses/LICENSE": _FIXTURE_LICENSE,
+            }
+            sdist_members = {**members, "PKG-INFO": _FIXTURE_METADATA, "LICENSE": _FIXTURE_LICENSE}
             with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
-                for name, data in sorted(members.items()):
+                for name, data in sorted(wheel_members.items()):
                     archive.writestr(name, data)
             with tarfile.open(sdist, "w:gz") as archive:
-                for name, data in sorted(members.items()):
+                for name, data in sorted(sdist_members.items()):
                     info = tarfile.TarInfo(sdist_root + name)
                     info.size = len(data)
                     info.mtime = 0
@@ -214,11 +251,17 @@ class CrossPlatformContractTests(unittest.TestCase):
             dist_dir = Path(directory) / "dist"
             dist_dir.mkdir()
             wheel, sdist, sdist_root = _fixture_artifacts(dist_dir)
+            wheel_members = {
+                **members,
+                f"{_FIXTURE_ARTIFACT_STEM}.dist-info/METADATA": _FIXTURE_METADATA,
+                f"{_FIXTURE_ARTIFACT_STEM}.dist-info/licenses/LICENSE": _FIXTURE_LICENSE,
+            }
+            sdist_members = {**members, "PKG-INFO": _FIXTURE_METADATA, "LICENSE": _FIXTURE_LICENSE}
             with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
-                for name, data in sorted(members.items()):
+                for name, data in sorted(wheel_members.items()):
                     archive.writestr(name, data)
             with tarfile.open(sdist, "w:gz") as archive:
-                for name, data in sorted(members.items()):
+                for name, data in sorted(sdist_members.items()):
                     info = tarfile.TarInfo(sdist_root + name)
                     info.size = len(data)
                     info.mtime = 0
@@ -301,6 +344,11 @@ class ReleaseClaimContractTests(unittest.TestCase):
         normalized_stem = _normalized_artifact_stem(project_name, project_version)
         self.assertEqual(project_name, "skill-control-plane")
         self.assertEqual(project_version, "1.0.1")
+        project_table = pyproject.split("[project]", 1)[1].split("\n[", 1)[0]
+        self.assertIn('license = "MIT"', project_table)
+        self.assertIn('license-files = ["LICENSE"]', project_table)
+        self.assertNotRegex(project_table, r'(?m)^\s*"License ::')
+        self.assertTrue((ROOT / "LICENSE").read_text(encoding="utf-8"))
         self.assertIn("skills-mgr =", pyproject)
         self.assertIn('include = ["skillsmgr*"]', pyproject)
         self.assertIn('authors = [{ name = "skills-manager contributors" }]', pyproject)
@@ -319,6 +367,8 @@ class ReleaseClaimContractTests(unittest.TestCase):
                 wheel_metadata = email.message_from_bytes(archive.read(metadata_member))
             self.assertEqual(wheel_metadata["Name"], project_name)
             self.assertEqual(wheel_metadata["Version"], project_version)
+            self.assertEqual(wheel_metadata["License-Expression"], "MIT")
+            self.assertEqual(wheel_metadata.get_all("License-File"), ["LICENSE"])
             self.assertEqual(wheel_metadata["Name"], project_name)
 
             sdist = root / sdist_name
@@ -331,6 +381,7 @@ class ReleaseClaimContractTests(unittest.TestCase):
                 sdist_metadata = email.message_from_bytes(archive.extractfile(f"{normalized_stem}/PKG-INFO").read())
             self.assertEqual(sdist_metadata["Name"], project_name)
             self.assertEqual(sdist_metadata["Version"], project_version)
+            self.assertEqual(sdist_metadata["License-Expression"], "MIT")
 
     def test_historical_and_internal_skills_manager_names_are_not_mass_replaced(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

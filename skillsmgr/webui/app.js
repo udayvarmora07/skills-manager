@@ -67,6 +67,11 @@ createApp({
       loadingWorkspaces: false,
       workspaces: null,
       workspaceProject: "",
+      qualityHygiene: null,
+      qualityHygieneLoading: false,
+      qualityHygieneError: null,
+      qualitySeverityFilter: "all",
+      qualityExpandedFindings: [],
       profileForm: { name: "", description: "", skills: "", targets: "" },
       profilePreview: null,
       mobileDetailOpen: false,
@@ -395,6 +400,31 @@ createApp({
         provenance: records.filter((record) => record.registry_provenance && typeof record.registry_provenance === "object").length,
       };
     },
+    qualityHygieneFindings() {
+      const report = this.qualityHygiene;
+      return report && Array.isArray(report.findings) ? report.findings : [];
+    },
+    filteredQualityHygieneFindings() {
+      const query = this.query.trim().toLowerCase();
+      return this.qualityHygieneFindings.filter((finding) => {
+        if (this.qualitySeverityFilter !== "all" && finding.severity !== this.qualitySeverityFilter) return false;
+        if (!query) return true;
+        const instances = (finding.instances || []).flatMap((instance) => [instance.name, instance.scope, instance.scope_label, instance.consumer]);
+        return [finding.title, finding.explanation, finding.recommendation, finding.category, ...instances]
+          .some((value) => String(value || "").toLowerCase().includes(query));
+      });
+    },
+    qualityHygieneGroups() {
+      const groups = new Map();
+      for (const finding of this.filteredQualityHygieneFindings) {
+        if (!groups.has(finding.category)) groups.set(finding.category, []);
+        groups.get(finding.category).push(finding);
+      }
+      return [...groups.entries()].map(([category, findings]) => ({ category, findings }));
+    },
+    qualityHygieneSummary() {
+      return (this.qualityHygiene && this.qualityHygiene.summary) || {};
+    },
   },
 
   watch: {
@@ -422,6 +452,7 @@ createApp({
       // otherwise the search box shows a term while the list shows every skill.
       this.refreshList();
       this.loadStatsTokens();
+      if (this.view === "quality") this.loadQualityHygiene();
     },
     libraryMode(v) {
       localStorage.setItem("skillsmgr-library-mode", v);
@@ -1064,6 +1095,24 @@ createApp({
       }
     },
 
+    async loadQualityHygiene() {
+      const scopeAtCall = this.activeScope || "all";
+      this.qualityHygieneLoading = true;
+      this.qualityHygieneError = null;
+      try {
+        const report = await api("/api/doctor?scope=" + encodeURIComponent(scopeAtCall) + "&hygiene=1");
+        if ((this.activeScope || "all") !== scopeAtCall) return;
+        this.qualityHygiene = report.hygiene || null;
+        if (!this.qualityHygiene) this.qualityHygieneError = "The server returned no hygiene report.";
+        this.liveAnnouncement = "Skill hygiene evidence refreshed.";
+      } catch (e) {
+        this.qualityHygieneError = e.message;
+        this.liveAnnouncement = "Skill hygiene evidence could not be loaded.";
+      } finally {
+        this.qualityHygieneLoading = false;
+      }
+    },
+
     async applySearch() {
       const q = this.query.trim();
       if (!q) {
@@ -1214,6 +1263,7 @@ createApp({
       if (v === "recovery") this.loadRecoverySnapshots();
       else if (v === "install") this.loadSkills();
       else if (v === "workspaces") this.loadWorkspaces();
+      else if (v === "quality") this.loadQualityHygiene();
       // BUG-4: entering the skills view with a live query must re-apply it, or
       // the list silently disagrees with the search box.
       else if (v === "skills") this.refreshList();
@@ -1293,6 +1343,45 @@ createApp({
 
     setTagFilter(tag) {
       this.tagFilter = tag || "";
+    },
+
+    qualityCategoryCount(category) {
+      return Number((this.qualityHygiene && this.qualityHygiene.category_counts || {})[category] || 0);
+    },
+
+    qualityFindingIsExpanded(id) {
+      return this.qualityExpandedFindings.includes(id);
+    },
+
+    toggleQualityFinding(id) {
+      const current = new Set(this.qualityExpandedFindings);
+      if (current.has(id)) current.delete(id); else current.add(id);
+      this.qualityExpandedFindings = [...current];
+    },
+
+    inspectHygieneInstance(instance, finding = null) {
+      const targetPath = instance && (instance.physical_path || instance.path);
+      const record = this.qualityRecords.find((item) => item.name === (instance && instance.name)
+        && item.scope === (instance && instance.scope)
+        && (!targetPath || (item.physical_path || item.path) === targetPath));
+      if (!record) {
+        this.toast("That exact observed instance is no longer in the current Library snapshot.", "err");
+        return;
+      }
+      this.query = "";
+      this.filter = "";
+      this.tagFilter = "";
+      this.selectedName = record.name;
+      this.selected = record;
+      this.switchView("skills");
+      this.$nextTick(() => {
+        this.selectSkill(record);
+        if (finding && finding.category === "broken-reference") this.openValidate();
+      });
+    },
+
+    retryQualityHygiene() {
+      return this.loadQualityHygiene();
     },
 
     onSearchKeydown(e) {
@@ -2069,7 +2158,7 @@ createApp({
         m.result = await api("/api/validate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: m.name }),
+          body: JSON.stringify({ name: m.name, scope: (this.selected && this.selected.scope) || this.activeScope || "global" }),
         });
       } catch (e) {
         m.error = e.message;

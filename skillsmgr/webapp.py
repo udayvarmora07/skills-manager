@@ -11,7 +11,7 @@ import ipaddress
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - only the allowlisted installer and trusted opener use it.
 import sys
 import tempfile
 import threading
@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .store import Store, StoreError, SkillNotFound
 from .diagnostics import diagnose as _diagnose
+from .launcher_security import trusted_executable
 # ``RequestError`` is re-exported deliberately: callers imported it from this
 # module before the web_security extraction, and tests/test_compatibility.py
 # pins that import path.  It is not dead code (BUG-15).
@@ -182,6 +183,62 @@ def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
     return payload
 
 
+def _doctor_query(qs: dict) -> tuple[str, bool, str]:
+    scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+    hygiene = (qs.get("hygiene", ["0"])[0] or "0").strip().lower() in {"1", "true", "yes"}
+    consumer = (qs.get("explain", [""])[0] or "").strip()
+    return scope, hygiene, consumer
+
+
+def _validate_hygiene_query(scope: str, hygiene: bool, consumer: str) -> None:
+    if not hygiene:
+        return
+    from . import scopes
+
+    known = {item.id for item in scopes.known_scopes()}
+    if scope != "all" and scope not in known:
+        raise StoreError(f"unknown scope {scope!r}")
+    if consumer:
+        raise StoreError("doctor hygiene cannot be combined with explain")
+
+
+def _doctor_scope_enrichment(report: dict, scope: str) -> None:
+    if scope != "all":
+        return
+    # BUG-8: this swallow made `/api/doctor?scope=all` return a payload
+    # *without* scopes/duplicates while still reporting success, so a client
+    # could not tell "no duplicates" from "the duplicate scan crashed".
+    try:
+        from .scopes import find_duplicates as _dupes
+        from .scopes import list_scopes as _lscopes
+
+        report["scopes"] = _lscopes()
+        report["duplicates"] = _dupes()
+    except Exception as exc:
+        _diagnose("doctor scope=all enrichment failed", exc)
+        report["scopes"] = []
+        report["duplicates"] = []
+        report.setdefault("degraded", []).append(
+            {
+                "section": "scopes/duplicates",
+                "reason": f"the scope and duplicate scan failed: {exc}",
+            }
+        )
+
+
+def _doctor_explain(report: dict, qs: dict, consumer: str, diagnostics_roots) -> None:
+    if not consumer:
+        return
+    from . import effective
+
+    report["explain"] = effective.explain(
+        consumer,
+        (qs.get("project", [""])[0] or "").strip() or None,
+        skill=(qs.get("skill", [""])[0] or "").strip() or None,
+        allowed_root=diagnostics_roots,
+    )
+
+
 def _doctor_payload(store: Store, qs: dict, diagnostics_roots=None) -> dict:
     """Build the ``/api/doctor`` payload, optionally with the #12 explain block.
 
@@ -195,39 +252,66 @@ def _doctor_payload(store: Store, qs: dict, diagnostics_roots=None) -> dict:
     complete inventory of skills installed for other agent tools.  The CLI
     passes no boundary (it already runs as the user); HTTP always does.
     """
-    scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+    scope, hygiene_requested, consumer = _doctor_query(qs)
+    _validate_hygiene_query(scope, hygiene_requested, consumer)
     report = store.doctor()
-    if scope == "all":
-        # BUG-8: this swallow made `/api/doctor?scope=all` return a payload
-        # *without* scopes/duplicates while still reporting success, so a client
-        # could not tell "no duplicates" from "the duplicate scan crashed".
-        try:
-            from .scopes import find_duplicates as _dupes
-            from .scopes import list_scopes as _lscopes
-
-            report["scopes"] = _lscopes()
-            report["duplicates"] = _dupes()
-        except Exception as exc:
-            _diagnose("doctor scope=all enrichment failed", exc)
-            report["scopes"] = []
-            report["duplicates"] = []
-            report.setdefault("degraded", []).append(
-                {
-                    "section": "scopes/duplicates",
-                    "reason": f"the scope and duplicate scan failed: {exc}",
-                }
-            )
-    consumer = (qs.get("explain", [""])[0] or "").strip()
-    if consumer:
-        from . import effective
-
-        report["explain"] = effective.explain(
-            consumer,
-            (qs.get("project", [""])[0] or "").strip() or None,
-            skill=(qs.get("skill", [""])[0] or "").strip() or None,
-            allowed_root=diagnostics_roots,
-        )
+    _doctor_scope_enrichment(report, scope)
+    if hygiene_requested:
+        report["hygiene"] = _doctor_hygiene_payload(store, scope)
+    _doctor_explain(report, qs, consumer, diagnostics_roots)
     return report
+
+
+def _doctor_hygiene_payload(store: Store, scope: str) -> dict:
+    """Acquire only configured scope observations and build hygiene evidence."""
+    from . import scopes
+    from .hygiene import hygiene_report
+    from .loader import scan_dir
+
+    def global_rows() -> list[dict]:
+        rows = scan_dir(store.skills_dir, include_husks=True)
+        root = str(store.skills_dir.resolve())
+        for row in rows:
+            row.update({"scope": "global", "scope_label": "Global", "consumer": "skills-manager"})
+            row["path"] = row.get("path") or str(store.skills_dir / row["name"])
+            row["physical_root"] = root
+            try:
+                row["physical_path"] = str(Path(row["path"]).resolve())
+            except OSError:
+                row["physical_path"] = str(row["path"])
+        return rows
+
+    records = []
+    degraded = []
+    descriptors = scopes.known_scopes()
+    if scope != "all":
+        descriptors = [item for item in descriptors if item.id == scope]
+    for descriptor in descriptors:
+        if descriptor.id != "global" and not descriptor.base.is_dir():
+            continue
+        try:
+            records.extend(global_rows() if descriptor.id == "global" else scopes.scan_scope(descriptor.id))
+        except Exception as exc:
+            degraded.append({
+                "section": "scope-scan",
+                "scope": descriptor.id,
+                "reason": str(exc)[:512],
+            })
+    try:
+        result = hygiene_report(records, scope=scope)
+    except Exception as exc:
+        result = hygiene_report([], scope=scope)
+        degraded.append({
+            "section": "hygiene-report",
+            "reason": "complete hygiene analysis was unavailable",
+            "detail": str(exc)[:512],
+        })
+    result["degraded"].extend(degraded)
+    result["degraded"] = sorted(
+        result["degraded"],
+        key=lambda item: (str(item.get("section", "")), str(item.get("scope", "")), str(item.get("reason", ""))),
+    )
+    return result
 
 
 def _skill_text(skill_dir: Path) -> str:
@@ -1207,7 +1291,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
                 return
             try:
-                proc = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=120)
+                proc = subprocess.run(  # nosec B603 - runner/options are allowlisted and argv is shell-free.
+                    cmd_parts, capture_output=True, text=True, timeout=120
+                )
                 self._send_json({
                     "command": cmd_str,
                     "runner": runner,
@@ -1291,7 +1377,16 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not isinstance(raw_name, str) or not raw_name.strip():
                 raise StoreError("skill name must be a non-empty string")
             name = raw_name.strip()
-            record = self.store.get(name)
+            requested_scope = data.get("scope", "global")
+            if not isinstance(requested_scope, str) or not requested_scope.strip():
+                raise StoreError("scope must be a non-empty string")
+            requested_scope = requested_scope.strip()
+            if requested_scope == "global":
+                record = self.store.get(name)
+            else:
+                from .scopes import get_skill as _get_scope_skill
+
+                record = _get_scope_skill(requested_scope, name)
             if not record.get("path"):
                 raise StoreError(f"skill '{name}' has no directory on disk")
             result = validate_skill(name, Path(record["path"]))
@@ -1508,16 +1603,24 @@ class WebAppServer:
         self.httpd.server_close()
 
 
-def _open_browser(url: str) -> None:
+def _open_browser(url: str, *, which=shutil.which) -> None:
+    _launch_browser(trusted_executable("xdg-open", which=which), url)
+
+
+def _launch_browser(executable: str | None, url: str) -> None:
+    """Launch an already trusted opener, or leave the URL for the operator."""
+    if not executable:
+        return
     try:
         subprocess.Popen(
-            ["xdg-open", url],
+            [executable, url],  # nosec B603 - executable is owner/permission validated above.
+            shell=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-    except OSError:
-        pass
+    except OSError as exc:
+        _diagnose("browser opener failed", exc)
 
 
 def run(

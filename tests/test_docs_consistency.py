@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -18,6 +19,70 @@ class DocumentationConsistencyTests(unittest.TestCase):
             (root / "README.md").write_text("See @docs/missing.md.\n", encoding="utf-8")
             errors = check_docs.check_doc_links(root)
         self.assertEqual(errors, ["README.md: broken @docs/missing.md"])
+
+    def _git_root(self, directory: str) -> Path:
+        root = Path(directory)
+        subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
+        return root
+
+    def test_markdown_discovery_is_tracked_plus_first_party_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._git_root(directory)
+            tracked = root / "unusual dir" / "naïve file.md"
+            tracked.parent.mkdir(parents=True)
+            tracked.write_text("# tracked\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "--", str(tracked.relative_to(root))], check=True)
+            (root / "docs" / "new-plan.md").parent.mkdir()
+            (root / "docs" / "new-plan.md").write_text("# plan\n", encoding="utf-8")
+            (root / "ROADMAP.md").write_text("# roadmap\n", encoding="utf-8")
+            for rel in (".mimocode/node_modules/noise.md", ".venv/noise.md", "build/noise.md", "tool-cache/noise.md"):
+                path = root / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("noise\n", encoding="utf-8")
+
+            names = [path.relative_to(root).as_posix() for path in check_docs._all_markdown(root)]
+            self.assertEqual(names, sorted(names))
+            self.assertIn("unusual dir/naïve file.md", names)
+            self.assertIn("docs/new-plan.md", names)
+            self.assertIn("ROADMAP.md", names)
+            self.assertNotIn(".mimocode/node_modules/noise.md", names)
+            self.assertNotIn(".venv/noise.md", names)
+            self.assertNotIn("build/noise.md", names)
+            self.assertNotIn("tool-cache/noise.md", names)
+            self.assertEqual(names.count("docs/new-plan.md"), 1)
+
+    def test_markdown_discovery_excludes_symlinks_outside_root(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            target = Path(outside) / "outside.md"
+            target.write_text("# outside\n", encoding="utf-8")
+            link = root / "docs" / "escape.md"
+            try:
+                link.symlink_to(target)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable")
+            self.assertNotIn(link, check_docs._all_markdown(root))
+
+    def test_markdown_discovery_falls_back_without_git_or_on_git_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "docs" / "plan.md").write_text("# plan\n", encoding="utf-8")
+            (root / "README.md").write_text("# readme\n", encoding="utf-8")
+            failures = (
+                ("missing", mock.patch.object(check_docs.subprocess, "run", side_effect=FileNotFoundError("git"))),
+                ("failed", mock.patch.object(
+                    check_docs.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 1, stdout=b"bad\0path.md"),
+                )),
+            )
+            for label, patcher in failures:
+                with self.subTest(failure=label):
+                    with patcher:
+                        names = [path.relative_to(root).as_posix() for path in check_docs._all_markdown(root)]
+                    self.assertEqual(names, ["README.md", "docs/plan.md"])
 
     def test_documented_store_symbol_must_exist(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -93,11 +158,11 @@ class DocumentationConsistencyTests(unittest.TestCase):
     def test_a_dead_markdown_anchor_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self._root(directory, files=[
-                ("README.md", "# R\n\n[good](OTHER.md#real-heading) [bad](OTHER.md#nope)\n"),
-                ("OTHER.md", "# Other\n\n## Real heading\n"),
+                ("README.md", "# R\n\n[good](docs/OTHER.md#real-heading) [bad](docs/OTHER.md#nope)\n"),
             ])
+            (root / "docs" / "OTHER.md").write_text("# Other\n\n## Real heading\n", encoding="utf-8")
             errors = check_docs.check_markdown_anchors(root)
-        self.assertEqual(errors, ["README.md: dead markdown anchor -> OTHER.md#nope"])
+        self.assertEqual(errors, ["README.md: dead markdown anchor -> docs/OTHER.md#nope"])
 
     def test_a_rest_route_implemented_but_undocumented_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:

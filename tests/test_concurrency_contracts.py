@@ -7,7 +7,9 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
 
 from skillsmgr.atomic_io import atomic_write_text
 from skillsmgr.store import Store
@@ -130,6 +132,38 @@ class ConcurrencyContractTests(unittest.TestCase):
         self.assertTrue(all(count > 0 for count in read_counts), read_counts)
         self.assertIn(skill_file.read_text(encoding="utf-8"), expected_texts)
         self.assertTrue(self.store.doctor()["ok"])
+
+    def test_concurrent_identical_list_reads_share_one_in_flight_scan(self):
+        self.store.create("demo", "demo skill", body="demo body")
+        entered = threading.Event()
+        release = threading.Event()
+        calls = 0
+        calls_lock = threading.Lock()
+        real_observe = self.store._observe_index_row
+
+        def blocked_observe(record):
+            nonlocal calls
+            with calls_lock:
+                calls += 1
+                first = calls == 1
+            if first:
+                entered.set()
+                self.assertTrue(release.wait(timeout=5))
+            return real_observe(record)
+
+        with mock.patch.object(
+            self.store, "_observe_index_row", side_effect=blocked_observe
+        ):
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                futures = [pool.submit(self.store.list)]
+                self.assertTrue(entered.wait(timeout=5))
+                futures.extend(pool.submit(self.store.list) for _ in range(7))
+                time.sleep(0.05)
+                release.set()
+                rows = [future.result(timeout=5) for future in futures]
+
+        self.assertEqual(calls, 1)
+        self.assertTrue(all([row["name"] for row in result] == ["demo"] for result in rows))
 
     def test_concurrent_http_requests_observe_complete_documents_and_cleanup(self):
         skill_file, old_text, new_text = self._documents()

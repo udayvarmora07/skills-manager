@@ -4,6 +4,22 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## P0 Trust Gate and Release Metadata Hardening — 2026-09-22
+
+- [x] Repair full-import rollback diagnostics and add forced restoration-failure regression coverage.
+- [x] Add the narrow Ruff `F821`/`F822`/`F823` gate with one pinned CI execution and mutation-proof contract coverage.
+- [x] Review all Bandit 1.9.4 findings, fix silent enrichment/opener behavior, and record named dispositions in `docs/STATIC-ANALYSIS.md`.
+- [x] Make Markdown discovery deterministic across tracked and first-party files, including safe fallback and symlink containment.
+- [x] Migrate to PEP 639 SPDX metadata and verify wheel/sdist license metadata and byte-identical `LICENSE` content.
+- [x] Update contributor/module/session/changelog/docs-index/progress evidence and run the final current-tree ladder.
+
+Final evidence: 878 unittest tests, both smoke suites, documentation,
+complexity (261 tracked functions), package-data, pinned Ruff 0.16.8, pinned Bandit 1.9.4, the
+hash-verified setuptools 84.0.0 wheel/sdist build, Node syntax, and
+`git diff --check` passed. The default interpreter's optional build check
+remains `UNAVAILABLE`; the disposable pinned build environment produced and
+verified both artifacts.
+
 ## Safe local source update implementation plan — 2026-09-22
 
 - [x] Select one high-leverage feature from the whole-project audit and define
@@ -16,6 +32,48 @@
 - [x] Implement `docs/19-safe-local-source-update-implementation-plan.md` in
   phased source-lock, service, CLI, REST, UI, documentation, and verification
   slices.
+
+## Skill Hygiene Report implementation plan — 2026-09-22
+
+- [x] Implement `docs/20-skill-hygiene-report-implementation-plan.md` as a
+  deterministic, read-only report behind the existing Doctor and Quality
+  surfaces.
+- [x] Add bounded domain analysis and focused hygiene contracts.
+- [x] Integrate Doctor CLI/REST behavior while preserving the existing paths.
+- [x] Enrich Quality with grouped hygiene findings, retry, search, and exact
+  instance navigation.
+- [x] Complete documentation, performance evidence, and the current-tree
+  verification ladder.
+
+Final evidence: 866 unittest tests passed; `smoke_store.py`, `smoke_web.py`,
+the six-viewport browser harness (320/400/640/900/1280/1440px), Node syntax,
+documentation, complexity, package-data, and `git diff --check` gates passed.
+Record-only hygiene benchmarks on Python 3.12.3/Linux (five warm runs) were
+11.48 ms median / 12.20 ms p95 for 100 records, 86.89 ms / 90.92 ms for
+1,000, and 1,415.49 ms / 1,593.21 ms for 10,000; the largest fixture hit the
+documented 100,000 candidate-pair cap and reported degraded evidence. The
+optional `python3 -m build` artifact check remains unavailable because the
+`build` module is not installed.
+
+## Whole-project improvement audit — 2026-09-22
+
+- [x] Review the repository, documentation, verification evidence, competitors,
+  ecosystem discussions, community requests, and representative user scenarios.
+- [x] Record the findings and prioritized roadmap in
+  `docs/18-project-improvement-audit-2026-09-22.md` and register it in the docs
+  index.
+
+## Runtime contention and form metadata hardening — 2026-09-22
+
+- [x] Reproduce and fix repeated SQLite schema bootstrap during concurrent read
+  requests without changing the filesystem source-of-truth contract, schema, or
+  public Store API.
+- [x] Coalesce identical in-flight filesystem/index reads so a spike does not
+  multiply the same expensive scan; completed results are not cached.
+- [x] Add `name` metadata to remaining web form controls reported by Chrome's
+  form-field audit.
+- [x] Re-run the focused regressions, full verification ladder, browser harness,
+  and bounded load checks; record results in `docs/06-progress-log.md`.
 
 ## UI redesign slice — 2026-09-20
 

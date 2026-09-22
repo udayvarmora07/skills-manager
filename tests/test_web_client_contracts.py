@@ -87,7 +87,7 @@ class LocalClientContractTests(unittest.TestCase):
     def test_extension_read_endpoints_answer(self):
         for path in ("/api/scopes", "/api/skills", "/api/skills/demo",
                      "/api/skills/demo/raw", "/api/stats", "/api/doctor",
-                     "/api/history?name=demo"):
+                     "/api/doctor?scope=global&hygiene=1", "/api/history?name=demo"):
             with self.subTest(path=path):
                 status, _ = self.call("GET", path)
                 self.assertEqual(status, 200)

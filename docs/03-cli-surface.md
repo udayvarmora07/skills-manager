@@ -117,7 +117,7 @@ Restore a skill from the trash, or roll back to a retained snapshot.
 Show recent history. When `NAME` is supplied, JSON output includes retained
 snapshot IDs and text output lists them after the history table.
 
-### `doctor [--json] [--scope SCOPE] [--explain CONSUMER [--project DIR] [--skill NAME]]`
+### `doctor [--json] [--scope SCOPE] [--hygiene] [--explain CONSUMER [--project DIR] [--skill NAME]]`
 Health check: data dir, DB, skill files, consistency between FS and index, content drift, incomplete transaction artifacts, temporary files, and stale snapshots. `global` (the default) runs the Store/DB doctor; an agent scope scans that scope's filesystem directly and reports malformed documents; unknown scope ids are clean errors with exit 1. With `--scope all`, the global Store report also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.
 
 `--explain CONSUMER` switches to the read-only effective-resolution diagnostic
@@ -136,6 +136,18 @@ extension < user < workspace, same-tier ties reported as `ambiguous`), plus
 `missing-project` and exit 1. Diagnostics that legitimately resolve nothing
 (`no-merge`, `undocumented-precedence`, `no-instances`) exit 0. `--skill NAME`
 narrows the report to one name. See `effective.py` in @docs/02-modules.md.
+
+`--hygiene` adds the deterministic, read-only Skill Hygiene Report under the
+`hygiene` JSON key, or after the ordinary Doctor sections in terminal output.
+It accepts `global`, one known agent/project scope, or `all`; `all` scans the
+deduplicated observed instances from the configured scope roots. The report
+covers malformed/unreadable documents, validator references and description
+guidance, exact duplicate and same-name drift groups, bounded heuristic
+near-duplicate candidates, context hotspots, and source-lock evidence. It also
+lists degraded and unavailable signals. It never mutates files or makes a
+combined quality claim; findings return exit 0 once the scan completes, while a
+total acquisition failure returns exit 1. `--hygiene` and `--explain` are
+incompatible and produce a clean exit-1 error.
 
 ### `stats [--json] [--scope SCOPE]`
 Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts. Category names are sanitized before printing (see *Untrusted display text*).

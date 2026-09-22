@@ -4,6 +4,57 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-09-22 — P0 trust gate and release metadata hardening complete
+
+**[SPEC]** Implemented `docs/21-p0-trust-gate-and-release-metadata-hardening-plan.md` on the settled shared tree. Full-import rollback now imports the shared diagnostic seam and preserves the original error plus the surviving dotted backup when restoration itself fails. Ruff is configured only for `F821`, `F822`, and `F823` at `py310`, with one read-only CI execution using Ruff action v4.1.0 at full SHA and Ruff 0.16.8. The final Bandit 1.9.4 scan over `skillsmgr/` has zero unsuppressed findings; fixed B110 enrichment behavior and the PATH-dependent browser opener, and recorded every reviewed finding in `docs/STATIC-ANALYSIS.md`.
+
+**[SPEC]** `check_docs.py` now uses the stable union of Git-tracked Markdown,
+regular Markdown under `docs/`, and an explicit first-party top-level
+allowlist. Git output is NUL-decoded and root-contained; missing/failing Git
+falls back cleanly and escaping symlinks are excluded. `check_package_data.py`
+now reads wheel/sdist metadata directly and requires SPDX `MIT`,
+`License-File: LICENSE`, no deprecated license classifier, and byte-identical
+license payloads. `pyproject.toml` uses `license = "MIT"` and
+`license-files = ["LICENSE"]`.
+
+**[SPEC] Verification on the final current tree:** `878` unittest tests passed;
+`python3 smoke_store.py`, `python3 smoke_web.py`, Python compilation,
+`check_docs.py`, `check_complexity.py` (261 tracked functions, no ratchet
+increase), default `check_package_data.py` (vendored Vue pass; optional build
+tool reported `UNAVAILABLE`), Node syntax checks, and `git diff --check` passed.
+In disposable environments, Ruff 0.16.8 selected-rule checks and Bandit 1.9.4
+`bandit -r skillsmgr -q` both exited zero. The mutation proof compiled a
+source copy with the rollback import removed, then Ruff rejected it with
+`F821` while the unmutated file compiled successfully. The hash-verified
+`requirements-build.txt` toolchain built both artifacts with setuptools 84.0.0;
+`check_package_data.py --dist-dir` verified both wheel and sdist license/Vue/
+forbidden-content contracts. No CLI command, Store method, schema, runtime
+dependency, package version, or frontend build step changed.
+
+## 2026-09-22 — Skill Hygiene Report implementation complete
+
+**[NOTE]** Registered `docs/20-skill-hygiene-report-implementation-plan.md`
+and completed its read-only vertical slice. The work is scoped to a new pure
+`skillsmgr/hygiene.py` analysis engine plus existing Doctor CLI/REST and
+Quality UI surfaces; it adds no Store method, SQLite schema, mutation, cache,
+network request, or runtime dependency. The source-update changes already
+present in the working tree remain preserved.
+
+**[SPEC] Verification:** The final current-tree ladder passed: 866 unittest
+tests, `smoke_store.py`, `smoke_web.py`, Python compilation, Node syntax checks,
+`check_docs.py`, `check_complexity.py` (260 tracked functions),
+`check_package_data.py`, the six-viewport browser harness at
+320/400/640/900/1280/1440px, and `git diff --check`. The browser harness found
+no console/runtime errors, failed requests, warnings, or horizontal overflow.
+The optional `python3 -m build` check is explicitly unavailable because the
+`build` module is not installed.
+
+**[NOTE] Bounded performance evidence:** On Python 3.12.3/Linux, five warm
+record-only runs measured 100 records at 11.48 ms median / 12.20 ms p95,
+1,000 at 86.89 ms / 90.92 ms, and 10,000 at 1,415.49 ms / 1,593.21 ms. The
+10,000-record run reached the 100,000 candidate-pair cap and returned degraded
+evidence; no universal hardware-performance claim is intended.
+
 ## 2026-09-22 — Safe local source update implementation complete
 
 **[SPEC]** Owner approval was received to ship the exact top-level `update`
@@ -36,6 +87,73 @@
   verification ladder. Owner approval for the proposed top-level `update` CLI
   command was recorded on 2026-09-22; the implementation is complete and adds
   no Store method or SQLite schema change.
+
+## 2026-09-22 — Whole-project improvement audit recorded
+
+**[NOTE]** Added `docs/18-project-improvement-audit-2026-09-22.md`, a dated
+  repository and documentation audit covering verification evidence,
+  maintainability risks, competitors, community demand, user scenarios,
+  positioning, and a phased improvement roadmap. Registered the report in the
+  docs index and recorded the completed documentation task in `task.md`. The
+  audit recommends fixing the archive rollback diagnostic and workspace-sensitive
+  docs gate first, then exposing the existing source-lock and recovery foundations
+  as one safe update and convergence workflow before expanding product scope.
+
+## 2026-09-22 — Runtime contention and form metadata hardening complete
+
+**[NOTE]** The follow-up hardening is complete. Store initialization now skips
+  repeated schema writes for a stable database, serializes first bootstrap with
+  the existing cross-process index lock, and detects database replacement by
+  device/inode identity. Identical in-flight `list`, `search`, `stats`, and
+  `doctor` reads, plus merged-scope list/search reads, now fan in to one scan;
+  completed results are not cached, so the filesystem remains authoritative.
+  The web UI's 55 native input/select/textarea controls now all expose stable
+  `id` or `name` metadata for browser form diagnostics and autofill.
+
+**[NOTE] Load evidence:** On an isolated fixture of 100 global skills and 10
+  agent-scope skills, 100 requests at concurrency 50 returned 200 with zero
+  errors for `/api/skills?scope=all`, `/api/doctor?scope=all`, and `/api/stats`.
+  Their p95 latencies were approximately 2.15s, 3.82s, and 2.14s respectively;
+  100 search requests at concurrency 10 also returned 200 with a 0.12s p95.
+  The earlier schema-contention run produced lock failures and p95 values of
+  roughly 6.1s, 9.6s, and 5.9s on the first three routes.
+
+**[NOTE] Verification (2026-09-22):** 839 unittest tests passed in 53.1s;
+  Store and REST smoke tests passed; Python syntax, frontend `node --check`,
+  documentation consistency, complexity (250 tracked functions), and Vue
+  package-data hash checks passed. The optional `python -m build` tool remains
+  unavailable, so package artifact coverage stayed explicitly `UNAVAILABLE`.
+  The six-viewport browser harness passed with no console/runtime errors,
+  failed requests, warnings, or horizontal overflow.
+
+## 2026-09-22 — Runtime contention and form metadata hardening in progress
+
+**[NOTE]** Follow-up from the isolated E2E/load pass. High-contention reads
+  reproduced repeated SQLite schema bootstrapping and `database is locked`
+  failures on aggregate filesystem/index routes as the skill set grew. A focused
+  regression now reproduces and pins one-time per-Store initialization under
+  concurrent first reads. Chrome also reported two non-fatal form-field metadata issues per page
+  load; the remaining controls will be given stable `name` attributes without
+  changing the API or UI behavior.
+
+**[NOTE] Implementation:** Store initialization is now guarded per Store and
+  by the existing cross-process index lock. A device/inode identity check
+  re-enters bootstrap after a database rebuild or replacement, while stable
+  reads skip the schema-writing path. Native web form controls now also carry
+  stable `id` or `name` metadata so browser autofill/form diagnostics can
+  identify them without changing the UI behavior.
+
+**[?] Verification:** The focused regression is next; the complete current-tree
+ladder is pending.
+
+The frontend source regression now covers every native input/select/textarea
+and requires stable `id` or `name` metadata.
+
+The post-initialization load rerun removed lock errors but still measured
+multi-second p95 latency from duplicate concurrent scans. A second focused
+regression now pins in-flight read coalescing before that optimization is
+implemented; it must not become a completed-result cache because the filesystem
+remains authoritative.
 
 ## 2026-09-22 — UI regional formatting coverage audit
 

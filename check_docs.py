@@ -10,7 +10,9 @@ to the authoritative/current-doc set below.
 from __future__ import annotations
 
 import ast
+import os
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -50,6 +52,22 @@ REQUIRED_DOCS = (
     "README.md",
 )
 
+_FIRST_PARTY_TOP_LEVEL_MARKDOWN = (
+    "AGENTS.md",
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "ROADMAP.md",
+    "TODO.md",
+    "PLAN.md",
+    "SECURITY.md",
+    "task.md",
+    "DEEP-AUDIT-2026-09-11.md",
+    "skills-manager-threat-model.md",
+    "security_best_practices_report.md",
+    "loop-engineering-findings.md",
+)
+
 
 def _relative(path: Path, root: Path) -> str:
     return str(path.relative_to(root)).replace("\\", "/")
@@ -59,12 +77,76 @@ def _current_paths(root: Path) -> list[Path]:
     return [root / name for name in CURRENT_DOCS]
 
 
+def _inside_root_regular_file(path: Path, root: Path) -> bool:
+    """Return whether *path* resolves to a regular file below *root*."""
+    try:
+        root_resolved = root.resolve(strict=True)
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError:
+        return False
+    return resolved.is_file()
+
+
+def _tracked_markdown(root: Path) -> list[Path]:
+    """Return tracked Markdown paths using Git's NUL-safe output mode."""
+    try:
+        root_resolved = root.resolve(strict=True)
+        git_root = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            check=False,
+        )
+        if git_root.returncode != 0:
+            return []
+        raw_git_root = git_root.stdout or b""
+        if isinstance(raw_git_root, str):
+            raw_git_root = os.fsencode(raw_git_root)
+        if Path(os.fsdecode(raw_git_root).strip()).resolve() != root_resolved:
+            return []
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--", "*.md"],
+            capture_output=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+    output = result.stdout or b""
+    if isinstance(output, str):
+        output = os.fsencode(output)
+    paths: list[Path] = []
+    for raw_path in output.split(b"\0"):
+        if not raw_path:
+            continue
+        candidate = root / Path(os.fsdecode(raw_path))
+        if candidate.suffix == ".md" and _inside_root_regular_file(candidate, root):
+            paths.append(candidate)
+    return paths
+
+
+def _first_party_untracked_markdown(root: Path) -> list[Path]:
+    """Return explicitly first-party Markdown outside Git's tracked set."""
+    paths = [root / name for name in _FIRST_PARTY_TOP_LEVEL_MARKDOWN]
+    docs_root = root / "docs"
+    if docs_root.is_dir():
+        for current, directories, filenames in os.walk(docs_root, followlinks=False):
+            current_path = Path(current)
+            directories[:] = [name for name in directories if not (current_path / name).is_symlink()]
+            paths.extend(current_path / name for name in filenames if name.endswith(".md"))
+    return [path for path in paths if path.suffix == ".md" and _inside_root_regular_file(path, root)]
+
+
 def _all_markdown(root: Path) -> list[Path]:
-    """Return markdown files, excluding generated VCS/artifact directories."""
+    """Return tracked plus explicitly first-party Markdown in stable order."""
+    candidates = {*_tracked_markdown(root), *_first_party_untracked_markdown(root)}
     return sorted(
-        path
-        for path in root.rglob("*.md")
-        if ".git" not in path.parts and ".autogit" not in path.parts and "dist" not in path.parts
+        candidates,
+        key=lambda path: path.relative_to(root).as_posix(),
     )
 
 

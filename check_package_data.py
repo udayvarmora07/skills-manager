@@ -18,6 +18,7 @@ depend on optional tooling being installed.
 from __future__ import annotations
 
 import argparse
+from email.parser import BytesParser
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
@@ -64,6 +65,8 @@ class ArchiveReport:
     kind: str
     webui_members: tuple[str, ...]
     vue_size: int
+    license_expression: str = ""
+    license_files: tuple[str, ...] = ()
 
 
 def verify_vendored_vue(payload: bytes, *, source: str) -> int:
@@ -214,6 +217,60 @@ def unexpected_members(files: Mapping[str, bytes]) -> list[str]:
     return sorted(offenders)
 
 
+def _metadata_member(files: Mapping[str, bytes], kind: str, source: str) -> str:
+    """Return the sole core-metadata member for an archive."""
+    if kind == "wheel":
+        candidates = sorted(name for name in files if name.endswith(".dist-info/METADATA"))
+    else:
+        candidates = sorted(name for name in files if name == "PKG-INFO")
+    if len(candidates) != 1:
+        raise AssertionError(
+            f"{source} must contain exactly one core metadata file; found {candidates}"
+        )
+    return candidates[0]
+
+
+def _license_members(files: Mapping[str, bytes], kind: str, declared: str) -> list[str]:
+    """Find an artifact's license payload at its PEP 639 location."""
+    if kind == "sdist":
+        return [declared] if declared in files else []
+    suffix = f".dist-info/licenses/{declared}"
+    return sorted(name for name in files if name.endswith(suffix))
+
+
+def verify_license_metadata(
+    files: Mapping[str, bytes], kind: str, project_root: Path, source: str
+) -> tuple[str, tuple[str, ...]]:
+    """Verify PEP 639 metadata and exact LICENSE bytes without extraction."""
+    license_path = project_root / "LICENSE"
+    if not license_path.is_file():
+        raise AssertionError("repository LICENSE file is missing")
+    try:
+        license_bytes = license_path.read_bytes()
+        license_bytes.decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise AssertionError(f"repository LICENSE must be readable UTF-8: {exc}") from exc
+
+    metadata_name = _metadata_member(files, kind, source)
+    metadata = BytesParser().parsebytes(files[metadata_name])
+    expression = metadata.get("License-Expression")
+    if expression != "MIT":
+        raise AssertionError(f"{source} must declare License-Expression: MIT, got {expression!r}")
+    declared = tuple(metadata.get_all("License-File") or ())
+    if declared != ("LICENSE",):
+        raise AssertionError(f"{source} must declare License-File: LICENSE, got {declared!r}")
+    legacy = [value for value in metadata.get_all("Classifier") or () if value.startswith("License ::")]
+    if legacy:
+        raise AssertionError(f"{source} contains deprecated license classifier(s): {legacy}")
+    members = _license_members(files, kind, declared[0])
+    if len(members) != 1:
+        raise AssertionError(f"{source} is missing its declared LICENSE artifact member")
+    member = members[0]
+    if files[member] != license_bytes:
+        raise AssertionError(f"{source} LICENSE bytes differ from the repository LICENSE")
+    return expression, (member,)
+
+
 def inspect_archive(path: Path, project_root: Path = ROOT) -> ArchiveReport:
     """Assert exact web UI package-data coverage for one archive."""
 
@@ -240,7 +297,8 @@ def inspect_archive(path: Path, project_root: Path = ROOT) -> ArchiveReport:
     if not vue:
         raise AssertionError(f"{path.name} contains no vendored Vue payload: {VUE_MEMBER}")
     vue_size = verify_vendored_vue(vue, source=path.name)
-    return ArchiveReport(path, kind, actual, vue_size)
+    license_expression, license_files = verify_license_metadata(files, kind, project_root, path.name)
+    return ArchiveReport(path, kind, actual, vue_size, license_expression, license_files)
 
 
 def _build_error(result: subprocess.CompletedProcess[str]) -> RuntimeError:
@@ -362,7 +420,10 @@ def run_check(project_root: Path = ROOT, *, install: bool = False, require_build
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
         for report in reports:
-            print(f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; Vue {report.vue_size} bytes)")
+            print(
+                f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; "
+                f"Vue {report.vue_size} bytes; {report.license_expression} license)"
+            )
         if install:
             # Release jobs inspect exact artifacts and then install those exact
             # artifacts; a silently ignored --install would look like verified
@@ -395,7 +456,10 @@ def run_check(project_root: Path = ROOT, *, install: bool = False, require_build
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
         for report in reports:
-            print(f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; Vue {report.vue_size} bytes)")
+            print(
+                f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; "
+                f"Vue {report.vue_size} bytes; {report.license_expression} license)"
+            )
         if install:
             try:
                 for artifact in (wheel, sdist):

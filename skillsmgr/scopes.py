@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import os
 import shutil
+import threading
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import paths
+from .diagnostics import diagnose as _diagnose
 from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
 from .loader import load_skill, read_skill_text_strict, scan_dir
 from . import root_discovery as _root_discovery
@@ -22,6 +24,7 @@ from .store import (
     SkillNotFound,
     Store,
     StoreError,
+    _coalesced_read,
     _atomic_write_text,
     _mutation_lock,
 )
@@ -37,6 +40,8 @@ from .validator import validate_skill_name
 # per-thread, and the web server rebinds it from its own ``store`` at the start
 # of every request thread, so two servers can no longer affect each other.
 _GLOBAL_STORE: ContextVar[Store | None] = ContextVar("skillsmgr_global_store", default=None)
+_SCOPE_READ_FLIGHTS: dict = {}
+_SCOPE_READ_FLIGHTS_LOCK = threading.Lock()
 
 
 def set_global_store(store: Store | None) -> None:
@@ -314,7 +319,8 @@ def scan_scope(scope_id: str) -> list[dict]:
                     r["tokens_method"] = tok["method"]
                     r["tokens_pct"] = tok["pct_window"]
                     r["chars"] = tok["chars"]
-                except Exception:
+                except Exception as exc:
+                    _diagnose("global scope token enrichment failed", exc)
                     r.setdefault("tokens", 0)
                     r.setdefault("tokens_method", "heuristic")
             r.setdefault("tokens_pct", 0)
@@ -372,6 +378,18 @@ def _merged_scope_ids(*, include_missing: bool = False) -> list[str]:
 
 
 def list_all(*, include_missing: bool = False) -> list[dict]:
+    """Merged list across global + every existing agent scope."""
+    store = _global_store()
+    key = ("list-all", str(Path(store.data_dir).resolve()), include_missing)
+    return _coalesced_read(
+        _SCOPE_READ_FLIGHTS,
+        _SCOPE_READ_FLIGHTS_LOCK,
+        key,
+        lambda: _list_all_uncached(include_missing=include_missing),
+    )
+
+
+def _list_all_uncached(*, include_missing: bool = False) -> list[dict]:
     """Merged list across global + every existing agent scope.
 
     SCOPE-11: the dedupe key includes the on-disk path.  One *recursive* scope
@@ -465,8 +483,8 @@ def get_skill(scope_id: str, name: str) -> dict:
             rec["lines"] = tok["lines"]
             rec["body_tokens"] = _est(rec.get("body") or "")["tokens"]
             rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
-        except Exception:
-            pass
+        except Exception as exc:
+            _diagnose("global scope detail enrichment failed", exc)
         return rec
     scope = _scope_by_id(scope_id)
     if scope is None:
@@ -495,8 +513,8 @@ def get_skill(scope_id: str, name: str) -> dict:
         entry["body_tokens"] = _est2(entry.get("body") or "")["tokens"]
         entry["frontmatter_tokens"] = max(0, (entry.get("tokens", 0) or 0) - entry["body_tokens"])
         entry["lines"] = raw.count("\n") + 1 if raw else 0
-    except Exception:
-        pass
+    except Exception as exc:
+        _diagnose(f"scope detail enrichment failed for {scope_id!r}", exc)
     return entry
 
 
@@ -923,6 +941,25 @@ def _global_search_records(store: Store | None = None) -> list[dict]:
 
 
 def search_all(
+    term: str, scope_id: str | None = None, *, store: Store | None = None
+) -> list[dict]:
+    """Case-insensitive search over name, description and body."""
+    selected_store = store or _global_store()
+    key = (
+        "search-all",
+        str(Path(selected_store.data_dir).resolve()),
+        term,
+        scope_id or "all",
+    )
+    return _coalesced_read(
+        _SCOPE_READ_FLIGHTS,
+        _SCOPE_READ_FLIGHTS_LOCK,
+        key,
+        lambda: _search_all_uncached(term, scope_id, store=selected_store),
+    )
+
+
+def _search_all_uncached(
     term: str, scope_id: str | None = None, *, store: Store | None = None
 ) -> list[dict]:
     """Case-insensitive search over name/description/body.

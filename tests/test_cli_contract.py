@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from skillsmgr import cli
 
@@ -415,6 +416,36 @@ class DoctorScopeCliTests(unittest.TestCase):
         self.assertIn("db_integrity", report)
         self.assertIn("duplicates", report)
         self.assertEqual(report["duplicates"][0]["scopes"], ["agents", "global"])
+
+    def test_scope_all_json_reports_duplicate_enrichment_degradation(self):
+        with mock.patch("skillsmgr.scopes.find_duplicates", side_effect=RuntimeError("boom")):
+            code, out, err = self.invoke(["doctor", "--scope", "all", "--json"])
+        self.assertEqual(code, cli.EXIT_OK)
+        report = json.loads(out)
+        self.assertEqual(report["duplicates"], [])
+        self.assertIn("scope/duplicates", json.dumps(report.get("degraded", [])))
+        self.assertIn("duplicate enrichment failed", err)
+
+    def test_hygiene_report_is_opt_in_and_findings_do_not_fail_exit(self):
+        self.assertEqual(
+            self.invoke(["create", "hygiene-demo", "-d", "Use this skill when checking hygiene"])[0],
+            cli.EXIT_OK,
+        )
+        code, out, err = self.invoke(["doctor", "--scope", "global", "--hygiene", "--json"])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(err, "")
+        report = json.loads(out)
+        self.assertIn("hygiene", report)
+        self.assertEqual(report["hygiene"]["summary"]["physical_instances"], 1)
+        code, out, err = self.invoke(["doctor", "--scope", "global", "--json"])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertNotIn("hygiene", json.loads(out))
+
+    def test_hygiene_and_explain_are_a_clean_error(self):
+        code, out, err = self.invoke(["doctor", "--hygiene", "--explain", "codex"])
+        self.assertEqual(code, cli.EXIT_ERROR)
+        self.assertEqual(out, "")
+        self.assertIn("cannot be combined", err)
 
 
 if __name__ == "__main__":

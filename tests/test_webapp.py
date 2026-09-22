@@ -11,9 +11,58 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import quote
+from unittest import mock
 
 from skillsmgr.store import Store, StoreError
 from skillsmgr.webapp import RequestError, WebAppHandler, WebAppServer
+
+
+class BrowserOpenerTests(unittest.TestCase):
+    def test_trusted_opener_receives_absolute_url_as_one_shell_free_argument(self):
+        from skillsmgr import webapp
+
+        with mock.patch.object(webapp, "trusted_executable", return_value="/safe/xdg-open"):
+            with mock.patch.object(webapp.subprocess, "Popen") as popen:
+                webapp._open_browser("http://127.0.0.1:8765/?q=one two")
+        popen.assert_called_once()
+        args, kwargs = popen.call_args
+        self.assertEqual(args[0], ["/safe/xdg-open", "http://127.0.0.1:8765/?q=one two"])
+        self.assertFalse(kwargs["shell"])
+
+    def test_unsafe_first_path_match_is_skipped_for_a_safe_later_match(self):
+        from skillsmgr import webapp
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            unsafe_dir = root / "unsafe"
+            safe_dir = root / "safe"
+            unsafe_dir.mkdir()
+            safe_dir.mkdir()
+            unsafe_dir.chmod(0o700)
+            safe_dir.chmod(0o700)
+            unsafe = unsafe_dir / "xdg-open"
+            safe = safe_dir / "xdg-open"
+            unsafe.write_text("unsafe\n", encoding="utf-8")
+            safe.write_text("safe\n", encoding="utf-8")
+            unsafe.chmod(0o777)
+            safe.chmod(0o700)
+            with mock.patch.dict(os.environ, {"PATH": f"{unsafe_dir}:{safe_dir}"}, clear=False):
+                with mock.patch.object(webapp.subprocess, "Popen") as popen:
+                    webapp._open_browser("http://127.0.0.1:8765/")
+            self.assertEqual(popen.call_args.args[0][0], str(safe.resolve()))
+
+    def test_missing_opener_and_launch_failure_are_clean(self):
+        from skillsmgr import webapp
+
+        with mock.patch.object(webapp, "trusted_executable", return_value=None):
+            with mock.patch.object(webapp.subprocess, "Popen") as popen:
+                webapp._open_browser("http://127.0.0.1:8765/")
+            popen.assert_not_called()
+        with mock.patch.object(webapp, "trusted_executable", return_value="/safe/xdg-open"):
+            with mock.patch.object(webapp.subprocess, "Popen", side_effect=OSError("no opener")):
+                with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    webapp._open_browser("http://127.0.0.1:8765/")
+        self.assertIn("browser opener failed", stderr.getvalue())
 
 
 class WebAppTestCase(unittest.TestCase):
@@ -81,6 +130,11 @@ class WebAppTestCase(unittest.TestCase):
         status, body = self._get("/api/skills/demo")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["name"], "demo")
+        status, body = self._get("/api/doctor?scope=global&hygiene=1")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertIn("hygiene", payload)
+        self.assertEqual(payload["hygiene"]["summary"]["physical_instances"], 1)
 
     def test_safe_local_update_rest_review_apply_and_snapshots(self):
         boundary = "skillsmgr-update-test"

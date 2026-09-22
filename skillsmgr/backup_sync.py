@@ -13,7 +13,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - each subprocess call below uses trusted Git and bounded argv.
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -285,7 +285,7 @@ def _run_git(repo: str | Path, arguments: list[str], *, timeout: float = 60.0) -
     environment = os.environ.copy()
     environment["GIT_TERMINAL_PROMPT"] = "0"
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 - trusted executable, validated argv, and no shell.
             [_trusted_git(), "-C", str(root), "--no-optional-locks", *arguments],
             capture_output=True,
             text=True,

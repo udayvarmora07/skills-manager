@@ -76,6 +76,25 @@ class FrontendSourceContractTests(unittest.TestCase):
         self.assertIn(".quality-center .btn { min-height: 44px; }", css)
         self.assertIn('.sidepanel[aria-label="Quality skills"] .sidepanel-row { min-height: 44px; }', css)
 
+    def test_quality_center_renders_server_hygiene_evidence_without_a_score(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        for phrase in (
+            "qualityHygiene", "qualityHygieneLoading", "qualityHygieneError",
+            'hygiene=1', "loadQualityHygiene", "retryQualityHygiene",
+            "filteredQualityHygieneFindings", "toggleQualityFinding",
+            "inspectHygieneInstance", "qualitySeverityFilter",
+        ):
+            self.assertIn(phrase, source)
+        for phrase in (
+            "Skill Hygiene Report", "Exact duplicate groups", "Near-duplicate candidates",
+            "Broken-reference findings", "Unavailable evidence", "aria-expanded",
+            "No combined quality score", "Largest context observations",
+        ):
+            self.assertIn(phrase, html)
+        self.assertIn("quality-finding-toggle", css)
+
     def test_quality_center_uses_observed_summary_and_exact_library_drilldown(self):
         script = r'''
 const fs = require('fs'), vm = require('vm');
@@ -126,6 +145,16 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn("'f-name-hint f-name-error'", html)
         self.assertIn('id="f-name-error"', html)
         self.assertIn('id="f-description-error"', html)
+
+    def test_form_controls_have_stable_id_or_name_metadata(self):
+        html = _read(INDEX_HTML)
+        controls = re.findall(r"<(?:input|select|textarea)\b[^>]*>", html)
+        missing = [
+            control
+            for control in controls
+            if not re.search(r"\b(?:id|name|:id|:name)=", control)
+        ]
+        self.assertEqual(missing, [])
 
     def test_overview_focus_and_skip_link_are_keyboard_contracts(self):
         source = _read(APP_JS)

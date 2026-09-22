@@ -2,11 +2,26 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
-**Version 1.8.3** (2026-09-22: UI regional-format coverage audit after the
-semantic accessibility audit; 836 tests, 238 complexity-tracked functions. The current tree has a filesystem-
-owned source-lock sidecar and explicit review/apply/rollback seam, plus bounded
-backup/sync Git review/apply and offline HMAC manifest-evidence seams; team
-distribution and participant evidence remain gated as documented below.)
+**Version 1.11.0** (2026-09-22: P0 trust-gate and release-metadata
+hardening; 878 tests, 261 complexity-tracked functions. The final tree has a
+full-import rollback diagnostic, a pinned narrow Ruff gate, a dated Bandit
+decision record, deterministic first-party Markdown discovery, trusted
+optional browser opening, and PEP 639 artifact checks. The default interpreter
+still reports the optional build tool as unavailable; a disposable venv using
+the hash-locked build requirements produced and verified both artifacts.)
+
+**Version 1.10.0** (2026-09-22: deterministic, read-only Skill Hygiene Report
+behind Doctor and Quality; 866 tests, 260 complexity-tracked functions. The
+current tree has a
+filesystem-owned source-lock sidecar, private expiring exact-target reviews,
+snapshot-backed local update/rollback, bounded backup/sync Git review/apply,
+offline HMAC manifest-evidence seams, and the hygiene report's bounded
+candidate analysis; team distribution and participant evidence remain gated as
+documented below. The optional package build is unavailable because the
+`build` module is not installed.)
+
+**Version 1.9.0** (2026-09-22: safe local source update and rollback vertical
+slice; 856 tests, 254 complexity-tracked functions.)
 
 **Version 1.4.0** (2026-09-16: worktree comparison and frontend report
 close-out; 728 tests, 222 complexity-tracked functions.)
@@ -39,9 +54,9 @@ the read-only `doctor --explain` diagnostic plus the non-UTF8 `SKILL.md` fix; an
 the 2026-09-10 offline registry bridge (`install --preview`) with the file-based
 advisory eval harness, both shipped by extending existing surfaces only — see
 @docs/ADR-003-registry-bridge-and-eval-harness.md.)
-## What exists today (2026-09-20)
+## What exists today (2026-09-22)
 
-- **CLI**: `python3 -m skillsmgr` — 27 top-level commands + 7 subcommands (trash/templates/db) + 3 aliases (`ls`, `rm`, `gui`) = 37 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
+- **CLI**: `python3 -m skillsmgr` — 28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.2.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only). The read-only `doctor --explain` diagnostic shipped 2026-09-11 (`skillsmgr/effective.py`; per-consumer rules cited from that doc, `unknown-consumer`/`undocumented-precedence` instead of a guess, nothing persisted). See @docs/03-cli-surface.md.
 - **Effective-resolution diagnostic (2026-09-11, #12)**: `python3 -m skillsmgr doctor --explain commandcode --project DIR [--skill NAME] [--json]` (also `GET /api/doctor?explain=…&project=…&skill=…`). Policies: `commandcode` six-way order, `codex` no-merge (no winner elected), `claude-code` personal > project with nested copies in `also_loads`, `gemini` built-in < extension < user < workspace (`ambiguous` on same-tier ties), `cursor`/`opencode` `undocumented-precedence`. `unknown-consumer`/`missing-project` → exit 1, everything else → exit 0. `skillsmgr/effective.py`. Over HTTP the report is **confined to the manager's data directory** (plus only those extra roots the operator configured at server construction): paths outside it are replaced by `<redacted>` (with `paths_redacted: true`), and an out-of-boundary `project` returns `project-outside-managed-roots` **without walking it** (SEC-2/SEC-3); the CLI passes no boundary and stays fully transparent.
 - **Store**: `skillsmgr/store.py` — FS source of truth + SQLite index. Public API in @docs/04-store-api.md. **Signatures that surprise people** (docs used to lie about these, fixed on 2026-08-14):
@@ -51,7 +66,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`preferences.js` bootstraps local theme/text-size before `styles.css`; `domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`); Settings persists the regional format preference in `skillsmgr-locale`.
-- **Tests**: stdlib `unittest` regression/contract suite — 836 tests green 2026-09-22 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (238 functions, budget ≤ 15), and `python3 check_package_data.py` (always asserts the vendored Vue sha256, then reports `UNAVAILABLE` when optional build tooling is absent — standing behavior, not a regression). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
+- **Tests**: stdlib `unittest` regression/contract suite — 866 tests green 2026-09-22 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (260 functions, budget ≤ 15), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
 - **Client contract (2026-09-11, #8)**: the REST API is the surface for local non-browser
   clients (editor extensions, scripts). Address it at `127.0.0.1` — `Host: localhost:<port>`
   is rejected on **every** request under the default bind, reads included (issue #14 F-2) —
@@ -77,6 +92,8 @@ advisory eval harness, both shipped by extending existing surfaces only — see
   §6 is resolved.
 - **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, `registry_reference`/`registry_bridge_plan` + the shared `install_argv`/`install_command_line` renderer, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Script-risk findings are machine-marked advisory/heuristic and are not enforcement evidence. Locked by hermetic tests in `tests/test_insights_contracts.py` and `tests/test_registry_bridge_contracts.py`.
 - **Source/update evidence (2026-09-20)**: `skillsmgr/source_lock.py` compares bounded complete candidate trees against an explicit physical target with validation and advisory risk evidence, persists bounded `.skillsmgr-source-lock.json` evidence, and provides explicit review-id/apply/rollback operations with complete-tree snapshots. `skillsmgr/backup_sync.py` adds safe Git remote metadata/fetch delegation, private expiring sync reviews, candidate revalidation, and snapshot-backed apply through that source-lock seam. Neither module adds a CLI command, Store method, SQLite schema, runtime dependency, or credential persistence path.
+- **Safe local source updates (2026-09-22)**: `skillsmgr/source_update.py` now binds the existing source-lock seam to one observed physical instance, private expiring review artifacts, activation-preserving staged candidates, exact-target apply, global-only resync, five-snapshot retention, and previewed rollback. The `update` CLI/REST/UI surfaces expose evidence and require explicit approval; browser uploads use a non-path source identity. No network update, Store method, SQLite schema, or background job was added.
+- **Skill Hygiene Report (2026-09-22)**: `skillsmgr/hygiene.py` provides deterministic read-only evidence for malformed/unreadable documents, validator references and descriptions, exact duplicates, same-name drift, bounded heuristic near duplicates, context limits/hotspots, and source-lock state. `doctor --hygiene` and `GET /api/doctor?scope=SCOPE&hygiene=1` reuse the same report, while Quality loads it on entry/scope changes and keeps retry, filters, exact-instance navigation, degraded evidence, and unavailable signals separate from Library observations. No new command, Store method, schema, cache, network, or mutation was added.
 - **Registry bridge (network/provenance, 2026-09-19)**: `skillsmgr/registry.py` backs the existing `install`/`POST /api/install` surfaces with bounded skills.sh browse/search/fetch, explicit trust confirmation, auth-isolated cache, stale-cache opt-in, response/path/resource limits, upstream-compatible hash comparison, atomic materialization, credential-free provenance sidecars, and pre-Store validation plus advisory risk evidence. See @docs/ADR-005-registry-network-and-provenance.md.
 - **Eval harness (file-based, advisory, 2026-09-10)**: `skillsmgr/evals.py` reads `evals/evals.json` from a skill dir and records `iteration-N/eval-<slug>/{with_skill,without_skill}/{outputs/output.txt,grading.json,timing.json}` plus a per-iteration `benchmark.json` (per-variant case pass rate and the `with_skill` − `without_skill` delta). Surfaces: `validate --evals`, `validate --evals-run FILE [--workspace DIR]`, `POST /api/validate {evals|runs}`. Workspaces default to `<data>/evals/<name>-workspace` (outside `skills/`; `--path` uses beside-the-skill only outside the store's `skills/` tree). Scores never change `valid`, never gate installs/edits, never enter SQLite (#4).
 - **Milestone 11 queue (current)**: L1/L2/L3/L4 are done; L2 ZIP import is
@@ -103,6 +120,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 | Open the UI as a desktop window | `python3 desktop_launcher.py` (`--plain` for the browser, `--print-only` to preview) |
 | Integrate a local client (editor/extension) | @docs/08-web-ui.md → "Local client integration contract" + `tests/test_web_client_contracts.py` |
 | Explain which skill copy an agent actually loads | `python3 -m skillsmgr doctor --explain <consumer> --project DIR [--skill NAME]` (`skillsmgr/effective.py`) |
+| Inspect bounded read-only hygiene evidence | `python3 -m skillsmgr doctor --hygiene --scope all --json` or Quality → Skill Hygiene Report (`@docs/20-skill-hygiene-report-implementation-plan.md`) |
 | CLI surface question | @docs/03-cli-surface.md |
 
 ## Design system (short form)
@@ -134,6 +152,8 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 18. **The vendored Vue file is pinned by sha256** (SEC-9): `check_package_data.py` holds `VUE_VERSION`/`VUE_UPSTREAM_URL`/`VUE_SHA256`/`VUE_SIZE` and verifies the checked-in file plus the payload inside both artifacts, before the optional build step. A Vue bump updates all four values in one commit, and `.gitattributes` keeps the file `-text` so EOL translation cannot break the hash.
 19. **Developer launchers do not trust the first PATH match** (SEC-15/SEC-16). `browser_harness.py` keeps Chrome's sandbox enabled, binds its ephemeral CDP listener to `127.0.0.1`, and uses `launcher_security.trusted_executable()` for Chrome and Node. `desktop_launcher.py` uses the same resolver; POSIX checks ownership and write permissions and allows a safe later PATH match when an earlier one is unsafe.
 20. **Environment-selected data roots are validated** (SEC-19). `paths.data_dir()` canonicalizes the selected base and appended manager directory, rejects unsafe ownership/permissions and broad roots, fails closed rather than falling back, and creates missing components privately. Validator local references are URL-decoded and ignore fragments, queries, and prose punctuation when checking existing targets (FM-19).
+21. **Hygiene is evidence, not a score or cleanup action** (HY-13). `doctor --hygiene` and Quality share `skillsmgr/hygiene.py`; missing source-lock, usage, freshness, trust, usefulness, arbitrary effective-load, and runtime-readiness signals remain explicitly unavailable. Near-duplicate results are bounded heuristics, and any degraded/truncated evidence must stay visible.
+22. **Trust gates stay narrow and artifact-facing** (P0). Ruff CI selects only `F821`/`F822`/`F823`; Bandit decisions and named suppressions live in @docs/STATIC-ANALYSIS.md. `check_docs.py` checks tracked Markdown plus `docs/` and explicit first-party top-level files, and `check_package_data.py` verifies SPDX license metadata and exact `LICENSE` bytes in wheels and sdists.
 
 ## Verification loop (run all, all must pass)
 
@@ -148,7 +168,20 @@ PYTHONDONTWRITEBYTECODE=1 python3 smoke_web.py            # "ALL WEB SMOKE TESTS
 PYTHONDONTWRITEBYTECODE=1 python3 -m skillsmgr --help   # webui (gui) listed, no tracebacks
 ```
 
-`check_docs.py` is not just a link checker any more (extended 2026-09-11): it enforces
+Pinned static-analysis checks (run in a disposable environment) are:
+
+```bash
+ruff check --select F821,F822,F823 skillsmgr tests smoke_store.py smoke_web.py browser_harness.py desktop_launcher.py check_complexity.py check_docs.py check_package_data.py
+bandit -r skillsmgr -q
+```
+
+The exact versions and the full-SHA Ruff action are recorded in
+@docs/STATIC-ANALYSIS.md. The artifact path uses the pinned build procedure
+from @docs/21-p0-trust-gate-and-release-metadata-hardening-plan.md.
+
+`check_docs.py` is not just a link checker any more (extended 2026-09-11): it discovers
+the stable union of Git-tracked Markdown, all regular Markdown under `docs/`,
+and explicit first-party top-level files before enforcing
 the HADS header facts (H1, version line within 20 lines, AI manifest) for **every**
 `docs/*.md`, validates local markdown links **and their anchors**, rejects a table
 row whose cell count disagrees with its table (an unescaped `|` silently adds a
@@ -191,6 +224,7 @@ skillsmgr/
   store.py             # FS/index/recovery/archive policy
   insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
   source_lock.py       # bounded source identity and whole-tree update previews
+  source_update.py     # exact-target local review/apply/rollback orchestration
   backup_sync.py       # bounded backup/sync manifests and dry-run plans
   bundles.py           # offline HMAC manifest evidence; no archive integration
   registry.py          # bounded registry API, snapshots, cache, provenance
@@ -207,8 +241,9 @@ MANIFEST.in            # sdist contents: prune tests (SEC-13)
 smoke_store.py         # store smoke (green)
 smoke_web.py           # REST smoke (green)
 smoke_fixtures.py      # shared tmp-store + loopback-server lifecycle helpers
-browser_harness.py     # dev-only Chrome CDP viewport probe (green, 5 viewports)
+browser_harness.py     # dev-only Chrome CDP viewport probe (green, 6 viewports)
 docs/08-web-ui.md      # authoritative web UI doc
+docs/STATIC-ANALYSIS.md  # Ruff/Bandit scope and dated decisions
 docs/12-agent-root-discovery-2026-09-08.md  # discovery inventory v1.2.0 ([?]s closed)
 docs/06-progress-log.md# dated entries (newest top)
 ```

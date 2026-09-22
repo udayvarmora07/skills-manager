@@ -96,6 +96,9 @@ try:
     assert stats["total"] == 1 and stats["active"] == 1
     status, doc = req("GET", "/api/doctor")
     assert doc["ok"] is True
+    status, hygiene_doc = req("GET", "/api/doctor?scope=global&hygiene=1")
+    assert status == 200 and "hygiene" in hygiene_doc
+    assert hygiene_doc["hygiene"]["summary"]["physical_instances"] == 1
     status, doc_all = req("GET", "/api/doctor?scope=all")
     assert status == 200 and "duplicates" in doc_all and "scopes" in doc_all
     assert isinstance(doc_all["duplicates"], list)  # env may have real agent dirs

@@ -12,7 +12,7 @@ import json
 import os
 import re
 import shlex
-import subprocess
+import subprocess  # nosec B404 - reviewed editor and allowlisted installer calls use list argv.
 import sys
 import tempfile
 from pathlib import Path
@@ -20,6 +20,7 @@ from pathlib import Path
 from . import colors
 from . import search as search_mod
 from . import templates as templates_mod
+from .diagnostics import diagnose as _diagnose
 from .cli_output import (
     err as _output_err,
     print_json as _output_print_json,
@@ -161,6 +162,9 @@ def validate_cli_combinations(args) -> None:
     elif command == "tokens":
         if getattr(args, "name", None) and getattr(args, "text", None) is not None:
             raise StoreError("tokens NAME cannot be combined with --text")
+    elif command == "doctor":
+        if getattr(args, "hygiene", False) and getattr(args, "explain", None):
+            raise StoreError("doctor --hygiene cannot be combined with --explain")
     elif command == "install":
         operation = any(
             getattr(args, flag, False)
@@ -385,7 +389,9 @@ def cmd_open(args, store: Store) -> int:
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
     if not editor:
         raise StoreError("set $EDITOR (or $VISUAL) to use 'open'")
-    status = subprocess.call(shlex.split(editor) + [str(md_path)])
+    status = subprocess.call(  # nosec B603 - explicit user-authorized editor, list argv, shell=False.
+        shlex.split(editor) + [str(md_path)]
+    )
     if status != 0:
         raise StoreError(f"editor exited with status {status}")
     store.resync()
@@ -734,6 +740,103 @@ def _doctor_scope_report(scope_id: str) -> dict:
     }
 
 
+def _global_hygiene_records(store: Store) -> list[dict]:
+    """Scan the global tree directly so unindexed husks remain evidence."""
+    from .loader import scan_dir
+
+    rows = scan_dir(store.skills_dir, include_husks=True)
+    physical_root = str(store.skills_dir.resolve())
+    for row in rows:
+        row["scope"] = "global"
+        row["scope_label"] = "Global"
+        row["consumer"] = "skills-manager"
+        row["physical_root"] = physical_root
+        row["path"] = row.get("path") or str(store.skills_dir / row["name"])
+        try:
+            row["physical_path"] = str(Path(row["path"]).resolve())
+        except OSError:
+            row["physical_path"] = str(row["path"])
+    return rows
+
+
+def _hygiene_records(store: Store, scope: str) -> tuple[list[dict], list[dict]]:
+    """Acquire bounded-scope observations without widening filesystem roots."""
+    from . import scopes
+
+    if scope == "global":
+        return _global_hygiene_records(store), []
+    if scope != "all":
+        return scopes.scan_scope(scope), []
+    records = []
+    degraded = []
+    for descriptor in scopes.known_scopes():
+        if descriptor.id != "global" and not descriptor.base.is_dir():
+            continue
+        try:
+            records.extend(
+                _global_hygiene_records(store)
+                if descriptor.id == "global"
+                else scopes.scan_scope(descriptor.id)
+            )
+        except Exception as exc:
+            degraded.append({
+                "section": "scope-scan",
+                "scope": descriptor.id,
+                "reason": _truncate(str(exc), 512),
+            })
+    return records, degraded
+
+
+def _render_hygiene_text(report: dict) -> None:
+    """Render report evidence through the terminal sanitization seam."""
+    summary = report.get("summary", {})
+    print(colors.COLORS.bold("Skill Hygiene Report"))
+    print(f"  scope: {_display(str(report.get('scope', '-')))}")
+    print(
+        "  observed records: {observed_records}; physical instances: {physical_instances}; "
+        "logical names: {logical_names}".format(**summary)
+    )
+    print(
+        "  findings: {finding_count} (errors {errors}, warnings {warnings}, info {informational}, "
+        "unavailable {unavailable})".format(**summary)
+    )
+    if summary.get("findings_truncated"):
+        print("  findings returned are bounded; inspect the JSON limits/degraded evidence")
+    for finding in report.get("findings", []):
+        print(
+            f"  [{_display(str(finding.get('severity', 'info')))}] "
+            f"{_display(str(finding.get('category', '')))}: "
+            f"{_display(str(finding.get('title', '')))}"
+        )
+        print(f"    {_display(str(finding.get('explanation', '')))}")
+        for instance in finding.get("instances", []):
+            location = instance.get("physical_path") or instance.get("path") or "path unavailable"
+            print(
+                f"    - {_display(str(instance.get('scope', '')))} / "
+                f"{_display(str(instance.get('name', '')))}: {_display(str(location))}"
+            )
+        print(f"    follow-up: {_display(str(finding.get('recommendation', '')))}")
+    if report.get("largest_instances"):
+        print("  context hotspots:")
+        for item in report["largest_instances"]:
+            location = item.get("physical_path") or item.get("path") or "path unavailable"
+            print(
+                f"    {_display(str(item.get('name', '')))}: {item.get('tokens', 0)} tokens "
+                f"({_display(str(location))})"
+            )
+    if report.get("degraded"):
+        print("  degraded evidence:")
+        for item in report["degraded"]:
+            print(f"    {_display(str(item.get('section', 'scan')))}: {_display(str(item.get('reason', '')))}")
+    if report.get("unavailable_signals"):
+        print("  unavailable evidence:")
+        for item in report["unavailable_signals"]:
+            print(
+                f"    {_display(str(item.get('signal', 'signal')))}: "
+                f"{_display(str(item.get('explanation', 'not observed')))}"
+            )
+
+
 def cmd_doctor(args, store: Store) -> int:
     scope = scope_from_args(args)
     from . import scopes
@@ -744,6 +847,7 @@ def cmd_doctor(args, store: Store) -> int:
     explain_consumer = getattr(args, "explain", None)
     if explain_consumer:
         return _cmd_doctor_explain(args, explain_consumer)
+    hygiene = bool(getattr(args, "hygiene", False))
     report = (
         store.doctor()
         if scope == "global"
@@ -751,14 +855,31 @@ def cmd_doctor(args, store: Store) -> int:
         if scope != "all"
         else store.doctor()
     )
+    if hygiene:
+        from .hygiene import hygiene_report
+
+        records, degraded = _hygiene_records(store, scope)
+        report["hygiene"] = hygiene_report(records, scope=scope)
+        report["hygiene"]["degraded"].extend(degraded)
+        report["hygiene"]["degraded"] = sorted(
+            report["hygiene"]["degraded"],
+            key=lambda item: (str(item.get("section", "")), str(item.get("scope", "")), str(item.get("reason", ""))),
+        )
     if args.json:
         if scope == "all":
             try:
                 from .scopes import find_duplicates as _dupes_json
 
                 report["duplicates"] = _dupes_json()
-            except Exception:
-                pass
+            except Exception as exc:
+                _diagnose("doctor scope=all duplicate enrichment failed", exc)
+                report["duplicates"] = []
+                report.setdefault("degraded", []).append(
+                    {
+                        "section": "scope/duplicates",
+                        "reason": "duplicate enrichment was unavailable",
+                    }
+                )
         _print_json(report)
         return EXIT_OK
     if report.get("ok"):
@@ -801,8 +922,12 @@ def cmd_doctor(args, store: Store) -> int:
                 for d in dupes:
                     flag = " (descriptions differ)" if d["descriptions_differ"] else ""
                     print(f"    {d['name']}: {', '.join(d['scopes'])}{flag}")
-        except Exception:
-            pass
+        except Exception as exc:
+            _diagnose("doctor scope=all enrichment failed", exc)
+            print("  scope and duplicate summary unavailable; inspect diagnostics", file=sys.stderr)
+    if hygiene:
+        _render_hygiene_text(report["hygiene"])
+        return EXIT_OK
     return EXIT_OK if report.get("ok") else EXIT_ERROR
 
 
@@ -1483,7 +1608,9 @@ def cmd_install(args, store: Store) -> int:
         print(f"running: {cmd_str}")
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(  # nosec B603 - runner and argv are validated before execution; shell stays false.
+            cmd, capture_output=True, text=True, timeout=120
+        )
     except FileNotFoundError as exc:
         raise StoreError(f"runner not found: {exc}")
     except subprocess.TimeoutExpired as exc:
