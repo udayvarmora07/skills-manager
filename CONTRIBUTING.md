@@ -16,7 +16,7 @@ Thanks for considering a contribution. This project is intentionally small and d
 2. SQLite schema / `SCHEMA_VERSION` unchanged.
 3. CLI stays stdlib-only.
 4. Web UI: stdlib backend, no build step, no new runtime deps, Vue vendored, binds `127.0.0.1`.
-5. **No new CLI commands or Store methods without approval** — open an issue first.
+5. **No new CLI commands or Store methods without approval** — propose the change in an issue or draft PR and wait for maintainer approval before implementing it.
 
 ## Development setup
 
@@ -100,6 +100,6 @@ do not weaken the trust checks to accommodate a local PATH layout.
 
 ## PR process
 
-1. Open an issue first for anything beyond a trivial fix.
+1. For anything beyond a trivial fix, discuss the scope in an [issue](https://github.com/udayvarmora07/skills-manager/issues) first. If you cannot create an issue, open a draft PR with the proposal; wait for maintainer approval before changing a locked constraint.
 2. Keep PRs focused; include the verification output (compile + unittest + smokes).
 3. Update `CHANGELOG.md` under `Unreleased`.

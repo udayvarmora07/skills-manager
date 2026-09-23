@@ -39,6 +39,13 @@ createApp({
       libraryMode: localStorage.getItem("skillsmgr-library-mode") || "library",
       browseMode: localStorage.getItem("skillsmgr-browse-mode") === "grid" ? "grid" : "list",
       onboardingDismissed: false,
+      firstScanGuideDismissed: false,
+      guideExplainConsumer: "codex",
+      guideExplainResult: null,
+      guideExplainError: null,
+      guideExplainLoading: false,
+      guideExplainRequest: 0,
+      scopeScanFailed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
       install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null },
@@ -164,6 +171,36 @@ createApp({
     },
     onboardingRoots() {
       return (this.scopes || []).filter((scope) => scope.exists);
+    },
+    firstScanGuideVisible() {
+      return this.view === "overview" && !this.firstScanGuideDismissed;
+    },
+    guideRoots() {
+      return (this.scopes || []).filter((scope) => scope.exists);
+    },
+    guideUnavailableRoots() {
+      return (this.scopes || []).filter((scope) => ["missing", "unsupported"].includes(scope.availability));
+    },
+    guideSampleRecord() {
+      return this.overviewRecords.find((record) =>
+        !record.malformed && !record.decode_error && record.addressable !== false) || this.overviewRecords[0] || null;
+    },
+    guideSampleIsProject() {
+      return !!(this.guideSampleRecord && (this.scopes || []).some((scope) =>
+        scope.id === this.guideSampleRecord.scope && scope.kind === "project"));
+    },
+    guidePreviewRecord() {
+      return this.overviewRecords.find((record) =>
+        !record.malformed && !record.decode_error && record.addressable !== false
+        && record.root_availability === "writable"
+        && record.scope && record.scope !== "all"
+        && (record.physical_path || record.path) && record.physical_root) || null;
+    },
+    guideExplainSkill() {
+      const name = this.guideSampleRecord && this.guideSampleRecord.name;
+      return name && this.guideExplainResult && this.guideExplainResult.skills
+        ? this.guideExplainResult.skills[name] || null
+        : null;
     },
     filteredTrash() {
       const q = this.query.trim().toLowerCase();
@@ -658,6 +695,45 @@ createApp({
       this.onboardingDismissed = true;
     },
 
+    dismissFirstScanGuide() {
+      this.firstScanGuideDismissed = true;
+    },
+
+    restartFirstScanGuide() {
+      this.firstScanGuideDismissed = false;
+      this.view = "overview";
+      this.$nextTick(() => {
+        const heading = document.querySelector("#first-scan-title");
+        if (heading) heading.focus();
+      });
+    },
+
+    async runGuideExplain() {
+      const request = ++this.guideExplainRequest;
+      this.guideExplainLoading = true;
+      this.guideExplainError = null;
+      this.guideExplainResult = null;
+      try {
+        const report = await api("/api/doctor?explain=" + encodeURIComponent(this.guideExplainConsumer));
+        if (request === this.guideExplainRequest) this.guideExplainResult = report.explain || null;
+      } catch (e) {
+        if (request === this.guideExplainRequest) this.guideExplainError = "Effective-resolution evidence is unavailable. Open Quality or retry the read-only explanation.";
+      } finally {
+        if (request === this.guideExplainRequest) this.guideExplainLoading = false;
+      }
+    },
+
+    openGuideLibrary() {
+      const record = this.guideSampleRecord;
+      if (record) this.openOverviewSkill({ primary: record });
+      else this.switchView("skills");
+    },
+
+    openGuidePreviewTarget() {
+      const record = this.guidePreviewRecord;
+      if (record) this.openOverviewSkill({ primary: record });
+    },
+
     restartOnboarding() {
       this.onboardingDismissed = false;
       this.view = "skills";
@@ -710,7 +786,10 @@ createApp({
     async loadScopes() {
       try {
         this.scopes = await api("/api/scopes");
-      } catch (e) { /* non-fatal */ }
+        this.scopeScanFailed = false;
+      } catch (e) {
+        this.scopeScanFailed = true;
+      }
     },
 
     async loadCatalog() {

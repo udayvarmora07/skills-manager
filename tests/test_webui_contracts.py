@@ -201,6 +201,14 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn("1440, 900", source)
         self.assertIn("malformed-observed", source)
         self.assertIn("recoverable-probe", source)
+        self.assertIn("data-first-scan-skip", source)
+        self.assertIn("data-first-scan-explain", source)
+        self.assertIn("first_useful_ms", source)
+        self.assertIn("exact_preview_target", source)
+        self.assertIn('scenario="empty"', source)
+        self.assertIn('("scope-failure", "inventory-failure", "unavailable-root")', source)
+        self.assertIn("Unavailable fixture", source)
+        self.assertIn("Empty first-run Create action", source)
         self.assertIn("Quality navigation tab", source)
         self.assertIn("quality-overview, .quality-section", source)
 
@@ -705,6 +713,85 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertIn("openDoctor", html)
         self.assertIn("Import archive", html)
         self.assertIn(".onboarding-steps", css)
+
+    def test_first_scan_guide_covers_observed_state_without_exposing_paths(self):
+        source = _read(APP_JS)
+        html = _read(INDEX_HTML)
+        css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
+        self.assertIn("firstScanGuideVisible", source)
+        self.assertIn("scopeScanFailed", source)
+        self.assertIn("guideUnavailableRoots", source)
+        self.assertIn("guidePreviewRecord", source)
+        self.assertIn("/api/doctor?explain=", source)
+        self.assertIn("firstScanGuideDismissed: false", source)
+        self.assertIn("dismissFirstScanGuide()", source)
+        self.assertIn("restartFirstScanGuide()", source)
+        self.assertIn('data-first-scan-skip', html)
+        self.assertIn('data-first-scan-restart', html)
+        self.assertIn('data-first-scan-explain', html)
+        self.assertIn('data-first-scan-library', html)
+        self.assertIn('data-first-scan-quality', html)
+        self.assertIn('data-first-scan-preview-target', html)
+        self.assertIn('role="status" aria-live="polite"', html)
+        self.assertIn("Effective state elsewhere remains unresolved", html)
+        self.assertIn("undocumented order", html)
+        self.assertIn("The scope list reports detected roots only", html)
+        guide = html[html.index('class="first-scan-guide"'):html.index('class="overview-empty"')]
+        for path_access in ("root.path", "guideSampleRecord.path", "physical_path", "physical_root"):
+            self.assertNotIn(path_access, guide)
+        self.assertIn(".first-scan-steps { display: grid;", css)
+        self.assertIn(".first-scan-steps { grid-template-columns: 1fr; }", css)
+        self.assertIn(".first-scan-actions .btn { width: 100%; }", css)
+
+    def test_first_scan_guide_restart_explains_with_existing_read_api_and_picks_exact_preview_target(self):
+        script = r"""
+const fs = require('fs'), vm = require('vm');
+let definition;
+const apiCalls = [];
+const domain = {api: async url => { apiCalls.push(url); return {explain:{consumer:'cursor',label:'Cursor',resolution:'undocumented-precedence',skills:{}}}; }};
+const sandbox = {
+  window:{SkillManagerDomain:new Proxy(domain,{get(target,key){ return target[key] || (()=>{}); }})},
+  Vue:{createApp(value){definition=value; return {mount(){}};}, nextTick(fn){if(fn) fn(); return Promise.resolve();}},
+  localStorage:{getItem(){return null;},setItem(){}},
+  document:{querySelector(){return {focus(){}};}}
+};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js','utf8'), sandbox);
+const data = definition.data();
+const rows = [
+  {name:'read-only',scope:'agents',addressable:true,root_availability:'read-only',physical_path:'/private/ro',physical_root:'/private'},
+  {name:'writable-exact',scope:'agents',addressable:true,root_availability:'writable',physical_path:'/private/writable-exact',physical_root:'/private'}
+];
+const context = Object.assign(data, {
+  allSkills:rows, skills:rows, scopes:[{id:'agents',label:'Agents',kind:'agent',exists:true,count:2}],
+  $nextTick(fn){if(fn) fn(); return Promise.resolve();}
+});
+Object.defineProperty(context,'overviewRecords',{get(){return definition.computed.overviewRecords.call(context);}});
+Object.defineProperty(context,'guideSampleRecord',{get(){return definition.computed.guideSampleRecord.call(context);}});
+Object.defineProperty(context,'guidePreviewRecord',{get(){return definition.computed.guidePreviewRecord.call(context);}});
+Object.defineProperty(context,'firstScanGuideVisible',{get(){return definition.computed.firstScanGuideVisible.call(context);}});
+context.dismissFirstScanGuide = definition.methods.dismissFirstScanGuide;
+context.restartFirstScanGuide = definition.methods.restartFirstScanGuide;
+context.runGuideExplain = definition.methods.runGuideExplain;
+context.view = 'overview';
+context.dismissFirstScanGuide();
+const afterSkip = context.firstScanGuideVisible;
+context.restartFirstScanGuide();
+context.guideExplainConsumer = 'cursor';
+context.runGuideExplain().then(() => console.log(JSON.stringify({
+  afterSkip, restarted:context.firstScanGuideVisible, view:context.view,
+  sample:context.guideSampleRecord.name, preview:context.guidePreviewRecord.name,
+  resolution:context.guideExplainResult.resolution, apiCalls
+})));
+"""
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+        evidence = json.loads(result.stdout)
+        self.assertFalse(evidence["afterSkip"])
+        self.assertTrue(evidence["restarted"])
+        self.assertEqual(evidence["view"], "overview")
+        self.assertEqual(evidence["sample"], "read-only")
+        self.assertEqual(evidence["preview"], "writable-exact")
+        self.assertEqual(evidence["resolution"], "undocumented-precedence")
+        self.assertEqual(evidence["apiCalls"], ["/api/doctor?explain=cursor"])
 
     def test_library_browse_mode_defaults_to_list_and_grid_is_local_opt_in(self):
         source = _read(APP_JS)

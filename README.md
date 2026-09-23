@@ -7,29 +7,23 @@
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 [![PyPI](https://img.shields.io/pypi/v/skill-control-plane.svg)](https://pypi.org/project/skill-control-plane/)
 
-> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. The `skill-control-plane` 1.0.1 distribution is published on PyPI; install it with `pip` or `pipx`. The Python import package remains `skillsmgr`, and the CLI entry point remains `skills-mgr`.
+![Skills Manager first-scan guide with synthetic observed roots, scope state, and a local update-preview route](docs/images/overview-2026-09-23-1280x900.png)
+
+*First-scan guide at 1280 × 900, captured 2026-09-23 from a worktree based on `6733da9` with synthetic browser-harness fixtures. No personal skills are shown.*
+
+> `skills-manager` on GitHub: `udayvarmora07/skills-manager`. The `skill-control-plane` distribution is available on PyPI; install it with `pip` or `pipx`. The Python import package remains `skillsmgr`, and the CLI entry point remains `skills-mgr`.
 
 ## Why this exists
 
-The [Agent Skills](https://agentskills.io) format (`SKILL.md`) is now an open standard supported by Claude Code, Cursor, Gemini CLI, OpenCode, Copilot/VS Code, Goose, Amp, and more. The ecosystem has **skill libraries** ([vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills)), **installers** ([skills.sh](https://skills.sh)), and a **spec** — but nobody owns the *management* problem:
+The [Agent Skills](https://agentskills.io) format (`SKILL.md`) is an open standard supported by many coding agents. Tools such as [Vercel's skills CLI](https://github.com/vercel-labs/skills) already install, list, and update skills across multiple agent targets. This project focuses on inspecting and managing the copies already on your machine:
 
 - The same skill copy-pasted into `~/.claude/skills`, `~/.codex/skills`, Cursor dirs… edits diverge.
 - Vague descriptions cause false activation or misses; oversized bodies eat context.
-- No versioning, no safe update/rollback, no backup story, no cross-tool view.
+- When copies drift, it can be hard to see which physical instance changed and how to recover it.
 
-`skills-manager` fills that gap: one store, every scope, full lifecycle.
+`skills-manager` provides a local inventory, validation, explicit per-scope sync, review-first local updates, and recovery. Its update flow currently reviews a local candidate directory; it does not automatically pull and apply upstream changes. Vercel's CLI is a fit for installing or updating from a source across agent targets; this manager is a fit when you need to inspect, compare, and recover local copies.
 
-| | skills-manager | `skills.sh` / `npx skills add` | skill libraries |
-|---|---|---|---|
-| Install remote skills | ✅ (via `install`) | ✅ | — (source) |
-| Create / edit / validate locally | ✅ | — | — |
-| Manage across **all** your agents | ✅ (`--scope all`) | single-target | — |
-| Sync + dedup between agents | ✅ | — | — |
-| Version history + trash/rollback | ✅ | — | — |
-| Review-first local update + rollback | ✅ (`update`) | — | — |
-| Token-footprint budgeting | ✅ (`tokens`) | — | — |
-| Deterministic read-only hygiene report | ✅ (`doctor --hygiene`) | — | — |
-| Local web UI | ✅ | — | — |
+The read-only `doctor --hygiene` report surfaces duplicates, drift, malformed files, and context hotspots from observed data. It does not infer usage or safety from popularity.
 
 ## Install
 
@@ -183,7 +177,7 @@ PRs welcome — start with [`CONTRIBUTING.md`](CONTRIBUTING.md). Locked constrai
 2. SQLite schema unchanged.
 3. CLI stays stdlib-only.
 4. Web UI: stdlib backend, no build step, no new runtime deps, loopback bind.
-5. No new CLI commands or Store methods without maintainer approval — open an issue first.
+5. No new CLI commands or Store methods without maintainer approval — propose the change in an issue or draft PR first.
 
 ## Adoption and migration
 

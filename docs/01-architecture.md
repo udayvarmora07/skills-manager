@@ -1,15 +1,15 @@
 # Architecture — Skills Manager
 
-**Version 0.7.0**
+**Version 0.7.1**
 
-**AI manifest**: Current architecture and data-flow facts verified against source on September 22, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, registry network/cache/provenance boundary, bounded source-lock and backup/sync review/apply boundaries, offline HMAC manifest evidence, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and an 836-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
+**AI manifest**: Current architecture and data-flow facts verified against source on September 23, 2026 (repo-map refresh: split CLI/web policy modules, launcher executable trust checks, validated data-root selection, URL-aware validator references, registry network/cache/provenance boundary, bounded source-lock and backup/sync review/apply boundaries, offline HMAC manifest evidence, pinned first-party workflow actions, CODEOWNERS/dependabot governance, sensitive-file ignore rules, and an 888-test suite). The filesystem is the source of truth; SQLite is a rebuildable index; the local web UI is a second front-end over the same Store/scopes layers the CLI uses.
 
 ## Repo map
 
 ```text
 skills-manager/
   skillsmgr/
-    __init__.py      # __version__ = "1.0.1"
+    __init__.py      # __version__ = "1.0.2"
     __main__.py      # entry: python3 -m skillsmgr -> cli.main()
     cli.py           # stable adapter: main/build_parser + handler/private-helper aliases
     cli_parser.py    # argparse construction (27 top-level + 3 aliases; 7 nested)

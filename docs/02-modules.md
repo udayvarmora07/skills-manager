@@ -1,12 +1,12 @@
 # Modules — Skills Manager
 
-**Version 0.9.0**
+**Version 0.9.1**
 
-**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-22 (CLI 28+7+3=38 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; launcher executable discovery now rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
+**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-23 (CLI 28+10+3=41 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; launcher executable discovery rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
 
 ## `__init__.py`
 
-`__version__ = "1.0.1"`. No other code.
+`__version__ = "1.0.2"`. No other code.
 
 ## `__main__.py`
 

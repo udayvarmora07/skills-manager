@@ -4,6 +4,33 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Package release candidate
+
+- Prepared version 1.0.2 metadata and PyPI installation copy for the next
+  release. The candidate build is verified locally and remains unpublished.
+
+### Guided first scan and performance evidence
+
+- Added a skippable first-scan guide for populated and empty libraries. It shows
+  observed roots, one exact instance, divergent-copy evidence, and existing
+  Library/Quality/read-only explanation paths without inferring a loaded winner
+  or changing skills.
+- Added an opt-in `skills-manager-management` skill example with dry-run-first
+  inventory, exact-target preview, explicit approval, recovery checks, and
+  manual installation/removal instructions. It is not auto-installed or
+  included in the Python distribution.
+- Extended the bounded baseline harness for cold and warm inventories of 100,
+  1,000, and 10,000 actual `SKILL.md` files, with explicit incomplete-sample
+  and p95 rules. The 10,000-skill run is recorded as incomplete where its
+  runtime budget was reached.
+
+### Public onboarding
+
+- Corrected the README's comparison with the multi-agent skills CLI and
+  clarified the local-candidate update boundary. Added a dated current-build
+  screenshot captured with synthetic fixtures and a draft-PR route for
+  contributors who cannot open an issue.
+
 ### P0 trust gate and release metadata hardening
 
 - Fixed full-import rollback diagnostics so an `OSError` restoring a previous

@@ -75,7 +75,10 @@ def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float
     raise RuntimeError("Chrome DevTools endpoint did not start")
 
 
-def _run_probe(url: str, width: int, height: int, port: int, screenshot: Path | None = None) -> dict:
+def _run_probe(
+    url: str, width: int, height: int, port: int,
+    screenshot: Path | None = None, scenario: str = "populated",
+) -> dict:
     """Use Chrome's remote debugging endpoint through a tiny Node CDP client."""
     script = r"""
 const http = require('http');
@@ -84,7 +87,8 @@ if (typeof globalThis.WebSocket !== 'function') {
   process.exit(2);
 }
 const WebSocket = globalThis.WebSocket;
-const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]), port = Number(process.argv[4]), screenshot = process.argv[5] || '';
+const url = process.argv[1], width = Number(process.argv[2]), height = Number(process.argv[3]), port = Number(process.argv[4]), screenshot = process.argv[5] || '', scenario = process.argv[6] || 'populated';
+const navigationStarted = Date.now();
 function getJson(path) { return new Promise((resolve, reject) => { const req=http.request('http://127.0.0.1:' + port + path, {method:'PUT'}, r => { let b=''; r.on('data', x=>b+=x); r.on('end',()=>resolve(JSON.parse(b))); }); req.on('error',reject); req.end(); }); }
 (async () => {
   const tabs = await getJson('/json/new?' + encodeURIComponent(url));
@@ -94,13 +98,23 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   const send = (method, params={}) => new Promise(resolve => { const n=++id; pending.set(n, resolve); ws.send(JSON.stringify({id:n,method,params})); });
   await new Promise(resolve => ws.onopen=resolve);
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
-  await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false}); await send('Page.navigate',{url});
+  await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false});
+  if (scenario === 'scope-failure' || scenario === 'inventory-failure' || scenario === 'unavailable-root') {
+    const failedRoute = scenario === 'scope-failure' ? '/api/scopes' : '/api/skills?scope=all';
+    const preload = scenario === 'unavailable-root'
+      ? `(() => { const original=window.fetch; window.fetch=function(input,init){ const target=typeof input==='string'?input:(input && input.url)||''; return original.call(this,input,init).then(response=>{ if(!target.includes('/api/scopes')) return response; return response.clone().json().then(scopes=>{ scopes.push({id:'unavailable-fixture',label:'Unavailable fixture',path:'/private/unavailable-root',kind:'agent',writable:false,availability:'unsupported',recursive:false,supported:false,exists:true,count:0,tokens:0}); return new Response(JSON.stringify(scopes),{status:response.status,headers:{'Content-Type':'application/json'}}); }); }); }; })();`
+      : `(() => { const original=window.fetch; window.fetch=function(input,init){ const target=typeof input==='string'?input:(input && input.url)||''; if(target.includes(${JSON.stringify(failedRoute)})) return Promise.reject(new Error('synthetic first-scan failure')); return original.call(this,input,init); }; })();`;
+    await send('Page.addScriptToEvaluateOnNewDocument', {source:preload});
+  }
+  await send('Page.navigate',{url});
   const readyExpression = `(() => {
     const app = document.querySelector('#app');
     const overview = document.querySelector('[data-overview-ready="true"]');
     const heading = document.querySelector('#overview-title');
-    const representative = overview && (overview.querySelector('.overview-health') || overview.querySelector('[data-overview-empty="true"]'));
-    return {ready: !!app && !app.hasAttribute('v-cloak') && !!heading && !!representative, marker: overview ? overview.innerText.slice(0, 400) : ''};
+    const representative = overview && (overview.querySelector('.overview-health') || overview.querySelector('[data-overview-empty="true"]') || overview.querySelector('.first-scan-guide'));
+    const guide = overview && overview.querySelector('.first-scan-guide');
+    const status = guide && guide.querySelector('.first-scan-status');
+    return {ready: !!app && !app.hasAttribute('v-cloak') && !!heading && !!representative && !!status, scanComplete: !!(status && status.innerText.startsWith('Scan complete:')), marker: overview ? overview.innerText.slice(0, 400) : ''};
   })()`;
   let previousMarker = null, stableChecks = 0, ready = false, lastState = null;
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -114,6 +128,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     await new Promise(r=>setTimeout(r,100));
   }
   if (!ready) throw new Error('Vue overview did not reach a stable rendered state: ' + JSON.stringify({lastState, errors, failed}));
+  const firstUsefulMs = Date.now() - navigationStarted;
   await send('Runtime.evaluate', {expression:`(() => { const trigger=document.querySelector('[aria-label="Open actions menu"]'); if (trigger) { trigger.focus(); trigger.click(); } return !!trigger; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,80));
   const menuOpen = await send('Runtime.evaluate', {expression:`(() => { const menu=document.querySelector('#actions-menu'); const items=[...document.querySelectorAll('#actions-menu [role="menuitem"]:not([disabled])')]; return {open:!!menu, focusedFirst:!!(items[0] && document.activeElement === items[0]), count:items.length}; })()`, returnByValue:true});
@@ -213,16 +228,73 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   if (!qualityReady) errors.push('Quality view did not render bounded evidence without overflow');
   await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,100));
+  const guideInitial = await send('Runtime.evaluate', {expression:`(() => { const guide=document.querySelector('.first-scan-guide'); const attention=[...document.querySelectorAll('.attention-item h3')].map(node=>node.innerText); return {visible:!!guide,status:(document.querySelector('.first-scan-status') || {}).innerText || '',empty:!!document.querySelector('[data-overview-empty="true"]'),loadError:!!document.querySelector('.overview-load-error'),unavailable:!!(guide && guide.innerText.includes('detected root is missing or unsupported')),malformedAttention:attention.some(text=>text.includes('malformed or unaddressable')),divergentAttention:attention.some(text=>text.includes('divergent copies')),instanceActionDisabled:!!(document.querySelector('[data-first-scan-library]') && document.querySelector('[data-first-scan-library]').disabled),overflow:document.documentElement.scrollWidth>window.innerWidth}; })()`, returnByValue:true});
+  const guideInitialState = guideInitial.result && guideInitial.result.result && guideInitial.result.result.value;
+  const scanExpected = scenario === 'scope-failure'
+    ? guideInitialState && /root details are unavailable/i.test(guideInitialState.status) && !guideInitialState.empty
+    : scenario === 'inventory-failure'
+      ? guideInitialState && /inventory scan failed/i.test(guideInitialState.status) && guideInitialState.loadError && !guideInitialState.empty
+      : scenario === 'unavailable-root'
+        ? guideInitialState && guideInitialState.status.startsWith('Scan complete:') && guideInitialState.unavailable
+      : guideInitialState && guideInitialState.status.startsWith('Scan complete:')
+        && (scenario !== 'empty' || guideInitialState.empty)
+        && (scenario !== 'populated' || (guideInitialState.malformedAttention && guideInitialState.divergentAttention));
+  if (!guideInitialState || !guideInitialState.visible || !scanExpected || guideInitialState.overflow) errors.push('First-scan guide did not represent the expected scan state without overflow: ' + JSON.stringify(guideInitialState));
+  if (scenario === 'empty') {
+    await send('Runtime.evaluate', {expression:`(() => { const action=[...document.querySelectorAll('.overview-empty-actions button')].find(button => button.innerText.includes('Create your first skill')); if(action) action.click(); return !!action; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,80));
+    const emptyCreate = await send('Runtime.evaluate', {expression:`(() => ({open:!!document.querySelector('[data-modal="skill"]')}))()`, returnByValue:true});
+    if (!(emptyCreate.result && emptyCreate.result.result && emptyCreate.result.result.value && emptyCreate.result.result.value.open)) errors.push('Empty first-run Create action did not open its existing dialog');
+    await send('Runtime.evaluate', {expression:`(() => { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,80));
+  }
+  await send('Runtime.evaluate', {expression:`(() => { const skip=document.querySelector('[data-first-scan-skip]'); if (skip) skip.click(); return !!skip; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,80));
+  const guideSkipped = await send('Runtime.evaluate', {expression:`(() => ({hidden:!document.querySelector('.first-scan-guide'),restart:!!document.querySelector('[data-first-scan-restart]')}))()`, returnByValue:true});
+  const guideSkippedState = guideSkipped.result && guideSkipped.result.result && guideSkipped.result.result.value;
+  if (!guideSkippedState || !guideSkippedState.hidden || !guideSkippedState.restart) errors.push('First-scan guide skip did not hide the guide or offer restart');
+  await send('Runtime.evaluate', {expression:`(() => { const restart=document.querySelector('[data-first-scan-restart]'); if (restart) restart.click(); return !!restart; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,80));
+  const guideRestarted = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('.first-scan-guide'),focused:document.activeElement && document.activeElement.id==='first-scan-title'}))()`, returnByValue:true});
+  const guideRestartedState = guideRestarted.result && guideRestarted.result.result && guideRestarted.result.result.value;
+  if (!guideRestartedState || !guideRestartedState.visible || !guideRestartedState.focused) errors.push('First-scan guide restart did not restore the guide and focus its heading');
+  await send('Runtime.evaluate', {expression:`(() => { const explain=document.querySelector('[data-first-scan-explain]'); if (explain) explain.click(); return !!explain; })()`, returnByValue:true});
+  let explainReady = false, explainState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const state = await send('Runtime.evaluate', {expression:`(() => ({result:!!document.querySelector('.first-scan-result'),error:!!document.querySelector('.first-scan-caution[role="status"]'),text:(document.querySelector('.first-scan-result') || document.querySelector('.first-scan-caution[role="status"]') || {}).innerText || ''}))()`, returnByValue:true});
+    explainState = state.result && state.result.result && state.result.result.value;
+    if (explainState && (explainState.result || explainState.error)) { explainReady = true; break; }
+    await new Promise(r=>setTimeout(r,50));
+  }
+  if (!explainReady || !/unresolved/.test(explainState.text)) errors.push('Read-only effective explanation did not return a clearly unresolved result');
+  const previewClicked = await send('Runtime.evaluate', {expression:`(() => { const preview=document.querySelector('[data-first-scan-preview-target]'); if (preview && !preview.disabled) preview.click(); return !!(preview && !preview.disabled); })()`, returnByValue:true});
+  const previewWasClicked = !!(previewClicked.result && previewClicked.result.result && previewClicked.result.result.value);
+  let previewReady = false, previewState = null;
+  for (let attempt = 0; previewWasClicked && attempt < 40; attempt += 1) {
+    const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update this exact skill instance from a folder"]'),guide:!!document.querySelector('.first-scan-guide')}))()`, returnByValue:true});
+    previewState = state.result && state.result.result && state.result.result.value;
+    if (previewState && previewState.heading && previewState.action && !previewState.guide) { previewReady = true; break; }
+    await new Promise(r=>setTimeout(r,50));
+  }
+  const previewDisabledForEmpty = scenario === 'empty' && !previewWasClicked
+    && !!(guideInitialState && guideInitialState.instanceActionDisabled);
+  if (scenario === 'populated' && !previewReady) errors.push('First-scan preview link did not land on the exact writable instance surface: ' + JSON.stringify(previewState));
+  if (scenario === 'empty' && !previewDisabledForEmpty) errors.push('Empty inventory did not disable exact-instance actions');
+  await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+  await new Promise(r=>setTimeout(r,100));
+  const guideFinal = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('.first-scan-guide'),overflow:document.documentElement.scrollWidth>window.innerWidth,focusable:!!document.querySelector('[data-first-scan-skip]:not([disabled])'),result:!!document.querySelector('.first-scan-result')}))()`, returnByValue:true});
+  const guideFinalState = guideFinal.result && guideFinal.result.result && guideFinal.result.result.value;
+  if (!guideFinalState || !guideFinalState.visible || guideFinalState.overflow || !guideFinalState.focusable || !guideFinalState.result) errors.push('First-scan guide lost its accessible state after returning from the exact Library detail');
   if (screenshot) {
     const capture = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:true});
     require('fs').writeFileSync(screenshot, Buffer.from(capture.result.data, 'base64'));
   }
   const value = await send('Runtime.evaluate',{expression:'JSON.stringify({title:document.title,modalCount:document.querySelectorAll("[role=dialog]").length,overflow:document.documentElement.scrollWidth>window.innerWidth})',returnByValue:true});
-  ws.close(); console.log(JSON.stringify({width,height,document:JSON.parse(value.result.result.value),errors,warnings,failed}));
+  ws.close(); console.log(JSON.stringify({width,height,scenario,document:JSON.parse(value.result.result.value),firstScan:{first_useful_ms:firstUsefulMs,scan_state:guideInitialState && guideInitialState.status,malformed_attention:!!(guideInitialState && guideInitialState.malformedAttention),divergent_attention:!!(guideInitialState && guideInitialState.divergentAttention),unavailable_root:!!(guideInitialState && guideInitialState.unavailable),scan_complete:!!(guideFinalState && guideFinalState.visible),skip_restart:!!(guideSkippedState && guideSkippedState.hidden && guideRestartedState && guideRestartedState.visible),effective_explain:!!explainReady,exact_preview_target:!!previewReady,preview_disabled_for_empty:previewDisabledForEmpty},errors,warnings,failed}));
 })().catch(e=>{ console.error(e.stack||String(e)); process.exit(1); });
 """
     screenshot_arg = str(screenshot) if screenshot is not None else ""
-    result = subprocess.run([_node(), "-e", script, url, str(width), str(height), str(port), screenshot_arg], capture_output=True, text=True, timeout=20)
+    result = subprocess.run([_node(), "-e", script, url, str(width), str(height), str(port), screenshot_arg, scenario], capture_output=True, text=True, timeout=20)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     lines = [line for line in result.stdout.splitlines() if line.strip()]
@@ -290,8 +362,35 @@ def run() -> int:
                 )
                 for width, height in VIEWPORTS
             ]
-            failures = [r for r in results if r["errors"] or r["failed"] or r["document"]["overflow"]]
-            print(json.dumps({"viewports": results, "passed": not failures}, indent=2))
+            scenario_results = {
+                scenario: _run_probe(server.url, 1280, 900, port, scenario=scenario)
+                for scenario in ("scope-failure", "inventory-failure", "unavailable-root")
+            }
+
+            # Repoint HOME and the manager data directory to a separate empty
+            # fixture so the empty-state browser path is observed end to end.
+            empty_home = root / "empty-home"
+            empty_data = root / "empty-data"
+            empty_home.mkdir(parents=True, exist_ok=True)
+            os.environ["HOME"] = str(empty_home)
+            os.environ["XDG_DATA_HOME"] = str(empty_home / ".local" / "share")
+            os.environ["SKILLS_MANAGER_DATA"] = str(empty_data)
+            empty_store = Store(empty_data)
+            empty_store.init_db()
+            empty_server = WebAppServer(empty_store, port=0)
+            empty_thread = Thread(target=empty_server.serve_forever, daemon=True)
+            empty_thread.start()
+            try:
+                scenario_results["empty"] = _run_probe(
+                    empty_server.url, 1280, 900, port, scenario="empty"
+                )
+            finally:
+                empty_server.shutdown()
+                empty_thread.join(timeout=5)
+
+            all_results = [*results, *scenario_results.values()]
+            failures = [r for r in all_results if r["errors"] or r["failed"] or r["document"]["overflow"]]
+            print(json.dumps({"viewports": results, "scenarios": scenario_results, "passed": not failures}, indent=2))
             return 1 if failures else 0
         finally:
             chrome.terminate()

@@ -1,8 +1,117 @@
 # Progress Log — Skills Manager
 
-**Version 0.1.0**
+**Version 0.3.0**
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
+
+## 2026-09-23 — Final next-five candidate verification
+
+- The current worktree passed 888 unittest tests, `smoke_store.py`,
+  `smoke_web.py`, `check_docs.py`, `check_complexity.py` (261 tracked
+  functions), the narrow Ruff 0.16.8 gate, Python compilation, three Node
+  syntax checks, package-data checks, and `git diff --check`.
+- The six-viewport browser harness and scope-failure, inventory-failure,
+  unavailable-root, and empty scenarios passed with no console/runtime errors,
+  warnings, failed requests, or overflow. Its populated checks observed both
+  malformed/unaddressable and divergent attention items.
+- The isolated wheel smoke and artifact metadata checks passed for the exact
+  `1.0.2` wheel/sdist hashes recorded below. The candidate is still uncommitted
+  and unpublished; the protected release review and maintainer approval are
+  not represented as complete.
+
+## 2026-09-23 — First-scan journey and management-skill example
+
+- Added a populated and empty first-scan guide using existing scan, Doctor,
+  Quality, Library, and update-preview routes. Six responsive viewports and
+  four synthetic failure/empty scenarios passed; the populated fixture also
+  asserted malformed/unaddressable and divergent-copy attention evidence.
+  Synthetic settled-scan time was 955 ms median. No human usability result
+  is claimed.
+- Added an opt-in `examples/skills-manager-management/` skill with exact-scope
+  evidence handling, read-only inventory, dry-run/preview gates, explicit
+  approval before writes, recovery checks, and manual installation/removal
+  instructions.
+- Added isolated CLI contracts for inventory/validation/explanation,
+  install dry-run, non-mutating target/candidate preview, ambiguous and unavailable
+  targets, unknown scope, missing target, and stale-review refusal. The
+  example validator passed with no errors or warnings.
+- Updated `task.md`, @docs/16-product-baseline-2026-09-18.md,
+  @docs/22-next-five-task-execution-plan-2026-09-23.md, and CHANGELOG.md. No
+  CLI/API/Store surface or database schema changed.
+
+## 2026-09-23 — Package release candidate selected
+
+- Rechecked PyPI and repository tags: published version/tag is `1.0.1` and
+  the next unused candidate is `1.0.2`. Updated the project package version
+  and confirmed README installation wording reflects the existing PyPI
+  distribution.
+- The pinned, hash-verified build passed package-data checks. Wheel
+  `skill_control_plane-1.0.2-py3-none-any.whl` SHA-256 is
+  `2d7beb9ba9545e38384da0ace95f2f64ba3c1ff750a225053fb641ecb7f25de8`; sdist
+  `skill_control_plane-1.0.2.tar.gz` SHA-256 is
+  `3e8aa27a9a3d3e8b0cda395490a57217bbe598ff6c0c9687cbd73c3a6635311c`. Both
+  declare version 1.0.2 and `License-Expression: MIT`. A clean no-dependency
+  install passed CLI CRUD/validation and local web asset/API smoke checks.
+- The candidate remains an uncommitted worktree based on `6733da9`; no tag,
+  upload, GitHub Release, or external publication was performed. The exact
+  commit and artifact hashes still require maintainer review and approval.
+
+## 2026-09-23 — Full-inventory baseline refresh
+
+- Extended `baseline_harness.py` with intentionally invoked 100/1,000/10,000
+  actual-file inventories, five startup-critical REST routes, cold and warm
+  policies, ordered samples, cleanup/size/runtime bounds, and nearest-rank
+  p95. A reported p95 now requires 20 successful samples; a request does not
+  start unless its full timeout fits inside the remaining runtime budget.
+- The 100 and 1,000 runs completed 20 samples per mode and route. The 10,000
+  fixture contained exactly 10,000 files, but the 900-second budget ended
+  after 20 cold scopes/list/stats samples and 11 cold Doctor samples;
+  remaining Doctor/Hygiene and all warm samples are explicitly `not_run`.
+- Saved all sample states in `benchmarks/full-inventory-2026-09-23.json` and
+  refreshed @docs/16-product-baseline-2026-09-18.md with timings, the route
+  bottleneck, a proposed one-hour evidence budget, and its non-SLO status.
+  This is synthetic evidence; no human usability result or performance pass
+  is claimed.
+
+## 2026-09-23 — Dependabot Actions PR triage
+
+- Refreshed open PR state, exact proposed commits, workflow use sites, release
+  metadata, and CI logs for PRs #15–#19. Added the per-PR evidence and
+  recommendations in @docs/23-github-actions-dependency-pr-review-2026-09-23.md.
+- Recommended request changes for all five. PRs #15–#18 target Node 24 but
+  retain stale adjacent version comments; #15/#16 also fail the repository's
+  full-SHA contract test. PR #19 points to v2.4.0, whose nested
+  `actions/attest` still declares Node 20 on the removal date.
+- The current `main` run fails the purge regression on Python 3.10/3.11; the
+  local Python 3.11.15 focused run passed and its cause remains unresolved.
+  No external review/comment, workflow pin change, or merge was made.
+
+## 2026-09-23 — Next five audit-derived tasks planned
+
+**[NOTE]** Reconciled @docs/18-project-improvement-audit-2026-09-22.md with
+`main` at `6733da9` and the existing uncommitted public-onboarding edits.
+Registered @docs/22-next-five-task-execution-plan-2026-09-23.md and queued
+five bounded tasks: action-update PR triage, a metadata-corrected package
+release, 100/1,000/10,000 full-inventory measurements, a guided first-run
+scan, and an opt-in agent-facing management skill. Existing P0 code fixes,
+local source update, and read-only hygiene are not re-planned. The plan does
+not merge a PR, publish a release, or claim participant evidence.
+`check_docs.py` and `git diff --check` passed for this planning slice; no
+product source, CLI/API contract, or package version changed.
+
+## 2026-09-23 — Public onboarding copy and current-build image
+
+- Replaced the README's unsupported category-ownership and single-target
+  comparison with a current, linked description of Vercel's multi-agent
+  installer/updater and this project's local inspection, review, and recovery
+  workflow. The local-candidate-only update boundary is explicit.
+- Captured the README overview image from commit `6733da9` at 1280 × 900 with
+  synthetic browser-harness fixtures. The six-viewport harness passed with no
+  console errors, failed requests, or horizontal overflow.
+- Clarified the contributor issue route and draft-PR fallback while preserving
+  maintainer approval for locked changes. GitHub issues were enabled at review
+  time; five Dependabot GitHub Actions PRs were open and remain for separate
+  review. No package release or participant session is claimed.
 
 ## 2026-09-22 — P0 trust gate and release metadata hardening complete
 

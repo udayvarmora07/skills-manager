@@ -380,8 +380,85 @@
             <button class="btn btn-primary" type="button" @click="openCreate">Create a skill</button>
             <button class="btn btn-secondary" type="button" @click="openAdd">Add a folder</button>
             <button class="btn btn-secondary" type="button" @click="openInstall">Install or update</button>
+            <button v-if="firstScanGuideDismissed" class="btn btn-secondary" type="button" data-first-scan-restart @click="restartFirstScanGuide">Restart first scan</button>
           </div>
         </header>
+
+        <section v-if="firstScanGuideVisible" class="first-scan-guide" aria-labelledby="first-scan-title" aria-describedby="first-scan-intro">
+          <div class="first-scan-heading">
+            <div>
+              <p class="eyebrow">First scan · read-only guidance</p>
+              <h2 id="first-scan-title" tabindex="-1">See what is on disk, then choose where to go</h2>
+              <p id="first-scan-intro">This guide summarizes existing observations. It never installs, syncs, cleans up, or changes a skill.</p>
+            </div>
+            <button class="text-button first-scan-skip" type="button" data-first-scan-skip @click="dismissFirstScanGuide">Skip guide</button>
+          </div>
+
+          <p class="first-scan-status" role="status" aria-live="polite">
+            <span v-if="loadingList">Scanning the observed skill inventory…</span>
+            <span v-else-if="banner">The skill inventory scan failed. Retry before drawing conclusions from an empty result.</span>
+            <span v-else-if="scopeScanFailed">Skill records loaded, but root details are unavailable. No conclusion is made about roots that could not be read.</span>
+            <span v-else>Scan complete: {{ formatNumber(overviewInstanceCount) }} observed instances across {{ formatNumber(guideRoots.length) }} detected roots.</span>
+          </p>
+
+          <div class="first-scan-actions" aria-label="Next places to inspect">
+            <button class="btn btn-primary" type="button" data-first-scan-library @click="openGuideLibrary" :disabled="!guideSampleRecord">Open observed instance</button>
+            <button class="btn btn-secondary" type="button" data-first-scan-quality @click="switchView('quality')">Open Quality</button>
+            <button class="btn btn-secondary" type="button" data-first-scan-preview-target @click="openGuidePreviewTarget" :disabled="!guidePreviewRecord">Open writable instance for update preview</button>
+            <span v-if="!guidePreviewRecord" class="hint">A local update preview is unavailable without an addressable writable instance.</span>
+          </div>
+
+          <ol class="first-scan-steps">
+            <li>
+              <h3>1. Check detected roots</h3>
+              <p v-if="scopeScanFailed">Root details could not be loaded. Retry the scan or open the read-only health check.</p>
+              <p v-else-if="!guideRoots.length">No scope roots were returned. This does not prove that unlisted or inaccessible roots are empty.</p>
+              <p v-else>The scope list reports detected roots only; roots omitted by discovery are not represented here.</p>
+              <ul v-if="guideRoots.length" class="first-scan-root-list">
+                <li v-for="root in guideRoots" :key="root.id">
+                  <strong>{{ root.label }}</strong>
+                  <span>{{ formatNumber(root.count) }} observed · {{ root.availability === 'writable' ? 'writable' : root.availability === 'read-only' ? 'read-only' : root.availability || 'availability unknown' }}</span>
+                </li>
+              </ul>
+              <p v-if="guideUnavailableRoots.length" class="first-scan-caution">{{ formatNumber(guideUnavailableRoots.length) }} detected root{{ guideUnavailableRoots.length === 1 ? ' is' : 's are' }} missing or unsupported; its contents are not treated as an empty successful scan.</p>
+            </li>
+            <li>
+              <h3>2. Inspect one physical instance</h3>
+              <p v-if="guideSampleRecord"><code>{{ guideSampleRecord.name }}</code> · {{ observedIdentity(guideSampleRecord, scopes).label }} · {{ guideSampleRecord.disabled ? 'Disabled observed' : guideSampleRecord.malformed || guideSampleRecord.decode_error ? 'Invalid document observed' : 'Enabled file observed' }}<span v-if="guideSampleIsProject"> · project root</span></p>
+              <p v-else-if="!loadingList && !banner">No skill instance is currently observed. The first-run actions above can create or import one.</p>
+              <p v-else>Instance details are pending until the inventory scan settles.</p>
+              <p v-if="guideSampleRecord" class="first-scan-caution">A discovered file is not proof that a consumer loaded it. Ordinary inventory keeps effective state <code>{{ guideSampleRecord.effective_state || 'unresolved' }}</code>.</p>
+            </li>
+            <li>
+              <h3>3. Check for observed conflicts</h3>
+              <p v-if="loadingList || banner || scopeScanFailed">Conflict status is unavailable until the scan completes without an error.</p>
+              <p v-else-if="overviewDivergentGroups.length">{{ formatNumber(overviewDivergentGroups.length) }} divergent same-name group{{ overviewDivergentGroups.length === 1 ? '' : 's' }} observed. Example: <code>{{ overviewDivergentGroups[0].name }}</code> has unequal copies. Open its exact copies in the Library to compare them.</p>
+              <p v-else>No divergent same-name groups were observed in the roots returned by this scan.</p>
+            </li>
+          </ol>
+
+          <section class="first-scan-explain" aria-labelledby="first-scan-explain-title">
+            <div>
+              <h3 id="first-scan-explain-title">Effective or shadowed state</h3>
+              <p>Use the existing read-only explainer for a consumer. It reports an unknown or undocumented order explicitly; it does not change the inventory's unresolved state. This view does not supply a project path, so project-specific roots are not evaluated.</p>
+            </div>
+            <div class="first-scan-explain-controls">
+              <label for="first-scan-consumer">Consumer</label>
+              <select id="first-scan-consumer" name="first-scan-consumer" v-model="guideExplainConsumer">
+                <option value="codex">Codex</option><option value="claude-code">Claude Code</option><option value="gemini">Gemini CLI</option><option value="commandcode">Command Code</option><option value="cursor">Cursor</option><option value="opencode">OpenCode</option>
+              </select>
+              <button class="btn btn-secondary" type="button" data-first-scan-explain @click="runGuideExplain" :disabled="guideExplainLoading">{{ guideExplainLoading ? 'Explaining…' : 'Explain resolution' }}</button>
+            </div>
+            <p v-if="guideExplainError" class="first-scan-caution" role="status">{{ guideExplainError }}</p>
+            <p v-else-if="guideExplainResult" class="first-scan-result" role="status" aria-live="polite">
+              {{ guideExplainResult.label || guideExplainResult.consumer }}: {{ guideExplainResult.resolution }}.
+              <span v-if="guideExplainSkill">For {{ guideExplainSkill.skill }}, the report says {{ guideExplainSkill.resolution }}<span v-if="guideExplainSkill.winner_tier"> at tier {{ guideExplainSkill.winner_tier }}</span><span v-if="guideExplainSkill.winner">; a winner is reported</span><span v-else>; no winner is elected</span>.</span>
+              <span v-else>No matching instance appears in the roots this report could inspect.</span>
+              Effective state elsewhere remains unresolved.
+            </p>
+          </section>
+
+        </section>
 
         <section v-if="!loadingList && !banner && overviewInstanceCount === 0" class="overview-empty" data-overview-empty="true" aria-labelledby="overview-empty-title">
           <div class="overview-empty-copy">

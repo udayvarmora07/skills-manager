@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.9.0**
+**Version 0.9.1**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -370,6 +370,32 @@ When the all-scopes library is empty, the detail pane shows a local-only
 getting-started checklist based on the detected scope roots and completed scan.
 Its create, archive-import, folder-add, and health-check actions call existing
 workflows; Skip hides it only in memory, and the empty state can restart it.
+
+The 2026-09-23 candidate extends the default Overview with a skippable,
+restartable first-scan guide for both empty and populated inventories. It
+shows the inventory scan result, names/counts/availability for roots returned
+by `/api/scopes`, one exact observed instance and scope, divergent groups from
+the filesystem-backed skill response, and actions to open that instance,
+Quality, or its existing local-update detail. The guide does not show root or
+physical paths. `/api/scopes` omits missing roots, so the copy says these are
+detected roots and explicitly avoids treating undiscovered roots as empty.
+Inventory failure, root-detail failure, unavailable roots, malformed or
+disabled instances, and divergent copies keep their observed/unavailable
+labels. A missing instance disables the Library action; a non-addressable or
+non-writable instance disables the update-preview destination.
+
+The consumer selector calls the existing read-only
+`GET /api/doctor?explain=CONSUMER` route without a project path. Its displayed
+result is limited to resolution and winner-tier evidence, and it never prints
+paths; project-specific roots are not evaluated in this UI flow. Unknown and
+undocumented precedence stay explicit, and ordinary `effective_state` remains
+`unresolved`. The update-preview action selects the exact writable physical
+instance in Library, where the existing local folder review can be opened;
+the guide itself makes no write, sync, install, cleanup, or update. Skip and
+restart are local in-memory UI state, and restart returns focus to the guide
+heading. The automated six-viewport evidence and its synthetic time-to-result
+are in @docs/16-product-baseline-2026-09-18.md; no human usability target is
+claimed.
 
 - **State**: `view` (`overview|skills|profiles|install|recovery|workspaces|quality|settings|trash`), `filter` (all|active|disabled), `tagFilter` (tag or `__untagged`), `query` (live search, 220ms debounce), `skills`, `allSkills`, `trashSkills`, `catalog`, exact `selectedKeys`, `selected`/`selectedName`, `workspaces`, `profileForm`/`profilePreview`, `install` (registry operation, review id/evidence, and runner form), `qualityRecords`/`filteredQualitySkills`/`qualitySummary` (observed evidence only), `qualityHygiene`/`qualityHygieneLoading`/`qualityHygieneError`/`qualitySeverityFilter` (server-derived hygiene evidence), `theme` (`system|light|dark`, localStorage), `resolvedTheme`, `textSize` (`standard|large`, localStorage), `locale` (`system|en-US|en-GB|en-IN`, localStorage), `resolvedLocale`, and reduced-motion evidence, `modals.*` (one object per dialog, including batch/help), `toasts`/`liveAnnouncement`, focus lifecycle state, `scopes` (from `/api/scopes`), `activeScope` (persisted). A batch modal stores a frozen `targets` snapshot at open; preview and execute reuse that same set rather than re-reading live Library selection. Profile quick apply derives exact `{name, scope, path}` targets from observed preview instances, dedupes exact keys, and opens the existing enable batch preview with profile context. It enables only those observed physical instances; it never installs missing members, reconciles divergent content, infers effective state, or disables outside-profile skills. Successful profile execution refreshes the profile preview. Quality keeps validity/state, physical divergence, provenance, and size evidence independent; the Quality Hygiene Report loads `/api/doctor?scope=SCOPE&hygiene=1`, exposes independent facts, grouped findings, severity filtering, search, retry, exact-instance navigation, degraded evidence, and unavailable signals; it never recomputes similarity or exposes a combined score.
 - **Commands palette**: The topbar Commands trigger and Ctrl/Cmd+K open the existing modal layer only when no other dialog is active. Its derived frontend-only index searches command label/title, keywords, and category; selected-record Edit, Validate, Enable/Disable, Sync, and Remove entries appear only for an available current Library selection. Results use a labelled combobox/listbox pattern with a live result count, no-results guidance, active descendant, and 44px pointer targets. Existing methods execute in place; Remove retains its existing confirmation. Navigation focuses the destination heading and modal actions focus the new dialog, while Escape returns focus to the Commands opener.

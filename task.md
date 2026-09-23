@@ -1,8 +1,34 @@
 # Task Checklist — Skills Manager
 
-**Version 0.8.4**
+**Version 0.8.8**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
+
+## Next five audit-derived tasks — planned 2026-09-23
+
+- [x] Reconcile @docs/18-project-improvement-audit-2026-09-22.md against the
+  current tree and create @docs/22-next-five-task-execution-plan-2026-09-23.md.
+- [x] T1: Review the five current Dependabot GitHub Actions PRs and record a
+  supported disposition for each in @docs/23-github-actions-dependency-pr-review-2026-09-23.md.
+- [/] T2: Prepare the metadata-corrected package release; publish only after
+  exact candidate review and maintainer approval.
+- [x] T3: Measure cold and warm full-inventory behavior at 100, 1,000, and
+  10,000 actual skill files; record the bounded 10,000-run limit in
+  @docs/16-product-baseline-2026-09-18.md.
+- [x] T4: Extend the existing first-run UI into a populated scan-to-action
+  journey with honest scope and effective-state evidence.
+- [x] T5: Publish an opt-in agent management skill example using existing
+  JSON and preview surfaces with explicit mutation approval.
+
+## Public onboarding copy and evidence — 2026-09-23
+
+- [x] Replace the README's category-ownership and single-target installer claims with a sourced, accurate comparison and clear local-update boundary.
+- [x] Capture and label a current-build synthetic overview screenshot near the README top.
+- [x] Clarify the issue-first contribution route with a draft-PR fallback while retaining maintainer approval for locked changes.
+
+The five open Dependabot action-update PRs remain a separate compatibility/CI
+review; this documentation slice does not merge or close them. A new package
+release and human usability sessions remain separate gates.
 
 ## P0 Trust Gate and Release Metadata Hardening — 2026-09-22
 

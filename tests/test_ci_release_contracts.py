@@ -29,11 +29,11 @@ _THIRD_PARTY_PIN_RE = re.compile(
     r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[^\s@#]+)?)@([^\s#]+)"
 )
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-_FIXTURE_ARTIFACT_STEM = "skill_control_plane-1.0.1"
+_FIXTURE_ARTIFACT_STEM = "skill_control_plane-1.0.2"
 _FIXTURE_METADATA = (
     "Metadata-Version: 2.4\n"
     "Name: skill-control-plane\n"
-    "Version: 1.0.1\n"
+    "Version: 1.0.2\n"
     "License-Expression: MIT\n"
     "License-File: LICENSE\n"
     "\n"
@@ -320,7 +320,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 class ReleaseClaimContractTests(unittest.TestCase):
     def test_pypi_claims_confirm_publication_and_install_paths(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("skill-control-plane` 1.0.1 distribution is published on PyPI", readme)
+        self.assertIn("The `skill-control-plane` distribution is available on PyPI", readme)
         self.assertIn("pip install skill-control-plane", readme)
         self.assertIn("pipx install skill-control-plane", readme)
         self.assertIn("Python import package remains `skillsmgr`", readme)
@@ -343,7 +343,7 @@ class ReleaseClaimContractTests(unittest.TestCase):
         project_name, project_version = _project_identity(pyproject)
         normalized_stem = _normalized_artifact_stem(project_name, project_version)
         self.assertEqual(project_name, "skill-control-plane")
-        self.assertEqual(project_version, "1.0.1")
+        self.assertEqual(project_version, "1.0.2")
         project_table = pyproject.split("[project]", 1)[1].split("\n[", 1)[0]
         self.assertIn('license = "MIT"', project_table)
         self.assertIn('license-files = ["LICENSE"]', project_table)
