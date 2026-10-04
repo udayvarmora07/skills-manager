@@ -162,10 +162,22 @@ jobs:
           node-version: "22"
       - name: Tighten the Node tool cache permissions
         # setup-node extracts with mode 0777, so launcher_security's ownership
-        # check rejects the binary. That check is correct -- tighten the
-        # runner's extraction rather than weaken the policy. `go-w` keeps every
-        # execute bit, so Node still runs.
-        run: sudo chmod -R go-w "$(dirname "$(command -v node)")/../" 2>/dev/null || true
+        # check rejects the binary and every parent directory up to /.
+        # That check is correct -- tighten the runner's extraction rather than
+        # weaken the policy. `go-w` keeps every execute bit, so Node still runs.
+        #
+        # Stop at a sticky directory: launcher_security already permits those
+        # (/tmp is 1777), and `chmod go-w /tmp` would break the runner.
+        run: |
+          target="$(command -v node)"
+          while [ -n "$target" ] && [ "$target" != "/" ] && [ -e "$target" ]; do
+            if [ -k "$target" ]; then
+              echo "$target is sticky; the trust check already permits it"
+              break
+            fi
+            sudo chmod go-w "$target" || true
+            target="$(dirname "$target")"
+          done
       - name: Confirm the harness can resolve its executables
         run: python3 -c "import browser_harness as b; print(b._node()); print(b._chrome())"
       - name: Frontend syntax and browser harness

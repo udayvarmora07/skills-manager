@@ -33,7 +33,7 @@ from .source_lock import (
     review_local_update,
     source_identity,
 )
-from .store import Store, StoreError
+from .store import Store, StoreError, _index_lock_path
 from .validator import validate_skill_name
 
 
@@ -728,6 +728,29 @@ def _commit_response(record: dict, target: dict, result: dict, warning: str | No
     return response
 
 
+def _reconcile_after_commit(
+    data: Path, scope: str, target: dict, warning: str | None
+) -> str | None:
+    """Reconcile the index and snapshot retention after a committed update.
+
+    Runs after the index lock is released, because ``resync()`` takes that same
+    lock itself. Each step is best-effort: the filesystem replacement already
+    succeeded, so a failure here is reported as ``committed_with_warning``
+    rather than being raised as a rollback.
+    """
+    if scope == "global":
+        try:
+            with _scope_store(data, scope):
+                Store(data_dir=data).resync()
+        except (OSError, StoreError, ValueError):
+            warning = "filesystem update committed; global index reconciliation is pending"
+    try:
+        _prune_snapshots(data, target)
+    except (OSError, SourceUpdateError, ValueError):
+        warning = "filesystem update committed; snapshot retention could not be completed"
+    return warning
+
+
 def commit_update_review(
     data_dir: str | Path,
     review_id: str,
@@ -743,59 +766,66 @@ def commit_update_review(
     data = _data_path(data_dir)
     review_id = _valid_review_id(review_id)
     directory, _ = _load_record(data, review_id)
-    with mutation_lock(directory / ".review.lock"):
-        _, record = _load_record(data, review_id)
-        if record["status"] == "pending" and _expired(record):
-            _mark_expired(directory, record)
-            raise SourceUpdateError("review-expired", "update review has expired")
-        if record["status"] != "pending":
-            raise SourceUpdateError("review-not-pending", "update review is no longer pending")
-        if record.get("target", {}).get("name") != name or record.get("target", {}).get("scope") != scope:
-            raise SourceUpdateError("target-mismatch", "apply arguments do not match the reviewed target")
-        target = _resolve_target(data, name, scope, target_path)
-        if not _same_target(record["target"], target) or record["target"].get("disabled") != target.get("disabled"):
-            raise SourceUpdateError("target-changed", "installed target identity changed after review")
-        candidate = _review_candidate(data, review_id)
-        try:
-            if local_manifest(candidate)["sha256"] != record["candidate"]["content_hash"]:
-                raise SourceUpdateError("review-candidate-changed", "staged review candidate changed")
-            if local_manifest(Path(target["physical_path"]))["sha256"] != record["candidate"]["current_hash"]:
-                raise SourceUpdateError("target-changed", "installed target changed after review")
-        except SourceLockError as exc:
-            raise _commit_error(exc, Path(target["physical_path"]), candidate, record) from exc
-        snapshot_root = _snapshot_base(data, target) / review_id
-        try:
-            result = commit_local_update(
-                target["physical_path"],
-                candidate,
-                target=target,
-                review=record["source_review"],
-                approve=True,
-                snapshot_root=snapshot_root,
-                name=name,
-                source=record["source"],
-            )
-        except SourceLockError as exc:
-            raise _commit_error(exc, Path(target["physical_path"]), candidate, record) from exc
-        warning = None
-        record["status"] = "committed"
-        record["committed_at"] = _iso(_now())
-        record["snapshot_id"] = review_id
-        try:
-            _write_record(directory, record)
-        except (OSError, SourceUpdateError):
-            warning = "filesystem update committed; review status could not be persisted"
-        if scope == "global":
+    # STORE-11: the review lock only excludes other reviews. A concurrent
+    # Store.edit/create/remove takes the library index lock plus the skill's own
+    # lock and nothing else, so an edit could land between the target-hash
+    # revalidation below and the atomic replacement inside commit_local_update,
+    # and be silently overwritten. Take the index lock outermost -- matching
+    # store._skill_and_index_locks' index-first ordering, so the two orderings
+    # cannot deadlock -- and hold it across the whole revalidate-then-swap
+    # window rather than only the post-hoc resync.
+    with mutation_lock(_index_lock_path(Store(data_dir=data).skills_dir)):
+        with mutation_lock(directory / ".review.lock"):
+            _, record = _load_record(data, review_id)
+            if record["status"] == "pending" and _expired(record):
+                _mark_expired(directory, record)
+                raise SourceUpdateError("review-expired", "update review has expired")
+            if record["status"] != "pending":
+                raise SourceUpdateError("review-not-pending", "update review is no longer pending")
+            if record.get("target", {}).get("name") != name or record.get("target", {}).get("scope") != scope:
+                raise SourceUpdateError("target-mismatch", "apply arguments do not match the reviewed target")
+            target = _resolve_target(data, name, scope, target_path)
+            if not _same_target(record["target"], target) or record["target"].get("disabled") != target.get("disabled"):
+                raise SourceUpdateError("target-changed", "installed target identity changed after review")
+            candidate = _review_candidate(data, review_id)
             try:
-                with _scope_store(data, scope):
-                    Store(data_dir=data).resync()
-            except (OSError, StoreError, ValueError):
-                warning = "filesystem update committed; global index reconciliation is pending"
-        try:
-            _prune_snapshots(data, target)
-        except (OSError, SourceUpdateError, ValueError):
-            warning = "filesystem update committed; snapshot retention could not be completed"
-        return _commit_response(record, target, result, warning)
+                if local_manifest(candidate)["sha256"] != record["candidate"]["content_hash"]:
+                    raise SourceUpdateError("review-candidate-changed", "staged review candidate changed")
+                if local_manifest(Path(target["physical_path"]))["sha256"] != record["candidate"]["current_hash"]:
+                    raise SourceUpdateError("target-changed", "installed target changed after review")
+            except SourceLockError as exc:
+                raise _commit_error(exc, Path(target["physical_path"]), candidate, record) from exc
+            snapshot_root = _snapshot_base(data, target) / review_id
+            try:
+                result = commit_local_update(
+                    target["physical_path"],
+                    candidate,
+                    target=target,
+                    review=record["source_review"],
+                    approve=True,
+                    snapshot_root=snapshot_root,
+                    name=name,
+                    source=record["source"],
+                )
+            except SourceLockError as exc:
+                raise _commit_error(exc, Path(target["physical_path"]), candidate, record) from exc
+            # The review must be marked committed while the review lock is still
+            # held: that write is what makes the review single-use. Releasing the
+            # lock first would let a second applier observe "pending" against an
+            # already-replaced target and report the wrong conflict.
+            warning = None
+            record["status"] = "committed"
+            record["committed_at"] = _iso(_now())
+            record["snapshot_id"] = review_id
+            try:
+                _write_record(directory, record)
+            except (OSError, SourceUpdateError):
+                warning = "filesystem update committed; review status could not be persisted"
+    # Past this point the filesystem replacement has succeeded, so the index
+    # lock is released: the remaining work is bookkeeping, and resync() takes
+    # that same lock itself.
+    warning = _reconcile_after_commit(data, scope, target, warning)
+    return _commit_response(record, target, result, warning)
 
 
 def list_update_snapshots(

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
-from skillsmgr import scopes
+from skillsmgr import scopes, source_update
 from skillsmgr.scopes import Scope
 from skillsmgr.source_update import (
     SourceUpdateError,
@@ -198,6 +198,82 @@ class SourceUpdateContracts(unittest.TestCase):
             outcomes = list(pool.map(lambda _: apply_once(), range(2)))
         self.assertEqual(sum(isinstance(outcome, dict) and outcome.get("committed") for outcome in outcomes), 1)
         self.assertIn("review-not-pending", outcomes)
+
+
+    def test_an_edit_cannot_land_inside_the_commit_window(self):
+        """A6: the revalidate-then-swap window must exclude Store mutations.
+
+        ``commit_update_review`` revalidates the target's content hash and then
+        atomically replaces the tree. A ``Store.edit`` takes only the index lock
+        and the skill's own lock, so before this was fixed an edit landing
+        between those two steps was silently overwritten by the replacement.
+
+        The window is a few bytecodes wide, so a stress test cannot pin it.
+        Instead this pauses the commit inside ``commit_local_update`` -- the
+        moment the swap would happen -- and asserts the concurrent edit cannot
+        complete while the commit holds the index lock.
+        """
+        import threading
+
+        result = self._prepare(self._source())
+        review_id = result["review_id"]
+
+        inside = threading.Event()   # commit is at the swap
+        release = threading.Event()  # let the commit finish
+        real_commit = source_update.commit_local_update
+        edit_finished = threading.Event()
+        edit_errors: list[BaseException] = []
+
+        def pausing_commit(*args, **kwargs):
+            if not inside.is_set():
+                inside.set()
+                if not release.wait(timeout=30):
+                    raise AssertionError("commit was never released")
+            return real_commit(*args, **kwargs)
+
+        def edit_during_commit():
+            try:
+                self.store.edit("demo", description="edited concurrently")
+            except BaseException as exc:      # noqa: BLE001 - asserted below
+                edit_errors.append(exc)
+            finally:
+                edit_finished.set()
+
+        commit_errors: list[BaseException] = []
+
+        def commit():
+            try:
+                commit_update_review(
+                    self.data, review_id, name="demo", scope="global", approve=True
+                )
+            except BaseException as exc:      # noqa: BLE001 - asserted below
+                commit_errors.append(exc)
+
+        with mock.patch.object(source_update, "commit_local_update", pausing_commit):
+            committer = threading.Thread(target=commit)
+            committer.start()
+            self.assertTrue(inside.wait(timeout=30), "commit never reached the swap")
+
+            editor = threading.Thread(target=edit_during_commit)
+            editor.start()
+            raced = edit_finished.wait(timeout=2.0)
+            release.set()
+            committer.join(timeout=60)
+            editor.join(timeout=60)
+
+        self.assertEqual(commit_errors, [], "the commit raised")
+        self.assertEqual(edit_errors, [], "the concurrent edit raised")
+        self.assertFalse(
+            raced,
+            "a Store.edit completed while the update commit held the index lock: "
+            "the revalidate-then-swap window is not excluded",
+        )
+
+        # Both landed, in order: the commit's body, then the edit's description.
+        record = self.store.get("demo")
+        self.assertEqual(record["description"], "edited concurrently")
+        self.assertIn("new body", record["body"])
+        self.assertTrue(self.store.doctor()["ok"], self.store.doctor())
 
 
 if __name__ == "__main__":
