@@ -22,11 +22,29 @@ from typing import Iterable, Mapping
 
 ROOT = Path(__file__).resolve().parent
 BASELINE_PATH = ROOT / "complexity-baseline.json"
+# The ratchet only guards the files it measures.  `cli.py` was reduced to a
+# 160-line adapter in the 2026-09-09 CLI split, so leaving it as a target left
+# 2,076 lines of real logic in `cli_handlers.py` / `cli_parser.py` completely
+# unguarded -- 25% of the baseline's own entries no longer resolved to a
+# measured function.  The targets now cover the modules that actually hold the
+# logic, not the adapters that used to.
 TARGET_FILES = (
     "skillsmgr/webapp.py",
     "skillsmgr/cli.py",
+    "skillsmgr/cli_parser.py",
+    "skillsmgr/cli_handlers.py",
     "skillsmgr/store.py",
     "skillsmgr/frontmatter.py",
+    "skillsmgr/scopes.py",
+    "skillsmgr/registry.py",
+    "skillsmgr/validator.py",
+    "skillsmgr/effective.py",
+    "skillsmgr/hygiene.py",
+    "skillsmgr/source_lock.py",
+    "skillsmgr/source_update.py",
+    "skillsmgr/backup_sync.py",
+    "skillsmgr/archive.py",
+    "skillsmgr/evals.py",
 )
 DEFAULT_THRESHOLD = 15
 DEFAULT_TOP_N = 10
@@ -314,6 +332,25 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict[str, object]:
     return data
 
 
+def unresolved_baseline_keys(
+    metrics: Iterable[FunctionMetric], baseline: Mapping[str, object]
+) -> list[str]:
+    """Return baseline entries that no longer match any measured function.
+
+    A renamed or deleted function leaves its baseline entry behind, and
+    :func:`evaluate_metrics` iterates over *measured* metrics, so such an entry
+    is never consulted -- the guard silently stops guarding anything.  That is
+    the same defect class as a gate that reports PASS about a path it cannot
+    see, so it is reported loudly instead.  Regenerate with ``--write-baseline``
+    after an intentional move.
+    """
+    functions = baseline.get("functions")
+    if not isinstance(functions, Mapping):
+        raise ValueError("baseline must contain functions")
+    measured = {metric.key for metric in metrics}
+    return sorted(key for key in functions if key not in measured)
+
+
 def evaluate_metrics(
     metrics: Iterable[FunctionMetric], baseline: Mapping[str, object]
 ) -> list[ComplexityViolation]:
@@ -404,7 +441,15 @@ def main(argv: list[str] | None = None) -> int:
     violations = evaluate_metrics(metrics, baseline) if not parse_errors else []
     for violation in violations:
         print(f"ERROR: {violation.message()}")
-    if parse_errors or violations:
+    if parse_errors:
+        return 1
+    stale = unresolved_baseline_keys(metrics, baseline)
+    for key in stale:
+        print(
+            f"ERROR: baseline entry no longer resolves to a measured function: {key}\n"
+            f"       it guards nothing; regenerate with --write-baseline if the move was intended"
+        )
+    if violations or stale:
         return 1
     print(
         f"COMPLEXITY CHECK PASSED: {len(metrics)} functions across "

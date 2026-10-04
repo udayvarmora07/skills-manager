@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -32,12 +33,55 @@ ROOT = Path(__file__).resolve().parent
 VIEWPORTS = ((320, 700), (400, 800), (640, 900), (900, 800), (1280, 900), (1440, 900))
 
 
+def _executable_diagnostics(name: str) -> str:
+    """Explain why no trusted PATH match exists for *name*.
+
+    ``trusted_executable`` fails closed and returns ``None`` without saying
+    which check rejected the candidate, so a CI runner that fails this way
+    looks identical to a machine with nothing installed.
+    """
+    lines: list[str] = []
+    resolved_which = shutil.which(name)
+    if not resolved_which:
+        lines.append(f"which({name}) found nothing on PATH")
+        return "; ".join(lines)
+    candidate = Path(resolved_which)
+    try:
+        info = candidate.stat()
+        lines.append(f"which({name}) -> {candidate} (uid={info.st_uid}, mode={oct(info.st_mode & 0o777)})")
+    except OSError as exc:
+        lines.append(f"which({name}) -> {candidate} is not stat-able: {exc}")
+        return "; ".join(lines)
+    if os.name != "nt":
+        if info.st_uid not in {os.getuid(), 0}:
+            lines.append(f"rejected: uid {info.st_uid} is not this user or root")
+        elif info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            lines.append("rejected: the file is group/world writable")
+        for parent in candidate.resolve().parents:
+            try:
+                parent_info = parent.stat()
+            except OSError:
+                lines.append(f"rejected: {parent} is not stat-able")
+                break
+            if parent_info.st_uid not in {os.getuid(), 0}:
+                lines.append(f"rejected: {parent} is owned by uid {parent_info.st_uid}")
+                break
+            if parent_info.st_mode & (stat.S_IWGRP | stat.S_IWOTH) and not parent_info.st_mode & stat.S_ISVTX:
+                lines.append(
+                    f"rejected: {parent} is group/world writable "
+                    f"(mode {oct(parent_info.st_mode & 0o777)})"
+                )
+                break
+    return "; ".join(lines)
+
+
 def _chrome() -> str:
     for name in ("google-chrome", "chromium", "chromium-browser"):
         path = trusted_executable(name, which=shutil.which)
         if path:
             return path
-    raise RuntimeError("Chrome/Chromium is required for browser_harness.py")
+    detail = "; ".join(_executable_diagnostics(n) for n in ("google-chrome", "chromium"))
+    raise RuntimeError(f"Chrome/Chromium is required for browser_harness.py ({detail})")
 
 
 def _node() -> str:
@@ -45,7 +89,10 @@ def _node() -> str:
     path = trusted_executable("node", which=shutil.which)
     if path:
         return path
-    raise RuntimeError("a trusted Node executable is required for browser_harness.py")
+    raise RuntimeError(
+        f"a trusted Node executable is required for browser_harness.py "
+        f"({_executable_diagnostics('node')})"
+    )
 
 
 def _chrome_stderr(log) -> str:
