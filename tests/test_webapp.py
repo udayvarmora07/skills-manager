@@ -6,6 +6,7 @@ import os
 import tarfile
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 import urllib.error
 import urllib.request
@@ -608,6 +609,96 @@ class WebAppTestCase(unittest.TestCase):
         finally:
             (victim / "SKILL.md").unlink()
             victim.rmdir()
+
+
+class DoctorScopeEnrichmentSeamTests(unittest.TestCase):
+    """D2: `/api/doctor?scope=all` must merge the tree once, not twice.
+
+    The route builds both `scopes` and `duplicates`. Without the `records=`
+    seam it walked every scope root once inside ``list_scopes()`` (which falls
+    back to its own per-root scan) and again inside ``find_duplicates()``,
+    making it the slowest route in the app at scale. ``/api/stats`` already
+    used the seam; this pins that Doctor does too, and that sharing one snapshot
+    does not change a single reported value.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self._old_home = os.environ.get("HOME")
+        self._old_data = os.environ.get("SKILLS_MANAGER_DATA")
+        os.environ["HOME"] = self._tmp.name
+        os.environ["SKILLS_MANAGER_DATA"] = str(Path(self._tmp.name) / "data")
+
+        from skillsmgr.store import Store
+
+        data_dir = Path(self._tmp.name) / "data" / "skills-manager"
+        (data_dir / "skills").mkdir(parents=True, mode=0o700)
+        self.store = Store(data_dir)
+        self.store.init_db()
+        for index in range(6):
+            skill = self.store.skills_dir / f"skill-{index:02d}"
+            skill.mkdir()
+            (skill / "SKILL.md").write_text(
+                f"---\nname: skill-{index:02d}\ndescription: number {index}\n---\n\nbody\n",
+                encoding="utf-8",
+            )
+        # A same-name copy in an agent scope, so `duplicates` is non-empty and a
+        # silent drop of the section would be visible.
+        duplicate = Path(self._tmp.name) / ".agents" / "skills" / "skill-03"
+        duplicate.mkdir(parents=True)
+        (duplicate / "SKILL.md").write_text(
+            "---\nname: skill-03\ndescription: a different description\n---\n\nbody\n",
+            encoding="utf-8",
+        )
+        self.store.resync()
+
+        from skillsmgr import scopes
+
+        scopes.set_global_store(self.store)
+        self.addCleanup(scopes.set_global_store, None)
+
+    def test_enrichment_merges_once_and_reports_identical_values(self):
+        from skillsmgr import scopes
+        from skillsmgr.webapp import _doctor_scope_enrichment
+
+        calls = []
+        real_list_all = scopes.list_all
+
+        def counting():
+            calls.append(1)
+            return real_list_all()
+
+        expected_scopes = scopes.list_scopes()
+        expected_duplicates = scopes.find_duplicates()
+
+        with unittest.mock.patch.object(scopes, "list_all", counting):
+            report = {"ok": True}
+            _doctor_scope_enrichment(report, "all")
+
+        self.assertEqual(len(calls), 1, "the enrichment scanned the tree more than once")
+        self.assertEqual(report["scopes"], expected_scopes)
+        self.assertEqual(report["duplicates"], expected_duplicates)
+        self.assertNotIn("degraded", report)
+        # The section must be genuinely populated, so this cannot pass by
+        # comparing two empty results.
+        self.assertEqual([d["name"] for d in report["duplicates"]], ["skill-03"])
+        self.assertTrue(report["scopes"])
+
+    def test_a_failing_scan_still_reports_degraded_evidence(self):
+        from skillsmgr import scopes
+        from skillsmgr.webapp import _doctor_scope_enrichment
+
+        with unittest.mock.patch.object(
+            scopes, "list_all", unittest.mock.Mock(side_effect=OSError("scan failed"))
+        ):
+            report = {"ok": True}
+            _doctor_scope_enrichment(report, "all")
+
+        self.assertEqual(report["scopes"], [])
+        self.assertEqual(report["duplicates"], [])
+        self.assertEqual(report["degraded"][0]["section"], "scopes/duplicates")
+        self.assertIn("scan failed", report["degraded"][0]["reason"])
 
 
 if __name__ == "__main__":

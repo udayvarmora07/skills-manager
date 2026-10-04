@@ -210,10 +210,18 @@ def _doctor_scope_enrichment(report: dict, scope: str) -> None:
     # could not tell "no duplicates" from "the duplicate scan crashed".
     try:
         from .scopes import find_duplicates as _dupes
+        from .scopes import list_all as _list_all
         from .scopes import list_scopes as _lscopes
 
-        report["scopes"] = _lscopes()
-        report["duplicates"] = _dupes()
+        # Take ONE merged filesystem snapshot and summarize both sections from
+        # it.  Without this the route walked every scope root twice: once
+        # inside list_scopes() (which falls back to its own per-root scan when
+        # no records are supplied) and again inside find_duplicates().  Both
+        # are O(N) document reads, which is what made this the slowest route in
+        # the app.  /api/stats already uses exactly this seam.
+        records = _list_all()
+        report["scopes"] = _lscopes(records=records)
+        report["duplicates"] = _dupes(records)
     except Exception as exc:
         _diagnose("doctor scope=all enrichment failed", exc)
         report["scopes"] = []

@@ -413,16 +413,32 @@ def _list_all_uncached(*, include_missing: bool = False) -> list[dict]:
     return _annotate_instance_states(merged)
 
 
-def find_duplicates() -> list[dict]:
+def _merged_records(records: list[dict] | None) -> list[dict]:
+    """Return *records* when a caller already holds a merged filesystem snapshot.
+
+    The request-level seam shared by :func:`list_scopes` and
+    :func:`find_duplicates`: a caller that has already merged every scope must
+    not force a second full pass over every root. ``None`` keeps the
+    filesystem-authoritative scan for every existing caller.
+    """
+    return list_all() if records is None else records
+
+
+def find_duplicates(records: list[dict] | None = None) -> list[dict]:
     """Same-name skills present in more than one scope.
 
     Read-only grouping over list_all(): each entry is
     {"name", "scopes", "count", "descriptions_differ", "records"} where
     records carry scope/scope_label/description/disabled/tokens. Converge
     with the existing sync_skill() — no new mutation paths.
+
+    ``records`` is the same request-level seam :func:`list_scopes` accepts: a
+    caller that already holds a merged filesystem snapshot passes it instead of
+    forcing a second full pass over every root.  The default remains the
+    filesystem-authoritative scan.
     """
     groups: dict[str, list[dict]] = {}
-    for rec in list_all():
+    for rec in _merged_records(records):
         groups.setdefault(rec["name"], []).append(rec)
     dupes: list[dict] = []
     for name in sorted(groups):
