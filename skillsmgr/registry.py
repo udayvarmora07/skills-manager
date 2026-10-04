@@ -1150,12 +1150,21 @@ def write_provenance(skill_dir: str | Path, provenance: dict) -> Path:
 
 
 def read_provenance(skill_dir: str | Path) -> dict | None:
-    """Read and validate a registry provenance sidecar, if present."""
+    """Read and validate a registry provenance sidecar, if present.
+
+    The existence probe comes first on purpose.  The ancestry walk below
+    costs one ``lstat`` per component from the skill directory to the
+    filesystem root, and it exists to protect *reading this file* -- so a
+    library where nothing came from the registry was paying that walk for
+    every skill on every read to guard a file that was not there
+    (docs/24 §D1).  When the sidecar is present the guard still runs first,
+    unchanged.
+    """
     root = Path(skill_dir).expanduser()
-    _reject_symlink_ancestors(root)
     path = root / PROVENANCE_FILENAME
     if not os.path.lexists(path):
         return None
+    _reject_symlink_ancestors(root)
     if path.is_symlink():
         raise RegistryError("registry provenance sidecar cannot be a symlink")
     try:

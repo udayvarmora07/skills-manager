@@ -4,6 +4,78 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-04 — D1: the primary read path, measured before and after
+
+**[SPEC]** Executed the pure-latency half of @docs/24 §D1. The profile the audit
+published was re-measured on this machine first, and it matched: at 1,200
+synthetic skills, `Store.list()` spent **81% of its time inside
+`_observe_index_row`**, of which the document read was 54%, a per-row
+`contained_path` 24%, and a per-row `read_provenance` 21%.
+
+Four costs were removed. **None of them had a behavioural contract behind it**,
+and each is pinned by a red-first regression in
+`tests/test_audit_d1_read_path.py` (15 tests; against the pre-fix source:
+**4 failures + 9 errors**, all 15 green after):
+
+- **The shared-read fan-in copied its result twice.** `_coalesced_read` stored
+  `copy.deepcopy(func())` into the flight and then returned
+  `copy.deepcopy(result)`. The first copy exists so a *waiting* caller never
+  shares objects with the producer; the producer's own return copy is a second
+  full traversal of every row that no other caller can reach. One copy now, and
+  the "every caller gets an independent copy" property is still tested.
+- **The skills root was resolved once per row.** `contained_path` resolves both
+  `root` and the candidate, so a scan re-resolved the same root 1,200 times.
+  `path_safety.contained_path_under()` / `safe_skill_path_under()` take an
+  already-resolved root — the resolved counterpart of the existing
+  `contained_entry_under`. `resolve()` was also swapped for `os.path.realpath`,
+  which resolves the same links without pathlib rebuilding every component
+  first; `contained_entry_under` already resolved that way.
+- **The provenance sidecar probe walked the whole ancestry to guard a file that
+  was usually absent.** `read_provenance` ran `_reject_symlink_ancestors` — one
+  `lstat` per component from the skill directory to `/` — *before* checking
+  `lexists`. A library where nothing came from the registry paid that walk for
+  every skill, on every read. The existence probe now comes first; **when the
+  sidecar is present the guard still runs first and unchanged**, and both
+  directions are tested.
+- **The default Library view read every global document twice.**
+  `scopes.scan_scope("global")` enriched index rows with a token estimate by
+  opening `SKILL.md` and re-running `tokens.estimate` — work the row's own
+  loader pass had already done for the same bytes and thrown away. The four
+  token fields are now carried through the observation pass, and the enrichment
+  fallback only runs for a row the loader could not read.
+
+**Measured, interleaved A/B at 1,200 skills** (three alternating post/pre rounds;
+a single before/after pair was **not** used — it showed no change at all, and
+the interleaved run showed −34%, which is the honest instrument on a noisy
+box):
+
+| operation | pre (ms) | post (ms) | change |
+|---|---|---|---|
+| `Store.list()` | 728.6 | 481.7 | **−33.9%** |
+| `scopes.list_all()` *(the default Library view)* | 1279.4 | 771.1 | **−39.7%** |
+| `Store.doctor()` | 758.2 | 634.6 | −16.3% |
+| `Store.search()` | 35.1 | 21.5 | −38.7% |
+| `Store.stats()` | 75.1 | 69.8 | −7.1% |
+
+The complexity ratchet caught my own +1 on `_observe_index_row` and the breach
+was **restored by refactoring** (`_mark_unaddressable_row`,
+`_observed_skill_path`), not by editing `complexity-baseline.json`. The one
+existing test that broke did so for a real reason: the coalescing contract test
+pinned the private method's arity, which the hoisted-root parameter changed;
+the wrapper now accepts whatever arity it is called with.
+
+**[NOTE] What was deliberately not done.** The audit's D1 item 1 — *make the
+observations lazy* — is **not** an optimisation, it is a public-contract change:
+the `malformed` / `decode_error` / `addressable` signals that the Overview's
+attention queue, Doctor, hygiene and `effective.explain` all read come out of
+that document read. Dropping it would silently remove user-visible drift
+reporting to buy latency, and adding a way to fetch observations on demand would
+be a new `Store` method, which is locked-constraint 5. It is recorded in
+`task.md` as a decision for the maintainer, not a silent omission. The measured
+headroom that remains is exactly that read: `load_skill` is 57% of the remaining
+`list()` cost, and there is no cheaper way to learn whether a document is
+malformed than reading it.
+
 ## 2026-10-04 — Audit remediation day 1 and week 1 (docs/24)
 
 **[SPEC]** Worked @docs/24-verified-findings-and-competitive-recommendations-2026-10-04.md.

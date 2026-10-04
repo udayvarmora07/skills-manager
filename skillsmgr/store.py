@@ -182,6 +182,12 @@ def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
     in-flight fan-in only, not a completed-result cache.  Each caller receives
     its own deep copy because scope enrichment and UI serialization annotate
     the returned dictionaries after the read completes.
+
+    The copy handed to a *waiting* caller exists so two callers never share
+    objects.  The caller that ran the read is handed the same single copy it
+    published to the flight: copying its own freshly-built result a second time
+    on the way out was a full extra traversal of every row (docs/24 §D1), and
+    the read's result is already private to this flight.
     """
     with flights_lock:
         flight = flights.get(key)
@@ -193,7 +199,7 @@ def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
             owner = False
     if owner:
         try:
-            result = copy.deepcopy(func())
+            result = func()
         except Exception as exc:
             with flights_lock:
                 flight["error"] = exc
@@ -841,6 +847,29 @@ def _safe_skill_path(root: Path, name: str) -> Path:
         raise StoreError(str(exc)) from exc
 
 
+def _safe_skill_path_under(resolved_root: Path, name: str) -> Path:
+    """``_safe_skill_path`` for a caller that already resolved the root.
+
+    A scan resolves ``<data>/skills`` once and calls this per row.  Resolving
+    the same root again for every row cost a measurable share of the primary
+    read path (docs/24 §D1); the name rule and the containment check are the
+    ones ``_safe_skill_path`` applies, so nothing is skipped to buy the speed.
+    """
+    try:
+        return paths.safe_skill_path_under(resolved_root, name)
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
+
+
+def _observed_skill_path(
+    skills_dir: Path, resolved_root: Path | None, name: str
+) -> Path:
+    """The contained path for one observed row, reusing a scan's resolved root."""
+    if resolved_root is None:
+        return _safe_skill_path(skills_dir, name)
+    return _safe_skill_path_under(resolved_root, name)
+
+
 class Store:
     """Manages the skills directory tree and the SQLite index."""
 
@@ -1210,16 +1239,54 @@ class Store:
             # the filesystem is the source of truth, so the index is filtered
             # by it rather than trusted over it.
             result = [dict(r) for r in rows if r["name"] in on_disk]
-            from .loader import load_skill, name_is_addressable
-
+            resolved_root = self.skills_dir.expanduser().resolve()
             for record in result:
-                self._observe_index_row(record)
+                self._observe_index_row(record, resolved_root)
             return result
         finally:
             conn.close()
 
-    def _observe_index_row(self, record: dict) -> None:
+    # Observation keys copied from a loaded document onto an index row.  The
+    # token fields are here because the loader has already estimated them from
+    # the same bytes: ``scopes.scan_scope("global")`` used to re-open and
+    # re-parse every SKILL.md to recompute exactly these four numbers, so the
+    # default Library view read each global document twice (docs/24 §D1).
+    _OBSERVED_KEYS = (
+        "content_hash",
+        "metadata_hash",
+        "observed_at",
+        "provenance",
+        "portable_frontmatter",
+        "frontmatter_extensions",
+        "registry_provenance",
+        "registry_provenance_error",
+        "malformed",
+        "decode_error",
+        "tokens",
+        "tokens_method",
+        "tokens_pct",
+        "chars",
+    )
+
+    @staticmethod
+    def _mark_unaddressable_row(record: dict) -> None:
+        """Mark one index row whose directory name fails the canonical rule.
+
+        Kept beside the read path it serves so a row the tool cannot address is
+        reported rather than silently dropped, and so the attention surfaces
+        that count it keep working (SCOPE-14).
+        """
+        record["malformed"] = True
+        record["decode_error"] = (
+            f"invalid skill name {record['name']!r}: it fails the "
+            "canonical name rule and cannot be addressed by name"
+        )
+
+    def _observe_index_row(self, record: dict, resolved_root: Path | None = None) -> None:
         """Merge live filesystem observations into one ``list()`` row.
+
+        ``resolved_root`` is the already-resolved skills directory a scan
+        computed once; callers outside a scan may omit it.
 
         SCOPE-15: a rogue index row whose name fails the canonical rule made
         ``_safe_skill_path`` raise StoreError, and that single row took down
@@ -1233,29 +1300,14 @@ class Store:
 
         record.setdefault("addressable", name_is_addressable(record["name"]))
         if not record["addressable"]:
-            record["malformed"] = True
-            record["decode_error"] = (
-                f"invalid skill name {record['name']!r}: it fails the "
-                "canonical name rule and cannot be addressed by name"
-            )
+            self._mark_unaddressable_row(record)
             return
-        skill_dir = _safe_skill_path(self.skills_dir, record["name"])
+        skill_dir = _observed_skill_path(self.skills_dir, resolved_root, record["name"])
         try:
             observed = load_skill(skill_dir)
         except (OSError, SkillNotFound, UnicodeError, StoreError):
             return
-        for key in (
-            "content_hash",
-            "metadata_hash",
-            "observed_at",
-            "provenance",
-            "portable_frontmatter",
-            "frontmatter_extensions",
-            "registry_provenance",
-            "registry_provenance_error",
-            "malformed",
-            "decode_error",
-        ):
+        for key in self._OBSERVED_KEYS:
             if key in observed:
                 record[key] = observed[key]
         if isinstance(record.get("provenance"), dict):

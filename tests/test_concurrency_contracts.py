@@ -143,7 +143,10 @@ class ConcurrencyContractTests(unittest.TestCase):
         calls_lock = threading.Lock()
         real_observe = self.store._observe_index_row
 
-        def blocked_observe(record):
+        def blocked_observe(record, *args, **kwargs):
+            # ``_observe_index_row`` also receives the scan's pre-resolved
+            # skills root (docs/24 §D1), so accept whatever arity it is
+            # called with rather than pinning the signature.
             nonlocal calls
             with calls_lock:
                 calls += 1
@@ -151,7 +154,7 @@ class ConcurrencyContractTests(unittest.TestCase):
             if first:
                 entered.set()
                 self.assertTrue(release.wait(timeout=5))
-            return real_observe(record)
+            return real_observe(record, *args, **kwargs)
 
         with mock.patch.object(
             self.store, "_observe_index_row", side_effect=blocked_observe

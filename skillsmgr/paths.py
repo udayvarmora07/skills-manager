@@ -17,8 +17,10 @@ from .path_safety import (
     contained_entry,
     contained_entry_under,
     contained_path,
+    contained_path_under,
     mkdir_private,
     safe_skill_path,
+    safe_skill_path_under,
     tighten_private_root,
     trusted_root,
 )

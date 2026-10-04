@@ -303,7 +303,11 @@ def scan_scope(scope_id: str) -> list[dict]:
                     r["physical_path"] = str(Path(r["path"]).resolve())
                 except OSError:
                     r["physical_path"] = str(r["path"])
-            # Enrich global rows with tokens if missing (DB rows don't have them).
+            # Enrich global rows with tokens if missing.  ``Store.list()``
+            # already estimated them from the same bytes while observing the
+            # row, so this fallback only runs for a row whose loader pass did
+            # not produce them -- it used to re-read and re-parse every
+            # SKILL.md on every merged request (docs/24 §D1).
             if "tokens" not in r or not r.get("tokens"):
                 try:
                     from .tokens import estimate as _est

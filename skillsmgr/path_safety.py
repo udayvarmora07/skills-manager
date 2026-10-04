@@ -153,12 +153,34 @@ def _reject_windows_separators(parts: tuple[Path, ...]) -> None:
 
 def contained_path(root: Path, *parts: str | Path) -> Path:
     """Return a resolved path only when it remains below ``root``."""
-    resolved_root = Path(root).expanduser().resolve()
+    return contained_path_under(Path(root).expanduser().resolve(), *parts)
+
+
+def contained_path_under(resolved_root: Path, *parts: str | Path) -> Path:
+    """Return a resolved path below an **already-resolved** root.
+
+    Identical guarantee to :func:`contained_path`, but the caller supplies the
+    resolved root instead of this function resolving it on every call.  A tree
+    scan resolves its root once and calls this per entry: re-resolving the same
+    root for every entry cost about a quarter of the primary read path at 1,200
+    skills (docs/24 §D1).  ``resolved_root`` **must** already be resolved, or
+    the containment check would compare a resolved candidate against an
+    unresolved prefix.
+
+    This is the *resolved* counterpart of :func:`contained_entry_under`; keep
+    the pair straight.  Use ``contained_entry_under`` when a name-addressed
+    operation must act on the named entry rather than its link target (SCOPE-3),
+    and this one when a resolved path is what the caller needs.
+    """
     path_parts = tuple(Path(part) for part in parts)
     if any(part.is_absolute() for part in path_parts):
         raise ValueError("absolute paths are not valid below a managed root")
     _reject_windows_separators(path_parts)
-    candidate = resolved_root.joinpath(*path_parts).resolve()
+    # ``os.path.realpath`` and ``Path.resolve()`` resolve the same set of
+    # links; the former reaches the kernel without pathlib rebuilding every
+    # component of the path first, which matters when a scan does this once
+    # per row.  ``contained_entry_under`` already resolves this way.
+    candidate = Path(os.path.realpath(Path(resolved_root).joinpath(*path_parts)))
     try:
         inside = candidate == resolved_root or candidate.is_relative_to(resolved_root)
     except AttributeError:  # pragma: no cover - Python 3.10 fallback
@@ -172,10 +194,21 @@ def contained_path(root: Path, *parts: str | Path) -> Path:
 
 def safe_skill_path(root: Path, name: str) -> Path:
     """Validate a canonical skill name and return its contained path."""
+    return safe_skill_path_under(Path(root).expanduser().resolve(), name)
+
+
+def safe_skill_path_under(resolved_root: Path, name: str) -> Path:
+    """Validate a canonical skill name below an **already-resolved** root.
+
+    The scan-time counterpart of :func:`safe_skill_path`.  A tree scan resolves
+    its root once and calls this per row instead of paying one root resolution
+    per row (docs/24 §D1); the name rule and the containment check are
+    unchanged, so a hoist that dropped either one would be a regression.
+    """
     from .validator import validate_skill_name
 
     validate_skill_name(name)
-    return contained_path(root, name)
+    return contained_path_under(resolved_root, name)
 
 
 def contained_entry(root: Path, *parts: str | Path) -> Path:

@@ -25,6 +25,24 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   contrast, WCAG 2.5.3 label, anchor colour, trash-purge labelling/placement.
 - [x] CI: re-enable Chrome's user-namespace sandbox on the runner and tighten the
   Node tool cache, so the browser job passes without weakening SEC-15.
+- [x] D1 (pure-latency part): the primary read path no longer pays four costs
+  it had no contract behind — a redundant whole-result `deepcopy` in the shared
+  read, one skills-root resolution *per row*, a full directory-ancestry walk to
+  guard a sidecar that is not there, and a second read of every global
+  document just to recompute a token estimate the loader had already produced.
+  Interleaved A/B at 1,200 skills: `Store.list()` −34%, `scopes.list_all()`
+  (the default Library view) −40%, `Store.doctor()` −16%, `search` −39%.
+- [ ] D1 (lazy observations): making `list()` skip the document read entirely is
+  a **public-contract change** — the `malformed`/`decode_error` signals the
+  Overview's attention queue is built on come from that read. Needs a decision,
+  not an optimisation pass.
+- [ ] D3-4: `GET /api/skills` must not create the data directory.
+- [ ] D3-3: `GET /api/export` writes an unpruned archive on every call.
+- [ ] D3-5: multipart upload silently discards unsafe parts and answers 200.
+- [ ] D3-8: invalid numeric query parameters are silently coerced.
+- [ ] D3-9: no pagination; unknown paging params silently ignored.
+- [ ] D3-6 / D3-7 / D3-12: `get()`/`list()` disagree, two error-body shapes,
+  unstripped bind host raises a raw `gaierror`.
 - [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
   rebuilt from the current tree, not the `6733da9` hashes in the progress log.
 - [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes
