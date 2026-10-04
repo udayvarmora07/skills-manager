@@ -71,6 +71,60 @@ class TrustRootSelectionTests(unittest.TestCase):
             paths.data_dir()
 
     @unittest.skipUnless(os.name == "posix", "POSIX permission contract")
+    def test_upgrades_a_legacy_group_writable_manager_root_in_place(self):
+        """The upgrade path SEC-19 never pinned.
+
+        A data directory created before the ownership control landed is
+        permanently unusable: every subcommand refuses, and nothing in the
+        product said what to do about it. This pins that a recognisable,
+        owner-held root is tightened to 0o700 with its contents intact.
+        """
+        manager = self.base / "skills-manager"
+        manager.mkdir(mode=0o700)
+        skills = manager / "skills"
+        skills.mkdir(mode=0o700)
+        document = skills / "demo" / "SKILL.md"
+        document.parent.mkdir()
+        document.write_text("---\nname: demo\n---\n\nbody\n", encoding="utf-8")
+        (manager / "skills-manager.db").write_bytes(b"index")
+        for path in (skills, manager):
+            path.chmod(stat.S_IRWXU | stat.S_IWGRP | stat.S_IXGRP)
+        os.environ["SKILLS_MANAGER_DATA"] = str(self.base)
+
+        resolved = paths.data_dir()
+
+        self.assertEqual(resolved, manager)
+        self.assertEqual(
+            stat.S_IMODE(resolved.stat().st_mode), 0o700,
+            "a recognisable owner-held root should be tightened to 0o700",
+        )
+        # Tightening permissions must never cost the user their data.
+        self.assertEqual(document.read_text(encoding="utf-8").count("name: demo"), 1)
+        self.assertTrue((resolved / "skills-manager.db").is_file())
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permission contract")
+    def test_refuses_to_repair_a_directory_it_does_not_recognise(self):
+        """The repair must only ever touch a directory that is recognisably ours."""
+        manager = self.base / "skills-manager"
+        manager.mkdir(mode=0o700)
+        (manager / "someone-elses-file.txt").write_text("not ours", encoding="utf-8")
+        manager.chmod(stat.S_IRWXU | stat.S_IWGRP | stat.S_IXGRP)
+        os.environ["SKILLS_MANAGER_DATA"] = str(self.base)
+
+        with self.assertRaises(ValueError) as ctx:
+            paths.data_dir()
+
+        message = str(ctx.exception)
+        # The refusal must say how to fix it, not only what is wrong.
+        self.assertIn(f"chmod 700 {manager}", message)
+        self.assertIn("SKILLS_MANAGER_DATA", message)
+        self.assertEqual(
+            stat.S_IMODE(manager.stat().st_mode),
+            stat.S_IRWXU | stat.S_IWGRP | stat.S_IXGRP,
+            "an unrecognised directory must be left exactly as it was",
+        )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permission contract")
     def test_rejects_a_new_root_directly_below_shared_tmp(self):
         selected = Path(tempfile.gettempdir()) / "skillsmgr-sec19-untrusted-root"
         if selected.exists():

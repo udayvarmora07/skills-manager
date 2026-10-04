@@ -19,6 +19,7 @@ from .path_safety import (
     contained_path,
     mkdir_private,
     safe_skill_path,
+    tighten_private_root,
     trusted_root,
 )
 
@@ -68,7 +69,24 @@ def data_dir() -> Path:
     # subtree.  This rejects broad/shared overrides such as ``/`` or ``/tmp``
     # even when the final ``skills-manager`` directory does not exist yet.
     selected = trusted_root(base)
-    return trusted_root(selected / "skills-manager")
+    manager = selected / "skills-manager"
+    try:
+        return trusted_root(manager)
+    except ValueError as exc:
+        # A root created before the ownership control landed is group/world-
+        # writable, so every subcommand fails with no way back.  Tighten it when
+        # it is recognisably ours and owned by us; the repair only ever reduces
+        # access, and anything else falls through to the refusal below.
+        repaired = tighten_private_root(manager)
+        if repaired is not None:
+            return trusted_root(repaired)
+        raise ValueError(
+            f"{exc}\n"
+            f"  fix: this directory is only readable and writable by your user.\n"
+            f"       run: chmod 700 {manager}\n"
+            f"  or point the manager somewhere private, e.g.:\n"
+            f"       export SKILLS_MANAGER_DATA=$HOME/.local/share/skills-manager"
+        ) from None
 
 
 def skills_dir() -> Path:

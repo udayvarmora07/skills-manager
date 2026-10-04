@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -48,14 +49,39 @@ def _node() -> str:
 
 
 def _chrome_stderr(log) -> str:
-    """Return the tail of Chrome's captured stderr, for a diagnosable failure."""
+    """Return Chrome's own explanation of a startup failure.
+
+    A crash dump is thousands of lines long and buries the one line that says
+    why, so prefer the diagnostic lines (CHECK failures, fatal messages, and
+    zygote/sandbox/namespace complaints) and fall back to the tail of the log.
+    """
     try:
         log.flush()
         log.seek(0)
         text = log.read()
     except (OSError, ValueError):
         return ""
-    return text.strip()[-2000:]
+    text = text.strip()
+    if not text:
+        return ""
+    interesting = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(
+            r"CHECK failed|FATAL|zygote|sandbox|namespace|No usable|"
+            r"Failed to create|permission denied|Permission denied|"
+            r"not permitted|Operation not permitted",
+            line,
+        )
+    ]
+    # Drop the stack frames that follow the message so the cause is readable.
+    trimmed: list[str] = []
+    for line in interesting:
+        if line.startswith("#"):
+            break
+        trimmed.append(line)
+    detail = "\n".join(trimmed) if trimmed else text[-2000:]
+    return detail[:2000]
 
 
 def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float = 30.0,

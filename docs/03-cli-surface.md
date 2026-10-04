@@ -184,13 +184,37 @@ and cache metadata without mutating the Store. The second request is
 revalidates the expiring review snapshot and optional `--registry-hash` evidence,
 then writes a credential-free `.skillsmgr-provenance.json` sidecar. The commit
 request performs no network request and a review id is single-use. `--allow-stale`
-opts into an expired cache only when the network is unavailable. Set
-`SKILLS_MANAGER_REGISTRY_TOKEN` or `VERCEL_OIDC_TOKEN` for bearer authentication;
-tokens are not persisted.
+opts into an expired cache only when the network is unavailable.
 The registry client rejects unsafe hosts/redirects, oversized or malformed
 responses, traversal/symlink paths, duplicate files, and resource-limit
 violations. See @docs/ADR-003-registry-bridge-and-eval-harness.md and
 @docs/ADR-005-registry-network-and-provenance.md.
+
+**[SPEC] Endpoint tiers (changed 2026-10-04).** skills.sh moved its read API
+behind Vercel-project OIDC, so every `/api/v1` request answers `401` without a
+project token — and a binary on a user's laptop cannot mint one. Three routes
+remain public, and this client depends only on those:
+
+| Operation | Route | Auth |
+|---|---|---|
+| `--search QUERY` | `/api/search` | **public** — returns `{skills:[…]}` at most 100 rows, honours `limit`, ignores paging |
+| `--fetch` (detail + commit) | `/api/download/{source}/{slug}` | **public** |
+| `--browse`, `--curated` | `/api/v1/skills`, `/api/v1/skills/curated` | **token required** — no public equivalent |
+
+`--search` normalizes the public envelope into the same listing shape every
+caller reads, applies the requested `limit` itself, and reports `truncated`
+when the route returned more than asked for. `--browse`/`--curated` still work
+with `SKILLS_MANAGER_REGISTRY_TOKEN` or `VERCEL_OIDC_TOKEN` (never persisted);
+without one they fail with a message naming the token **and** the public
+alternative, rather than an opaque `HTTP 401`.
+
+**[SPEC] `--registry-hash` is the manager's own content digest.** The public
+download route's `hash` field is produced by an undocumented upstream algorithm
+(verified live: ten candidate algorithms, none matching), so it is never claimed
+as verified. It is preserved as `upstream_hash` with `upstream_hash_verified:
+false`, and the review artifact plus the provenance sidecar both carry that
+demotion. Integrity rests on the framed `snapshot_hash`, which is what
+`--registry-hash` compares and what detects upstream change between fetches.
 
 Before the existing store-add seam is reached, a fetched snapshot is
 materialized in a private temporary directory, fully validated, and scanned

@@ -29,6 +29,56 @@ def mkdir_private(path: Path) -> Path:
     return target
 
 
+#: Entries that identify a directory as this tool's own data root.  Used only to
+#: decide whether a too-permissive existing directory may be tightened, never to
+#: grant access to anything.
+_OWNED_ROOT_ENTRIES = ("skills", "trash", "templates", "backups", "skills-manager.db")
+
+
+def tighten_private_root(root: Path, *, label: str = "data root") -> Path | None:
+    """Tighten an over-permissive but recognisably-owned root to ``0o700``.
+
+    A data directory created before the ownership control landed is permanently
+    unusable: :func:`trusted_root` rejects it, every subcommand fails, and
+    nothing in the product tells the user what to do about it.  This is the
+    upgrade path.
+
+    The repair is deliberately conservative and can only ever *reduce* access:
+
+    * the directory already exists and is a directory;
+    * it is owned by this user (or root);
+    * its parent chain is itself an acceptable root;
+    * its contents already look like this tool's data;
+    * it is currently group- or world-writable.
+
+    Anything else returns ``None`` and the caller reports the original refusal
+    with instructions rather than silently changing a directory it does not own.
+    """
+    target = Path(root)
+    try:
+        info = target.stat()
+    except OSError:
+        return None
+    if not os.path.isdir(target):
+        return None
+    if not info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        return None                                  # already tight enough
+    if os.name == "posix" and info.st_uid not in (0, os.getuid()):
+        return None                                  # not ours to change
+    try:
+        trusted_root(target.parent, label=label)
+    except ValueError:
+        return None                                  # parent chain is not safe
+    try:
+        if not any(entry.exists() for entry in
+                   (target / name for name in _OWNED_ROOT_ENTRIES)):
+            return None                              # not recognisably ours
+        os.chmod(target, 0o700)
+    except OSError:
+        return None
+    return target
+
+
 def trusted_root(root: Path, *, label: str = "data root") -> Path:
     """Return a canonical root only when it is safe to read and write.
 
