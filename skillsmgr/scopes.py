@@ -752,29 +752,35 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
     skill_dir = _safe_scope_skill_path(scope, name)
     src = skill_dir / ("SKILL.md.disabled" if enable else "SKILL.md")
     dst = skill_dir / ("SKILL.md" if enable else "SKILL.md.disabled")
-    if not src.is_file():
+    # STORE-11: the existence checks and the rename below must be one atomic
+    # step, so they run together under the same lock key the sibling scope
+    # writers use.  Without it this was check-then-rename with no exclusion at
+    # all, and a concurrent toggle in another process could move the document
+    # between the checks and the rename.
+    with _mutation_lock(src):
+        if not src.is_file():
+            if dst.is_file():
+                raise StoreError(f"skill '{name}' is already {'enabled' if enable else 'disabled'} in scope '{scope_id}'")
+            raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
+        # SCOPE-13: with both documents present the rename below would land on top
+        # of the other one and destroy it, with no snapshot.  Refuse instead of
+        # guessing which document the user meant.
         if dst.is_file():
-            raise StoreError(f"skill '{name}' is already {'enabled' if enable else 'disabled'} in scope '{scope_id}'")
-        raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
-    # SCOPE-13: with both documents present the rename below would land on top
-    # of the other one and destroy it, with no snapshot.  Refuse instead of
-    # guessing which document the user meant.
-    if dst.is_file():
-        raise StoreError(
-            f"skill '{name}' has both SKILL.md and SKILL.md.disabled in scope "
-            f"'{scope_id}'; remove one of the two documents first"
-        )
-    try:
-        src.rename(dst)
-    except FileNotFoundError:
-        # STORE-11: the lock is process-local, so a second process (CLI + Web UI
-        # on one data dir) can move the document between the checks above and
-        # this rename.  Report that as a clean, actionable conflict instead of
-        # letting a raw FileNotFoundError reach the caller as a traceback/500.
-        raise StoreError(
-            f"skill '{name}' changed concurrently in scope '{scope_id}' "
-            "(another process moved its document); retry the toggle"
-        ) from None
+            raise StoreError(
+                f"skill '{name}' has both SKILL.md and SKILL.md.disabled in scope "
+                f"'{scope_id}'; remove one of the two documents first"
+            )
+        try:
+            src.rename(dst)
+        except FileNotFoundError:
+            # The advisory lock excludes cooperating writers on this data dir, but
+            # a change made outside the tool can still land between the check and
+            # the rename.  Report that as a clean, actionable conflict instead of
+            # letting a raw FileNotFoundError reach the caller as a traceback/500.
+            raise StoreError(
+                f"skill '{name}' changed concurrently in scope '{scope_id}' "
+                "(another process moved its document); retry the toggle"
+            ) from None
     return {"name": name, "disabled": not enable, "scope": scope_id}
 
 

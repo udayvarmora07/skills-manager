@@ -1,6 +1,7 @@
 """Hermetic concurrency contracts for atomic Store and HTTP operations."""
 
 import json
+import os
 import tempfile
 import time
 import threading
@@ -11,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import scopes
 from skillsmgr.atomic_io import atomic_write_text
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
@@ -350,6 +352,113 @@ class ConcurrencyContractTests(unittest.TestCase):
             if ".skillsmgr-tmp" in p.name
         ]
         self.assertEqual(leftovers, [])
+
+
+class ScopeToggleAtomicityTests(unittest.TestCase):
+    """STORE-11 (scope path): agent-scope toggles must not interleave.
+
+    ``scopes.toggle_skill`` used to check that the source document existed and
+    that the destination did not, then rename -- with no lock at all, while its
+    sibling scope writers (``edit_skill``, ``restore_snapshot``) all took
+    ``_mutation_lock``.  Both existence checks and the rename therefore sat in
+    one unprotected window, so a second toggler could act on stale observations.
+
+    A timing-based stress test cannot pin this: the window is a few bytecodes
+    wide and the GIL rarely lands a second thread inside it.  Instead this
+    pauses the first toggler *inside* its critical section and asserts the
+    second one cannot get in -- which is the mutual-exclusion property the lock
+    is supposed to provide, checked deterministically rather than hopefully.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self._old_home = os.environ.get("HOME")
+        self._old_data = os.environ.get("SKILLS_MANAGER_DATA")
+        os.environ["HOME"] = self._tmp.name
+        os.environ["SKILLS_MANAGER_DATA"] = str(Path(self._tmp.name) / "data")
+        scopes.set_global_store(scopes.Store())
+        scopes._global_store().init_db()
+        created = scopes.create_skill("agents", "demo", description="demo skill")
+        self.skill_dir = Path(created["path"])
+        self.active = self.skill_dir / "SKILL.md"
+        self.disabled = self.skill_dir / "SKILL.md.disabled"
+        self.original = self.active.read_text(encoding="utf-8")
+
+    def tearDown(self):
+        scopes.set_global_store(None)
+        if self._old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = self._old_home
+        if self._old_data is None:
+            os.environ.pop("SKILLS_MANAGER_DATA", None)
+        else:
+            os.environ["SKILLS_MANAGER_DATA"] = self._old_data
+
+    def test_a_second_toggle_cannot_enter_the_first_toggles_critical_section(self):
+        inside = threading.Event()   # first toggler is mid-critical-section
+        release = threading.Event()  # let the first toggler finish
+        real_rename = Path.rename
+
+        def pausing_rename(path, target):
+            if not inside.is_set():
+                inside.set()
+                # NOTE: `path` is a Path, not the TestCase -- assert through the
+                # captured test, or an exception here would kill the first
+                # toggler *inside* the lock and silently make the test vacuous.
+                if not release.wait(timeout=30):
+                    raise AssertionError("first toggler was never released")
+            return real_rename(path, target)
+
+        second_done = threading.Event()
+        outcomes: list[BaseException] = []
+
+        def second_toggle() -> None:
+            try:
+                scopes.toggle_skill("agents", "demo", enable=False)
+            except (scopes.StoreError, scopes.SkillNotFound) as exc:
+                outcomes.append(exc)
+            finally:
+                second_done.set()
+
+        with mock.patch.object(Path, "rename", pausing_rename):
+            first_errors: list[BaseException] = []
+
+            def first_toggle() -> None:
+                try:
+                    scopes.toggle_skill("agents", "demo", enable=False)
+                except BaseException as exc:  # noqa: BLE001 - asserted below
+                    first_errors.append(exc)
+
+            first = threading.Thread(target=first_toggle)
+            first.start()
+            self.assertTrue(inside.wait(timeout=30), "first toggle never started")
+
+            other = threading.Thread(target=second_toggle)
+            other.start()
+            # Give the second toggler ample opportunity to finish.  If it
+            # completes while the first is still paused inside its critical
+            # section, the check-then-rename window was unprotected.
+            raced = second_done.wait(timeout=2.0)
+            release.set()
+            first.join(timeout=30)
+            other.join(timeout=30)
+
+        self.assertEqual(first_errors, [], "the first toggle raised")
+        self.assertFalse(
+            raced,
+            "a second toggle completed while the first was mid-rename: "
+            "toggle_skill does not exclude concurrent writers",
+        )
+
+        survivors = [p for p in (self.active, self.disabled) if p.is_file()]
+        self.assertEqual(
+            len(survivors), 1, f"expected one surviving document, found {survivors}"
+        )
+        self.assertEqual(survivors[0].read_text(encoding="utf-8"), self.original)
+        listed = scopes.get_skill("agents", "demo")
+        self.assertEqual(listed["disabled"], survivors[0] == self.disabled)
 
 
 if __name__ == "__main__":

@@ -1901,10 +1901,11 @@ class Store:
         try:
             md_file.rename(skill_dir / "SKILL.md.disabled")
         except FileNotFoundError:
-            # STORE-11: the mutation lock is process-local, so a second process on
-            # this data dir (CLI + web UI) can move the document between the
-            # checks above and this rename.  Fail cleanly instead of leaking a
-            # raw FileNotFoundError that doctor() then cannot explain.
+            # STORE-11: the mutation lock excludes cooperating writers on this
+            # data dir (CLI + web UI), but a writer that did not take it -- or a
+            # change made outside the tool entirely -- can still move the document
+            # between the checks above and this rename.  Fail cleanly instead of
+            # leaking a raw FileNotFoundError that doctor() then cannot explain.
             raise StoreError(
                 f"skill '{name}' changed concurrently (another process moved "
                 "SKILL.md); retry the disable"

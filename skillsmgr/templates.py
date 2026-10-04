@@ -64,11 +64,11 @@ def create_template(
 ) -> Path:
     """Create template *name* with default content and return its path."""
     path = template_path(templates_dir, name)
-    # BUG-11: the directory must exist before the lock is taken.  Today
-    # ``_mutation_lock`` is a pure in-memory lookup so the old ordering could not
-    # fail, but it read as though the lock guarded the mkdir -- and any future
-    # file-backed lock would have created its lock file inside a directory that
-    # did not exist yet.
+    # BUG-11: the directory must exist before the lock is taken.
+    # ``_mutation_lock`` opens its advisory lock file lazily, and that file lives
+    # outside the managed tree, but the ordering still matters: taking the lock
+    # before the directory exists would create a lock file inside a directory
+    # that does not exist yet.
     templates_dir.mkdir(parents=True, exist_ok=True)
     with _mutation_lock(path):
         if path.exists():

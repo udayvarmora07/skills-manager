@@ -148,11 +148,22 @@ path parameters, and CLI names.
 
 ## Locking model
 
-**[SPEC]** Locking is in-process and two-level; it is not a cross-process lock.
+**[SPEC]** Locking is two-level: an in-process reentrant lock for thread
+exclusion, plus an OS-level **advisory cross-process** lock over a file, so a
+CLI process and a web UI process on one data directory exclude one another.
 
-- `atomic_io.mutation_lock(path)` returns a reentrant lock keyed by the resolved
-  path, held in a bounded registry (`MAX_MUTATION_LOCKS = 512`; only provably
-  free locks are evicted, so a reentrant holder cannot lose its lock).
+- `atomic_io.mutation_lock(path)` returns a `_CrossProcessLock` keyed by the
+  resolved path, held in a bounded registry (`MAX_MUTATION_LOCKS = 512`; only
+  provably free locks are evicted, so a reentrant holder cannot lose its lock).
+- The primitive is a `threading.RLock` for reentrancy and thread exclusion
+  (tracked by an explicit depth counter) **combined with** an advisory file
+  lock: `fcntl.flock(fd, LOCK_EX)` on POSIX, and a one-byte
+  `msvcrt.locking` region on Windows. On a platform providing neither, the
+  lock degrades to thread-only exclusion — that fallback is the one documented
+  limit.
+- Lock files live in `tempfile.gettempdir()/skillsmgr-locks/<sha256-of-key>.lock`,
+  deliberately **outside** every managed tree, so acquiring a lock for a path
+  that does not exist yet cannot materialize a fake skill directory.
 - A mutation takes a **per-skill lock** on `<skill>/SKILL.md` and/or the
   **library-wide index lock** at `<data>/skills/.skillsmgr-index-lock`
   (`store._index_lock_path`). `store._skill_and_index_locks()` holds both, always
@@ -161,10 +172,15 @@ path parameters, and CLI names.
 - Whole-trash operations (`restore`, `purge_trash`) serialize on a single
   `<data>/trash/.trash-lock` key, because per-skill keys cannot make them exclude
   each other (STORE-5).
-- The primitive is `threading.RLock`, so it excludes threads inside **one**
-  process only. Concurrent CLI and web UI on one data dir have no mutual
-  exclusion — that is `STORE-11`/`SEC-12`, recorded as **OPEN** in
-  @docs/13-audit-remediation-status-2026-09-11.md.
+- A lost cross-process race surfaces as a clean `StoreError` rather than a raw
+  `OSError`; toggle renames in both `store.py` and `scopes.py` translate the
+  racing `FileNotFoundError` into an actionable "changed concurrently, retry"
+  message.
+
+`STORE-11`/`SEC-12` are **FIXED** — see
+@docs/13-audit-remediation-status-2026-09-11.md. Cross-process exclusion is
+advisory: it coordinates cooperating writers, and a caller that ignores the
+returned lock is not constrained by it.
 
 ## Root and consumer model
 

@@ -124,6 +124,15 @@ class RemovePurgeAtomicityTests(AuditStoreTestCase):
         # STORE-7: SKILL.md was unlinked before the failing rmtree, a raw
         # PermissionError escaped, and the row stayed 'active' -- so list()
         # advertised a skill whose document was already gone.
+        #
+        # ``_purge_skill`` has two *both-correct* outcomes, chosen by the order
+        # ``shutil.rmtree`` enumerates directory entries: if SKILL.md was already
+        # unlinked the row is dropped and the remnant parked; if the delete failed
+        # before touching the document the tree is rolled back and the row kept.
+        # Which branch runs therefore depends on the filesystem, not on the
+        # product.  Assert the invariant that actually matters -- a skill is never
+        # advertised once its document is gone -- rather than one branch, which is
+        # what made this test pass on the author's filesystem and fail on CI.
         skill_dir = self.make_skill(extra_dirs=["scripts"])
         (skill_dir / "scripts" / "run.sh").write_text("x", encoding="utf-8")
         self.make_undeletable(skill_dir / "scripts")
@@ -133,16 +142,33 @@ class RemovePurgeAtomicityTests(AuditStoreTestCase):
 
         self.assertIn("could not purge skill 'demo'", str(ctx.exception))
         self.assertNotIsInstance(ctx.exception, OSError)
+
+        advertised = "demo" in [row["name"] for row in self.store.list()]
+        document_exists = (skill_dir / "SKILL.md").is_file()
         self.assertEqual(
-            [r["name"] for r in self.store.list()], [], "a husk was advertised"
+            advertised,
+            document_exists,
+            "a skill was advertised without a backing document, or a surviving "
+            "document was dropped from the index",
         )
-        with self.assertRaises(SkillNotFound):
-            self.store.get("demo")
+
+        # get() must agree with list() in either branch.
+        if advertised:
+            self.assertEqual(self.store.get("demo")["status"], "active")
+        else:
+            with self.assertRaises(SkillNotFound):
+                self.store.get("demo")
+
+        # doctor() must be honest about whichever branch ran.
         report = self.store.doctor()
-        self.assertFalse(report["ok"])
-        self.assertEqual(
-            report["transaction_artifacts"], ["skills/demo.skillsmgr-stage"]
-        )
+        if advertised:
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["transaction_artifacts"], [])
+        else:
+            self.assertFalse(report["ok"])
+            self.assertEqual(
+                report["transaction_artifacts"], ["skills/demo.skillsmgr-stage"]
+            )
 
     def test_remove_purge_keeps_the_tree_when_nothing_was_deleted(self):
         # The other honest outcome: if the delete fails before touching the
