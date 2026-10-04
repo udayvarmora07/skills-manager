@@ -160,6 +160,14 @@ jobs:
         with:
           # Node >= 22 provides the global WebSocket the CDP probe uses.
           node-version: "22"
+      - name: Tighten the Node tool cache permissions
+        # setup-node extracts with mode 0777, so launcher_security's ownership
+        # check rejects the binary. That check is correct -- tighten the
+        # runner's extraction rather than weaken the policy. `go-w` keeps every
+        # execute bit, so Node still runs.
+        run: sudo chmod -R go-w "$(dirname "$(command -v node)")/../" 2>/dev/null || true
+      - name: Confirm the harness can resolve its executables
+        run: python3 -c "import browser_harness as b; print(b._node()); print(b._chrome())"
       - name: Frontend syntax and browser harness
         run: |
           node --check skillsmgr/webui/app.js

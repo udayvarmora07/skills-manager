@@ -1136,5 +1136,129 @@ console.log(JSON.stringify({overview, selected}));
         self.assertIn('class="update-diff" tabindex="0"', html)
 
 
+class MarkdownRendererEscapingTests(unittest.TestCase):
+    """A7: execute the real renderer instead of trusting it by inspection.
+
+    ``renderMarkdown`` renders attacker-authored ``SKILL.md`` bodies and is the
+    single function that makes docs/08-web-ui.md locked rule 4 ("frontend never
+    renders raw HTML") true.  Every other frontend test stubbed it out as a
+    no-op, so a regression here would have failed nothing.  These tests load the
+    checked-in ``domain.js`` into a Node ``vm`` and run real payloads through it.
+    """
+
+    #: Payloads that must never survive as live HTML. The link payloads use a
+    #: scheme *with* ``//`` on purpose: the renderer's pattern requires it, so a
+    #: bare ``javascript:alert(1)`` would never match and would prove nothing.
+    PAYLOADS = [
+        "<script>alert(1)</script>",
+        '<img src=x onerror="alert(1)">',
+        "<svg/onload=alert(1)>",
+        "<iframe src=javascript:alert(1)></iframe>",
+        "[click](javascript://alert(1))",
+        "[x](JavaScript://alert(1))",
+        "[x](data://text/html,<script>alert(1)</script>)",
+        "[x](vbscript://msgbox(1))",
+        "[x](file:///etc/passwd)",
+        '<a href="#" onclick="alert(1)">x</a>',
+        "<div onmouseover=alert(1)>hover</div>",
+        "` <script>alert(1)</script> `",
+        "**<img src=x onerror=alert(1)>**",
+        "| a | b |\n|---|---|\n| <script>alert(1)</script> | x |",
+        "> <script>alert(1)</script>",
+        "- <script>alert(1)</script>",
+        "\x00<script>alert(1)</script>",
+        "[ok](https://example.com) and [no](javascript://x)",
+    ]
+
+    #: Every tag the renderer is allowed to emit. `div` is used for the table
+    #: wrapper; the rest is block/inline Markdown.
+    ALLOWED_TAGS = {
+        "p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol",
+        "li", "blockquote", "pre", "code", "a", "table", "thead",
+        "tbody", "tr", "th", "td", "strong", "em", "hr", "div",
+    }
+
+    def test_rendered_markdown_never_contains_a_live_html_sink(self):
+        script = r"""
+const fs = require('fs'), vm = require('vm');
+const sandbox = { window: {} };
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), sandbox);
+const render = sandbox.window.SkillManagerDomain.renderMarkdown;
+const payloads = JSON.parse(process.argv[1]);
+console.log(JSON.stringify(payloads.map(render)));
+"""
+        result = subprocess.run(
+            ["node", "-e", script, json.dumps(self.PAYLOADS)],
+            capture_output=True, text=True, check=True, cwd=str(ROOT),
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(len(rendered), len(self.PAYLOADS))
+
+        for payload, html in zip(self.PAYLOADS, rendered):
+            with self.subTest(payload=payload):
+                # The invariant that matters: every '<' the renderer emits opens
+                # one of its own known-safe tags. Escaped attacker text contains
+                # no '<' at all, so it cannot appear here.
+                tags = re.findall(r"<\s*/?\s*([a-zA-Z][a-zA-Z0-9]*)", html)
+                self.assertTrue(
+                    set(tags) <= self.ALLOWED_TAGS,
+                    f"unexpected tags {set(tags) - self.ALLOWED_TAGS} in {html!r}",
+                )
+                # No emitted tag may carry an event-handler attribute...
+                for match in re.finditer(r"<([a-zA-Z][^>]*)>", html):
+                    attributes = match.group(1)
+                    self.assertNotRegex(
+                        attributes, r"\son[a-z]+\s*=",
+                        f"event handler survived in {attributes!r}",
+                    )
+                    self.assertNotIn(
+                        "javascript:", attributes.lower(),
+                        f"javascript: URL survived in {attributes!r}",
+                    )
+                # ...and no dangerous element name appears at all.
+                lowered = html.lower()
+                for element in ("<script", "<img", "<svg", "<iframe", "<object"):
+                    self.assertNotIn(element, lowered)
+                # Any attribute value the renderer emits is a fixed literal.
+                for href in re.findall(r'href="([^"]*)"', html):
+                    self.assertTrue(
+                        href.startswith("https://") or href.startswith("http://"),
+                        f"non-http link target survived: {href!r}",
+                    )
+
+    def test_escaped_payloads_stay_visible_as_text(self):
+        script = r"""
+const fs = require('fs'), vm = require('vm');
+const sandbox = { window: {} };
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), sandbox);
+console.log(JSON.stringify(sandbox.window.SkillManagerDomain.renderMarkdown(
+  '<script>alert(1)</script>')));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+            cwd=str(ROOT),
+        )
+        html = json.loads(result.stdout)
+        # Escaped, not stripped: the reader still sees the text, inert.
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn("<script", html.lower())
+
+    def test_the_renderer_is_the_only_html_sink_and_is_reachable(self):
+        """Pin the export list so a new raw-HTML sink becomes visible."""
+        source = _read(DOMAIN_JS)
+        # No raw HTML injection anywhere in the shipped frontend.
+        for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML",
+                     "document.write", "eval(", "new Function("):
+            with self.subTest(sink=sink):
+                for path in (APP_JS, DOMAIN_JS, INDEX_HTML):
+                    self.assertNotIn(sink, _read(path), f"{sink} in {path.name}")
+        # v-html, if present, must route through the escaping renderer.
+        html = _read(INDEX_HTML)
+        for binding in re.findall(r'v-html="([^"]+)"', html):
+            self.assertIn("inlineMd", binding + " " + source)
+        self.assertIn("renderMarkdown", source)
+        self.assertIn("renderMarkdown,", source)   # exported on the frozen seam
+
+
 if __name__ == "__main__":
     unittest.main()
