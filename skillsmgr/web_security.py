@@ -46,7 +46,9 @@ def validate_request(
     if host_header not in allowed_hosts:
         raise RequestError(403, "invalid Host header")
 
-    fetch_site = (headers.get("Sec-Fetch-Site") or "").lower()
+    # .strip() as well as .lower(): the policy must accept only the exact
+    # token, and a trailing space is not a different policy decision.
+    fetch_site = (headers.get("Sec-Fetch-Site") or "").strip().lower()
     if fetch_site == "cross-site":
         raise RequestError(403, "cross-origin request rejected")
 

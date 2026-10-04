@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 import unittest
 import unittest.mock
+import threading
 import zipfile
 import urllib.error
 import urllib.request
@@ -15,6 +16,8 @@ from urllib.parse import quote
 from unittest import mock
 
 from skillsmgr.store import Store, StoreError
+
+ROOT = Path(__file__).resolve().parent.parent
 from skillsmgr.webapp import RequestError, WebAppHandler, WebAppServer
 
 
@@ -699,6 +702,101 @@ class DoctorScopeEnrichmentSeamTests(unittest.TestCase):
         self.assertEqual(report["duplicates"], [])
         self.assertEqual(report["degraded"][0]["section"], "scopes/duplicates")
         self.assertIn("scan failed", report["degraded"][0]["reason"])
+
+
+class RawRouteErrorContractTests(unittest.TestCase):
+    """D3-1: the raw route must not surface interpreter text to the client.
+
+    It called ``read_text(encoding="utf-8")`` directly. ``UnicodeDecodeError``
+    subclasses ``ValueError``, so a non-UTF-8 ``SKILL.md`` produced a 400 whose
+    body was the interpreter's own ``"'utf-8' codec can't decode byte 0xe9 in
+    position 46"`` -- the issue-#13 bug class one call site from being fixed,
+    in the file that already had ``_skill_text()`` for exactly this.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        data_dir = Path(self._tmp.name) / "data" / "skills-manager"
+        (data_dir / "skills").mkdir(parents=True, mode=0o700)
+        self.store = Store(data_dir)
+        self.store.init_db()
+        self.store.create("demo", "demo skill")
+
+        from skillsmgr.webapp import WebAppServer
+
+        self.server = WebAppServer(self.store, port=0)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.addCleanup(self._stop)
+        self.url = f"http://127.0.0.1:{self.server.httpd.server_port}"
+
+    def _stop(self):
+        self.server.shutdown()
+        self.thread.join(timeout=5)
+
+    def _get_raw(self):
+        request = urllib.request.Request(f"{self.url}/api/skills/demo/raw", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, response.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read().decode("utf-8", "replace")
+
+    def test_a_non_utf8_document_never_leaks_the_codec_message(self):
+        document = self.store.skills_dir / "demo" / "SKILL.md"
+        original = document.read_bytes()
+        try:
+            document.write_bytes(b"---\nname: demo\n---\n\ncaf\xe9 latin-1\n")
+            status, body = self._get_raw()
+            self.assertNotIn("codec can't decode", body)
+            self.assertNotIn("UnicodeDecodeError", body)
+            # A readable answer, either the tolerant text or a clean 404/400 --
+            # what matters is that the interpreter's own wording never escapes.
+            self.assertIn(status, (200, 400, 404))
+            if status == 200:
+                self.assertIn("caf", body)
+        finally:
+            document.write_bytes(original)
+
+    def test_an_unreadable_document_is_not_an_unhandled_500(self):
+        document = self.store.skills_dir / "demo" / "SKILL.md"
+        original = document.read_bytes()
+        try:
+            document.write_bytes(b"---\nname: demo\n---\n\nbody\n")
+            os.chmod(document, 0o000)
+            status, body = self._get_raw()
+            self.assertNotEqual(status, 500)
+            self.assertNotIn("PermissionError", body)
+        finally:
+            os.chmod(document, 0o600)
+            document.write_bytes(original)
+
+    def test_a_normal_document_is_still_returned_verbatim(self):
+        status, body = self._get_raw()
+        self.assertEqual(status, 200)
+        self.assertIn("name: demo", body)
+
+
+class ImportContentTypeCaseTests(unittest.TestCase):
+    """D3-11: the import content-type match must be case-insensitive.
+
+    The sibling route already used ``.lower().startswith(...)``; this one did
+    not, so ``Multipart/Form-Data`` was accepted as a route match and then
+    mis-parsed as a raw archive body -- the "sibling of an already-fixed bug"
+    class this repository keeps hitting.
+    """
+
+    def test_multipart_matching_is_case_insensitive(self):
+        source = (ROOT / "skillsmgr" / "webapp.py").read_text(encoding="utf-8")
+        bare = 'ctype.startswith("multipart/form-data")'
+        self.assertNotIn(
+            bare, source,
+            "the import route must lowercase the content type before matching",
+        )
+        self.assertIn(
+            'ctype.lower().startswith("multipart/form-data")', source
+        )
 
 
 if __name__ == "__main__":

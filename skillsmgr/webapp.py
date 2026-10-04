@@ -333,6 +333,25 @@ def _skill_text(skill_dir: Path) -> str:
     return ""
 
 
+def _raw_document_response(handler, name: str, skill_dir: Path) -> None:
+    """Send one skill's document as text/plain, or a clean 404.
+
+    D3-1: this route used to call ``read_text(encoding="utf-8")`` directly.
+    ``UnicodeDecodeError`` subclasses ``ValueError``, so a non-UTF-8 ``SKILL.md``
+    produced a 400 carrying the interpreter's own ``"'utf-8' codec can't decode
+    byte ..."`` text, and an unreadable file produced an unhandled 500 --
+    while ``GET /api/skills/<name>`` on the same file correctly returned 200.
+    Reading through ``_skill_text`` keeps both answers inside the contract this
+    server already documents.  Kept as a module function so ``_route_get`` does
+    not grow another decision point.
+    """
+    raw = _skill_text(skill_dir)
+    if not raw:
+        handler._send_error(404, f"skill '{name}' has no readable SKILL.md")
+        return
+    handler._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
+
+
 def _apply_token_estimate(record: dict, tok) -> None:
     """Copy one token estimate onto a REST record."""
     record["tokens"] = tok["tokens"]
@@ -867,8 +886,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not skill_file.is_file():
                 self._send_error(404, f"skill '{parts[2]}' has no SKILL.md")
                 return
-            raw = skill_file.read_text(encoding="utf-8")
-            self._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
+            _raw_document_response(self, parts[2], skill_dir)
             return
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
@@ -1477,7 +1495,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         parts = self._parts()
         qs = parse_qs(urlparse(self.path).query)
         ctype = self.headers.get("Content-Type", "")
-        if parts == ["api", "import"] and ctype.startswith("multipart/form-data"):
+        if parts == ["api", "import"] and ctype.lower().startswith("multipart/form-data"):
             boundary_m = re.search(r"boundary=([^;]+)", ctype)
             if not boundary_m:
                 self._send_error(400, "multipart boundary missing")

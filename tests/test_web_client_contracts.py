@@ -191,6 +191,38 @@ class LocalClientContractTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn("cross-origin", payload["error"])
 
+    def test_fetch_metadata_variants_are_all_rejected(self):
+        """D3-10: the predicate must accept only the exact token.
+
+        ``Sec-Fetch-Site`` was compared with ``.lower()`` but not ``.strip()``.
+        The stdlib email parser strips leading, not trailing, whitespace, so
+        ``"cross-site "`` -- a value the policy documents as rejected -- was
+        accepted and the request proceeded. Not browser-exploitable, but a
+        policy predicate must not accept a value it says it rejects.
+        """
+        # A newline cannot be sent at all: http.client rejects it as an illegal
+        # header value, so it is a client limitation rather than a server case.
+        for value in ("cross-site", "cross-site ", " cross-site", "CROSS-SITE",
+                      "Cross-Site\t"):
+            with self.subTest(value=value):
+                status, payload = self.call(
+                    "GET", "/api/skills",
+                    headers={"Sec-Fetch-Site": value},
+                )
+                self.assertEqual(
+                    status, 403,
+                    f"Sec-Fetch-Site={value!r} was not rejected",
+                )
+                self.assertIn("error", payload)
+
+    def test_same_origin_fetch_metadata_is_still_allowed(self):
+        """The strip must not start rejecting legitimate values."""
+        for value in ("same-origin", "none", "same-site"):
+            with self.subTest(value=value):
+                status, _ = self.call("GET", "/api/skills",
+                                      headers={"Sec-Fetch-Site": value})
+                self.assertEqual(status, 200)
+
     def test_no_cors_headers_are_advertised(self):
         request = urllib.request.Request(self.url + "/api/stats")
         with urllib.request.urlopen(request, timeout=10) as response:
