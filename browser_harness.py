@@ -47,7 +47,19 @@ def _node() -> str:
     raise RuntimeError("a trusted Node executable is required for browser_harness.py")
 
 
-def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float = 30.0) -> int:
+def _chrome_stderr(log) -> str:
+    """Return the tail of Chrome's captured stderr, for a diagnosable failure."""
+    try:
+        log.flush()
+        log.seek(0)
+        text = log.read()
+    except (OSError, ValueError):
+        return ""
+    return text.strip()[-2000:]
+
+
+def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float = 30.0,
+                   log=None) -> int:
     """Return the DevTools port Chrome actually bound.
 
     Chrome writes the port it bound to ``DevToolsActivePort`` inside its
@@ -59,7 +71,11 @@ def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError("Chrome exited before DevTools became available")
+            detail = _chrome_stderr(log) if log is not None else ""
+            raise RuntimeError(
+                "Chrome exited before DevTools became available"
+                + (f"; chrome stderr:\n{detail}" if detail else "")
+            )
         try:
             port = int(port_file.read_text(encoding="utf-8").splitlines()[0])
         except (OSError, ValueError, IndexError):
@@ -72,7 +88,11 @@ def _devtools_port(process: subprocess.Popen[str], profile: Path, timeout: float
         except (OSError, urllib.error.URLError):
             pass
         time.sleep(0.05)
-    raise RuntimeError("Chrome DevTools endpoint did not start")
+    detail = _chrome_stderr(log) if log is not None else ""
+    raise RuntimeError(
+        "Chrome DevTools endpoint did not start"
+        + (f"; chrome stderr:\n{detail}" if detail else "")
+    )
 
 
 def _run_probe(
@@ -349,9 +369,15 @@ def run() -> int:
         server_thread = Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         profile = Path(directory) / "chrome"
-        chrome = subprocess.Popen([_chrome(), "--headless=new", "--disable-gpu", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        # Chrome's stderr is captured rather than discarded.  When the browser
+        # cannot start, "Chrome exited before DevTools became available" on its
+        # own does not say why -- and this job had been skipped long enough that
+        # its first real execution failed without a diagnosable cause.  The
+        # sandbox stays enabled (SEC-15); only the reporting changes.
+        chrome_log = open(Path(directory) / "chrome.stderr.log", "w+", encoding="utf-8")
+        chrome = subprocess.Popen([_chrome(), "--headless=new", "--disable-gpu", "--disable-dev-shm-usage", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=chrome_log, text=True)
         try:
-            port = _devtools_port(chrome, profile)
+            port = _devtools_port(chrome, profile, log=chrome_log)
             results = [
                 _run_probe(
                     server.url,
@@ -395,6 +421,7 @@ def run() -> int:
         finally:
             chrome.terminate()
             chrome.wait(timeout=5)
+            chrome_log.close()
             server.shutdown()
             server_thread.join(timeout=5)
 
