@@ -4,6 +4,32 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## docs/24 audit remediation — day 1 and week 1, 2026-10-04
+
+`main` is green for the first time since 2026-09-16; all four previously-skipped
+gates now run. Full evidence in @docs/06-progress-log.md.
+
+- [x] A1: assert the purge invariant, not one branch of it (turns `main` green).
+- [x] A9: repair the registry client against the public skills.sh routes; keep
+  browse/curated token-gated with an actionable message.
+- [x] A2: correct the locking model in `docs/01-architecture.md` and sweep the
+  three stale code comments. (`AGENTS.md` needed no change — the audit overstated it.)
+- [x] A3: guarded upgrade path for a legacy over-permissive data root, plus the
+  missing SEC-19 regression.
+- [x] A4: re-aim the complexity ratchet at the modules that hold the logic and
+  fail on baseline keys that no longer resolve.
+- [x] A5: lock the agent-scope toggle's check-then-rename.
+- [x] A6: hold the index lock across the update commit's revalidate-then-swap window.
+- [x] A7: commit the Markdown-renderer payload set as a real executed test.
+- [x] UI quick wins: `--s3`, reduced-motion iteration count, WCAG 1.4.11 border
+  contrast, WCAG 2.5.3 label, anchor colour, trash-purge labelling/placement.
+- [x] CI: re-enable Chrome's user-namespace sandbox on the runner and tighten the
+  Node tool cache, so the browser job passes without weakening SEC-15.
+- [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
+  rebuilt from the current tree, not the `6733da9` hashes in the progress log.
+- [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes
+  (G8): rendered review required, not a diff.
+
 ## Next five audit-derived tasks — planned 2026-09-23
 
 - [x] Reconcile @docs/18-project-improvement-audit-2026-09-22.md against the

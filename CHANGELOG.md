@@ -4,6 +4,77 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI is green again.** `main` had been failing on every push since
+  2026-09-16. `unit (py3.10)` and `unit (py3.11)` failed on a test that asserted
+  one of two both-correct outcomes of a failed purge, chosen by the order the
+  filesystem enumerates directory entries. The test now asserts the invariant it
+  exists to protect — a skill is never advertised once its document is gone — and
+  is verified order-independent across ten directory names. The browser,
+  package/release-artifact, docs, and adversarial-security gates had been skipped
+  on every run as a result and now execute.
+- **The registry client works again.** skills.sh moved its read API behind
+  project OIDC, so `--browse`, `--search`, `--curated` and the whole `--fetch`
+  install path returned HTTP 401 in production. Search now reads the public
+  `/api/search` route and fetch/detail the public `/api/download` route. The
+  download route's `hash` is produced by an undocumented upstream algorithm, so
+  it is recorded as `upstream_hash` with `upstream_hash_verified: false` instead
+  of being asserted; integrity rests on the manager's own framed digest.
+  `--browse`/`--curated` need a token and now say so, naming the working
+  alternative, rather than surfacing a bare 401.
+- **A legacy over-permissive data directory is no longer a dead end.** A root
+  created before the ownership control landed was permanently unusable, with an
+  error that named the condition but not the fix. A directory that is
+  owner-held, has an acceptable parent chain, and is recognisably this tool's
+  data is now tightened to `0o700` with its contents intact; anything else is
+  refused with the exact `chmod` command.
+- **The agent-scope toggle is now excluded.** `toggle_skill` did
+  check-then-rename with no lock while its sibling scope writers all took one.
+- **A concurrent edit can no longer be lost to an update commit.** The update
+  commit revalidated the target and then replaced the tree under a review lock
+  that `Store.edit` never took, so an edit landing in that window was silently
+  overwritten. The library index lock is now held across the whole window.
+- **Corrected the documented locking model.** The architecture doc still
+  described in-process `threading.RLock` with cross-process exclusion "OPEN";
+  the code has used an advisory `flock`/`msvcrt` lock since the fix. Three code
+  comments repeating the same belief were corrected.
+- **An undefined spacing token.** `--s3` was used 13 times and defined nowhere,
+  the only undefined custom property in the stylesheet, so eight components
+  rendered with no intended spacing.
+- **Reduced motion now stops the strobe.** Two animations are `infinite` and the
+  reduced-motion block only forced duration, so they still ran.
+- **Border contrast.** The token forming the only visible boundary on form
+  inputs measured 1.62:1 in light and 2.06:1 in dark, failing WCAG 1.4.11 in
+  both themes. Both now clear 3:1.
+- Accessibility: the "Update from folder" control failed WCAG 2.5.3
+  `label-content-name-mismatch`; adapter links rendered in default browser blue;
+  the trash purge control now names what it destroys and sits below the list it
+  removes.
+
+### Changed
+
+- **The complexity ratchet now measures real modules.** It tracked `cli.py`, which
+  became a 160-line adapter in a CLI split, leaving 2,076 lines of CLI logic
+  unguarded and 43 of 169 baseline entries resolving to nothing. Targets now
+  cover 16 modules (261 → 631 functions, ~4,750 → ~13,000 LOC), and a baseline
+  entry that no longer matches a measured function is a hard failure rather than
+  a silently dropped guard.
+- The browser harness reports which ownership check rejected an executable, and
+  reports Chrome's own startup error instead of discarding its stderr. CI
+  re-enables Chrome's user-namespace sandbox on the runner and tightens the Node
+  tool cache, rather than passing `--no-sandbox` and weakening the pinned SEC-15
+  decision.
+
+### Tests
+
+- 902 tests, up from 888. New coverage: the purge invariant across ten
+  enumeration orders, the registry's public routes and hash demotion, the
+  orphaned-baseline-key gate, the agent-scope toggle's critical section, the
+  update commit's exclusion window, the data-root upgrade path, and the Markdown
+  renderer executed over 17 hostile payloads in a Node `vm` (it had been stubbed
+  at 8 sites and run by no test at all).
+
 ### Package release candidate
 
 - Prepared version 1.0.2 metadata and PyPI installation copy for the next

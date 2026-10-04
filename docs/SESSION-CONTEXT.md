@@ -2,6 +2,15 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Version 1.12.0** (2026-10-04: docs/24 audit remediation, days 1-7;
+**902 tests, 631 complexity-tracked functions**. `main` is green for the
+first time since 2026-09-16 and all four previously-skipped CI gates run.
+The registry client works again against the public skills.sh routes; the
+complexity ratchet covers 16 modules and fails on orphaned baseline keys;
+the agent-scope toggle and the update commit hold cross-process locks; the
+Markdown renderer has a committed hostile-payload regression. See
+@docs/06-progress-log.md for the full record.)
+
 **Version 1.11.0** (2026-09-22: P0 trust-gate and release-metadata
 hardening; 878 tests, 261 complexity-tracked functions. The final tree has a
 full-import rollback diagnostic, a pinned narrow Ruff gate, a dated Bandit
@@ -54,7 +63,7 @@ the read-only `doctor --explain` diagnostic plus the non-UTF8 `SKILL.md` fix; an
 the 2026-09-10 offline registry bridge (`install --preview`) with the file-based
 advisory eval harness, both shipped by extending existing surfaces only — see
 @docs/ADR-003-registry-bridge-and-eval-harness.md.)
-## What exists today (2026-09-22)
+## What exists today (2026-10-04)
 
 - **CLI**: `python3 -m skillsmgr` — 28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.2.0 (all three `[?]`s closed 2026-09-09; facade ids are compat-only). The read-only `doctor --explain` diagnostic shipped 2026-09-11 (`skillsmgr/effective.py`; per-consumer rules cited from that doc, `unknown-consumer`/`undocumented-precedence` instead of a guess, nothing persisted). See @docs/03-cli-surface.md.
@@ -66,7 +75,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`preferences.js` bootstraps local theme/text-size before `styles.css`; `domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`); Settings persists the regional format preference in `skillsmgr-locale`.
-- **Tests**: stdlib `unittest` regression/contract suite — 866 tests green 2026-09-22 (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (260 functions, budget ≤ 15), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
+- **Tests**: stdlib `unittest` regression/contract suite — **902 tests green 2026-10-04** (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (**631 functions across 16 files**, budget ≤ 15, and a hard failure on any baseline key that no longer resolves), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
 - **Client contract (2026-09-11, #8)**: the REST API is the surface for local non-browser
   clients (editor extensions, scripts). Address it at `127.0.0.1` — `Host: localhost:<port>`
   is rejected on **every** request under the default bind, reads included (issue #14 F-2) —

@@ -4,6 +4,98 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-04 — Audit remediation day 1 and week 1 (docs/24)
+
+**[SPEC]** Worked @docs/24-verified-findings-and-competitive-recommendations-2026-10-04.md.
+Every claim marked **[VERIFIED]** below was re-measured directly rather than
+taken on trust; three places where the delegated claim was wrong are recorded as
+such. **`main` is green for the first time since 2026-09-16** — all 15 CI jobs
+pass, including the four that had been skipped on every run since the purge test
+went red (`browser smoke`, `package + release-artifact check`, `docs
+consistency`, `adversarial security checks`).
+
+- **A1 — CI was red on `main` for 7 days and four gates were off.** The purge
+  test asserted one of two *both-correct* branches of `_purge_skill`, chosen by
+  the order `shutil.rmtree` enumerates entries. Replaced with the invariant
+  ("a skill is never advertised once its document is gone") plus branch-consistent
+  `get()`/`doctor()` assertions. Verified order-independent by executing the real
+  test source under **10** different restricted-directory names, both branches
+  exercised. Red-first: with `bin`, the old `== []` assertion fails.
+- **A9 — the whole registry integration was returning HTTP 401 in production.**
+  skills.sh moved its read API behind Vercel-project OIDC; a binary on a laptop
+  cannot mint a token, so `--browse`/`--search`/`--curated` **and the entire
+  `--fetch` install path** were dead. Repointed search to the public
+  `/api/search` and fetch/detail to the public `/api/download`, and proved the
+  full trust-gated cycle works end to end again (fetch → review id → explicit
+  commit → 12 files installed → provenance sidecar → replay refused).
+  **This extends the audit**: browse and curated have *no* public equivalent, and
+  the download route's `hash` does **not** match our `registry_snapshot_hash`
+  (10 candidate algorithms checked against a live payload, none match). The
+  upstream hash is therefore carried as `upstream_hash` with
+  `upstream_hash_verified: false` rather than asserted; integrity rests on the
+  manager's own framed `snapshot_hash`.
+- **A2 — locking docs were wrong in the authoritative file.** `docs/01-architecture.md`
+  still described in-process `threading.RLock` with `STORE-11`/`SEC-12` OPEN; the
+  code uses an advisory cross-process `flock`/`msvcrt` lock. Corrected, plus three
+  stale code comments. **The audit also claimed `AGENTS.md` carried the same
+  stale claim — it does not** (72 lines, no locking section); only
+  `docs/01-architecture.md` was affected.
+- **A3 — a pre-existing `0775` data root was permanently unusable with no
+  remediation.** Added a guarded repair that tightens to `0o700` only when the
+  directory is owner-held, has an acceptable parent chain, and is recognisably
+  this tool's data, plus an error that names the exact `chmod` command. It can
+  only reduce access. Two red-first regressions, including the upgrade path SEC-19
+  never pinned.
+- **A4 — the complexity ratchet measured a 160-line adapter.** `cli.py` became
+  one in the 2026-09-09 CLI split, leaving 2,076 lines of `cli_handlers.py` /
+  `cli_parser.py` unguarded and **43 of 169** baseline entries (25%) resolving
+  to nothing. Targets now cover 16 modules: **261 → 631 functions,
+  4,750 → ~13,000 LOC**. A baseline key that no longer resolves is now a hard
+  failure rather than a silently dropped guard (proved by injecting a stale key).
+- **A5 — agent-scope `toggle_skill` did check-then-rename with no lock** while
+  `edit_skill` and `restore_snapshot` both took `_mutation_lock`. Now wrapped.
+- **A6 — the update commit and `Store.edit` took disjoint locks**, so an edit
+  landing between the target-hash revalidation and the atomic swap was silently
+  overwritten. The index lock is now held across the whole window, outermost and
+  index-first. The review's `committed` status write stays *inside* the review
+  lock — releasing it first broke single-use, caught by an existing test.
+- **A7 — `renderMarkdown`/`esc` were stubbed at 8 sites and executed by no test.**
+  Three tests now run the real renderer over 17 hostile payloads in a Node `vm`,
+  asserting on emitted tags rather than substrings (escaped text legitimately
+  contains `onerror`; `div` is the renderer's own table wrapper). Two mutations
+  confirmed to fail the suite. **The first payload set was itself wrong**: a bare
+  `javascript:alert(1)` cannot match a link pattern requiring `//`, so it proved
+  nothing.
+- **UI (audit §E/G1–G3).** `--s3` was used 13 times and defined *nowhere* — the
+  stylesheet's only undefined custom property, so eight components rendered with
+  no intended spacing. Reduced motion forced `animation-duration` but not
+  `animation-iteration-count`, leaving two `infinite` animations strobing.
+  `--border-strong` — the *only* boundary on `.form-field` inputs — measured
+  1.62:1 light / 2.06:1 dark, a WCAG 1.4.11 failure in both themes; now 3.26:1 /
+  3.43:1. `--border` (88 uses, decorative containers) was deliberately left
+  alone. Plus the anchor-colour, `label-content-name-mismatch` (WCAG 2.5.3), and
+  trash-purge labelling/placement fixes.
+- **CI browser job.** It had been skipped so long that its first real execution
+  died at `ZygoteHostImpl::Init()`. Chrome reported "No usable sandbox!"
+  (Ubuntu 24.04 AppArmor). Chrome's own message offers `--no-sandbox`, but the
+  harness keeps the renderer sandbox on by design (SEC-15, pinned by test), so the
+  runner's user namespaces were re-enabled instead. That exposed a second latent
+  failure: `setup-node` extracts with mode 0777, which `launcher_security`
+  correctly rejects — fixed by tightening the runner, not the policy. The harness
+  now reports *which* check rejected an executable.
+
+**[NOTE] One audit recommendation was reverted after measuring it.** G2 #5
+("Show scope controls" → "Filters and scopes") rests on the claim that the
+disclosure holds filters. It does not: `#compact-controls` contains agent scopes
+and the context budget only, while the All/Active/Disabled chips live in a
+separate `.filters` block. A pinned test encodes the original label as a
+deliberate decision, so the label stands.
+
+**[NOTE] Not done, deliberately.** Dark-theme pane separation (G2 #7) and the
+structural UI changes (G8) are visual decisions that need rendered review, not a
+diff. Publishing 1.0.2 still requires maintainer approval. The audit's
+`[AGENT]`-marked competitive figures were not re-verified.
+
 ## 2026-09-23 — Final next-five candidate verification
 
 - The current worktree passed 888 unittest tests, `smoke_store.py`,
