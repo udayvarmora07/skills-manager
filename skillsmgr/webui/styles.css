@@ -5,6 +5,7 @@
 :root {
   --s1: 4px;
   --s2: 8px;
+  --s3: 12px;
   --s4: 16px;
   --s9: 32px;
   --radius: 10px;
@@ -19,7 +20,7 @@
   --surface: #ffffff;
   --surface-2: #f0f2f5;
   --border: #dce1e8;
-  --border-strong: #c5ccd6;
+  --border-strong: #8a8f96;
   --text: #20242c;
   --text-muted: #626b79;
   --accent: #a94b20;
@@ -47,7 +48,7 @@
   --surface: #20252e;
   --surface-2: #282f3a;
   --border: #37404c;
-  --border-strong: #4a5665;
+  --border-strong: #6e7884;
   --text: #edf0f5;
   --text-muted: #a5afbd;
   --accent: #e7a06f;
@@ -83,7 +84,7 @@
     --surface: #20252e;
     --surface-2: #282f3a;
     --border: #37404c;
-    --border-strong: #4a5665;
+    --border-strong: #6e7884;
     --text: #edf0f5;
     --text-muted: #a5afbd;
     --accent: #e7a06f;
@@ -145,6 +146,10 @@ body {
 
 button { font-family: inherit; touch-action: manipulation; }
 select, input[type="checkbox"], input[type="radio"], [role="button"] { touch-action: manipulation; }
+a {
+  color: var(--accent-text);
+}
+
 input, select, textarea { font-family: inherit; font-size: 0.875rem; color: var(--text); }
 
 html[data-text-size="large"] { font-size: 1.125rem; }
@@ -1612,6 +1617,10 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
   .skel-row { background: var(--surface-2); }
 }

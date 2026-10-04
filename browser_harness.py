@@ -317,7 +317,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   const previewWasClicked = !!(previewClicked.result && previewClicked.result.result && previewClicked.result.result.value);
   let previewReady = false, previewState = null;
   for (let attempt = 0; previewWasClicked && attempt < 40; attempt += 1) {
-    const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update this exact skill instance from a folder"]'),guide:!!document.querySelector('.first-scan-guide')}))()`, returnByValue:true});
+    const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update from folder for this exact skill instance"]'),guide:!!document.querySelector('.first-scan-guide')}))()`, returnByValue:true});
     previewState = state.result && state.result.result && state.result.result.value;
     if (previewState && previewState.heading && previewState.action && !previewState.guide) { previewReady = true; break; }
     await new Promise(r=>setTimeout(r,50));

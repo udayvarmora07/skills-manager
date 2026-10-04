@@ -142,6 +142,19 @@ jobs:
         run: python3 smoke_store.py
       - name: Web smoke
         run: python3 smoke_web.py
+      - name: Allow Chrome's user-namespace sandbox on the runner
+        # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor, so
+        # Chrome aborts at ZygoteHostImpl::Init() with "No usable sandbox!" and
+        # the harness cannot start. Chrome's own message offers --no-sandbox as
+        # a workaround, but the harness keeps the renderer sandbox enabled by
+        # design (SEC-15). Re-enabling the namespace keeps that decision intact
+        # instead of weakening it, and only affects this ephemeral runner.
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          else
+            echo "unprivileged user namespaces are not AppArmor-restricted here"
+          fi
       - name: Frontend syntax
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 — 2026-09-15 reviewed
         with:
