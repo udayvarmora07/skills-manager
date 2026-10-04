@@ -87,15 +87,97 @@ class RegistryClientTests(unittest.TestCase):
         self.assertEqual(self.client.curated()["data"], [])
 
     def test_detail_and_fetch_use_encoded_registry_paths(self):
+        """Per-skill reads use the PUBLIC /api/download route.
+
+        skills.sh moved /api/v1/skills behind project OIDC, so the only
+        unauthenticated per-skill route is /api/download/{source}/{slug}.
+        """
         self.responses.append(Response(
-            _snapshot(), final_url="https://skills.sh/api/v1/skills/owner/repo/demo"
+            _snapshot(), final_url="https://skills.sh/api/download/owner/repo/demo"
         ))
         self.client.detail("https://skills.sh/owner/repo/demo?utm=1")
         result = self.client.fetch("owner/repo/demo")
         self.assertEqual(result["registry_hash"], result["hash"])
         self.assertNotEqual(result["snapshot_hash"], result["hash"])
         self.assertEqual(len(self.requests), 1)
-        self.assertEqual(self.requests[0][0].full_url, "https://skills.sh/api/v1/skills/owner/repo/demo")
+        self.assertEqual(
+            self.requests[0][0].full_url,
+            "https://skills.sh/api/download/owner/repo/demo",
+        )
+
+    def test_public_download_hash_is_retained_but_never_claimed_verified(self):
+        """The download route's `hash` uses an undocumented upstream algorithm.
+
+        It must not be asserted as verified, and must not be silently dropped
+        either -- it is kept as provenance with an explicit false marker.
+        """
+        files = _files()
+        upstream = "f" * 64                      # plausible, but not our digest
+        payload = {"id": "owner/repo/demo", "files": files, "hash": upstream}
+        self.responses.append(Response(
+            payload, final_url="https://skills.sh/api/download/owner/repo/demo"))
+        result = self.client.fetch("owner/repo/demo")
+
+        self.assertFalse(result["hash_verified"])
+        self.assertFalse(result["upstream_hash_verified"])
+        self.assertEqual(result["upstream_hash"], upstream)
+        # Integrity still rests on the manager's own framed digest.
+        self.assertEqual(result["registry_hash"], registry.registry_snapshot_hash(files))
+        self.assertEqual(result["snapshot_hash"], registry.snapshot_hash(files))
+        # Re-validation (what the commit path does) must stay stable.
+        again = registry.validate_snapshot(result, verify_upstream_hash=False)
+        self.assertEqual(again["snapshot_hash"], result["snapshot_hash"])
+        # The upstream digest is never the manager's content identity.
+        self.assertNotEqual(result["registry_hash"], upstream)
+
+    def test_search_reads_the_public_route_and_normalizes_its_envelope(self):
+        self.responses.append(Response({
+            "query": "pdf", "searchType": "fuzzy", "searchVersion": "algolia",
+            "skills": [
+                {"id": "a/b/c", "source": "a/b", "skillId": "c", "name": "c",
+                 "installs": 5},
+                {"id": "a/b/c", "source": "a/b", "skillId": "c", "name": "c",
+                 "installs": 5},                     # duplicate id: deduped
+                {"id": "d/e/f", "source": "d/e", "skillId": "f", "name": "f",
+                 "installs": 1},
+            ],
+        }, final_url="https://skills.sh/api/search"))
+        result = self.client.search("pdf")
+        url = self.requests[0][0].full_url
+        self.assertTrue(url.startswith("https://skills.sh/api/search?"), url)
+        self.assertNotIn("/api/v1/", url)
+        self.assertEqual([row["id"] for row in result["data"]], ["a/b/c", "d/e/f"])
+        self.assertEqual(result["data"][0]["url"], "https://skills.sh/a/b/c")
+        self.assertEqual(result["query"], "pdf")
+
+    def test_search_limit_is_applied_client_side(self):
+        """The public route honours limit but ignores paging; the client owns the cap."""
+        rows = [{"id": f"o/r/s{index}", "source": "o/r", "skillId": f"s{index}",
+                 "name": f"s{index}", "installs": index} for index in range(20)]
+        self.responses.append(Response({"skills": rows},
+                                       final_url="https://skills.sh/api/search"))
+        result = self.client.search("pdf", limit=3)
+        self.assertEqual(len(result["data"]), 3)
+        self.assertTrue(result["truncated"])
+        self.assertIn("limit=3", self.requests[0][0].full_url)
+
+    def test_authenticated_only_routes_fail_with_an_actionable_message(self):
+        """browse/curated have no public equivalent: say so, do not surface a bare 401."""
+        anonymous = registry.RegistryClient(self.tmp.name, opener=self.opener)
+        for operation, label in ((anonymous.browse, "leaderboard"),
+                                 (anonymous.curated, "curated feed")):
+            with self.subTest(operation=label):
+                with self.assertRaises(registry.RegistryError) as ctx:
+                    operation()
+                message = str(ctx.exception)
+                self.assertIn("requires a skills.sh project token", message)
+                self.assertIn("search", message)
+                self.assertIn("fetch", message)
+        # Nothing was requested: the guard fails before any network call.
+        self.assertEqual(self.requests, [])
+        # With a token the route is still reachable.
+        self.responses.append(Response({"data": []}))
+        self.assertEqual(self.client.browse()["data"], [])
 
     def test_cache_hit_and_stale_fallback_are_explicit(self):
         clock = [1000.0]
@@ -127,11 +209,17 @@ class RegistryClientTests(unittest.TestCase):
         self.assertNotIn("secret", cache.read_text(encoding="utf-8"))
 
     def test_cache_isolated_by_auth_scope(self):
-        self.responses.append(Response({"data": ["private"]}))
-        self.client.browse()
+        # Use a public operation (search) so this isolates the cache scope rather
+        # than the leaderboard's token requirement.
+        private = {"skills": [{"id": "o/r/private", "source": "o/r", "skillId": "private"}]}
+        public = {"skills": [{"id": "o/r/public", "source": "o/r", "skillId": "public"}]}
+        self.responses.append(Response(private))
+        self.client.search("shared")
         anonymous = registry.RegistryClient(self.tmp.name, opener=self.opener)
-        self.responses.append(Response({"data": ["public"]}))
-        self.assertEqual(anonymous.browse()["data"], ["public"])
+        self.responses.append(Response(public))
+        self.assertEqual(
+            [row["id"] for row in anonymous.search("shared")["data"]], ["o/r/public"]
+        )
         self.assertEqual(len(self.requests), 2)
 
     def test_http_json_size_and_redirect_fail_closed(self):

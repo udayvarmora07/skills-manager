@@ -27,13 +27,29 @@ from .store import StoreError
 
 REGISTRY_BASE_URL = "https://skills.sh"
 REGISTRY_API_BASE = f"{REGISTRY_BASE_URL}/api/v1"
-REGISTRY_SKILLS_PATH = "/api/v1/skills"
-REGISTRY_SEARCH_PATH = "/api/v1/skills/search"
-REGISTRY_CURATED_PATH = "/api/v1/skills/curated"
-REGISTRY_DOWNLOAD_PATH = "/api/download"
+# Endpoint tiers.  skills.sh moved its read API behind Vercel-project OIDC on
+# 2026-10-04: everything under /api/v1 now answers 401 without a project
+# token, and a binary on a user's laptop cannot mint one.  Three routes remain
+# public and are the ones this client depends on; the authenticated tier is kept
+# only for the leaderboard/curated feeds, which have no public equivalent.
+REGISTRY_SKILLS_PATH = "/api/v1/skills"          # authenticated: browse/detail
+REGISTRY_CURATED_PATH = "/api/v1/skills/curated"  # authenticated: curated feed
+REGISTRY_SEARCH_PATH = "/api/search"              # public: catalog search
+REGISTRY_DOWNLOAD_PATH = "/api/download"          # public: skill snapshot
+REGISTRY_AUDIT_PATH = "/api/v1/skills/audit"      # public: third-party audits
 REGISTRY_CACHE_DIRNAME = "registry-cache"
 REGISTRY_REVIEW_DIRNAME = "registry-reviews"
 PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
+
+#: Message used whenever an authenticated-only route is requested without a
+#: token.  It names the working alternative instead of surfacing a bare HTTP 401,
+#: which is what made this outage invisible to a reader of the CLI output.
+AUTH_REQUIRED_NOTE = (
+    "this registry route now requires a skills.sh project token "
+    "(SKILLS_MANAGER_REGISTRY_TOKEN or VERCEL_OIDC_TOKEN); a binary cannot "
+    "mint one. The public catalog is still available -- use 'search' or "
+    "'fetch', which need no token."
+)
 
 MAX_QUERY_LENGTH = 256
 MAX_URL_LENGTH = 2048
@@ -42,6 +58,9 @@ MAX_CACHE_BYTES = 12 * 1024 * 1024
 MAX_FILES = 128
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_FILE_BYTES = 8 * 1024 * 1024
+#: The public /api/search route returns at most this many rows and ignores any
+#: paging parameter, so it is the hard ceiling on one search response.
+MAX_PUBLIC_SEARCH_RESULTS = 100
 MAX_PATH_DEPTH = 8
 MAX_CACHE_TTL = 3600
 DEFAULT_CACHE_TTL = 300
@@ -212,8 +231,18 @@ def registry_snapshot_hash(files: list[dict]) -> str:
     return digest.hexdigest()
 
 
-def validate_snapshot(payload: object) -> dict:
-    """Validate and normalize a registry snapshot response."""
+def validate_snapshot(payload: object, *, verify_upstream_hash: bool = True) -> dict:
+    """Validate and normalize a registry snapshot response.
+
+    ``verify_upstream_hash`` enforces that a supplied ``hash`` really is the
+    skills.sh-compatible digest of the returned files.  The public
+    ``/api/download`` route serves a ``hash`` computed by a different, not
+    publicly documented algorithm, so callers reading that route pass
+    ``False``: the manager's own framed ``snapshot_hash`` still identifies the
+    content for change detection, and the upstream value is preserved under
+    ``upstream_hash`` with ``upstream_hash_verified: false`` rather than being
+    silently dropped or presented as verified.
+    """
     if not isinstance(payload, dict):
         raise RegistryError("registry snapshot must be an object")
     raw_files = payload.get("files")
@@ -253,14 +282,24 @@ def validate_snapshot(payload: object) -> dict:
         raise RegistryError("registry snapshot hash must be a SHA-256 hex string")
     computed = snapshot_hash(files)
     registry_hash = registry_snapshot_hash(files)
-    if supplied is not None and supplied.lower() != registry_hash:
+    # A snapshot validated under the public download contract carries
+    # ``upstream_hash_verified: False``.  Re-validating such a dict (as
+    # ``materialize_snapshot`` does) must stay stable rather than re-imposing
+    # the strict check its files can never satisfy.
+    strict = verify_upstream_hash and payload.get("upstream_hash_verified") is not False
+    if supplied is not None and strict and supplied.lower() != registry_hash:
         raise RegistryError("registry snapshot hash does not match its files")
     result = {key: value for key, value in payload.items() if key != "files"}
     result["files"] = files
     result["hash"] = supplied.lower() if isinstance(supplied, str) else None
     result["snapshot_hash"] = computed
     result["registry_hash"] = registry_hash
-    result["hash_verified"] = supplied is not None
+    result["hash_verified"] = supplied is not None and strict
+    # When the upstream hash could not be checked against its own files, keep it
+    # visible but explicitly demoted: it is provenance metadata, not evidence.
+    if supplied is not None and not strict:
+        result["upstream_hash"] = supplied.lower()
+        result["upstream_hash_verified"] = False
     return result
 
 
@@ -305,7 +344,8 @@ def write_registry_review(data_dir: str | Path, snapshot: dict, inspection: dict
         for key in (
             "id", "source", "slug", "page_url", "api_url", "hash", "remote_hash",
             "snapshot_hash",
-            "registry_hash", "hash_verified", "normalization", "files", "_registry",
+            "registry_hash", "hash_verified", "upstream_hash",
+            "upstream_hash_verified", "normalization", "files", "_registry",
         )
         if normalized.get(key) is not None
     }
@@ -451,6 +491,42 @@ def _validate_listing(payload: object) -> dict:
     return payload
 
 
+def _validate_public_search(payload: object) -> dict:
+    """Normalize the public ``/api/search`` envelope into the listing shape.
+
+    The public route answers ``{"query", "searchType", "searchVersion",
+    "skills": [{"id", "source", "skillId", "name", "installs"}]}``.  Every
+    caller downstream reads ``data``, so the entries are copied into that key
+    with a page URL synthesized from the id rather than trusting a server field.
+    """
+    if not isinstance(payload, dict):
+        raise RegistryError("registry search response has an invalid shape")
+    raw = payload.get("skills")
+    if not isinstance(raw, list):
+        raise RegistryError("registry search response has an invalid shape")
+    if len(raw) > MAX_FILES:
+        raise RegistryError("registry search response has too many rows")
+    data: list[dict] = []
+    seen: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise RegistryError("registry search row must be an object")
+        ident = entry.get("id")
+        if not isinstance(ident, str) or not ident:
+            raise RegistryError("registry search row is missing an id")
+        if ident in seen:
+            continue
+        seen.add(ident)
+        row = dict(entry)
+        row["url"] = f"{REGISTRY_BASE_URL}/{ident}"
+        data.append(row)
+    result = {"data": data}
+    for key in ("query", "searchType", "searchVersion"):
+        if key in payload:
+            result[key] = payload[key]
+    return result
+
+
 def _validate_detail(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise RegistryError("registry detail response has an invalid shape")
@@ -503,6 +579,28 @@ class RegistryClient:
         if query:
             url += "?" + urlencode(query)
         return _registry_url(url)
+
+    def _require_token(self, operation: str) -> str:
+        """Fail fast, with the working alternative named, on an authenticated route.
+
+        skills.sh put the leaderboard and curated feed behind project OIDC
+        without publishing an unauthenticated equivalent.  Without this guard
+        the caller only ever saw "HTTP 401", which is what let the whole
+        registry surface break unnoticed.
+        """
+        token = self._credential()
+        if not token:
+            raise RegistryError(
+                f"registry {operation} is unavailable: {AUTH_REQUIRED_NOTE}"
+            )
+        return token
+
+    @staticmethod
+    def _snapshot_path(source: str, slug: str) -> str:
+        """Return the public per-skill snapshot path for one registry id."""
+        return REGISTRY_DOWNLOAD_PATH + "/" + "/".join(
+            quote(part, safe="") for part in (*source.split("/"), slug)
+        )
 
     def _cache_path(self, url: str, auth_scope: str) -> Path | None:
         if self.cache_dir is None:
@@ -640,7 +738,12 @@ class RegistryClient:
 
     def browse(self, *, page: int = 0, per_page: int = 100, view: str = "all-time",
                allow_stale: bool = False) -> dict:
-        """Return one bounded leaderboard page."""
+        """Return one bounded leaderboard page.
+
+        **[NOTE]** skills.sh publishes no unauthenticated leaderboard. This
+        route is reachable only with a project token; without one the call
+        fails with an actionable message rather than an opaque HTTP 401.
+        """
         if isinstance(page, bool) or not isinstance(page, int) or not 0 <= page <= 100000:
             raise RegistryError("registry page is out of bounds")
         if isinstance(per_page, bool) or not isinstance(per_page, int) or not 1 <= per_page <= 500:
@@ -648,6 +751,7 @@ class RegistryClient:
         view = _bounded_text(view, "registry view", 32)
         if view not in {"all-time", "trending", "hot"}:
             raise RegistryError("registry view must be all-time, trending, or hot")
+        self._require_token("leaderboard")
         payload, meta = self._request_json(
             self._url(REGISTRY_SKILLS_PATH, {"page": page, "per_page": per_page, "view": view}),
             allow_stale=allow_stale,
@@ -656,22 +760,43 @@ class RegistryClient:
 
     def search(self, query: str, *, limit: int = 50, owner: str | None = None,
                allow_stale: bool = False) -> dict:
-        """Search the catalog with the registry's bounded query contract."""
+        """Search the catalog with the registry's bounded query contract.
+
+        **[NOTE]** This reads the public ``/api/search`` route -- the same one
+        the ecosystem ``skills`` CLI uses -- so it needs no token.  The route
+        answers ``{"skills": [...]}`` rather than the ``{"data": [...]}`` listing
+        shape, honours ``limit`` but ignores paging, and returns at most
+        ``MAX_PUBLIC_SEARCH_RESULTS`` rows; the response is normalized here so
+        every caller keeps one listing contract.
+        """
         query = _bounded_text(query, "registry search query")
         if len(query) < 2:
             raise RegistryError("registry search query must contain at least 2 characters")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
             raise RegistryError("registry search limit must be between 1 and 200")
-        query_params = {"q": query, "limit": limit}
+        query_params = {"q": query, "limit": min(limit, MAX_PUBLIC_SEARCH_RESULTS)}
         if owner is not None:
             query_params["owner"] = _bounded_text(owner, "registry owner", 128)
         payload, meta = self._request_json(
             self._url(REGISTRY_SEARCH_PATH, query_params), allow_stale=allow_stale
         )
-        return self._with_meta(_validate_listing(payload), meta)
+        listing = _validate_public_search(payload)
+        rows = listing["data"]
+        if owner is not None:
+            rows = [row for row in rows if row.get("source", "").split("/")[0] == owner]
+        # The public route applies its own cap and ignores paging, so `limit` is
+        # honoured here rather than silently returning more than asked for.
+        listing["data"] = rows[:limit]
+        listing["truncated"] = len(rows) > limit
+        return self._with_meta(listing, meta)
 
     def curated(self, *, allow_stale: bool = False) -> dict:
-        """Return the registry's curated catalog."""
+        """Return the registry's curated catalog.
+
+        **[NOTE]** Like :meth:`browse`, this feed is authenticated-only and has
+        no public equivalent.
+        """
+        self._require_token("curated feed")
         payload, meta = self._request_json(
             self._url(REGISTRY_CURATED_PATH), default_ttl=MAX_CACHE_TTL,
             allow_stale=allow_stale,
@@ -681,21 +806,42 @@ class RegistryClient:
         return self._with_meta(payload, meta)
 
     def detail(self, spec: str, *, allow_stale: bool = False) -> dict:
-        """Return metadata for a registry skill id or skills.sh page URL."""
+        """Return metadata for a registry skill id or skills.sh page URL.
+
+        **[NOTE]** Served from the public snapshot route, the only per-skill
+        route skills.sh leaves unauthenticated.  The returned record is a
+        bounded summary rather than the file contents.
+        """
         reference = _reference(spec)
         if not reference.get("slug"):
             raise RegistryError("registry detail requires a skill id, not only a repository")
         source = str(reference["source"])
         slug = str(reference["slug"])
-        path = REGISTRY_SKILLS_PATH + "/" + "/".join(
-            quote(part, safe="") for part in (*source.split("/"), slug)
+        payload, meta = self._request_json(
+            self._url(self._snapshot_path(source, slug)), allow_stale=allow_stale
         )
-        payload, meta = self._request_json(self._url(path), allow_stale=allow_stale)
-        return self._with_meta(_validate_detail(payload), meta)
+        result = validate_snapshot(payload, verify_upstream_hash=False)
+        detail = _validate_detail({
+            "id": reference.get("registry_id"),
+            "source": source,
+            "slug": slug,
+            "page_url": reference.get("page_url"),
+            "snapshot_hash": result["snapshot_hash"],
+            "files": [entry["path"] for entry in result["files"]],
+            "file_count": len(result["files"]),
+        })
+        return self._with_meta(detail, meta)
 
     def fetch(self, spec: str, *, expected_hash: str | None = None,
               allow_stale: bool = False) -> dict:
-        """Fetch and validate a complete text snapshot for one registry skill."""
+        """Fetch and validate a complete text snapshot for one registry skill.
+
+        **[NOTE]** Reads the public ``/api/download`` route.  Its ``hash`` field
+        is produced by an undocumented upstream algorithm, so it is retained as
+        ``upstream_hash`` with ``upstream_hash_verified: false`` rather than
+        being asserted as verified.  Integrity still rests on the manager's own
+        framed ``snapshot_hash``, which is what ``--registry-hash`` compares.
+        """
         reference = _reference(spec)
         if not reference.get("slug"):
             raise RegistryError("registry fetch requires a skill id, not only a repository")
@@ -703,11 +849,10 @@ class RegistryClient:
             raise RegistryError("expected_hash must be a SHA-256 hex string")
         source = str(reference["source"])
         slug = str(reference["slug"])
-        path = REGISTRY_SKILLS_PATH + "/" + "/".join(
-            quote(part, safe="") for part in (*source.split("/"), slug)
+        payload, meta = self._request_json(
+            self._url(self._snapshot_path(source, slug)), allow_stale=allow_stale
         )
-        payload, meta = self._request_json(self._url(path), allow_stale=allow_stale)
-        result = validate_snapshot(payload)
+        result = validate_snapshot(payload, verify_upstream_hash=False)
         if expected_hash is not None and result["registry_hash"] != expected_hash.lower():
             raise RegistryError("fetched snapshot does not match expected_hash")
         result["id"] = reference.get("registry_id")
@@ -795,6 +940,9 @@ def provenance_for_snapshot(snapshot: dict) -> dict:
         "page_url": normalized.get("page_url"),
         "api_url": normalized.get("api_url") or registry_meta.get("url"),
         "remote_hash": normalized.get("hash"),
+        "remote_hash_verified": bool(
+            normalized.get("hash_verified", normalized.get("upstream_hash_verified"))
+        ),
         "registry_hash": normalized["registry_hash"],
         "local_snapshot_hash": normalized["snapshot_hash"],
         "hash_verified": bool(normalized.get("hash_verified")),
@@ -810,7 +958,8 @@ def _validate_provenance(value: object) -> dict:
         raise RegistryError("registry provenance sidecar has an invalid header")
     allowed = {
         "version", "kind", "id", "source", "slug", "page_url", "api_url",
-        "remote_hash", "registry_hash", "local_snapshot_hash", "hash_verified", "fetched_at",
+        "remote_hash", "remote_hash_verified",
+        "registry_hash", "local_snapshot_hash", "hash_verified", "fetched_at",
         "normalization",
         "cache_state", "files",
     }
@@ -868,9 +1017,12 @@ def _validate_provenance(value: object) -> dict:
         or "\x00" in value["normalization"]
     ):
         raise RegistryError("registry provenance normalization is invalid")
+    if not isinstance(value.get("remote_hash_verified", False), bool):
+        raise RegistryError("registry provenance remote_hash_verified is invalid")
     if (
         value.get("remote_hash") is not None
         and value.get("registry_hash") is not None
+        and value.get("remote_hash_verified", True)
         and value["remote_hash"].lower() != value["registry_hash"].lower()
         and value.get("normalization") is None
     ):
