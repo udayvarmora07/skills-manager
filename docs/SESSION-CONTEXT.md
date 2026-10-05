@@ -2,14 +2,28 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Version 1.13.0** (2026-10-05: context-budget pass. **1,102 tests,
+683 complexity-tracked functions**, both measured on this tree.
+`docs/06-progress-log.md` is now a digest plus the entries dated **2026-09-23
+and later** — 69,013 bytes / 10,066 words, down from 313,968 / 40,906. The
+older append-only history moved verbatim to @docs/archive/README.md, which
+indexes the two slices and states the cut-off rule. `check_docs.py` needed no
+change: its HADS loop globs `docs/*.md` non-recursively, so archive files are
+outside the header contract, while `_all_markdown()` walks `docs/` recursively
+and still holds them to link, anchor, table and trailing-newline integrity.
+The 1.12.0 block below records its own dated measurement and is left as
+history.)
+
 **Version 1.12.0** (2026-10-04: docs/24 audit remediation, days 1-7;
-**902 tests, 631 complexity-tracked functions**. `main` is green for the
+**902 tests, 631 complexity-tracked functions** — the ladder at that date, not
+today's; see 1.13.0. `main` is green for the
 first time since 2026-09-16 and all four previously-skipped CI gates run.
 The registry client works again against the public skills.sh routes; the
 complexity ratchet covers 16 modules and fails on orphaned baseline keys;
 the agent-scope toggle and the update commit hold cross-process locks; the
 Markdown renderer has a committed hostile-payload regression. See
-@docs/06-progress-log.md for the full record.)
+@docs/06-progress-log.md for the current digest; older history is in
+@docs/archive/README.md.)
 
 **Version 1.11.0** (2026-09-22: P0 trust-gate and release-metadata
 hardening; 878 tests, 261 complexity-tracked functions. The final tree has a
@@ -184,6 +198,18 @@ advisory eval harness, both shipped by extending existing surfaces only — see
     repair instruction will be shown. Pinned by
     `tests/test_frontend_seam_contracts.py`.
 
+25. **The progress log is a digest plus a window, not the history.**
+    `docs/06-progress-log.md` carries the current digest and the entries dated
+    **2026-09-23 onward**; everything older is in `docs/archive/`, verbatim.
+    Append new work at the **top** of the resident file, and keep the digest's
+    "Current state" numbers true — or the file regrows into the problem
+    @docs/24 §C1 diagnosed. Two properties of the gate are worth knowing:
+    `check_house_style` enforces HADS headers with `(root / "docs").glob("*.md")`,
+    which is **non-recursive**, so `docs/archive/*.md` is outside the header
+    contract; but `_all_markdown()` walks `docs/` recursively, so archive files
+    ARE held to trailing-newline, table-integrity, `@docs/` pointer and
+    markdown-anchor rules. Nothing in `docs/archive/` is a current claim.
+
 ## Verification loop (run all, all must pass)
 
 **[SPEC] Run the suite on every interpreter CI runs, not just the default
@@ -311,7 +337,10 @@ browser_harness.py     # dev-only Chrome CDP viewport probe (green, 6 viewports)
 docs/08-web-ui.md      # authoritative web UI doc
 docs/STATIC-ANALYSIS.md  # Ruff/Bandit scope and dated decisions
 docs/12-agent-root-discovery-2026-09-08.md  # discovery inventory v1.2.0 ([?]s closed)
-docs/06-progress-log.md# dated entries (newest top)
+docs/06-progress-log.md# digest + dated entries 2026-09-23.. (newest top)
+docs/archive/README.md  # archive index + cut-off rule (2026-10-05)
+docs/archive/06-progress-log-2026-09.md  # verbatim entries 2026-09-04..09-22
+docs/archive/06-progress-log-2026-08.md  # verbatim entries 2026-08-13..08-16
 ```
 
 ## Open questions / next steps
