@@ -53,8 +53,10 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   iterating a string `to_scopes` one character at a time.
 - [x] D3-9: `GET /api/skills` takes opt-in `limit`/`offset` with
   `X-Total-Count`; unimplemented paging params are 400s, not ignored.
-- [ ] D3-6 / D3-7 / D3-12: `get()`/`list()` disagree, two error-body shapes,
-  unstripped bind host raises a raw `gaierror`.
+- [x] D3-6: a stale index row is a 404 in REST and never serves its stored body.
+- [x] D3-7: one error shape — `{"error", "code"}` — for every route.
+- [x] D3-12: the validated, normalised host is what binds; a bind failure is a
+  clean `StoreError`, not a raw `gaierror`.
 - [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
   rebuilt from the current tree, not the `6733da9` hashes in the progress log.
 - [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes

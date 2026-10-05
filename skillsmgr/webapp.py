@@ -454,6 +454,53 @@ def _batch_targets(data: dict) -> list[dict]:
     return [_resolve_batch_target(item, records, seen) for item in raw]
 
 
+# Stable machine codes for the one error shape, so a client can branch on
+# ``code`` for every route (docs/24 §D3-7).
+def _error_payload(status: int, message: object, code: str | None = None) -> dict:
+    """The one error shape every route sends.
+
+    ``error`` is always the human message; ``code`` is a stable machine string
+    -- the exception's own when it has one, then a shape-specific slug, then the
+    status.  Two error families the audit found disagreeing (39 routes with
+    ``{"error"}``, the source-update family with ``{"code", "error"}``) are one
+    contract now, and a client can branch on ``code`` for every route
+    (docs/24 §D3-7).
+    """
+    payload = getattr(message, "as_dict", lambda: None)()
+    if not isinstance(payload, dict):
+        payload = {"error": str(message)}
+    payload.setdefault("error", str(message))
+    payload.setdefault(
+        "code",
+        code
+        or getattr(message, "code", None)
+        or _specific_error_code(status, message)
+        or _STATUS_CODES.get(status, "error"),
+    )
+    return payload
+
+
+def _specific_error_code(status: int, message: object) -> str | None:
+    """A code for the two 404s a client may want to tell apart."""
+    if status != 404:
+        return None
+    if isinstance(message, SkillNotFound):
+        return "skill_not_found"
+    return None
+
+
+_STATUS_CODES = {
+    400: "bad_request",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    409: "conflict",
+    413: "too_large",
+    415: "unsupported_media_type",
+    500: "internal_error",
+}
+
+
 _INT_RE = re.compile(r"^[0-9]+$")
 
 
@@ -525,6 +572,24 @@ def _scope_list(data: dict, name: str = "to_scopes") -> list[str]:
 _UNIMPLEMENTED_PAGING_PARAMS = ("page", "per_page", "perpage", "cursor",
                                 "before", "after", "start", "skip", "first")
 MAX_PAGE_LIMIT = 500
+
+
+def _require_installed(record: dict, name: str) -> None:
+    """Refuse to serve an index row whose directory is gone.
+
+    ``Store.get()`` deliberately reports ``installed: False`` and ``path:
+    None`` for a stale row (STORE-10), and ``doctor()`` still needs to see
+    it.  What it must not do is let that row's *stored body* out of the REST
+    API: ``list()`` already omits the skill, so answering ``200`` here made
+    this the one route serving content the filesystem does not have
+    (docs/24 §D3-6).
+    """
+    if record.get("installed"):
+        return
+    raise SkillNotFound(
+        f"skill '{name}' is not installed; run doctor to see why the index "
+        "still has a row for it"
+    )
 
 
 def _page_rows(rows: list, qs: dict[str, list[str]]) -> tuple[list, int]:
@@ -746,9 +811,16 @@ class WebAppHandler(BaseHTTPRequestHandler):
         page, total = _page_rows(rows, qs)
         self._send_json(page, extra_headers={"X-Total-Count": str(total)})
 
-    def _send_error(self, status: int, message: str) -> None:
-        payload = getattr(message, "as_dict", lambda: {"error": str(message)})()
-        self._send_json(payload, status)
+    def _send_error(self, status: int, message: str, code: str | None = None) -> None:
+        """Send the one error shape every route uses.
+
+        ``{"error": message, "code": <stable string>}``.  ``error`` is always
+        present so a client can always branch on it; ``code`` is the exception's
+        own stable code when it has one (``SourceUpdateError`` and friends) and
+        otherwise a fixed slug for the status, so the two families the audit
+        found disagreeing are one contract now (docs/24 §D3-7).
+        """
+        self._send_json(_error_payload(status, message, code), status)
 
     def _drain_body(self, length: int) -> None:
         """Read and discard an over-limit body before sending its error."""
@@ -1052,7 +1124,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             # Resolve through Store.get() first so the decoded path segment is
             # validated before it can be used for a filesystem read.
             record = self.store.get(parts[2])
-            skill_dir = Path(record["path"]) if record.get("path") else self.store.skills_dir / parts[2]
+            _require_installed(record, parts[2])
+            skill_dir = Path(record["path"])
             skill_file = skill_dir / "SKILL.md"
             if not skill_file.is_file():
                 skill_file = skill_dir / "SKILL.md.disabled"
@@ -1072,6 +1145,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 return
             # Use injected store for correct data_dir in tests, with token enrichment
             rec = self.store.get(parts[2])
+            _require_installed(rec, parts[2])
             rec.setdefault("scope", "global")
             rec.setdefault("scope_label", "Global")
             try:
@@ -1239,7 +1313,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         elif parts == ["api", "export"]:
             self._serve_export(qs)
         else:
-            self._send_error(404, "unknown endpoint")
+            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
 
     # -- POST routes ------------------------------------------------------
 
@@ -1533,7 +1607,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 else:
                     self._send_json(self.store.restore(parts[2]))
             else:
-                self._send_error(404, "unknown endpoint")
+                self._send_error(404, "unknown endpoint", code="unknown_endpoint")
         elif parts == ["api", "templates"]:
             data = self._body_json()
             name = data.get("name")
@@ -1592,7 +1666,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         elif parts == ["api", "resync"]:
             self._send_json(self.store.resync())
         else:
-            self._send_error(404, "unknown endpoint")
+            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
 
     # -- PATCH routes -----------------------------------------------------
 
@@ -1610,7 +1684,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(self.store.edit(parts[2], **fields))
         else:
-            self._send_error(404, "unknown endpoint")
+            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
 
     # -- DELETE routes ----------------------------------------------------
 
@@ -1637,7 +1711,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
             self._send_json(delete_profile(self.store.data_dir, parts[3]))
         else:
-            self._send_error(404, "unknown endpoint")
+            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
 
     def _route_delete(self):
         parts = self._parts()
@@ -1688,7 +1762,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 shutil.rmtree(target.parent, ignore_errors=True)
             self._send_json(result)
         else:
-            self._send_error(404, "unknown endpoint")
+            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
 
     def _upload_folder(self, file_parts: list[dict]) -> dict:
         """Install skills from an uploaded skill folder (webkitdirectory)."""
@@ -1736,6 +1810,22 @@ class _StoreBoundHTTPServer(ThreadingHTTPServer):
         super().process_request_thread(request, client_address)
 
 
+def _bind_server(normalized_host: str, port: int, requested_host: str):
+    """Bind the *validated* host, translating a socket failure cleanly.
+
+    Binding ``host`` while the policy checked ``normalized_host`` meant a
+    trailing space or a bare IPv6 literal passed the loopback check and then
+    raised the interpreter's own ``gaierror`` out of the constructor
+    (docs/24 §D3-12).
+    """
+    try:
+        return _StoreBoundHTTPServer((normalized_host, port), WebAppHandler)
+    except OSError as exc:
+        raise StoreError(
+            f"cannot bind the web UI to {requested_host!r}: {exc.strerror or exc}"
+        ) from exc
+
+
 class WebAppServer:
     def __init__(self, store: Store, host: str = "127.0.0.1", port: int = 0,
                  extra_allowed_roots: list[str | Path] | None = None):
@@ -1747,7 +1837,11 @@ class WebAppServer:
             is_loopback = False
         if not (is_localhost_name or is_loopback):
             raise StoreError("web UI host must be loopback (127.0.0.1, ::1, or localhost)")
-        self.httpd = _StoreBoundHTTPServer((host, port), WebAppHandler)
+        # Bind the *validated* host. Binding `host` while checking
+        # `normalized_host` meant a trailing space or a bare IPv6 literal
+        # passed the loopback policy and then raised the interpreter's own
+        # gaierror out of the constructor (docs/24 §D3-12).
+        self.httpd = _bind_server(normalized_host, port, host)
         self.httpd.store = store  # type: ignore[attr-defined]
         self.host = host
         self.port = self.httpd.server_address[1]

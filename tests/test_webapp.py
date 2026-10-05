@@ -334,7 +334,8 @@ class WebAppTestCase(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 urllib.request.urlopen(request)
             self.assertEqual(ctx.exception.code, 400, (path, payload))
-            self.assertEqual(json.loads(ctx.exception.read()), {"error": message})
+            self.assertEqual(json.loads(ctx.exception.read()),
+                             {"error": message, "code": "bad_request"})
         self.assertEqual({row["name"] for row in store.list()}, initial_names)
         self.assertEqual(set(store.templates_dir.glob("*.md")), initial_templates)
 
@@ -374,7 +375,8 @@ class WebAppTestCase(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 urllib.request.urlopen(request)
             self.assertEqual(ctx.exception.code, 400, payload)
-            self.assertEqual(json.loads(ctx.exception.read()), {"error": message})
+            self.assertEqual(json.loads(ctx.exception.read()),
+                             {"error": message, "code": "bad_request"})
 
     def test_scalar_metadata_types_return_json_400_without_mutation(self):
         store = self.server.httpd.store
@@ -394,7 +396,10 @@ class WebAppTestCase(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as ctx:
                     urllib.request.urlopen(request)
                 self.assertEqual(ctx.exception.code, 400, (method, field))
-                self.assertEqual(json.loads(ctx.exception.read()), {"error": f"{field} must be a string"})
+                self.assertEqual(
+                    json.loads(ctx.exception.read()),
+                    {"error": f"{field} must be a string", "code": "bad_request"},
+                )
         self.assertEqual(self._persisted(store, "demo"), before)
         self.assertFalse((store.skills_dir / "bad-meta").exists())
 
@@ -412,7 +417,8 @@ class WebAppTestCase(unittest.TestCase):
                 urllib.request.urlopen(request)
             self.assertEqual(ctx.exception.code, 400)
             expected = f"{field} must be a string"
-            self.assertEqual(json.loads(ctx.exception.read()), {"error": expected})
+            self.assertEqual(json.loads(ctx.exception.read()),
+                             {"error": expected, "code": "bad_request"})
         after = self._persisted(store, "demo")
         self.assertEqual(after, before)
 
@@ -431,7 +437,10 @@ class WebAppTestCase(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 urllib.request.urlopen(request)
             self.assertEqual(ctx.exception.code, 400)
-            self.assertEqual(json.loads(ctx.exception.read()), {"error": "allowed_tools must be a string"})
+            self.assertEqual(
+                    json.loads(ctx.exception.read()),
+                    {"error": "allowed_tools must be a string", "code": "bad_request"},
+                )
         self.assertFalse((store.skills_dir / "global-list").exists())
 
         old_home = os.environ.get("HOME")
@@ -453,7 +462,10 @@ class WebAppTestCase(unittest.TestCase):
                     with self.assertRaises(urllib.error.HTTPError) as ctx:
                         urllib.request.urlopen(request)
                     self.assertEqual(ctx.exception.code, 400)
-                    self.assertEqual(json.loads(ctx.exception.read()), {"error": "allowed_tools must be a string"})
+                    self.assertEqual(
+                    json.loads(ctx.exception.read()),
+                    {"error": "allowed_tools must be a string", "code": "bad_request"},
+                )
                 else:
                     with urllib.request.urlopen(request) as response:
                         self.assertEqual(response.status, 201)
@@ -466,7 +478,10 @@ class WebAppTestCase(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 urllib.request.urlopen(request)
             self.assertEqual(ctx.exception.code, 400)
-            self.assertEqual(json.loads(ctx.exception.read()), {"error": "allowed_tools must be a string"})
+            self.assertEqual(
+                    json.loads(ctx.exception.read()),
+                    {"error": "allowed_tools must be a string", "code": "bad_request"},
+                )
         finally:
             if old_home is None:
                 os.environ.pop("HOME", None)

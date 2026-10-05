@@ -244,7 +244,7 @@ class RestSearchContractTests(SearchContractCase):
             urllib.request.urlopen(self.server.url.rstrip("/") + path)
         self.assertEqual(context.exception.code, 400)
         payload = json.loads(context.exception.read())
-        self.assertEqual(payload, {"error": message})
+        self.assertEqual(payload, {"error": message, "code": "bad_request"})
 
     def test_rest_global_agent_and_merged_search_match_body(self):
         for scope, expected in (

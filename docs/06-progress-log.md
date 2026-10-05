@@ -4,6 +4,49 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — D3-6, D3-7, D3-12: the last three error-contract gaps
+
+**[SPEC]** All three reproduced on the live server first. D3-6 was worse than
+recorded:
+
+```text
+GET /api/skills       -> 200 ['kept']        # the stale row is correctly omitted
+GET /api/skills/gone  -> 200 installed=False  body="# gone\n"
+```
+
+This is a row whose directory no longer exists — `doctor()` calls it
+`stale_rows` and reports `ok: False` — and it was the one route serving the
+**stored body of a document the filesystem does not have**.
+
+- **D3-6.** Both `/api/skills/<name>` and `/api/skills/<name>/raw` now answer
+  `404 skill_not_found` for a row with no directory. `Store.get()` is
+  **unchanged**: STORE-10's `installed: False` / `path: None` signal is a
+  documented contract other callers rely on, and `doctor()` still needs to see
+  the row. Only the REST route changed, and a test pins that the Store signal
+  survives.
+- **D3-7.** One error shape everywhere: `{"error", "code"}`. `error` is always
+  the message; `code` is the exception's own stable code when it has one (the
+  source-update family keeps `review-not-found`, `target-changed`, …) and
+  otherwise a status slug. Six existing tests asserted the error body by exact
+  equality as `{"error": message}`; they now assert `{"error", "code"}`, which
+  is a **stricter** pin, not a looser one.
+- **D3-12.** `WebAppServer` validated `normalized_host` and then bound `host`.
+  So `'127.0.0.1 '` (trailing space) and `'::1'` passed the loopback policy and
+  then raised the interpreter's own `gaierror` out of the constructor. The
+  validated value is what binds, and a socket failure becomes a clean
+  `StoreError` naming the host.
+
+**Red-first:** `tests/test_audit_d3_error_contract.py`, 15 tests — **7 failures
++ 4 errors** before, 15/15 after.
+
+**Two of my own errors, both worth recording.** `X-Total-Count`-style lessons
+aside, here: `_send_error` grew complexity 1 → 5 and `WebAppServer.__init__`
+9 → 11, both restored by extraction (`_error_payload`, `_bind_server`) rather
+than by re-baselining. And one test asserted that an `::1` bind failure would
+mention "loopback" — but `::1` *passes* the loopback policy and fails at the
+socket, so the test was demanding the wrong message and was corrected to demand
+a clean `StoreError` naming the host.
+
 ## 2026-10-05 — D3-9: `/api/skills` has a real paging contract
 
 **[SPEC]** Closed @docs/24 §D3-9. Measured first: `?limit=5`, `?offset=3`,

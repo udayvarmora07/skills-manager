@@ -51,6 +51,10 @@ review artifact, and provenance sidecar before calling the existing Store
 
 ## How to run
 
+A `--host` that passes the loopback policy is bound as the **normalised** value,
+and a socket-level bind failure becomes a clean `StoreError` naming the host
+rather than the interpreter's `gaierror` (docs/24 §D3-12).
+
 ```bash
 python3 -m skillsmgr webui            # serves on http://127.0.0.1:8765, opens browser
 python3 -m skillsmgr gui              # alias (same thing)
@@ -109,7 +113,17 @@ scope-qualified.
 
 ## REST API
 
-All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown / a broken data layout — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
+All endpoints return JSON unless noted. Errors are **one shape**:
+`{"error": "message", "code": "<stable string>"}` — `error` is always the human
+message, `code` is always a machine-readable slug (the exception's own code
+when it has one, such as `review-not-found`, otherwise `bad_request`,
+`forbidden`, `not_found`, `skill_not_found`, `unknown_endpoint`, `conflict`,
+`too_large`, `unsupported_media_type` or `internal_error`). This unified two
+families the audit found disagreeing: 39 routes emitted `{"error": ...}` while
+the source-update family emitted `{"code", "error"}`, so a client could not
+branch on one key (docs/24 §D3-7).
+
+Statuses: 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown / a broken data layout — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
 
 **[SPEC] Reads never write, and a broken layout answers one 404 everywhere.**
 `GET /api/skills`, `/api/stats`, `/api/doctor` and `/api/search` used to run the
@@ -212,7 +226,7 @@ new persistence or authority.
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/api/skills[?scope=SCOPE][&q=TERM][&limit=N][&offset=N]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata. **Opt-in paging:** `limit`/`offset` bound the page and every response carries `X-Total-Count` (the unpaged total). An unpaged request still returns every row, because the web UI depends on it. Paging parameters this API does not implement (`page`, `per_page`, `cursor`, `before`, `after`, `start`, `skip`, `first`) are a `400` naming `limit`/`offset`, not silently ignored; `limit` is capped at 500 (docs/24 §D3-9) |
-| GET | `/api/skills/<name>[?scope=SCOPE]` | — | full record incl. body + path |
+| GET | `/api/skills/<name>[?scope=SCOPE]` | — | full record incl. body + path. A row whose directory is gone answers `404 skill_not_found` rather than `200` with the stored body — `list()` already omits it and `doctor()` still reports it as a stale row, so serving it here was the one route returning content the filesystem does not have (docs/24 §D3-6) |
 | GET | `/api/skills/<name>/raw[?scope=SCOPE]` | — | raw SKILL.md text (text/plain) |
 | POST | `/api/skills[?scope=SCOPE]` | `{name, description, category?, version?, license?, compatibility?, allowed_tools?, body?}` | created record (201) |
 | PATCH | `/api/skills/<name>[?scope=SCOPE]` | partial fields (same keys as POST) | `{name, changed}` |
