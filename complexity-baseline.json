@@ -1630,6 +1630,11 @@
       "end_lineno": 179,
       "lineno": 178
     },
+    "skillsmgr/scopes.py::_annotate_scope_entries": {
+      "complexity": 6,
+      "end_lineno": 339,
+      "lineno": 310
+    },
     "skillsmgr/scopes.py::_availability": {
       "complexity": 1,
       "end_lineno": 175,
@@ -1645,6 +1650,11 @@
       "end_lineno": 186,
       "lineno": 182
     },
+    "skillsmgr/scopes.py::_enrich_global_row": {
+      "complexity": 8,
+      "end_lineno": 379,
+      "lineno": 342
+    },
     "skillsmgr/scopes.py::_escaping_links": {
       "complexity": 6,
       "end_lineno": 148,
@@ -1657,8 +1667,8 @@
     },
     "skillsmgr/scopes.py::_global_search_records": {
       "complexity": 3,
-      "end_lineno": 971,
-      "lineno": 962
+      "end_lineno": 1002,
+      "lineno": 993
     },
     "skillsmgr/scopes.py::_global_skills_dir": {
       "complexity": 2,
@@ -1677,18 +1687,23 @@
     },
     "skillsmgr/scopes.py::_list_all_uncached": {
       "complexity": 5,
-      "end_lineno": 422,
-      "lineno": 401
+      "end_lineno": 453,
+      "lineno": 432
     },
     "skillsmgr/scopes.py::_merged_records": {
       "complexity": 2,
-      "end_lineno": 433,
-      "lineno": 425
+      "end_lineno": 464,
+      "lineno": 456
     },
     "skillsmgr/scopes.py::_merged_scope_ids": {
       "complexity": 5,
-      "end_lineno": 386,
-      "lineno": 372
+      "end_lineno": 417,
+      "lineno": 403
+    },
+    "skillsmgr/scopes.py::_physical_path": {
+      "complexity": 2,
+      "end_lineno": 307,
+      "lineno": 294
     },
     "skillsmgr/scopes.py::_resolved_scope_root": {
       "complexity": 1,
@@ -1707,8 +1722,8 @@
     },
     "skillsmgr/scopes.py::_search_all_uncached": {
       "complexity": 12,
-      "end_lineno": 1033,
-      "lineno": 993
+      "end_lineno": 1064,
+      "lineno": 1024
     },
     "skillsmgr/scopes.py::_unique_physical_scopes": {
       "complexity": 1,
@@ -1717,28 +1732,28 @@
     },
     "skillsmgr/scopes.py::create_skill": {
       "complexity": 21,
-      "end_lineno": 648,
-      "lineno": 567
+      "end_lineno": 679,
+      "lineno": 598
     },
     "skillsmgr/scopes.py::edit_skill": {
       "complexity": 28,
-      "end_lineno": 740,
-      "lineno": 651
+      "end_lineno": 771,
+      "lineno": 682
     },
     "skillsmgr/scopes.py::find_duplicates": {
       "complexity": 8,
-      "end_lineno": 480,
-      "lineno": 436
+      "end_lineno": 511,
+      "lineno": 467
     },
     "skillsmgr/scopes.py::get_raw": {
       "complexity": 6,
-      "end_lineno": 564,
-      "lineno": 546
+      "end_lineno": 595,
+      "lineno": 577
     },
     "skillsmgr/scopes.py::get_skill": {
       "complexity": 18,
-      "end_lineno": 543,
-      "lineno": 483
+      "end_lineno": 574,
+      "lineno": 514
     },
     "skillsmgr/scopes.py::known_scopes": {
       "complexity": 5,
@@ -1747,8 +1762,8 @@
     },
     "skillsmgr/scopes.py::list_all": {
       "complexity": 1,
-      "end_lineno": 398,
-      "lineno": 389
+      "end_lineno": 429,
+      "lineno": 420
     },
     "skillsmgr/scopes.py::list_scopes": {
       "complexity": 9,
@@ -1757,28 +1772,28 @@
     },
     "skillsmgr/scopes.py::list_snapshots_for": {
       "complexity": 3,
-      "end_lineno": 933,
-      "lineno": 926
+      "end_lineno": 964,
+      "lineno": 957
     },
     "skillsmgr/scopes.py::remove_skill": {
       "complexity": 6,
-      "end_lineno": 767,
-      "lineno": 743
+      "end_lineno": 798,
+      "lineno": 774
     },
     "skillsmgr/scopes.py::restore_snapshot": {
       "complexity": 7,
-      "end_lineno": 959,
-      "lineno": 936
+      "end_lineno": 990,
+      "lineno": 967
     },
     "skillsmgr/scopes.py::scan_scope": {
-      "complexity": 18,
-      "end_lineno": 369,
-      "lineno": 294
+      "complexity": 4,
+      "end_lineno": 400,
+      "lineno": 382
     },
     "skillsmgr/scopes.py::search_all": {
       "complexity": 3,
-      "end_lineno": 990,
-      "lineno": 974
+      "end_lineno": 1021,
+      "lineno": 1005
     },
     "skillsmgr/scopes.py::set_global_store": {
       "complexity": 1,
@@ -1787,13 +1802,13 @@
     },
     "skillsmgr/scopes.py::sync_skill": {
       "complexity": 34,
-      "end_lineno": 923,
-      "lineno": 812
+      "end_lineno": 954,
+      "lineno": 843
     },
     "skillsmgr/scopes.py::toggle_skill": {
       "complexity": 12,
-      "end_lineno": 809,
-      "lineno": 770
+      "end_lineno": 840,
+      "lineno": 801
     },
     "skillsmgr/source_lock.py::_compare_manifests": {
       "complexity": 15,
