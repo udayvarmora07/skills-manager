@@ -73,6 +73,11 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 - **The web server binds the host it validated.** A trailing space or a bare
   IPv6 literal passed the loopback policy and then raised a raw `gaierror`.
 - **One Ctrl-C no longer permanently wedges a coalesced read endpoint.**
+- **The frontend's observed state has one source.** Five hand-copied predicates
+  (the audit counted three) disagreed with each other, `invalid` was missing from
+  the domain label map so it never appeared in Quality, and the Escape ladder
+  hand-copied a key order it did not match. Requests across 10 navigations fell
+  from 17 to 9.
 
 ### Changed
 

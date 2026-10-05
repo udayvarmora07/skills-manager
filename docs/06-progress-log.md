@@ -4,6 +4,54 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — The frontend had five copies of one predicate, not three
+
+**[SPEC]** Fourth and last parallel branch merged. §C2/§C4 also corrected
+upward: the audit counted **three** divergent observed-state predicates and
+there were **five** (four in `app.js`, one in `domain.js`).
+
+- **One source for the observed state.** All five now call
+  `domain.observeRecord()` / `observedStateFor()` / `observedStateKeys()`, and
+  `invalid` was added to `OBSERVED_STATE_LABELS` — it had been missing, which is
+  exactly the failure the audit predicted: a state added to the seam silently
+  never appeared in Quality.
+- **One Escape rule.** The old 16-way ladder hand-copied the `data()` key
+  order that `activeModal` derives, and the two **disagreed**: the ladder closed
+  `commands` first while `data()` lists it last, so with Commands plus another
+  dialog open, focus and Escape named different dialogs. Escape now closes
+  `activeModal`.
+- **One transport.** Five raw `fetch()` calls bypassed `domain.api` (verified
+  exactly five). They now route through `api()` / `apiText()` / `apiBlob()`.
+  **Identical in-flight GETs share one request; a completed read is never
+  cached and a mutation is never shared** — the filesystem stays authoritative.
+- **Request amplification (§G6) measured before and after:** 17 requests across
+  10 navigations → **9**, with `/api/skills/<name>` and `/api/skills/<name>/raw`
+  each dropping from 4 to **0**.
+- **`domain.js` is guarded.** A load failure now renders an explicit message
+  instead of a blank page, because the destructure at the top of `app.js` had no
+  existence check.
+
+**Red-first:** `tests/test_frontend_seam_contracts.py`, 29 tests, **17 failing**
+(9 failures + 8 errors) against the pre-fix sources.
+
+**[NOTE] One new test pins a collision nobody had noticed.**
+`observations.document_observations()` hashes the document *text*, and an
+unreadable row is built with `text=""` — so **every unreadable version of a skill
+shares `sha256("")`**. Once a skill is already malformed, a *different* unreadable
+version compares equal and the body is not re-fetched. That is harmless only
+because the differing `decode_error` is carried across; a reuse decision keyed on
+`content_hash` alone would show a stale repair instruction. Recorded as a
+`SESSION-CONTEXT.md` gotcha and pinned by a test.
+
+**[NOTE] One item verified and deliberately not done.** The non-reactive handles
+(`themeMediaQuery`, `searchTimer`, `modalFocusTimer`, and the `listSeq` /
+`detailSeq` / `toastSeq` counters) really do live in reactive `data()` and get
+proxied — but moving them changes reactivity, and those counters are compared in
+`finally` blocks and watcher callbacks. A non-reactive counter read through a
+stale closure is precisely the stale-response class this repository has already
+been bitten by. It needs its own proof, not a drive-by inside a de-duplication
+diff.
+
 ## 2026-10-05 — Two parallel branches merged; the complexity ratchet had a hole
 
 **[SPEC]** Two of the four worktree branches are in: the god-router split

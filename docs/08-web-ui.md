@@ -478,6 +478,27 @@ claimed.
   `lang="en"` until translated resources exist, so a regional format choice
   never falsely claims translated interface copy.
 - **Domain seam (`domain.js`)**: `api()` fetch wrapper, formatting/token helpers, raw frontmatter enrichment, and hand-rolled escaped Markdown rendering; all load before `app.js` without a bundler.
+- **[SPEC] The seam owns the observed state, not five copies of it.** The
+  frontend carried five hand-written copies of the same predicate (four in
+  `app.js`, one in `domain.js`) and `invalid` was missing from
+  `OBSERVED_STATE_LABELS`, so a state added to the seam silently never appeared
+  in Quality. All five now call `domain.observeRecord()` /
+  `observedStateFor()` / `observedStateKeys()`, and `invalid` is in the label
+  map. Pinned by `tests/test_frontend_seam_contracts.py` (29 tests, 17 of them
+  failing against the pre-fix sources).
+- **[SPEC] Escape closes `activeModal`.** The old 16-way Escape ladder
+  hand-copied the `data()` key order that `activeModal` derives, and the two
+  disagreed: the ladder closed `commands` first while `data()` lists it last,
+  so with Commands plus another dialog open, focus and Escape named different
+  dialogs. One rule now, derived from the same source.
+- **[SPEC] Transport goes through `api()`, `apiText()` and `apiBlob()`.** Five
+  raw `fetch()` calls bypassed the seam. **Identical in-flight GETs share one
+  request**; completed reads are *never* cached (the filesystem stays
+  authoritative) and mutations are never shared. Request amplification across
+  10 navigations fell from **17 to 9**, with `/api/skills/<name>` and
+  `/api/skills/<name>/raw` dropping from four each to zero.
+- A list refresh reuses the open detail when the skill's observed identity has
+  not changed, which is why the detail count above is zero.
 - **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Source updates use a frozen exact target, multipart review, explicit confirmation, and snapshot-backed rollback. The scope query string is built inline per call (`"?scope=" + encodeURIComponent(scope)`); the former `_scopeParam`/`_scopeQs` helpers were dead code and were removed (`BUG-15`).
 - **Source update state**: `update` stores the pending review, exact `{name, scope, physical_path}` target, candidate source identity, bounded change evidence, validation/risk results, review expiry, and recovery snapshot evidence. `recoverySnapshots` is loaded for the selected physical instance; apply and rollback both require a fresh review and explicit confirmation.
 - **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), exact visible-set selection and tag changes, `prepareBatch`/`executeBatch` (preview-locked enable/disable/remove/sync), `saveProfile`/`previewProfile`/`openProfileBatch`/`deleteProfile`, `openInstallCenter`/`openRecoveryCenter`, `loadWorkspaces` (read-only adapter/project evidence), `inspectQualityInLibrary` (reuse exact Library selection/detail), `openInstall`/`runInstall` (build/run `skills add` or browse/search/curate/fetch skills.sh), `runRegistry` (cache-aware reads and explicit provenance fetch), `commitRegistryReview` (separate no-network trust commit), and escaped editor preview. Install reports existing `registry_provenance` as registry-backed skills (not deduplicated sources) and makes no update claim without registry evidence; persistent search filters names and provenance identifiers. Registry fetch sends `{fetch:true, source}` and shows review id/expiry/validation/risk/hash evidence; the separate `{fetch:true, review_id, trust_confirmed:true}` action commits only the exact returned review, with a new request retiring the old review. Recovery is the single exposed recovery navigation entry and composes global-only trash restore, history/snapshot rollback, full archive import, and full backup export; its history modal forces global scope. Profile detail shows observed/disabled/divergent/missing counts, configured targets, and each instance scope/path; `Review enable plan` is offered only when at least one observed instance exists. The plan explains Disabled → Active and Active → No state change outcomes, unresolved members, and recovery/partial-failure behavior. Quality actions route to existing Validate, Doctor, and Stats modals without inventing new evidence.

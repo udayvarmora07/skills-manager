@@ -66,8 +66,11 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   (`_route_get` recorded 96, measured 13, and the ratchet only fails on
   *increase*). Regenerated with 0 entries raised, and `slack_baseline_keys()`
   now fails the gate whenever an entry sits above its measured metric.
-- [/] Still in flight: agent-scope read cost (§D1) and frontend state
-  registries + request amplification (§C2/§G6).
+- [x] §C2/§G6: five observed-state predicates collapsed to one seam, one
+  Escape rule, one transport. Requests across 10 navigations 17 -> 9.
+- [x] §D1 (agent scopes): the scan stops re-deriving what it validated.
+- All four parallel branches merged; ladder green at 1,102 tests including
+  the browser harness.
 - [ ] C4 #4, second half only: the one-document invariant is implemented twice
   — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
   nothing keeping them equivalent. Needs a session that owns `scopes.py`.

@@ -75,7 +75,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`preferences.js` bootstraps local theme/text-size before `styles.css`; `domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`); Settings persists the regional format preference in `skillsmgr-locale`.
-- **Tests**: stdlib `unittest` regression/contract suite — **1,046 tests green 2026-10-05** (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (**683 functions across 16 files**, budget ≤ 15, and a hard failure on any baseline key that no longer resolves), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
+- **Tests**: stdlib `unittest` regression/contract suite — **1,102 tests green 2026-10-05** (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (**683 functions across 16 files**, budget ≤ 15, and a hard failure on any baseline key that no longer resolves), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
 - **Client contract (2026-09-11, #8)**: the REST API is the surface for local non-browser
   clients (editor extensions, scripts). Address it at `127.0.0.1` — `Host: localhost:<port>`
   is rejected on **every** request under the default bind, reads included (issue #14 F-2) —
@@ -164,6 +164,26 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 21. **Hygiene is evidence, not a score or cleanup action** (HY-13). `doctor --hygiene` and Quality share `skillsmgr/hygiene.py`; missing source-lock, usage, freshness, trust, usefulness, arbitrary effective-load, and runtime-readiness signals remain explicitly unavailable. Near-duplicate results are bounded heuristics, and any degraded/truncated evidence must stay visible.
 22. **Trust gates stay narrow and artifact-facing** (P0). Ruff CI selects only `F821`/`F822`/`F823`; Bandit decisions and named suppressions live in @docs/STATIC-ANALYSIS.md. `check_docs.py` checks tracked Markdown plus `docs/` and explicit first-party top-level files, and `check_package_data.py` verifies SPDX license metadata and exact `LICENSE` bytes in wheels and sdists.
 
+23. **The frontend's observed state has exactly one source.** Five hand-copied
+    predicates used to decide active/disabled/malformed/unaddressable/divergent,
+    and `invalid` was missing from `OBSERVED_STATE_LABELS` — so a state added to
+    the domain seam silently never appeared in Quality. Call
+    `domain.observeRecord()` / `observedStateFor()` / `observedStateKeys()`; do
+    not re-derive. Escape closes `activeModal` — the old 16-way ladder hand-copied
+    the `data()` key order and disagreed with it. Transport goes through
+    `api()` / `apiText()` / `apiBlob()`; no raw `fetch()`. Identical in-flight GETs
+    may share one request, but a **completed** read is never cached and a mutation
+    is never shared (docs/24 §C2/§G6).
+24. **Two unreadable versions of a skill share one `content_hash`.**
+    `observations.document_observations()` hashes the document *text*, and an
+    unreadable row is built with `text=""` — so every unreadable version of the
+    same skill hashes to `sha256("")`. Once a skill is already malformed, a
+    *different* unreadable version therefore compares equal and its body is not
+    re-fetched. That is harmless **only** because the differing `decode_error` is
+    carried across. If a reuse decision ever keys on `content_hash` alone, a stale
+    repair instruction will be shown. Pinned by
+    `tests/test_frontend_seam_contracts.py`.
+
 ## Verification loop (run all, all must pass)
 
 ```bash
@@ -237,6 +257,17 @@ skillsmgr/
   backup_sync.py       # bounded backup/sync manifests and dry-run plans
   bundles.py           # offline HMAC manifest evidence; no archive integration
   registry.py          # bounded registry API, snapshots, cache, provenance
+tests/test_audit_d1_read_path.py  # §D1 read-path cost regressions
+tests/test_audit_d1_review_regressions.py  # six defects self-review found in §D1/§D3-4
+tests/test_audit_d3_read_purity.py      # reads create nothing; one repairable 404
+tests/test_audit_d3_upload_safety.py    # an unsafe upload part aborts the upload
+tests/test_audit_d3_export.py          # a download leaves no archive behind
+tests/test_audit_d3_parameter_coercion.py  # bad params are 400s, not defaults
+tests/test_audit_d3_pagination.py      # limit/offset + X-Total-Count
+tests/test_audit_d3_error_contract.py  # one error shape; no stale bodies
+tests/test_audit_d1_scope_reads.py     # agent-scope read cost
+tests/test_audit_route_table.py        # 16 route characterisations
+tests/test_frontend_seam_contracts.py # one state predicate, one transport
 tests/test_insights_contracts.py  # insights hermetic contracts (57 tests)
 tests/test_audit_batch5_contracts.py  # SEC-4..SEC-9 + SEC-13 regressions
 tests/test_audit_batch8_contracts.py  # SEC-14..SEC-18 regressions
