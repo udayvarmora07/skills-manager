@@ -4,6 +4,46 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — D3-5: an unsafe upload part no longer vanishes
+
+**[SPEC]** Closed @docs/24 §D3-5. Reproduced on the live `PUT /api/import`
+route first, and the measured behaviour was worse than the audit recorded:
+
+```text
+safe + parent-traversal + absolute  -> 200 {"imported": ["good"], "skipped": []}
+only unsafe parts                  -> 200 {"imported": [], "skipped": []}
+```
+
+Two parts the client sent and the user expected were simply **gone**, and the
+payload claimed `skipped: []` — which reads as "everything you sent was
+processed". The second shape is silent data loss with a success status: nothing
+installed, nothing reported, no route back.
+
+- **An unsafe part rejects the whole upload.** `web_upload._plan_staging()`
+  judges every part's path *before* anything is written, so a rejected upload
+  installs nothing and leaves no staging tree. Absolute paths, `..` segments,
+  backslash separators and NUL bytes each answer `400` naming the part the
+  client sent and the reason.
+- **One predicate for both upload paths.** `staged_single_skill` (the
+  review-first source-update upload) already **raised** for exactly these
+  conditions while `upload_folder` skipped the part — the two upload paths had
+  drifted into disagreeing about the same input. Both now share
+  `_unsafe_part_reason()`, and a test pins that they agree.
+- **The SEC-6 name-conflict contract needed care here.** `_stage_path()`
+  detects "one name is both a file and a directory" by *looking at the
+  filesystem*, so it only worked mid-write. Putting a decision pass in front of
+  the writes silently disabled it — the two `test_audit_batch5_contracts`
+  regressions caught it, which is exactly what they exist for. The conflict is
+  now derived from the upload itself (a staged path is a prefix of, or prefixed
+  by, another) so both part orders are rejected before any write, and
+  `_stage_path`'s filesystem check remains as a second line.
+
+**Red-first:** `tests/test_audit_d3_upload_safety.py`, 14 tests — **13 failures**
+before, 14/14 after. One of those 14 was *my* test being wrong rather than the
+code: the error message renders the client-controlled filename with `repr()`, so
+a backslash shows doubled, and the assertion now matches that deliberately
+rather than the product being weakened to satisfy a test.
+
 ## 2026-10-05 — D3-4: a read no longer creates, repairs, or hides
 
 **[SPEC]** Closed the first half of @docs/24 §D3-4. Both halves were

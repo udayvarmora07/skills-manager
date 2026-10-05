@@ -282,8 +282,22 @@ failing mid-request (SEC-6): one upload that contains both `a` (a file) and
 `a/b/SKILL.md` (needing directory `a`) answers `{"error": "a file and a
 directory share the name 'a'"}` in either part order, and a filename containing
 a NUL byte answers an explicit message rather than the interpreter's own
-`embedded null byte` text. Parts with an absolute path or a `..` segment are
-still skipped silently, as before.
+`embedded null byte` text.
+
+**[SPEC] An unsafe part rejects the whole upload** (docs/24 §D3-5). Every part's
+path is planned *before* anything is written, so an absolute path, a `..`
+segment, or a backslash separator answers `400` naming the part the client sent
+(`{"error": "uploaded file '../evil/SKILL.md' is unsafe: parent-directory
+segment"}`), installs nothing, and leaves no staging tree. This was not
+cosmetic: the part used to be skipped with `continue` and the response was still
+`200`, so a folder containing one safe and one unsafe path answered
+`{"imported": ["good"], "skipped": []}` — a payload that actively claims nothing
+was skipped — and an upload of *only* unsafe paths answered `200 {"imported":
+[], "skipped": []}` while installing nothing at all. `PUT /api/import`
+multipart and the review-first source-update upload now share one predicate
+(`web_upload._unsafe_part_reason`); they had drifted into disagreeing about the
+same input. A part with **no** filename is still ignored: it is a form field,
+not a file, so there is no path to judge.
 
 ### Local client integration contract (non-browser clients — issue #8)
 

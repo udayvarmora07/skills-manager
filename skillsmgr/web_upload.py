@@ -148,6 +148,74 @@ def _split_multipart(raw: bytes, marker: bytes) -> list[bytes]:
     return [raw]
 
 
+def _unsafe_part_reason(rel: str) -> str | None:
+    """Why *rel* may not be staged under the upload root, or ``None`` if it may.
+
+    One predicate for both upload paths, because they had drifted into
+    disagreeing about the same input: ``staged_single_skill`` raised for these
+    conditions while ``upload_folder`` skipped the part and still answered
+    ``200 {"skipped": []}`` -- so a part the user sent was dropped and the
+    response claimed nothing was skipped (docs/24 §D3-5).
+    """
+    if not rel:
+        # Not a file part (a form field). There is no path to judge.
+        return None
+    if rel.startswith("/"):
+        return "absolute path"
+    if "\\" in rel:
+        return "backslash separator"
+    if ".." in PurePosixPath(rel).parts:
+        return "parent-directory segment"
+    if "\x00" in rel:
+        return "NUL byte in the file name"
+    return None
+
+
+def _plan_staging(file_parts: list[dict]) -> list[tuple[str, bytes]]:
+    """Decide every destination from the upload alone, before touching disk.
+
+    Two policies live here, both of which used to depend on what had already
+    been written, and therefore could only be applied *during* the write pass:
+
+    * an unsafe path rejects the whole upload -- previously the part was skipped
+      with ``continue`` and the client still got ``200 {"skipped": []}``,
+      which reads as "everything you sent was processed" (docs/24 §D3-5);
+    * one name being both a file and a directory is the same actionable
+      conflict in either part order (SEC-6).  ``_stage_path`` can only see that
+      by looking at the filesystem, so with a decision pass in front of the
+      writes it needs to see the plan instead.
+
+    Returns ``(relative path, bytes)`` pairs, skipping parts with no filename
+    (a form field carries no file, so there is no path to judge).
+    """
+    planned: list[tuple[str, bytes]] = []
+    staged: set[str] = set()
+    for part in file_parts:
+        rel = part["filename"]
+        if not rel:
+            continue
+        reason = _unsafe_part_reason(rel)
+        if reason is not None:
+            raise StoreError(f"uploaded file {rel!r} is unsafe: {reason}")
+        parts = PurePosixPath(rel).parts
+        # A directory needed by this file is already staged as a file.
+        for index in range(len(parts) - 1):
+            if "/".join(parts[: index + 1]) in staged:
+                raise StoreError(
+                    f"a file and a directory share the name {parts[index]!r}"
+                )
+        # This file is a directory that something already staged needs.
+        for existing in staged:
+            if existing.startswith(rel + "/"):
+                raise StoreError(
+                    f"a file and a directory share the name "
+                    f"{PurePosixPath(rel).name!r}"
+                )
+        staged.add(rel)
+        planned.append((rel, part.get("content") or b""))
+    return planned
+
+
 def upload_folder(
     file_parts: list[dict],
     add_skill: Callable[[Path], dict],
@@ -161,6 +229,10 @@ def upload_folder(
     filesystem staging and per-skill result contract here makes this policy
     independently testable without exposing a new Store method or changing
     ``WebAppHandler``/``WebAppServer`` interfaces.
+
+    **[SPEC] An unsafe part aborts the upload.** Every path is planned before
+    anything is written, so a rejected upload installs nothing, leaves no
+    staging tree, and answers ``400`` naming the part the client sent.
     """
 
     if len(file_parts) > max_parts:
@@ -175,20 +247,21 @@ def upload_folder(
     if not skill_files:
         raise StoreError("no SKILL.md files in upload")
 
+    planned = _plan_staging(file_parts)
+
     tmp_root = Path(tempfile.mkdtemp(prefix="skillsmgr-add-"))
     imported: list[str] = []
     skipped: list[str] = []
     try:
-        for part in file_parts:
-            rel = part["filename"]
-            if not rel or rel.startswith("/") or ".." in Path(rel).parts:
-                continue
+        for rel, content in planned:
             target = _stage_path(tmp_root, rel).resolve()
             if not _contained(target, tmp_root):
-                continue
+                raise StoreError(
+                    f"uploaded file {rel!r} is unsafe: it escapes the upload root"
+                )
             try:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(part["content"])
+                target.write_bytes(content)
             except (OSError, ValueError) as exc:
                 # Never surface a raw Python exception as the client's error
                 # message (SEC-6); the OS's own wording is the useful part.

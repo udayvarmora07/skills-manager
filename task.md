@@ -45,7 +45,9 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   and a damaged layout answers one repairable 404 instead of four 400s beside
   two 200s. Also fixed two non-hermetic test suites that read the real `$HOME`.
 - [ ] D3-3: `GET /api/export` writes an unpruned archive on every call.
-- [ ] D3-5: multipart upload silently discards unsafe parts and answers 200.
+- [x] D3-5: an unsafe upload part rejects the whole upload with a 400 naming
+  the part, instead of vanishing under a `200 {"skipped": []}` payload.
+  Both upload paths now share one predicate.
 - [ ] D3-8: invalid numeric query parameters are silently coerced.
 - [ ] D3-9: no pagination; unknown paging params silently ignored.
 - [ ] D3-6 / D3-7 / D3-12: `get()`/`list()` disagree, two error-body shapes,
