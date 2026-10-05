@@ -4,7 +4,36 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
-## 2026-10-05 — The frontend had five copies of one predicate, not three
+## 2026-10-05 — A `git add -A` broke a documented policy; corrected before push
+
+**[NOTE]** Caught while answering "is everything pushed?", which is the first
+moment the working tree was inspected rather than assumed. A `git add -A` used
+to stage the frontend documentation swept in two files that were untracked at
+the start of this session:
+
+- **`.autogit`** — a 3-byte local tooling marker that this log records as
+  *"untracked by policy"* in at least two dated entries. Staging it violated a
+  rule the repository states about itself, and nothing about the file made that
+  worth it.
+- **`.specs/audit-2026-10-04/UI-UX-AGENT-RESOURCE-LIST.md`** — 56 KB from the
+  audit's working directory.
+
+**[SPEC] Both were caught before anything was pushed**, so no history rewrite
+was needed. `.autogit` is untracked again and added to `.gitignore` so it
+cannot recur; the file itself is untouched on disk. `.specs/audit-2026-10-04/`
+is left tracked, because the rest of `.specs/` already is and singling one
+subdirectory out would be the inconsistency.
+
+**[NOTE] The lesson is about the command, not the two files.** `git add -A`
+stages whatever *exists*, which includes things a repository deliberately does
+not track. This one has no `.gitignore` entry for `.autogit` or `.specs/`, so
+nothing would have stopped it, and the resulting commit was green through
+every gate — `check_docs.py`, the complexity ratchet and 1,102 tests all
+passed with a policy violation inside the tree. **A gate cannot catch a policy
+it does not know about**, which is the same lesson as §A4's stale baseline and
+§F3's "fail loudly when the assertion stops applying".
+
+## 2026-10-05 — The frontend had five copies of one predicate, not three## 2026-10-05 — The frontend had five copies of one predicate, not three
 
 **[SPEC]** Fourth and last parallel branch merged. §C2/§C4 also corrected
 upward: the audit counted **three** divergent observed-state predicates and

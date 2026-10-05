@@ -31,3 +31,6 @@ Thumbs.db
 # Local scratch
 *.log
 /tmp/
+
+# Local tooling marker; the progress log records it as untracked by policy.
+.autogit
