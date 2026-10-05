@@ -3,7 +3,28 @@
 
 /* ------------------------------------------------------------- utilities */
 
-const { api, formatBytes, formatTokens, tokenPctClass, tokenBarWidth, renderMarkdown, parseFrontmatter, formatCompat, formatTools, groupLogicalSkills, deriveLogicalSkillIdentity, observedIdentity } = window.SkillManagerDomain;
+/* domain.js carries the transport, formatting, and state policy. If it failed
+ * to load, say so on the page instead of throwing into an empty document —
+ * a blank screen with a console trace tells the user nothing. */
+const SkillManagerDomain = window.SkillManagerDomain;
+if (!SkillManagerDomain) {
+  const failure = document.createElement("div");
+  failure.setAttribute("role", "alert");
+  failure.style.cssText = "margin:2rem;padding:1rem;border:1px solid #a94b20;border-radius:8px;"
+    + "font:14px/1.5 system-ui,sans-serif;color:#a94b20;background:#fff;";
+  failure.textContent = "Skills Manager could not start: domain.js did not load. "
+    + "Reload the page; if it persists, the served frontend files are incomplete.";
+  document.body.appendChild(failure);
+  throw new Error("SkillManagerDomain missing");
+}
+
+const {
+  api, apiText, apiBlob,
+  formatBytes, formatTokens, tokenPctClass, tokenBarWidth,
+  renderMarkdown, parseFrontmatter, formatCompat, formatTools,
+  groupLogicalSkills, deriveLogicalSkillIdentity, observedIdentity,
+  observeRecord, observedStateFor, observedStateKeys,
+} = SkillManagerDomain;
 
 /* ------------------------------------------------------------------ app */
 
@@ -293,40 +314,24 @@ createApp({
       return this.overviewRecords.length;
     },
     overviewActiveCount() {
-      return this.overviewRecords.filter((record) => {
-        const states = record.instance_states || record.states || [];
-        return !record.disabled
-          && !record.malformed
-          && !record.decode_error
-          && record.addressable !== false
-          && !states.some((state) => ["invalid", "malformed", "unaddressable"].includes(state));
-      }).length;
+      return this.overviewRecords.filter((record) => observedStateFor(record) === "active").length;
     },
     overviewDisabledCount() {
-      return this.overviewRecords.filter((record) => !!record.disabled).length;
+      return this.overviewRecords.filter((record) => observeRecord(record).isDisabled).length;
     },
     overviewDivergentGroups() {
       return this.overviewLogicalSkills.filter((group) => !!group.divergent);
     },
     overviewMalformedCount() {
-      return this.overviewRecords.filter((record) => {
-        const states = record.instance_states || record.states || [];
-        return !!record.malformed || states.includes("malformed");
-      }).length;
+      return this.overviewRecords.filter((record) => observeRecord(record).malformedDocument).length;
     },
     overviewUnaddressableCount() {
-      return this.overviewRecords.filter((record) => {
-        const states = record.instance_states || record.states || [];
-        return record.addressable === false || states.includes("unaddressable");
-      }).length;
+      return this.overviewRecords.filter((record) => observeRecord(record).notAddressable).length;
     },
     overviewInvalidRecords() {
       return this.overviewRecords.filter((record) => {
-        const states = record.instance_states || record.states || [];
-        return !!record.malformed
-          || !!record.decode_error
-          || record.addressable === false
-          || states.some((state) => ["invalid", "malformed", "unaddressable"].includes(state));
+        const observed = observeRecord(record);
+        return observed.malformedDocument || observed.notAddressable;
       });
     },
     overviewAttention() {
@@ -412,19 +417,14 @@ createApp({
       const records = this.qualityRecords;
       const logical = groupLogicalSkills(records, this.scopes);
       const stateOf = (record) => {
-        const states = record.instance_states || record.states || [];
-        if (states.includes("invalid")) return "invalid";
-        if (record.malformed || record.decode_error || states.includes("malformed")) return "malformed";
-        if (record.addressable === false || states.includes("unaddressable")) return "unaddressable";
-        if (record.disabled) return "disabled";
-        return "observed";
+        // The domain seam owns this classification; "observed" is its "active"
+        // bucket under the wording Quality uses, so nothing here restates it.
+        const state = observedStateFor(record);
+        return state === "active" ? "observed" : state;
       };
       const validityFlagged = records.filter((record) => {
-        const states = record.instance_states || record.states || [];
-        return record.malformed
-          || record.decode_error
-          || record.addressable === false
-          || states.some((state) => ["invalid", "malformed", "unaddressable"].includes(state));
+        const observed = observeRecord(record);
+        return observed.malformedDocument || observed.notAddressable;
       });
       return {
         observed: records.length,
@@ -601,12 +601,15 @@ createApp({
     },
 
     qualityStateLabel(record) {
-      const states = (record && (record.instance_states || record.states)) || [];
-      if (states.includes("invalid")) return "Invalid observed";
-      if (record && (record.malformed || record.decode_error || states.includes("malformed"))) return "Malformed observed";
-      if (record && (record.addressable === false || states.includes("unaddressable"))) return "Unaddressable observed";
-      if (record && record.disabled) return "Disabled observed";
-      return "Observed; not a validation verdict";
+      // Reads the same seam the Overview counts and the Library badges read, so
+      // a state added to the vocabulary cannot appear here and be missing there.
+      switch (observedStateFor(record)) {
+        case "invalid": return "Invalid observed";
+        case "malformed": return "Malformed observed";
+        case "unaddressable": return "Unaddressable observed";
+        case "disabled": return "Disabled observed";
+        default: return "Observed; not a validation verdict";
+      }
     },
 
     inspectQualityInLibrary() {
@@ -1163,8 +1166,14 @@ createApp({
         if (this.query.trim() && this.view === "skills") this.applySearch();
         if (this.selectedName) {
           const still = this.skills.find((sk) => sk.name === this.selectedName && (s === "all" || sk.scope === s));
-          if (still) this.loadDetail(still.name, still.scope);
-          else { this.selectedName = null; this.selected = null; }
+          if (still) {
+            // The list already re-read the filesystem. Only re-read the detail
+            // when that row actually changed, so a navigation that refreshes
+            // the list does not also re-download the document body and its
+            // frontmatter for a skill the reader did not touch.
+            if (this.detailIsCurrent(still)) this.selected = { ...this.selected, ...this.detailObservations(still) };
+            else this.loadDetail(still.name, still.scope);
+          } else { this.selectedName = null; this.selected = null; }
         }
       } catch (e) {
         if (mySeq !== this.listSeq) return;
@@ -1172,6 +1181,37 @@ createApp({
       } finally {
         if (mySeq === this.listSeq) this.loadingList = false;
       }
+    },
+
+    /* Identity of the exact physical instance a detail belongs to. Two reads
+     * of an unchanged document produce the same signature, which is what lets
+     * a list refresh reuse the detail instead of re-fetching it. */
+    detailSignature(record) {
+      if (!record) return "";
+      return [
+        record.name, record.scope, record.physical_path || record.path || "",
+        record.content_hash || "", record.disabled ? "1" : "0",
+        record.malformed ? "1" : "0", record.addressable === false ? "0" : "1",
+      ].join("|");
+    },
+
+    detailIsCurrent(row) {
+      if (!this.selected || this.selected.name !== row.name) return false;
+      if ((this.selected.scope || null) !== (row.scope || null)) return false;
+      return this.detailSignature(this.selected) === this.detailSignature(row);
+    },
+
+    /* List rows carry the observed fields the detail pane shows beside the
+     * document; the body and raw frontmatter stay from the last detail read. */
+    detailObservations(row) {
+      const carried = {};
+      for (const key of ["scope", "scope_label", "physical_root", "physical_path",
+        "root_availability", "addressable", "consumer", "disabled", "path",
+        "malformed", "decode_error", "content_hash", "tokens", "tokens_pct",
+        "description", "category", "license", "version", "updated_at", "provenance"]) {
+        if (row[key] != null) carried[key] = row[key];
+      }
+      return carried;
     },
 
     async loadQualityHygiene() {
@@ -1257,13 +1297,8 @@ createApp({
         const record = await api("/api/skills/" + encodeURIComponent(name) + qp);
         if (mySeq !== this.detailSeq) return;
         try {
-          const raw = await fetch("/api/skills/" + encodeURIComponent(name) + "/raw" + qp);
-          if (raw.ok) {
-            const text = await raw.text();
-            Object.assign(record, parseFrontmatter(text));
-          } else if (mySeq === this.detailSeq) {
-            this.toast("Could not load full metadata (compatibility may be missing).", "err");
-          }
+          const text = await apiText("/api/skills/" + encodeURIComponent(name) + "/raw" + qp);
+          Object.assign(record, parseFrontmatter(text));
         } catch (e) {
           if (mySeq === this.detailSeq) {
             this.toast("Could not load full metadata (compatibility may be missing).", "err");
@@ -1402,8 +1437,10 @@ createApp({
       const group = key === "divergent"
         ? this.overviewDivergentGroups[0]
         : this.overviewLogicalSkills.find((item) => (item.instances || []).some((record) => {
-          const states = record.instance_states || record.states || [];
-          return !!record.malformed || record.addressable === false || states.includes("malformed") || states.includes("unaddressable");
+          // The same predicate that built the attention item, so the deep link
+          // cannot point at a group the queue did not count.
+          const observed = observeRecord(record);
+          return observed.malformedDocument || observed.notAddressable;
         }));
       this.openOverviewSkill(group);
     },
@@ -1902,22 +1939,8 @@ createApp({
         this.openModal("help", {});
       } else if (e.key === "Escape") {
         if (this.menuOpen) this.closeActionsMenu(true);
-        else if (this.modals.commands) this.closeModal("commands");
-        else if (this.modals.remove) this.closeModal("remove");
-        else if (this.modals.purge) this.closeModal("purge");
-        else if (this.modals.skill) this.closeModal("skill");
-        else if (this.modals.validate) this.closeModal("validate");
-        else if (this.modals.doctor) this.closeModal("doctor");
-        else if (this.modals.stats) this.closeModal("stats");
-        else if (this.modals.history) this.closeModal("history");
-        else if (this.modals.templates) this.closeModal("templates");
-        else if (this.modals.newtemplate) this.closeModal("newtemplate");
-        else if (this.modals.import) this.closeModal("import");
-        else if (this.modals.sync) this.closeModal("sync");
-        else if (this.modals.install) this.closeModal("install");
-        else if (this.modals.batch) this.closeModal("batch");
-        else if (this.modals.update) this.requestCloseUpdate();
-        else if (this.modals.help) this.closeModal("help");
+        else if (this.activeModal === "update") this.requestCloseUpdate();
+        else if (this.activeModal) this.closeModal(this.activeModal);
       }
     },
 
@@ -1996,14 +2019,11 @@ createApp({
       try {
         const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
         const qp = "?scope=" + encodeURIComponent(sc);
-        const raw = await fetch("/api/skills/" + encodeURIComponent(this.selectedName) + "/raw" + qp);
-        if (raw.ok) {
-          const text = await raw.text();
-          const fm = parseFrontmatter(text);
-          if (!this.modals.skill) return;
-          if (fm.compatibility && !this.modals.skill.form.compatibility) this.modals.skill.form.compatibility = fm.compatibility;
-          if (fm.allowed_tools && !this.modals.skill.form.allowed_tools) this.modals.skill.form.allowed_tools = fm.allowed_tools;
-        }
+        const text = await apiText("/api/skills/" + encodeURIComponent(this.selectedName) + "/raw" + qp);
+        const fm = parseFrontmatter(text);
+        if (!this.modals.skill) return;
+        if (fm.compatibility && !this.modals.skill.form.compatibility) this.modals.skill.form.compatibility = fm.compatibility;
+        if (fm.allowed_tools && !this.modals.skill.form.allowed_tools) this.modals.skill.form.allowed_tools = fm.allowed_tools;
       } catch (e) { /* optional */ }
     },
 
@@ -2077,10 +2097,7 @@ createApp({
         }
         this.busy = true;
         try {
-          const res = await fetch("/api/import", { method: "PUT", body: form });
-          let data = null;
-          try { data = await res.json(); } catch (e) { /* ignore */ }
-          if (!res.ok) throw new Error((data && data.error) || "HTTP " + res.status);
+          const data = await api("/api/import", { method: "PUT", body: form });
           await this.loadSkills();
           if (data.imported && data.imported.length) {
             this.toast("Added skill(s): " + data.imported.join(", ") + ".");
@@ -2412,10 +2429,7 @@ createApp({
       this.busy = true;
       try {
         const url = "/api/import?filename=" + encodeURIComponent(m.file.name) + "&force=" + (m.force ? "1" : "0") + "&full=" + (m.full ? "1" : "0");
-        const res = await fetch(url, { method: "PUT", body: m.file });
-        let data = null;
-        try { data = await res.json(); } catch (e) { /* ignore */ }
-        if (!res.ok) throw new Error((data && data.error) || "HTTP " + res.status);
+        const data = await api(url, { method: "PUT", body: m.file });
         this.closeModal("import");
         if (data.imported && data.imported.length) {
           this.toast("Imported: " + data.imported.join(", "));
@@ -2470,12 +2484,8 @@ createApp({
     async exportArchive(full = false) {
       this.busy = true;
       try {
-        const res = await fetch("/api/export" + (full ? "?full=1" : ""));
-        if (!res.ok) throw new Error("Export failed (HTTP " + res.status + ")");
-        const blob = await res.blob();
-        const cd = res.headers.get("Content-Disposition") || "";
-        const m = /filename="?([^";]+)"?/.exec(cd);
-        const filename = m ? m[1] : "skills-export.tar.gz";
+        const { blob, filename: served } = await apiBlob("/api/export" + (full ? "?full=1" : ""));
+        const filename = served || "skills-export.tar.gz";
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
