@@ -35,7 +35,17 @@ class LocalClientContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls._old_data = os.environ.get("SKILLS_MANAGER_DATA")
+        cls._old_home = os.environ.get("HOME")
         os.environ["SKILLS_MANAGER_DATA"] = cls.tmp.name
+        # HOME too: every scope-aware route (``/api/stats`` above all) reads the
+        # real agent scope roots through ``scopes.known_scopes()``, so without
+        # this the contract suite walks the developer's actual ~/.claude,
+        # ~/.codex, ~/.gemini and friends -- 1,965 documents and ~3.7 s on this
+        # machine, which under load exceeded the 10 s client timeout and failed
+        # the suite for a reason unrelated to the contract under test.  Same
+        # hazard smoke_web.py already documents; it is a per-class fixup.
+        cls._home = tempfile.TemporaryDirectory()
+        os.environ["HOME"] = cls._home.name
         cls.store = Store()
         cls.store.init_db()
         cls.store.create("demo", "Use this when demoing the client contract")
@@ -50,11 +60,16 @@ class LocalClientContractTests(unittest.TestCase):
         cls.server.shutdown()
         cls._thread.join(timeout=5)
         cls.server.httpd.server_close()
+        cls._home.cleanup()
         cls.tmp.cleanup()
         if cls._old_data is None:
             os.environ.pop("SKILLS_MANAGER_DATA", None)
         else:
             os.environ["SKILLS_MANAGER_DATA"] = cls._old_data
+        if cls._old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = cls._old_home
 
     @classmethod
     def call(cls, method: str, path: str, *, body=None, headers=None):

@@ -443,6 +443,25 @@ class SkillNotFound(StoreError):
     """Raised when an operation targets a skill that does not exist."""
 
 
+class StoreLayoutError(StoreError):
+    """Raised when the managed data layout exists but cannot be used.
+
+    A component of ``<data>`` -- usually ``skills`` -- is a regular file, or the
+    index is present but unusable.  This is distinct from "nothing is
+    installed": there is nothing to read *and* nothing the reader may create,
+    so the message names the path and the repair rather than leaving a caller
+    to discover it (docs/24 §D3-4).
+
+    Every write path raises this too, via ``_ensure_store_dirs``' guard, so the
+    condition has one name wherever a user meets it.
+    """
+
+    # The web layer already routes a ``StoreError`` through this attribute, so a
+    # broken layout answers 404 -- the resource cannot be read, and nothing the
+    # caller sent caused it -- instead of 400 with an internal path.
+    status = 404
+
+
 def now_iso() -> str:
     """Return the current UTC time in ``YYYY-MM-DDTHH:MM:SSZ`` form."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -889,6 +908,10 @@ class Store:
         self._db_init_lock = threading.Lock()
         self._db_initialized = False
         self._db_identity: tuple[int, int] | None = None
+        # Identity of an index file already proved readable on the read path.
+        # Kept apart from ``_db_identity`` because that one means "schema
+        # bootstrapped", and a read never bootstraps one (docs/24 §D3-4).
+        self._db_read_ok: tuple[int, int] | None = None
         self._read_flights: dict = {}
         self._read_flights_lock = threading.Lock()
 
@@ -909,6 +932,98 @@ class Store:
         if self._db_is_current():
             return
         self._initialize_db_if_needed()
+
+    def _check_store_layout(self) -> None:
+        """Fail cleanly when the managed layout cannot be used.
+
+        The read path calls this instead of ``_ensure_store_dirs``.  Creating
+        the layout is a write, and a read that repairs the disk on its way to
+        answering is a read that writes (docs/24 §D3-4) -- but silently
+        *ignoring* a broken component is worse still, because the rest of the
+        API keeps answering 200 against a library that cannot be read.  The
+        message names the path and the repair so the condition is actionable
+        from whatever surface reported it.
+        """
+        for path in self._managed_layout_dirs():
+            if path.exists() and not path.is_dir():
+                raise self._layout_error(path, "a directory")
+        # The index is the one component that must *not* be a directory.
+        if self.db_path.is_dir():
+            raise self._layout_error(self.db_path, "a file")
+        if self.db_path.exists() and not self.db_path.is_file():
+            raise self._layout_error(self.db_path, "a regular file")
+
+    def _layout_error(self, path: Path, expected: str) -> StoreLayoutError:
+        return StoreLayoutError(
+            f"data layout is unusable: {path} exists but is not {expected}; "
+            f"move it aside with `mv {path} {path}.broken` and reload, or "
+            "point SKILLS_MANAGER_DATA at another root"
+        )
+
+    def _managed_layout_dirs(self) -> tuple[Path, ...]:
+        return (
+            self.data_dir,
+            self.skills_dir,
+            self.trash_dir,
+            self.templates_dir,
+            self.backups_dir,
+        )
+
+    def _open_index_for_read(self) -> sqlite3.Connection | None:
+        """Open the index for a read, or return ``None`` when nothing is indexed.
+
+        Deliberately creates nothing: not the data layout, not the database
+        file, and not the schema.  ``sqlite3.connect`` writes a file the moment
+        it is handed a path that does not exist, so the file is probed before
+        the connection is opened rather than after.
+
+        A missing or unusable index means "nothing is installed" to a reader,
+        which is exactly what the filesystem says too; the next write
+        bootstraps it as it always did.  ``doctor()`` is where a lost index is
+        *reported*, so this stays a read.
+        """
+        self._check_store_layout()
+        identity = _db_file_identity(self.db_path)
+        if identity is None:
+            return None
+        if self._db_read_ok != identity:
+            self._db_read_ok = None
+            if self._index_has_skill_table():
+                self._db_read_ok = identity
+        if self._db_read_ok != identity:
+            return None
+        return self._connect()
+
+    def _index_rows(self, query: str, params: tuple = ()) -> list[dict]:
+        """Run one read query, returning ``[]`` when nothing is indexed.
+
+        The seam every read uses so the missing-index case is answered in one
+        place: a read creates nothing, and a store with no index reads exactly
+        like a store with no skills (docs/24 §D3-4).
+        """
+        conn = self._open_index_for_read()
+        if conn is None:
+            return []
+        try:
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
+        finally:
+            conn.close()
+
+    def _index_has_skill_table(self) -> bool:
+        """Whether the existing index file carries the schema a read needs."""
+        try:
+            conn = self._connect()
+        except StoreError:
+            return False
+        try:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'skills'"
+            ).fetchone()
+        except sqlite3.Error:
+            return False
+        finally:
+            conn.close()
+        return row is not None
 
     def _ensure_store_dirs(self) -> None:
         """Create the private data directories needed by Store operations."""
@@ -1225,32 +1340,24 @@ class Store:
 
     def _list_uncached(self) -> list[dict]:
         """Return installed skills (active and disabled) sorted by name."""
-        self._init_db()
         on_disk = self._skill_names_on_disk()
-        conn = self._connect()
-        try:
-            rows = conn.execute(
-                "SELECT name, status, description, category, license, version, "
-                "disabled, added_at, updated_at FROM skills "
-                "WHERE status = 'active' ORDER BY name"
-            ).fetchall()
-            # STORE-10: a row whose directory is gone (a crash between the
-            # filesystem move and the index commit) must not be advertised:
-            # the filesystem is the source of truth, so the index is filtered
-            # by it rather than trusted over it.
-            result = [dict(r) for r in rows if r["name"] in on_disk]
-            resolved_root = self.skills_dir.expanduser().resolve()
-            for record in result:
-                self._observe_index_row(record, resolved_root)
-            return result
-        finally:
-            conn.close()
+        rows = self._index_rows(
+            "SELECT name, status, description, category, license, version, "
+            "disabled, added_at, updated_at FROM skills "
+            "WHERE status = 'active' ORDER BY name"
+        )
+        # STORE-10: a row whose directory is gone (a crash between the
+        # filesystem move and the index commit) must not be advertised:
+        # the filesystem is the source of truth, so the index is filtered
+        # by it rather than trusted over it.
+        result = [r for r in rows if r["name"] in on_disk]
+        resolved_root = self.skills_dir.expanduser().resolve()
+        for record in result:
+            self._observe_index_row(record, resolved_root)
+        return result
 
-    # Observation keys copied from a loaded document onto an index row.  The
-    # token fields are here because the loader has already estimated them from
-    # the same bytes: ``scopes.scan_scope("global")`` used to re-open and
-    # re-parse every SKILL.md to recompute exactly these four numbers, so the
-    # default Library view read each global document twice (docs/24 §D1).
+    # Observation keys copied from a loaded document onto a record.  One list,
+    # two readers, because the two were hand-copied and drifted.
     _OBSERVED_KEYS = (
         "content_hash",
         "metadata_hash",
@@ -1262,11 +1369,13 @@ class Store:
         "registry_provenance_error",
         "malformed",
         "decode_error",
-        "tokens",
-        "tokens_method",
-        "tokens_pct",
-        "chars",
     )
+    # ``list()`` additionally carries the token estimate the loader already
+    # produced from the same bytes: ``scopes.scan_scope("global")`` used to
+    # re-open and re-parse every SKILL.md to recompute exactly these four
+    # numbers, so the default Library view read each document twice (docs/24
+    # §D1).  ``get()`` keeps its documented record shape and does not add them.
+    _TOKEN_KEYS = ("tokens", "tokens_method", "tokens_pct", "chars")
 
     @staticmethod
     def _mark_unaddressable_row(record: dict) -> None:
@@ -1307,7 +1416,7 @@ class Store:
             observed = load_skill(skill_dir)
         except (OSError, SkillNotFound, UnicodeError, StoreError):
             return
-        for key in self._OBSERVED_KEYS:
+        for key in self._OBSERVED_KEYS + self._TOKEN_KEYS:
             if key in observed:
                 record[key] = observed[key]
         if isinstance(record.get("provenance"), dict):
@@ -1325,40 +1434,22 @@ class Store:
         on-disk document must check ``installed``.
         """
         skill_dir = _safe_skill_path(self.skills_dir, name)
-        self._init_db()
-        conn = self._connect()
-        try:
-            row = conn.execute(
-                "SELECT * FROM skills WHERE name = ?", (name,)
-            ).fetchone()
-            if row is None:
-                raise SkillNotFound(f"skill '{name}' is not installed")
-            result = dict(row)
-            installed = skill_dir.is_dir()
-            result["installed"] = installed
-            result["path"] = str(skill_dir) if installed else None
-            if skill_dir.is_dir():
-                observed = self._load_skill(skill_dir)
-                for key in (
-                    "content_hash",
-                    "metadata_hash",
-                    "observed_at",
-                    "provenance",
-                    "portable_frontmatter",
-                    "frontmatter_extensions",
-                    "registry_provenance",
-                    "registry_provenance_error",
-                    "malformed",
-                    "decode_error",
-                ):
-                    if key in observed:
-                        result[key] = observed[key]
-                if isinstance(result.get("provenance"), dict):
-                    result["provenance"]["scope"] = "global"
-                    result["provenance"]["consumer"] = "skills-manager"
-            return result
-        finally:
-            conn.close()
+        rows = self._index_rows("SELECT * FROM skills WHERE name = ?", (name,))
+        if not rows:
+            raise SkillNotFound(f"skill '{name}' is not installed")
+        result = rows[0]
+        installed = skill_dir.is_dir()
+        result["installed"] = installed
+        result["path"] = str(skill_dir) if installed else None
+        if installed:
+            observed = self._load_skill(skill_dir)
+            for key in self._OBSERVED_KEYS:
+                if key in observed:
+                    result[key] = observed[key]
+            if isinstance(result.get("provenance"), dict):
+                result["provenance"]["scope"] = "global"
+                result["provenance"]["consumer"] = "skills-manager"
+        return result
 
     def search(self, term: str) -> list[dict]:
         """Case-insensitive search over name, description and body."""
@@ -1373,25 +1464,20 @@ class Store:
         """Case-insensitive search over name, description and body."""
         from .search import rank_results
 
-        self._init_db()
         on_disk = self._skill_names_on_disk()
-        conn = self._connect()
-        try:
-            rows = conn.execute(
-                "SELECT name, description, category, license, version, disabled, "
-                "updated_at, body FROM skills WHERE status = 'active' ORDER BY name",
-            ).fetchall()
-            # STORE-10: only search what the filesystem still holds.
-            records = [dict(r) for r in rows if r["name"] in on_disk]
-            if not term:
-                return [{k: v for k, v in record.items() if k != "body"} for record in records]
-            ranked = rank_results(records, term)
-            return [
-                {k: v for k, v in record.items() if k != "body"}
-                for record, _ in ranked
-            ]
-        finally:
-            conn.close()
+        rows = self._index_rows(
+            "SELECT name, description, category, license, version, disabled, "
+            "updated_at, body FROM skills WHERE status = 'active' ORDER BY name",
+        )
+        # STORE-10: only search what the filesystem still holds.
+        records = [r for r in rows if r["name"] in on_disk]
+        if not term:
+            return [{k: v for k, v in record.items() if k != "body"} for record in records]
+        ranked = rank_results(records, term)
+        return [
+            {k: v for k, v in record.items() if k != "body"}
+            for record, _ in ranked
+        ]
 
     def create(
         self,
@@ -2107,9 +2193,26 @@ class Store:
         index residue, not an installed skill, and used to be counted ``active``
         while ``list()`` advertised it and ``get()`` served its stored body.
         """
-        self._init_db()
-        on_disk = self._skill_names_on_disk()
-        conn = self._connect()
+        self._check_store_layout()
+        return self._stats_from_index(self._skill_names_on_disk())
+
+    def _empty_stats(self) -> dict:
+        """The counts a store with nothing indexed reports."""
+        return {
+            "total": 0,
+            "active": 0,
+            "disabled": 0,
+            "trashed": 0,
+            "db_rows": 0,
+            "size_bytes": _skills_tree_size(self.skills_dir),
+            "db_bytes": 0,
+            "categories": {},
+        }
+
+    def _stats_from_index(self, on_disk: set[str]) -> dict:
+        conn = self._open_index_for_read()
+        if conn is None:
+            return self._empty_stats()
         try:
             listed = [
                 r["name"]
@@ -2381,21 +2484,50 @@ class Store:
 
     def history(self, name: str | None = None, limit: int = 50) -> list[dict]:
         """Return recent history rows, newest first."""
-        self._init_db()
-        conn = self._connect()
+        if name:
+            return self._index_rows(
+                "SELECT id, name, action, at FROM history WHERE name = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (name, limit),
+            )
+        return self._index_rows(
+            "SELECT id, name, action, at FROM history ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+
+    def _doctor_index_state(self) -> dict:
+        """Everything ``doctor()`` reads out of the index, in one pass.
+
+        A store with no usable index is reported, not repaired: ``db_rows`` is
+        zero, nothing is active or trashed, and ``db_integrity`` says
+        ``unindexed`` so the caller can name the rebuild (docs/24 §D3-4).
+        """
+        conn = self._open_index_for_read()
+        if conn is None:
+            return {
+                "db_rows": 0,
+                "active_rows": {},
+                "trashed_names": set(),
+                "integrity": "unindexed",
+            }
         try:
-            if name:
-                rows = conn.execute(
-                    "SELECT id, name, action, at FROM history WHERE name = ? "
-                    "ORDER BY id DESC LIMIT ?",
-                    (name, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT id, name, action, at FROM history ORDER BY id DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-            return [dict(r) for r in rows]
+            return {
+                "db_rows": conn.execute("SELECT COUNT(*) AS c FROM skills").fetchone()["c"],
+                "active_rows": {
+                    r["name"]: dict(r)
+                    for r in conn.execute(
+                        "SELECT name, description, body, category, license, version, disabled "
+                        "FROM skills WHERE status = 'active'"
+                    ).fetchall()
+                },
+                "trashed_names": {
+                    r["name"]
+                    for r in conn.execute(
+                        "SELECT name FROM skills WHERE status = 'trashed'"
+                    ).fetchall()
+                },
+                "integrity": conn.execute("PRAGMA integrity_check").fetchone()[0],
+            }
         finally:
             conn.close()
 
@@ -2409,29 +2541,21 @@ class Store:
         )
 
     def _doctor_uncached(self) -> dict:
-        """Audit consistency between the filesystem tree and the database."""
-        self._init_db()
+        """Audit consistency between the filesystem tree and the database.
+
+        Doctor is a read, so it does not bootstrap the layout or the index
+        either.  A store with no index is precisely the drift a user runs
+        ``doctor`` to find: it is reported here (``db_rows == 0``, every scanned
+        directory an orphan) rather than quietly repaired behind their back.
+        """
+        self._check_store_layout()
         scanned = {e["name"]: e for e in self._scan_dir(self.skills_dir)}
-        conn = self._connect()
-        try:
-            db_rows = conn.execute("SELECT COUNT(*) AS c FROM skills").fetchone()["c"]
-            active_rows = {
-                r["name"]: dict(r)
-                for r in conn.execute(
-                    "SELECT name, description, body, category, license, version, disabled "
-                    "FROM skills WHERE status = 'active'"
-                ).fetchall()
-            }
-            active_names = set(active_rows)
-            trashed_names = {
-                r["name"]
-                for r in conn.execute(
-                    "SELECT name FROM skills WHERE status = 'trashed'"
-                ).fetchall()
-            }
-            integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
-        finally:
-            conn.close()
+        index = self._doctor_index_state()
+        db_rows = index["db_rows"]
+        active_rows = index["active_rows"]
+        active_names = set(active_rows)
+        trashed_names = index["trashed_names"]
+        integrity = index["integrity"]
         drift = self._doctor_drift(scanned, active_names, active_rows)
         orphan_dirs = drift["orphan_dirs"]
         stale_rows = drift["stale_rows"]
@@ -2444,6 +2568,7 @@ class Store:
         stale_snapshots = artifacts["stale_snapshots"]
         trash_count = artifacts["trash_count"]
         templates_count = artifacts["templates_count"]
+        index_missing = integrity == "unindexed"
         ok = _doctor_is_clean(
             integrity,
             orphan_dirs,
@@ -2457,8 +2582,16 @@ class Store:
             trashed_names,
             artifacts["trash_names"],
         )
+        repair = []
+        if index_missing:
+            repair.append(
+                f"the skill index {self.db_path} is missing or unusable; "
+                "rebuild it with `skills-mgr db rebuild` (the skills "
+                "themselves are still on disk)"
+            )
         return {
             "data_dir": str(self.data_dir),
+            "repair": repair,
             "dirs": {
                 "skills": str(self.skills_dir),
                 "trash": str(self.trash_dir),

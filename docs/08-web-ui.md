@@ -109,7 +109,20 @@ scope-qualified.
 
 ## REST API
 
-All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
+All endpoints return JSON unless noted. Errors: `{"error": "message"}` with status 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown / a broken data layout — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
+
+**[SPEC] Reads never write, and a broken layout answers one 404 everywhere.**
+`GET /api/skills`, `/api/stats`, `/api/doctor` and `/api/search` used to run the
+write path's bootstrap, so one request against a data directory that did not
+exist created four directories and a 32 KB SQLite file. They no longer do: a
+read opens the index without creating the layout, the file, or the schema. When
+a component of `<data>` is a regular file (or the index is a directory), every
+route answers the **same** `404` with the same body naming the path and its
+`mv <path> <path>.broken` repair — previously four routes answered `400` with
+the interpreter's own `mkdir_private` text while `/api/scopes` and `/api/trash`
+still answered `200`, leaving the UI half-broken and half-looking-healthy
+(docs/24 §D3-4). `StoreLayoutError` carries `status = 404`, so the existing
+`StoreError` branch routes it with no special case.
 
 **[SPEC]** Requests are accepted only on a loopback-bound server with the
 configured loopback `Host` and port. This policy applies to **every** request,

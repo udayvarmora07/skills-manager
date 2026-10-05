@@ -4,6 +4,94 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — D3-4: a read no longer creates, repairs, or hides
+
+**[SPEC]** Closed the first half of @docs/24 §D3-4. Both halves were
+**reproduced before anything was changed**, on a real loopback server with an
+isolated data root:
+
+```text
+one GET /api/skills on a data directory that did not exist  ->  200 []
+  ... which then existed, holding four directories and a 32 KB SQLite file
+```
+
+and, with `<data>/skills` replaced by a regular file:
+
+```text
+GET /api/skills   -> 400 {"error": "cannot create directory below non-directory …"}
+GET /api/stats    -> 400 (same)
+GET /api/doctor   -> 400 (same)
+GET /api/search   -> 400 (same)
+GET /api/scopes   -> 200          <-- the UI was half-broken
+GET /api/trash    -> 200          <-- and half of it looked healthy
+```
+
+The second shape is the worse one: nothing the caller sent caused it, and the
+message was the interpreter's `mkdir_private` text naming an internal path,
+with no repair step.
+
+- **Reads create nothing.** `Store.list/get/search/stats/history/doctor` no
+  longer call the write path's `_init_db()`. They go through
+  `_index_rows()`, one seam that opens the index *without* creating the data
+  layout, the database file, or the schema — `sqlite3.connect` writes a file the
+  moment it is handed a path that does not exist, so the file is probed first.
+  A store with no index reads exactly like a store with no skills, which is what
+  the filesystem says too; the next write bootstraps it as it always did.
+- **A lost index is reported, not silently repaired.** `doctor()` is where a
+  deleted index is *found*, so repairing it there would defeat the tool. It now
+  reports `db_integrity: "unindexed"`, `db_rows: 0`, every scanned directory as
+  an orphan, `ok: false`, and a `repair` line naming `skills-mgr db rebuild` —
+  and notes the skills are still on disk.
+- **A damaged layout is named and repairable.** New `StoreLayoutError`
+  (a `StoreError` with `status = 404`, routed by the web layer's existing
+  status attribute) names the path, what it is instead of, and the exact
+  `mv <path> <path>.broken` repair. Every affected route answers the **same**
+  404 with the same body, instead of four 400s beside two 200s.
+
+**Red-first:** `tests/test_audit_d3_read_purity.py`, 12 tests. Proved against
+the pre-fix tree with **only the new exception name shimmed in** so the module
+could import — **6 failures + 6 errors** before, 12/12 after. The failures are
+individually meaningful: the read that created the layout, the read that created
+the index, the mixed 400/200 status set, and the leaked interpreter text each
+fail on their own assertion.
+
+**One existing test asserted the mechanism, not the property.**
+`test_concurrent_first_reads_bootstrap_schema_once` pinned
+`bootstrap.call_count == 1`. The bug it was written for was real — repeated
+schema writes turned a read into a SQLite writer — but "once" was the mechanism.
+It now asserts `0` schema bootstraps **and** `0` `_ensure_store_dirs` calls,
+which satisfies the same contention concern more strongly and is what D3-4
+requires. The fan-in half of that contract is unchanged and still asserted.
+
+**Two test suites were not hermetic, and that made CI red for a wrong reason.**
+The first full-suite run after this work reported two errors that passed in
+isolation. They were not flaky — they were **non-hermetic**. `WebAppServer`
+binds a `Store`, but every scope-aware route still reads the *real* agent scope
+roots through `scopes.known_scopes()`:
+
+```text
+/home/uday-varmora/.claude/skills      328      ~/.gemini/skills      450
+/home/uday-varmora/.codex/skills       177      ~/.commandcode/skills   59
+/home/uday-varmora/.config/opencode    519 r    ~/.agents/skills      120 r
+                                                     list_all(): 1,965 rows, 3.7 s
+```
+
+`r` = recursive. `/api/stats` scans all of it, so on a loaded machine it
+exceeded the 10 s client timeout in `urlopen` and the request raised instead of
+returning — twice, in two different suites. `tests/test_audit_d3_read_purity.py`
+and the pre-existing `tests/test_web_client_contracts.py` now isolate `HOME` as
+well as `SKILLS_MANAGER_DATA`; the latter went from a multi-second class to
+**15 tests in 0.65 s** and the former to **12 tests in 1.4 s**. This is the same
+hazard `smoke_web.py` already documents, fixed per-class.
+
+**[NOTE] The measurement above is itself an open D1 finding.** `scopes.list_all()`
+— the default Library view — re-reads and re-parses **every document in every
+agent scope** on each request, with no observation reuse at all. 3.7 s at 1,965
+real skills is the same O(n) full-document-parse cost the D1 work removed from
+the *global* half, and it is untouched by it: agent-scope rows go through
+`loader.scan_dir` → `load_skill` per row, not through `_observe_index_row`.
+Recorded in `task.md` as the next D1 step rather than started here.
+
 ## 2026-10-04 — D1: the primary read path, measured before and after
 
 **[SPEC]** Executed the pure-latency half of @docs/24 §D1. The profile the audit

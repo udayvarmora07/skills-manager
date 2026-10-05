@@ -36,7 +36,14 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   a **public-contract change** — the `malformed`/`decode_error` signals the
   Overview's attention queue is built on come from that read. Needs a decision,
   not an optimisation pass.
-- [ ] D3-4: `GET /api/skills` must not create the data directory.
+- [ ] D1 (agent scopes, measured 2026-10-05): `scopes.list_all()` — the default
+  Library view — re-reads and re-parses **every document in every agent scope**
+  on every request, with no observation reuse. Measured 3.7 s at 1,965 real
+  skills. This is the same O(n) cost the global half no longer pays, and it is
+  the largest remaining item in the default view.
+- [x] D3-4: `GET /api/skills` no longer creates the data layout or the index,
+  and a damaged layout answers one repairable 404 instead of four 400s beside
+  two 200s. Also fixed two non-hermetic test suites that read the real `$HOME`.
 - [ ] D3-3: `GET /api/export` writes an unpruned archive on every call.
 - [ ] D3-5: multipart upload silently discards unsafe parts and answers 200.
 - [ ] D3-8: invalid numeric query parameters are silently coerced.

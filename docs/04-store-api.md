@@ -20,11 +20,30 @@
 
 - `StoreError` (the module-level class in `store.py`) — generic store failure (duplicate, invalid state, I/O).
 - `SkillNotFound` (subclasses `StoreError`) — skill absent or unavailable (e.g. disabled).
+- `StoreLayoutError` (subclasses `StoreError`, `status = 404`) — the managed
+  layout exists but cannot be used: a component of `<data>` is a regular file,
+  or the index is a directory. Distinct from "nothing is installed", because
+  nothing can be read **and** nothing the reader may create. The message names
+  the path, what it is instead of, and the exact `mv <path> <path>.broken`
+  repair (docs/24 §D3-4).
 - `FrontmatterError` — malformed SKILL.md frontmatter (from `frontmatter.py`).
 
 ## Constructor
 
-`Store(data_dir: Path | None = None)` — resolves `<data>/skills-manager` (see @docs/01-architecture.md) and assigns the layout paths.  **It does not create the layout or initialise the DB** (STORE-14): every public entry point calls `_init_db()` itself, so the first use of any method bootstraps the schema.  Call `init_db()` explicitly when an empty data directory must exist before the first call.
+`Store(data_dir: Path | None = None)` — resolves `<data>/skills-manager` (see @docs/01-architecture.md) and assigns the layout paths.  **It does not create the layout or initialise the DB** (STORE-14).  Call `init_db()` explicitly when an empty data directory must exist before the first call.
+
+**[SPEC] Reads create nothing (docs/24 §D3-4).** The **write** entry points
+(`create`, `edit`, `remove`, `add`, `import_`, `resync`, `db_rebuild`,
+`init_db`, `export`) bootstrap the layout, the database file and the schema, so
+the first use of any of them brings a fresh data directory into existence.  The
+**read** entry points (`list`, `get`, `search`, `stats`, `history`, `doctor`)
+deliberately do not: they open the index without creating the data layout, the
+database file, or the schema, and a store with no index reads exactly like a
+store with no skills.  `doctor()` is where a missing index is *reported*
+(`db_integrity: "unindexed"`, `ok: false`, and a `repair` line naming
+`skills-mgr db rebuild`) rather than quietly repaired — repairing it there would
+defeat the tool.  A damaged layout raises `StoreLayoutError` from both read and
+write paths, so the condition has one name wherever a user meets it.
 
 ## Public methods
 

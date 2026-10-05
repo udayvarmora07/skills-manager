@@ -52,7 +52,17 @@ class StoreContractCase(unittest.TestCase):
 
 
 class TestStoreConstructionAndCrud(StoreContractCase):
-    def test_concurrent_first_reads_bootstrap_schema_once(self):
+    def test_concurrent_first_reads_share_one_scan_and_write_nothing(self):
+        """Eight concurrent first reads: one scan, zero schema writes.
+
+        This used to assert ``bootstrap.call_count == 1``.  The bug it was
+        written for was real -- repeated schema writes turned a read into a
+        SQLite writer and let concurrent requests contend on the database --
+        but "once" was the mechanism, not the property.  A read that never
+        bootstraps satisfies the same contention concern more strongly, and is
+        what docs/24 §D3-4 requires: looking must not change the disk.  The
+        fan-in half of the contract is unchanged and still asserted.
+        """
         fresh_dir = Path(self.tmp.name) / "fresh-read-store"
         seed_store = Store(data_dir=fresh_dir)
         seed_store.init_db()
@@ -64,11 +74,15 @@ class TestStoreConstructionAndCrud(StoreContractCase):
             "_bootstrap_schema",
             wraps=Store._bootstrap_schema,
         ) as bootstrap:
-            with ThreadPoolExecutor(max_workers=8) as pool:
-                rows = list(pool.map(lambda _item: fresh_store.list(), range(8)))
+            with mock.patch.object(
+                Store, "_ensure_store_dirs", wraps=Store._ensure_store_dirs
+            ) as ensure_dirs:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    rows = list(pool.map(lambda _item: fresh_store.list(), range(8)))
 
         self.assertTrue(all([row["name"] for row in result] == ["demo"] for result in rows))
-        self.assertEqual(bootstrap.call_count, 1)
+        self.assertEqual(0, bootstrap.call_count, "a read bootstrapped the schema")
+        self.assertEqual(0, ensure_dirs.call_count, "a read created the data layout")
 
     def test_init_db_creates_layout_and_schema(self):
         self.assertTrue(self.store.skills_dir.is_dir())
