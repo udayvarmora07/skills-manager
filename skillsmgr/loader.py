@@ -6,6 +6,7 @@ dirs). Keeps FS parsing consistent; FS stays source of truth.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from .frontmatter import FrontmatterError, parse_frontmatter
@@ -98,12 +99,18 @@ def conflicting_documents(skill_dir: Path) -> bool:
 def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]:
     """Pick a skill's document, reporting unreadable files and the conflict state.
 
-    Returns ``(text, disabled, read_error, conflict)``.  ``is_file()`` and
-    ``read_bytes()`` both raise ``OSError`` for an unreadable file or an
-    unsearchable directory, and one such entry used to abort *every* scope
-    view with a raw ``PermissionError`` (SCOPE-4).  The filesystem is the
-    source of truth, so an unreadable document is reported as drift with the
-    reason rather than being allowed to take the whole scan down.
+    Returns ``(text, disabled, read_error, conflict)``.  One such entry used to
+    abort *every* scope view with a raw ``PermissionError`` (SCOPE-4), so an
+    unreadable document is reported as drift with the reason rather than being
+    allowed to take the whole scan down.
+
+    **[SPEC]** Existence is decided with :func:`os.stat`, not ``is_file()``.
+    ``Path.is_file()`` *raised* ``PermissionError`` for a document inside an
+    unreadable directory up to Python 3.13 and **returns False** in 3.14, so
+    probing with it made the same store report drift on one version and raise
+    ``SkillNotFound`` on another -- issue #13's contract, silently split by
+    the interpreter.  Stat-ing directly tells "absent" apart from "cannot be
+    read" on every supported version (3.10-3.14).
 
     ``conflict`` is the same answer :func:`conflicting_documents` gives, taken
     from the probe this function has to make anyway instead of re-stat'ing
@@ -114,11 +121,11 @@ def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]
     for filename, disabled in ((_ACTIVE_DOCUMENT, 0), (_DISABLED_DOCUMENT, 1)):
         candidate = skill_dir / filename
         try:
-            is_file = candidate.is_file()
+            os.stat(candidate)
+        except (FileNotFoundError, NotADirectoryError):
+            continue
         except OSError as exc:
             return None, disabled, f"{candidate} cannot be read ({exc.strerror or exc})", False
-        if not is_file:
-            continue
         try:
             text, decode_error = read_skill_text(candidate)
         except OSError as exc:

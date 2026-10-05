@@ -186,6 +186,26 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 
 ## Verification loop (run all, all must pass)
 
+**[SPEC] Run the suite on every interpreter CI runs, not just the default
+one.** This repository supports 3.10-3.14. A green run on the default
+interpreter says nothing about the others — two CI failures on 2026-10-05
+(passing 3.12/3.13, failing 3.10/3.11/3.14) were invisible locally for exactly
+that reason, and one of them was a real product bug. `uv python list` shows
+what is available:
+
+```bash
+for py in python3.11 python3 "$(uv python find 3.13)" "$(uv python find 3.14)"; do
+  PYTHONDONTWRITEBYTECODE=1 "$py" -m unittest discover -s tests 2>&1 | grep -E '^(OK|FAILED|Ran )'
+done
+```
+
+Two interpreter-dependent traps this has already caught: `Path.is_relative_to()`
+delegated to `relative_to()` before 3.14, so patching one to count the other
+counts stdlib internals; and `Path.is_file()` raised `PermissionError` for an
+unreadable directory before 3.14 but returns `False`, which turned a reported
+drift row into a raised error. Probe with `os.stat`, and frame-scope any
+monkeypatch of a stdlib method to your own call sites.
+
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skillsmgr/*.py smoke_*.py tests/*.py check_*.py
 PYTHONDONTWRITEBYTECODE=1 python3 check_complexity.py

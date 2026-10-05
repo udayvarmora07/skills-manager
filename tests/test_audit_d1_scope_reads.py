@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -98,17 +99,41 @@ class ScopeReadCase(unittest.TestCase):
         self._skill(root / "apps" / "web" / "parked", "parked", disabled=True)
         return root
 
-    def _counting(self, target, attribute: str, match):
-        """Patch ``target.<attribute>`` and record the calls ``match`` accepts."""
+    def _counting(self, target, attribute: str, match, *, only_project_frames: bool = False):
+        """Patch ``target.<attribute>`` and record the calls ``match`` accepts.
+
+        The wrapper always delegates to the real method, so patching cannot
+        change behaviour -- only what gets counted.
+
+        ``only_project_frames`` counts a call only when the *immediate caller*
+        is our own code.  That is required when patching a stdlib method: on
+        Python < 3.12 ``Path.is_relative_to()`` is implemented as
+        ``self.relative_to(*other)``, so a bare patch counts pathlib's own
+        internal and a test asserting "we do not call relative_to" fails on
+        3.10/3.11 while passing on 3.12+ -- the code it claims to police is
+        identical on every version.  A cost assertion that depends on which
+        interpreter is running is not a contract; this makes it one.
+        """
         real = getattr(target, attribute)
         seen: list[str] = []
 
         def wrapper(self, *args, **kwargs):
+            if only_project_frames and not _called_from_project_code():
+                return real(self, *args, **kwargs)
             if match(self, *args, **kwargs):
                 seen.append(str(self))
             return real(self, *args, **kwargs)
 
         return mock.patch.object(target, attribute, wrapper), seen
+
+
+_PROJECT_DIR_MARKERS = ("skillsmgr/", "skillsmgr\\")
+
+
+def _called_from_project_code() -> bool:
+    """Whether the immediate caller is this project's code rather than the stdlib."""
+    filename = sys._getframe(2).f_code.co_filename
+    return any(marker in filename for marker in _PROJECT_DIR_MARKERS)
 
 
 # --------------------------------------------------------------- scan_scope
@@ -201,7 +226,7 @@ class ScanDirWalkCostTests(ScopeReadCase):
         """RED-FIRST: pre-fix this called ``Path.relative_to`` once per row."""
         root = self._seed_flat(5)
         patcher, seen = self._counting(
-            pathlib.Path, "relative_to", lambda self, *a, **k: True
+            pathlib.Path, "relative_to", lambda self, *a, **k: True, only_project_frames=True
         )
         with patcher:
             rows = loader.scan_dir(root)
@@ -212,7 +237,7 @@ class ScanDirWalkCostTests(ScopeReadCase):
         """RED-FIRST: pre-fix this walked the tree once per document name."""
         root = self._seed_recursive()
         patcher, seen = self._counting(
-            pathlib.Path, "rglob", lambda self, *a, **k: True
+            pathlib.Path, "rglob", lambda self, *a, **k: True, only_project_frames=True
         )
         with patcher:
             rows = loader.scan_dir(root, recursive=True)
@@ -293,7 +318,7 @@ class DocumentProbeTests(ScopeReadCase):
         """RED-FIRST: pre-fix ``conflicting_documents`` re-stat'ed both names."""
         skill = self._skill(self.base / "skills" / "one", "one")
         patcher, seen = self._counting(
-            pathlib.Path, "is_file", lambda self, *a, **k: self.name in _DOCUMENT_NAMES
+            pathlib.Path, "is_file", lambda self, *a, **k: self.name in _DOCUMENT_NAMES, only_project_frames=True
         )
         with patcher:
             record = loader.load_skill(skill)

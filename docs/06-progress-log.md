@@ -4,6 +4,61 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — CI went red on `main`; two failures, one of them a real product bug
+
+**[SPEC]** The push landed and CI ran it — and **`main` was red**, failing
+`unit (py3.10)`, `unit (py3.11)`, `unit (py3.14)` and both Windows
+cross-platform legs. Because four jobs declare `needs: unit`, that silently
+switched off **adversarial security checks**, **browser smoke and frontend
+syntax**, **package + release-artifact check** and **docs consistency** — the
+same coupling that let CI sit red for seven days in §A1. Exactly one local
+interpreter had ever run this tree, and it was not one of the failing ones.
+
+Reproduced locally before touching anything (`uv` supplied 3.11/3.13/3.14).
+The two failures were unrelated:
+
+**1. A test that asserted a mechanism, not a property — on Python < 3.12.**
+`test_a_flat_scan_does_not_recompute_relative_parts_per_candidate` patches
+`pathlib.Path.relative_to` and asserts it is never called. But
+`contained_entry_under` calls `target.is_relative_to(...)`, and **on Python up
+to 3.13 `Path.is_relative_to()` is implemented *as* `self.relative_to(...)`** —
+in 3.14 it was reimplemented to compare parts directly. So the patch counted a
+**stdlib internal** as if it were our walk:
+
+```text
+py3.11  rows=3  relative_to=3   <-- all three from pathlib, none from us
+py3.12  rows=3  relative_to=0
+py3.14  rows=3  relative_to=0
+```
+
+The product never called `relative_to` in a flat scan on any version. The
+counter is now frame-scoped — `only_project_frames=True` counts a call only
+when the *immediate caller* is our code — so it measures what it claims to.
+This is the **second time this repository has shipped that exact class of
+defect**: §A1's purge test asserted one branch of a two-branch function and
+passed on the author's filesystem while failing on the runner's. Both were
+"assert the mechanism, not the invariant".
+
+**2. A genuine cross-version product bug.** `test_an_unreadable_document_is_still_reported_as_drift`
+failed on 3.14 only, and it was telling the truth. `loader._probe_document`
+decided existence with `Path.is_file()`, which **raised** `PermissionError` for
+a document inside an unreadable directory up to 3.13 and **returns False** in
+3.14. So the same store reported drift on one version and raised
+`SkillNotFound` on another — issue #13's and SCOPE-4's contract, silently
+split by the interpreter. Existence is now decided with `os.stat`, telling
+"absent" apart from "cannot be read" directly, on every supported version.
+
+**Lesson recorded rather than learned for the first time:** one interpreter is
+not a test matrix. This repository supports 3.10-3.14 and CI proves it, but
+nothing in the local loop did — a green local run said nothing about the two
+versions that failed. `docs/SESSION-CONTEXT.md` now records that the local
+gate must include every interpreter `uv` can supply, not just the default one.
+
+**Verified on all four locally available interpreters**, full 1,102-test suite
+each: **py3.11 OK, py3.12 OK, py3.13 OK, py3.14 OK**, plus
+`check_complexity.py`, `check_docs.py`, both smokes, both `node --check`, and
+`git diff --check`.
+
 ## 2026-10-05 — A `git add -A` broke a documented policy; corrected before push
 
 **[NOTE]** Caught while answering "is everything pushed?", which is the first
