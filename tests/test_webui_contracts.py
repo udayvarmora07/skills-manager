@@ -98,13 +98,17 @@ class FrontendSourceContractTests(unittest.TestCase):
     def test_quality_center_uses_observed_summary_and_exact_library_drilldown(self):
         script = r'''
 const fs = require('fs'), vm = require('vm');
+// Load the REAL domain seam, overriding only the transport and the grouping
+// this test asserts on. Stubbing the state policy instead would let the app's
+// copy drift from the seam without any test noticing.
+const domainSandbox = { window: {}, document: {} };
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), domainSandbox);
+// The exported seam is frozen, so override through a copy.
+const Domain = Object.assign({}, domainSandbox.window.SkillManagerDomain, {
+  groupLogicalSkills: function (rows) { return [{divergent: rows.some(row => row.content_hash === 'different')}]; }
+});
 const sandbox = {
-  window: {SkillManagerDomain: {
-    api(){}, formatBytes(){}, formatTokens(v){return String(v || 0);}, tokenPctClass(){}, tokenBarWidth(){},
-    renderMarkdown(){}, parseFrontmatter(){}, formatCompat(){}, formatTools(){},
-    groupLogicalSkills(rows){return [{divergent: rows.some(row => row.content_hash === 'different')}];},
-    deriveLogicalSkillIdentity(){}, observedIdentity(){}
-  }},
+  window: {SkillManagerDomain: Domain},
   Vue: {createApp(app){sandbox.app = app; return {mount(){}};}, nextTick(){}},
   localStorage: {getItem(){return null;}, setItem(){}},
   document: {addEventListener(){}, removeEventListener(){}, documentElement:{dataset:{}}, querySelectorAll(){return[];}, querySelector(){return null;}},
@@ -324,7 +328,10 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn(
             "Could not load full metadata (compatibility may be missing).", source
         )
-        self.assertIn("else if (mySeq === this.detailSeq)", source)
+        # The raw read is routed through the domain seam now; a failure must
+        # still be reported to the reader rather than swallowed.
+        self.assertIn("await apiText(", source)
+        self.assertIn("} catch (e) {\n          if (mySeq === this.detailSeq) {", source)
 
     def test_install_workflow_surfaces_registry_reads_and_fetch(self):
         source = _read(APP_JS)

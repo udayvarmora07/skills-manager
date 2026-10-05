@@ -5,13 +5,49 @@
 /* Keep transport, formatting, parsing, and safe rendering independent from the
  * Vue application. The app consumes this small browser-global interface so the
  * same policy can be exercised without mounting the full UI. */
+/* Identical in-flight reads fan in to one request, the same policy the backend
+ * already applies to concurrent identical reads. Only *in-flight* work is
+ * shared: a completed response is never cached, so the filesystem stays the
+ * source of truth and a later read always re-reads it. */
+const IN_FLIGHT_READS = new Map();
+
 async function api(url, opts = {}) {
+  if (opts.method && opts.method !== "GET") return requestJson(url, opts);
+  const inFlight = IN_FLIGHT_READS.get(url);
+  if (inFlight) return inFlight;
+  const pending = requestJson(url, opts).finally(() => IN_FLIGHT_READS.delete(url));
+  IN_FLIGHT_READS.set(url, pending);
+  return pending;
+}
+
+async function requestJson(url, opts = {}) {
   const res = await fetch(url, opts);
   let data = null;
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) data = await res.json();
   if (!res.ok) throw new Error((data && data.error) || "HTTP " + res.status);
   return data;
+}
+
+/* Non-JSON transfers still belong to this seam: the app must not re-implement
+ * error handling or transport inline. These keep the same "throw the server's
+ * own error message" contract as api() above. */
+async function apiText(url, opts = {}) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.text();
+}
+
+async function apiBlob(url, opts = {}) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return { blob: await res.blob(), filename: filenameFromResponse(res) };
+}
+
+function filenameFromResponse(res) {
+  const disposition = (res.headers && res.headers.get && res.headers.get("Content-Disposition")) || "";
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  return match ? match[1] : "";
 }
 
 function esc(s) {
@@ -74,27 +110,57 @@ function tokenBarWidth(pct) {
 const OBSERVED_STATE_LABELS = Object.freeze({
   active: "Active",
   disabled: "Disabled",
+  invalid: "Invalid",
   malformed: "Malformed",
   unaddressable: "Unaddressable",
   divergent: "Divergent",
 });
 
-function stateKeysFor(record) {
-  const states = Array.isArray(record && (record.instance_states || record.states))
-    ? (record.instance_states || record.states) : [];
+/* One reader for the several shapes the API uses for the same observation:
+ * a top-level flag (`malformed`, `decode_error`, `addressable`, `disabled`) and
+ * the backend's `instance_states` vocabulary. Every surface that decides what
+ * state a record is in must go through here, so a state added to the vocabulary
+ * cannot appear in one surface and be missing from another. */
+function observeRecord(record) {
+  const source = record || {};
+  const raw = source.instance_states || source.states;
+  const states = Array.isArray(raw) ? raw : [];
+  const has = (key) => states.some((state) => String(state).toLowerCase() === key);
+  return {
+    states,
+    /* The backend reports an unreadable document as the `invalid` state; a
+     * document that cannot be decoded is the same observation, so both fold
+     * into one key here and `invalid` stays available as its own label. */
+    invalid: has("invalid"),
+    malformedDocument: !!(source.malformed || source.decode_error) || has("invalid") || has("malformed"),
+    notAddressable: source.addressable === false || has("unaddressable"),
+    isDisabled: !!source.disabled || has("disabled"),
+  };
+}
+
+/* The single classification every state predicate reads. Order is
+ * most-specific-first; `invalid` is reported separately from `malformed`
+ * because Quality counts them separately. */
+function observedStateFor(record) {
+  const observed = observeRecord(record);
+  if (observed.invalid) return "invalid";
+  if (observed.malformedDocument) return "malformed";
+  if (observed.notAddressable) return "unaddressable";
+  if (observed.isDisabled) return "disabled";
+  return "active";
+}
+
+/* The badges a Library row shows. The backend's `invalid` and a malformed or
+ * undecodable document are one observation to a reader, so both render as
+ * "Malformed" here; Quality keeps the finer distinction via observedStateFor. */
+function observedStateKeys(record, options = {}) {
+  const observed = observeRecord(record);
   const out = [];
-  if (record && (record.malformed || record.decode_error)
-      || states.some((state) => ["invalid", "malformed"].includes(String(state).toLowerCase()))) {
-    out.push("malformed");
-  }
-  if (record && record.addressable === false
-      || states.some((state) => String(state).toLowerCase() === "unaddressable")) {
-    out.push("unaddressable");
-  }
-  if (record && record.disabled || states.some((state) => String(state).toLowerCase() === "disabled")) {
-    out.push("disabled");
-  }
+  if (observed.malformedDocument) out.push("malformed");
+  if (observed.notAddressable) out.push("unaddressable");
+  if (observed.isDisabled) out.push("disabled");
   if (!out.length) out.push("active");
+  if (options.divergent && !out.includes("divergent")) out.push("divergent");
   return out;
 }
 
@@ -114,7 +180,7 @@ function observedIdentity(record, scopes, options = {}) {
   const identityLabel = !kindLabel || kindLabel === "unknown"
     ? scopeLabel
     : `${scopeLabel} ${kindLabel}`;
-  const baseStates = stateKeysFor(record || {});
+  const baseStates = observedStateKeys(record || {});
   if (options.divergent && !baseStates.includes("divergent")) baseStates.push("divergent");
   const stateLabels = baseStates.map((state) => OBSERVED_STATE_LABELS[state] || state);
   return {
@@ -185,7 +251,7 @@ function groupLogicalSkills(records, scopes) {
     const scopeLabels = [];
     const badges = [];
     for (const instance of group.records) {
-      for (const state of stateKeysFor(instance)) states.add(state);
+      for (const state of observedStateKeys(instance)) states.add(state);
       const explicit = Array.isArray(instance.instance_states) ? instance.instance_states : [];
       if (explicit.includes("divergent")) states.add("divergent");
       if (instance.content_hash) hashes.add(String(instance.content_hash));
@@ -320,6 +386,12 @@ function formatTools(v) {
 
 window.SkillManagerDomain = Object.freeze({
   api,
+  apiText,
+  apiBlob,
+  OBSERVED_STATE_LABELS,
+  observeRecord,
+  observedStateFor,
+  observedStateKeys,
   groupLogicalSkills,
   deriveLogicalSkillIdentity,
   observedIdentity,
