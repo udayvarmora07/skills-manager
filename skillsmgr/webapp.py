@@ -1003,30 +1003,42 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return True
         return False
 
-    def _route_get(self):
-        parts = self._parts()
-        if self._serve_static():
-            return
-        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
-        if self._route_source_update_get(parts, qs):
-            return
+# -- GET routes -------------------------------------------------------
+
+    def _route_library_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve the root/workspace discovery reads.
+
+        Three exact two-segment paths that answer "what can this manager see":
+        the agent scopes, the manager-owned catalog, and the adapter catalog
+        with an optional contained project.  They are one guard because they
+        share a shape and a purpose, not because they share code.
+        """
         if parts == ["api", "scopes"]:
             from .scopes import list_scopes as _list_scopes
 
             self._send_json(_list_scopes())
-            return
+            return True
         if parts == ["api", "catalog"]:
             from .catalog import load_catalog
 
             self._send_json(load_catalog(self.store.data_dir))
-            return
+            return True
         if parts == ["api", "workspaces"]:
             from .adapters import workspaces_payload
 
             project = (qs.get("project", [""])[0] or "").strip() or None
             roots = getattr(self.server, "diagnostics_roots", None) or [self.store.data_dir]
             self._send_json(workspaces_payload(project, roots))
-            return
+            return True
+        return False
+
+    def _route_profile_preview_get(self, parts: list[str]) -> bool:
+        """Serve ``GET /api/catalog/profiles/<name>/preview``.
+
+        The only reason this is not in ``_route_library_get`` is its shape: a
+        five-segment path, so it cannot be confused with the exact two-segment
+        reads beside it.
+        """
         if len(parts) == 5 and parts[:3] == ["api", "catalog", "profiles"] and parts[4] == "preview":
             from .catalog import load_catalog, profile_preview
             from .scopes import list_all as _list_all
@@ -1036,285 +1048,413 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if profile is None:
                 raise SkillNotFound(f"profile '{profile_name}' not found")
             self._send_json({"name": profile_name, **profile_preview(profile, _list_all())})
-            return
-        if parts == ["api", "skills"]:
-            scope = (qs.get("scope", [""])[0] or "").strip()
-            q = (qs.get("q", [""])[0] or "").strip()
-            if scope == "all":
-                if q:
-                    from .scopes import search_all as _search_all
+            return True
+        return False
 
-                    rows = _search_all(q, scope_id="all", store=self.store)
-                else:
-                    from .scopes import list_all as _list_all
+    def _route_skills_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/skills`` -- the list/search page for every scope.
 
-                    rows = _list_all()
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_page(rows, qs)
-                return
-            if scope and scope != "global":
-                from .scopes import scan_scope as _scan_scope, search_all as _search_all
-
-                if q:
-                    rows = _search_all(q, scope_id=scope)
-                else:
-                    rows = _scan_scope(scope)
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_page(rows, qs)
-                return
-            # scope == "" or "global": use the scope adapter so wildcard
-            # validation and body-aware ranking share one StoreError seam.
+        Four scope modes and a search variant in each.  Reads are per scope:
+        ``all`` merges, a named agent scope reads that root, and the default
+        goes through the scope adapter so wildcard validation and body-aware
+        ranking share one ``StoreError`` seam.  Token and catalog enrichment
+        run per branch because the merged and agent rows already carry their
+        own token counts.
+        """
+        if parts != ["api", "skills"]:
+            return False
+        scope = (qs.get("scope", [""])[0] or "").strip()
+        q = (qs.get("q", [""])[0] or "").strip()
+        if scope == "all":
             if q:
                 from .scopes import search_all as _search_all
 
-                rows = _search_all(q, scope_id="global", store=self.store)
-                for r in rows:
-                    r.setdefault("scope", "global")
-                    r.setdefault("scope_label", "Global")
-                # Add token enrichment from actual files
-                _enrich_rows_with_tokens(self.store, rows, "all-scope list")
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_page(rows, qs)
+                rows = _search_all(q, scope_id="all", store=self.store)
             else:
-                rows = self.store.list()
-                for r in rows:
-                    r.setdefault("scope", "global")
-                    r.setdefault("scope_label", "Global")
-                # Token enrichment for list rows
-                _enrich_rows_with_tokens(self.store, rows, "global list")
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_page(rows, qs)
-            return
-        if parts == ["api", "search"]:
-            scope = (qs.get("scope", [""])[0] or "global").strip() or "global"
-            q = qs.get("q", [""])[0]
-            if len(q) > MAX_QUERY_LEN:
-                self._send_error(400, "search query too long")
-                return
-            if scope in ("all", ""):
-                if scope == "all":
-                    from .scopes import search_all as _search_all
+                from .scopes import list_all as _list_all
 
-                    rows = _search_all(q, scope_id="all", store=self.store)
-                else:
-                    rows = self.store.search(q)
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
-            elif scope == "global":
-                from .scopes import search_all as _search_all
+                rows = _list_all()
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_page(rows, qs)
+            return True
+        if scope and scope != "global":
+            from .scopes import scan_scope as _scan_scope, search_all as _search_all
 
-                rows = _search_all(q, scope_id="global", store=self.store)
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
-            else:
-                from .scopes import search_all as _search_all
-
+            if q:
                 rows = _search_all(q, scope_id=scope)
-                _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
-            return
-        if len(parts) == 4 and parts[:2] == ["api", "skills"] and parts[3] == "raw":
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            if scope != "global":
-                from .scopes import get_raw as _get_raw
+            else:
+                rows = _scan_scope(scope)
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_page(rows, qs)
+            return True
+        # scope == "" or "global": use the scope adapter so wildcard
+        # validation and body-aware ranking share one StoreError seam.
+        if q:
+            from .scopes import search_all as _search_all
 
-                raw = _get_raw(scope, parts[2])
-                self._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
-                return
-            # Resolve through Store.get() first so the decoded path segment is
-            # validated before it can be used for a filesystem read.
-            record = self.store.get(parts[2])
-            _require_installed(record, parts[2])
-            skill_dir = Path(record["path"])
-            skill_file = skill_dir / "SKILL.md"
-            if not skill_file.is_file():
-                skill_file = skill_dir / "SKILL.md.disabled"
-            if not skill_file.is_file():
-                self._send_error(404, f"skill '{parts[2]}' has no SKILL.md")
-                return
-            _raw_document_response(self, parts[2], skill_dir)
-            return
-        if len(parts) == 3 and parts[:2] == ["api", "skills"]:
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            if scope != "global":
-                from .scopes import get_skill as _get_skill
+            rows = _search_all(q, scope_id="global", store=self.store)
+            for r in rows:
+                r.setdefault("scope", "global")
+                r.setdefault("scope_label", "Global")
+            # Add token enrichment from actual files
+            _enrich_rows_with_tokens(self.store, rows, "all-scope list")
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_page(rows, qs)
+        else:
+            rows = self.store.list()
+            for r in rows:
+                r.setdefault("scope", "global")
+                r.setdefault("scope_label", "Global")
+            # Token enrichment for list rows
+            _enrich_rows_with_tokens(self.store, rows, "global list")
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_page(rows, qs)
+        return True
 
-                record = _get_skill(scope, parts[2])
-                _enrich_rows_with_catalog(self.store, [record])
-                self._send_json(record)
-                return
-            # Use injected store for correct data_dir in tests, with token enrichment
-            rec = self.store.get(parts[2])
-            _require_installed(rec, parts[2])
-            rec.setdefault("scope", "global")
-            rec.setdefault("scope_label", "Global")
-            try:
-                from .tokens import estimate as _estD
+    def _route_search_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/search`` -- ranked rows, no paging.
 
-                tok = _estD(_skill_text(self.store.skills_dir / parts[2]))
-                _apply_token_estimate(rec, tok)
-                rec["lines"] = tok["lines"]
-                rec["body_tokens"] = _estD(rec.get("body") or "")["tokens"]
-                rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
-            except Exception as exc:
-                _diagnose(f"detail token enrichment failed for {parts[2]!r}", exc)
-                rec.setdefault("tokens", 0)
-                rec.setdefault("tokens_method", "unavailable")
-            _enrich_rows_with_catalog(self.store, [rec])
-            self._send_json(rec)
-            return
+        Distinct from ``GET /api/skills?q=`` because it is unpaged and it is
+        the one route that bounds the query string before doing any work.
+        """
+        if parts != ["api", "search"]:
+            return False
+        scope = (qs.get("scope", [""])[0] or "global").strip() or "global"
+        q = qs.get("q", [""])[0]
+        if len(q) > MAX_QUERY_LEN:
+            self._send_error(400, "search query too long")
+            return True
+        if scope in ("all", ""):
+            if scope == "all":
+                from .scopes import search_all as _search_all
+
+                rows = _search_all(q, scope_id="all", store=self.store)
+            else:
+                rows = self.store.search(q)
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_json(rows)
+        elif scope == "global":
+            from .scopes import search_all as _search_all
+
+            rows = _search_all(q, scope_id="global", store=self.store)
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_json(rows)
+        else:
+            from .scopes import search_all as _search_all
+
+            rows = _search_all(q, scope_id=scope)
+            _enrich_rows_with_catalog(self.store, rows)
+            self._send_json(rows)
+        return True
+
+    def _route_skill_raw_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/skills/<name>/raw`` -- the document as text/plain.
+
+        The global branch resolves through ``Store.get()`` before it builds any
+        filesystem path, so the decoded path segment is validated by the
+        canonical name guard before it can reach a read.
+        """
+        if len(parts) != 4 or parts[:2] != ["api", "skills"] or parts[3] != "raw":
+            return False
+        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        if scope != "global":
+            from .scopes import get_raw as _get_raw
+
+            raw = _get_raw(scope, parts[2])
+            self._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
+            return True
+        # Resolve through Store.get() first so the decoded path segment is
+        # validated before it can be used for a filesystem read.
+        record = self.store.get(parts[2])
+        _require_installed(record, parts[2])
+        skill_dir = Path(record["path"])
+        skill_file = skill_dir / "SKILL.md"
+        if not skill_file.is_file():
+            skill_file = skill_dir / "SKILL.md.disabled"
+        if not skill_file.is_file():
+            self._send_error(404, f"skill '{parts[2]}' has no SKILL.md")
+            return True
+        _raw_document_response(self, parts[2], skill_dir)
+        return True
+
+    def _route_skill_detail_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/skills/<name>`` -- one full record with counts.
+
+        The token breakdown is advisory: if the document cannot be estimated the
+        record still answers, with ``tokens_method: "unavailable"`` and the
+        reason diagnosed, rather than losing the whole response to a read error.
+        """
+        if len(parts) != 3 or parts[:2] != ["api", "skills"]:
+            return False
+        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        if scope != "global":
+            from .scopes import get_skill as _get_skill
+
+            record = _get_skill(scope, parts[2])
+            _enrich_rows_with_catalog(self.store, [record])
+            self._send_json(record)
+            return True
+        # Use injected store for correct data_dir in tests, with token enrichment
+        rec = self.store.get(parts[2])
+        _require_installed(rec, parts[2])
+        rec.setdefault("scope", "global")
+        rec.setdefault("scope_label", "Global")
+        try:
+            from .tokens import estimate as _estD
+
+            tok = _estD(_skill_text(self.store.skills_dir / parts[2]))
+            _apply_token_estimate(rec, tok)
+            rec["lines"] = tok["lines"]
+            rec["body_tokens"] = _estD(rec.get("body") or "")["tokens"]
+            rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
+        except Exception as exc:
+            _diagnose(f"detail token enrichment failed for {parts[2]!r}", exc)
+            rec.setdefault("tokens", 0)
+            rec.setdefault("tokens_method", "unavailable")
+        _enrich_rows_with_catalog(self.store, [rec])
+        self._send_json(rec)
+        return True
+
+    def _route_collection_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve the small exact-path reads: trash, templates, doctor, export.
+
+        Each is a two-segment path with no branching of its own -- one call and
+        a response -- so they share one guard rather than earning a method
+        each.  ``/api/export`` keeps its own implementation in
+        ``_serve_export`` because streaming it is not a one-liner.
+        """
         if parts == ["api", "trash"]:
             self._send_json(self.store.trash_list())
-        elif parts == ["api", "templates"]:
+            return True
+        if parts == ["api", "templates"]:
             from .templates import list_templates
 
             self._send_json({"templates": list_templates(self.store.templates_dir)})
-        elif parts == ["api", "history"]:
-            name = qs.get("name", [None])[0]
-            limit = max(1, _int_param(qs, "limit", 50, maximum=MAX_HISTORY_LIMIT))
-            if qs.get("snapshots", ["0"])[0] in ("1", "true", "yes") and name:
-                scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-                if scope == "global":
-                    from .store import list_snapshots as _list_snapshots
-
-                    snapshots = _list_snapshots(self.store.data_dir, "global", name)
-                else:
-                    from .scopes import list_snapshots_for as _list_snapshots_for
-
-                    snapshots = _list_snapshots_for(scope, name)
-                self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
-                return
-            self._send_json(self.store.history(name=name, limit=limit))
-        elif parts == ["api", "stats"]:
-            st = self.store.stats()
-            win_qs = _window_param(qs)
-            try:
-                from .scopes import list_scopes as _list_scopes
-                from .tokens import WINDOWS as _WINDOWS
-
-                from .scopes import list_all as _list_all
-
-                records = _list_all()
-                scopes = _list_scopes(records=records)
-                st["scopes"] = scopes
-                st["all_total"] = sum(s["count"] for s in scopes)
-                st["all_tokens"] = sum(s.get("tokens", 0) for s in scopes)
-                st["all_avg_tokens"] = (st["all_tokens"] // st["all_total"]) if st["all_total"] else 0
-                # Token budget vs selected window.
-                win = _WINDOWS.get(win_qs, _WINDOWS.get("claude", 200_000))
-                st["window"] = win_qs
-                st["window_tokens"] = win
-                st["all_pct_window"] = round(st["all_tokens"] / win * 100, 1) if win else 0
-                # Top 5 largest across all scopes.
-                try:
-                    st["largest"] = sorted(records, key=lambda r: r.get("tokens", 0), reverse=True)[:5]
-                    st["largest"] = [{"name": r["name"], "scope": r.get("scope"), "tokens": r.get("tokens", 0)} for r in st["largest"]]
-                except Exception as exc:
-                    _diagnose("stats largest-skills scan failed", exc)
-                    st["largest"] = []
-                    st.setdefault("degraded", []).append("largest")
-                # Whether exact counting is available.
-                try:
-                    from .tokens import _HAS_TIKTOKEN as _ht
-
-                    st["has_tiktoken"] = bool(_ht)
-                except Exception as exc:
-                    _diagnose("stats tokenizer probe failed", exc)
-                    st["has_tiktoken"] = False
-            except Exception as exc:
-                # BUG-8/BUG-7: this is the swallow that returned a 200 payload
-                # with documented keys missing.  Report it and fill the keys the
-                # UI depends on so the client cannot be handed a half-record.
-                _diagnose("stats scope enrichment failed", exc)
-                for key, fallback in (
-                    ("scopes", []), ("all_total", 0), ("all_tokens", 0),
-                    ("all_avg_tokens", 0), ("window_tokens", 0),
-                    ("all_pct_window", 0), ("largest", []),
-                ):
-                    st.setdefault(key, fallback)
-                st.setdefault("degraded", []).append("scopes")
-            self._send_json(st)
-        elif parts == ["api", "tokens"]:
-            win = _window_param(qs)
-            name = (qs.get("name", [""])[0] or "").strip()
-            scope = (qs.get("scope", ["all"])[0] or "all").strip()
-            text = (qs.get("text", [""])[0] or "")
-            if text:
-                from .tokens import estimate as _est
-
-                self._send_json(_est(text, window=win))
-                return
-            if name:
-                if scope and scope not in ("all", ""):
-                    from .scopes import get_skill as _get_skill
-
-                    rec = _get_skill(scope, name)
-                else:
-                    # Find first match across all scopes.
-                    from .scopes import list_all as _list_all
-
-                    rec = next((r for r in _list_all() if r["name"] == name), None)
-                    if rec is None:
-                        raise SkillNotFound(f"skill '{name}' not found")
-                    # Enrich with full record for body.
-                    try:
-                        from .scopes import get_skill as _gs
-
-                        rec = _gs(rec.get("scope", "global"), name)
-                    except Exception as exc:
-                        # The listing record is still usable; say why it is thin
-                        # rather than silently returning a partial record.
-                        _diagnose(f"tokens detail enrichment failed for {name!r}", exc)
-                from .tokens import estimate as _est2
-
-                raw = ""
-                p = Path(rec.get("path", "")) if rec.get("path") else None
-                if p and p.is_dir():
-                    for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                        if cand.is_file():
-                            raw = cand.read_text(encoding="utf-8")
-                            break
-                if not raw and rec.get("body"):
-                    raw = rec.get("body", "")
-                self._send_json(_est2(raw or "", window=win))
-                return
-            # No name/text: aggregate over scope.
-            if scope in ("all", "", None):
-                from .scopes import list_all as _list_all
-                from .tokens import aggregate as _agg
-
-                agg = _agg(_list_all())
-                agg["window"] = win
-                from .tokens import WINDOWS as _WW
-
-                wtok = _WW.get(win, _WW.get("claude", 200_000))
-                agg["window_tokens"] = wtok
-                agg["pct_window"] = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
-                self._send_json(agg)
-                return
-            from .scopes import scan_scope as _scan_scope
-            from .tokens import aggregate as _agg2
-
-            agg = _agg2(_scan_scope(scope))
-            agg["window"] = win
-            from .tokens import WINDOWS as _WW2
-
-            wtok = _WW2.get(win, _WW2.get("claude", 200_000))
-            agg["window_tokens"] = wtok
-            agg["pct_window"] = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
-            self._send_json(agg)
-            return
-        elif parts == ["api", "doctor"]:
+            return True
+        if parts == ["api", "doctor"]:
             self._send_json(
                 _doctor_payload(
                     self.store, qs, getattr(self.server, "diagnostics_roots", None) or [self.store.data_dir]
                 )
             )
-        elif parts == ["api", "export"]:
+            return True
+        if parts == ["api", "export"]:
             self._serve_export(qs)
-        else:
-            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
+            return True
+        return False
 
+    def _route_history_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/history``, plus its ``snapshots=1`` variant."""
+        if parts != ["api", "history"]:
+            return False
+        name = qs.get("name", [None])[0]
+        limit = max(1, _int_param(qs, "limit", 50, maximum=MAX_HISTORY_LIMIT))
+        if qs.get("snapshots", ["0"])[0] in ("1", "true", "yes") and name:
+            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+            if scope == "global":
+                from .store import list_snapshots as _list_snapshots
+
+                snapshots = _list_snapshots(self.store.data_dir, "global", name)
+            else:
+                from .scopes import list_snapshots_for as _list_snapshots_for
+
+                snapshots = _list_snapshots_for(scope, name)
+            self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
+            return True
+        self._send_json(self.store.history(name=name, limit=limit))
+        return True
+
+    def _route_stats_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/stats`` -- store counts plus scope/token budgets.
+
+        BUG-8/BUG-7: the enrichment below used to swallow every failure, so a
+        crash answered 200 with documented keys missing.  Each step now
+        reports itself through ``degraded`` and fills the keys the UI depends
+        on, so a client is never handed a half-record.
+        """
+        if parts != ["api", "stats"]:
+            return False
+        st = self.store.stats()
+        win_qs = _window_param(qs)
+        try:
+            from .scopes import list_scopes as _list_scopes
+            from .tokens import WINDOWS as _WINDOWS
+
+            from .scopes import list_all as _list_all
+
+            records = _list_all()
+            scopes = _list_scopes(records=records)
+            st["scopes"] = scopes
+            st["all_total"] = sum(s["count"] for s in scopes)
+            st["all_tokens"] = sum(s.get("tokens", 0) for s in scopes)
+            st["all_avg_tokens"] = (st["all_tokens"] // st["all_total"]) if st["all_total"] else 0
+            # Token budget vs selected window.
+            win = _WINDOWS.get(win_qs, _WINDOWS.get("claude", 200_000))
+            st["window"] = win_qs
+            st["window_tokens"] = win
+            st["all_pct_window"] = round(st["all_tokens"] / win * 100, 1) if win else 0
+            # Top 5 largest across all scopes.
+            try:
+                st["largest"] = sorted(records, key=lambda r: r.get("tokens", 0), reverse=True)[:5]
+                st["largest"] = [{"name": r["name"], "scope": r.get("scope"), "tokens": r.get("tokens", 0)} for r in st["largest"]]
+            except Exception as exc:
+                _diagnose("stats largest-skills scan failed", exc)
+                st["largest"] = []
+                st.setdefault("degraded", []).append("largest")
+            # Whether exact counting is available.
+            try:
+                from .tokens import _HAS_TIKTOKEN as _ht
+
+                st["has_tiktoken"] = bool(_ht)
+            except Exception as exc:
+                _diagnose("stats tokenizer probe failed", exc)
+                st["has_tiktoken"] = False
+        except Exception as exc:
+            # BUG-8/BUG-7: this is the swallow that returned a 200 payload
+            # with documented keys missing.  Report it and fill the keys the
+            # UI depends on so the client cannot be handed a half-record.
+            _diagnose("stats scope enrichment failed", exc)
+            for key, fallback in (
+                ("scopes", []), ("all_total", 0), ("all_tokens", 0),
+                ("all_avg_tokens", 0), ("window_tokens", 0),
+                ("all_pct_window", 0), ("largest", []),
+            ):
+                st.setdefault(key, fallback)
+            st.setdefault("degraded", []).append("scopes")
+        self._send_json(st)
+        return True
+
+    def _route_tokens_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``GET /api/tokens`` -- one estimate or a scope aggregate.
+
+        Three modes: raw ``text``, one named skill (resolved across scopes when
+        no scope is given), or an aggregate over a scope.  The named mode is
+        the only one that touches the filesystem, so it is split out into
+        ``_tokens_record`` and ``_tokens_document`` below.
+        """
+        if parts != ["api", "tokens"]:
+            return False
+        win = _window_param(qs)
+        name = (qs.get("name", [""])[0] or "").strip()
+        scope = (qs.get("scope", ["all"])[0] or "all").strip()
+        text = (qs.get("text", [""])[0] or "")
+        if text:
+            from .tokens import estimate as _est
+
+            self._send_json(_est(text, window=win))
+            return True
+        if name:
+            from .tokens import estimate as _est2
+
+            rec = self._tokens_record(name, scope)
+            self._send_json(_est2(self._tokens_document(rec), window=win))
+            return True
+        # No name/text: aggregate over scope.
+        if scope in ("all", "", None):
+            from .scopes import list_all as _list_all
+            from .tokens import aggregate as _agg
+
+            agg = _agg(_list_all())
+            agg["window"] = win
+            from .tokens import WINDOWS as _WW
+
+            wtok = _WW.get(win, _WW.get("claude", 200_000))
+            agg["window_tokens"] = wtok
+            agg["pct_window"] = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
+            self._send_json(agg)
+            return True
+        from .scopes import scan_scope as _scan_scope
+        from .tokens import aggregate as _agg2
+
+        agg = _agg2(_scan_scope(scope))
+        agg["window"] = win
+        from .tokens import WINDOWS as _WW2
+
+        wtok = _WW2.get(win, _WW2.get("claude", 200_000))
+        agg["window_tokens"] = wtok
+        agg["pct_window"] = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
+        self._send_json(agg)
+        return True
+
+    def _tokens_record(self, name: str, scope: str) -> dict:
+        """Return the record ``/api/tokens?name=`` estimates from.
+
+        With an explicit agent scope that scope answers directly; otherwise the
+        first record of that name across every scope wins.  The enrichment is
+        advisory: if the full record cannot be read the listing record is
+        still usable, and the reason is diagnosed rather than swallowed.
+        """
+        if scope and scope not in ("all", ""):
+            from .scopes import get_skill as _get_skill
+
+            return _get_skill(scope, name)
+        # Find first match across all scopes.
+        from .scopes import list_all as _list_all
+
+        rec = next((r for r in _list_all() if r["name"] == name), None)
+        if rec is None:
+            raise SkillNotFound(f"skill '{name}' not found")
+        # Enrich with full record for body.
+        try:
+            from .scopes import get_skill as _gs
+
+            rec = _gs(rec.get("scope", "global"), name)
+        except Exception as exc:
+            # The listing record is still usable; say why it is thin
+            # rather than silently returning a partial record.
+            _diagnose(f"tokens detail enrichment failed for {name!r}", exc)
+        return rec
+
+    @staticmethod
+    def _tokens_document(rec: dict) -> str:
+        """Return the document text a token estimate should be run over."""
+        raw = ""
+        p = Path(rec.get("path", "")) if rec.get("path") else None
+        if p and p.is_dir():
+            for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
+                if cand.is_file():
+                    raw = cand.read_text(encoding="utf-8")
+                    break
+        if not raw and rec.get("body"):
+            raw = rec.get("body", "")
+        return raw or ""
+
+    def _route_get(self):
+        """Dispatch ``GET`` to one route guard, in order.
+
+        Every guard below answers the request itself and returns ``True``, or
+        returns ``False`` without touching the socket.  The order is the
+        original order and the guards are mutually exclusive: each exact route
+        is a two-segment path and each shape-matched route needs three or more,
+        so no entry can shadow another.  Anything unclaimed is a JSON 404.
+        """
+        parts = self._parts()
+        if self._serve_static():
+            return
+        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+        if self._route_source_update_get(parts, qs):
+            return
+        if self._route_library_get(parts, qs):
+            return
+        if self._route_profile_preview_get(parts):
+            return
+        if self._route_skills_get(parts, qs):
+            return
+        if self._route_search_get(parts, qs):
+            return
+        if self._route_skill_raw_get(parts, qs):
+            return
+        if self._route_skill_detail_get(parts, qs):
+            return
+        if self._route_collection_get(parts, qs):
+            return
+        if self._route_history_get(parts, qs):
+            return
+        if self._route_stats_get(parts, qs):
+            return
+        if self._route_tokens_get(parts, qs):
+            return
+        self._send_error(404, "unknown endpoint", code="unknown_endpoint")
     # -- POST routes ------------------------------------------------------
 
     def _execute_batch_post(self) -> bool:
@@ -1457,217 +1597,348 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _route_sync_post(self, parts: list[str]) -> bool:
+        """Serve ``POST /api/sync`` -- copy one skill between scopes.
+
+        Every field is validated before any copy runs, so a refused request
+        has not moved a skill (docs/24 §D3-8).
+        """
+        if parts != ["api", "sync"]:
+            return False
+        data = self._body_json()
+        raw_name = data.get("name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise StoreError("name must be a string")
+        name = raw_name.strip()
+        raw_from_scope = data.get("from_scope") or "global"
+        if not isinstance(raw_from_scope, str):
+            raise StoreError("from_scope must be a string")
+        from_scope = raw_from_scope.strip() or "global"
+        to_scopes = _scope_list(data)
+        force = bool(data.get("force"))
+        if not name:
+            raise StoreError("name is required for sync")
+        from .scopes import sync_skill as _sync_skill
+
+        self._send_json(_sync_skill(name, from_scope, to_scopes, force=force))
+        return True
+
+    def _route_install_post(self, parts: list[str]) -> bool:
+        """Serve ``POST /api/install`` -- registry reads and runner install.
+
+        Three families share this path: the bounded skills.sh operations
+        (browse/search/curated/fetch, handled entirely by
+        ``_registry_install_result``), an offline preview of the command the
+        runner *would* run, and the execution itself.  Only the last one runs a
+        subprocess, and only for an explicit ``run``.
+        """
+        if parts != ["api", "install"]:
+            return False
+        data = self._body_json()
+        result = _registry_install_result(self.store, data)
+        if result is not None:
+            self._send_json(result)
+            return True
+        raw_source = data.get("source")
+        if not isinstance(raw_source, str):
+            raise StoreError("source must be a string")
+        source = raw_source.strip()
+        if not source:
+            raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
+        from .cli_handlers import validated_install_source
+
+        source = validated_install_source(source)
+        raw_scope = data.get("scope", "global")
+        if not isinstance(raw_scope, str):
+            raise StoreError("scope must be a string")
+        scope = raw_scope.strip() or "global"
+        raw_runner = data.get("runner", "npx")
+        if not isinstance(raw_runner, str):
+            raise StoreError("runner must be a string")
+        runner = raw_runner.strip() or "npx"
+        cmd_parts = self._install_command_parts(runner, source)
+        self._install_option_argv(cmd_parts, scope, data)
+        cmd_str = " ".join(cmd_parts)
+        if not data.get("run"):
+            self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
+            return True
+        try:
+            proc = subprocess.run(  # nosec B603 - runner/options are allowlisted and argv is shell-free.
+                cmd_parts, capture_output=True, text=True, timeout=120
+            )
+            self._send_json({
+                "command": cmd_str,
+                "runner": runner,
+                "source": source,
+                "executed": True,
+                "exit_code": proc.returncode,
+                "stdout": proc.stdout[-8000:],
+                "stderr": proc.stderr[-8000:],
+            })
+        except subprocess.TimeoutExpired as exc:
+            self._send_json({"command": cmd_str, "error": f"timed out after 120s: {exc}", "executed": True}, 500)
+        except FileNotFoundError as exc:
+            raise StoreError(f"runner not found: {exc}")
+        return True
+
+    @staticmethod
+    def _install_command_parts(runner: str, source: str) -> list[str]:
+        """Return the argv prefix for an allowlisted runner.
+
+        The allowlist is the security boundary: the runner is never a shell
+        string, and ``uvx`` is refused outright because it is not a way to run
+        the npm ``skills`` package.
+        """
+        if runner == "uvx":
+            raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python tools use pipx/uvx with a PyPI package.")
+        allowed_runners = {"npx", "pnpm", "yarn", "bunx", "bun"}
+        if runner not in allowed_runners:
+            raise StoreError(f"unsupported runner {runner!r}; use npx, pnpm, yarn, or bunx")
+        if runner == "npx":
+            return ["npx", "skills", "add", source]
+        if runner == "pnpm":
+            return ["pnpm", "dlx", "skills", "add", source]
+        if runner == "yarn":
+            return ["yarn", "dlx", "skills", "add", source]
+        if runner in ("bunx", "bun"):
+            return ["bunx", "skills", "add", source]
+        return ["npx", "skills", "add", source]
+
+    @staticmethod
+    def _as_option_list(value) -> list | None:
+        """Coerce one repeated-option value into a list, or drop it.
+
+        ``agents`` and ``skills`` accept a bare string as a one-element list
+        (what the UI sends for a single target); any other non-list shape is
+        dropped rather than guessed at.  Named once because both options used
+        to repeat the rule, and two copies of one rule drift apart.
+        """
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return value
+        return [value] if isinstance(value, str) else None
+
+    def _install_option_argv(self, cmd_parts: list[str], scope: str, data: dict) -> None:
+        """Append the validated scope, agent, skill and mode flags.
+
+        Every value that reaches the argv is run through the shared install
+        guard, so an option cannot smuggle an argument into the runner.
+        """
+        from .cli_handlers import validated_install_value
+
+        if scope == "global":
+            cmd_parts.append("-g")
+        agents = self._as_option_list(data.get("agents"))
+        if agents:
+            for a in agents:
+                a = validated_install_value("agent", str(a))
+                cmd_parts.extend(["-a", a])
+        skills_filter = self._as_option_list(data.get("skills"))
+        if skills_filter:
+            for s in skills_filter:
+                s = validated_install_value("skill", str(s))
+                cmd_parts.extend(["-s", s])
+        if bool(data.get("copy")):
+            cmd_parts.append("--copy")
+        if bool(data.get("list_only")):
+            cmd_parts.append("-l")
+
+    def _route_skill_write_post(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``POST /api/skills`` -- create one skill, 201 on success.
+
+        Name and description are required before anything is written, and the
+        remaining metadata is validated by the shared field guard rather than
+        per-route, so a scalar where a list belongs is a clean 400 and not a
+        half-created skill.
+        """
+        if parts != ["api", "skills"]:
+            return False
+        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        data = self._body_json()
+        name = data.pop("name", None)
+        description = data.pop("description", None)
+        if not isinstance(name, str) or not name.strip():
+            raise StoreError("name must be a non-empty string")
+        if not isinstance(description, str) or not description.strip():
+            raise StoreError("description must be a non-empty string")
+        fields = _validated_skill_fields(data)
+        if scope != "global":
+            from .scopes import create_skill as _create_skill
+
+            self._send_json(_create_skill(scope, name, description, **fields), 201)
+            return True
+        self._send_json(self.store.create(name, description, **fields), 201)
+        return True
+
+    def _route_skill_toggle_post(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``POST /api/skills/<name>/disable`` and ``/enable``.
+
+        The response echoes the verb that was applied, so a client can confirm
+        which transition happened without spending a second read.
+        """
+        if len(parts) != 4 or parts[:2] != ["api", "skills"] or parts[3] not in ("disable", "enable"):
+            return False
+        name = parts[2]
+        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        if scope != "global":
+            from .scopes import toggle_skill as _toggle_skill
+
+            self._send_json(_toggle_skill(scope, name, enable=(parts[3] == "enable")))
+            return True
+        action = getattr(self.store, parts[3])
+        action(name)
+        self._send_json({"name": name, parts[3]: True})
+        return True
+
+    def _route_trash_post(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """Serve ``/api/trash`` -- purge, restore, and rollback to a snapshot.
+
+        A path under ``/api/trash`` that is neither ``purge`` nor a single
+        name is a JSON 404 rather than a silently ignored mutation.
+        """
+        if parts[:2] != ["api", "trash"]:
+            return False
+        if len(parts) == 3 and parts[2] == "purge":
+            self._send_json(self.store.purge_trash())
+            return True
+        if len(parts) == 3:
+            snapshot = qs.get("snapshot", [None])[0]
+            if snapshot:
+                scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+                if scope == "global":
+                    self._send_json(self.store.restore(parts[2], snapshot=snapshot))
+                else:
+                    from .scopes import restore_snapshot as _restore_snapshot
+
+                    self._send_json(_restore_snapshot(scope, parts[2], snapshot))
+            else:
+                self._send_json(self.store.restore(parts[2]))
+            return True
+        self._send_error(404, "unknown endpoint", code="unknown_endpoint")
+        return True
+
+    def _route_templates_post(self, parts: list[str]) -> bool:
+        """Serve ``POST /api/templates`` -- create a template, 201 on success.
+
+        A duplicate name or an invalid one is reported as the same
+        ``StoreError`` shape as every other refusal, never as a raw
+        ``FileExistsError`` or ``ValueError``.
+        """
+        if parts != ["api", "templates"]:
+            return False
+        data = self._body_json()
+        name = data.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise StoreError("template name must be a non-empty string")
+        body = data.get("body")
+        if body is not None and not isinstance(body, str):
+            raise StoreError("template body must be a string")
+        from .templates import create_template
+
+        try:
+            path = create_template(self.store.templates_dir, name, data.get("body") or None)
+        except FileExistsError as exc:
+            raise StoreError(str(exc)) from exc
+        except ValueError as exc:
+            raise StoreError(str(exc)) from exc
+        self._send_json({"name": name, "path": str(path)}, 201)
+        return True
+
+    def _route_validate_post(self, parts: list[str]) -> bool:
+        """Serve ``POST /api/validate`` -- validate one skill, optionally evals.
+
+        The record is resolved through the store or the named agent scope
+        first, so a name that fails the canonical guard never reaches the
+        validator.
+        """
+        if parts != ["api", "validate"]:
+            return False
+        from .validator import validate_skill
+
+        data = self._body_json()
+        raw_name = data.get("name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise StoreError("skill name must be a non-empty string")
+        name = raw_name.strip()
+        requested_scope = data.get("scope", "global")
+        if not isinstance(requested_scope, str) or not requested_scope.strip():
+            raise StoreError("scope must be a non-empty string")
+        requested_scope = requested_scope.strip()
+        if requested_scope == "global":
+            record = self.store.get(name)
+        else:
+            from .scopes import get_skill as _get_scope_skill
+
+            record = _get_scope_skill(requested_scope, name)
+        if not record.get("path"):
+            raise StoreError(f"skill '{name}' has no directory on disk")
+        result = validate_skill(name, Path(record["path"]))
+        self._send_json(
+            _validate_payload(
+                self.store,
+                data,
+                name,
+                Path(record["path"]),
+                {
+                    "valid": result.valid,
+                    "issues": [
+                        {"level": issue.level, "key": issue.key, "message": issue.message}
+                        for issue in result.issues
+                    ],
+                },
+            )
+        )
+        return True
+
+    def _route_index_post(self, parts: list[str]) -> bool:
+        """Serve ``POST /api/rebuild`` and ``/api/resync``.
+
+        Both re-derive the SQLite index from the filesystem and touch no skill
+        document; the index is a rebuildable cache, never the source of truth.
+        """
+        if parts == ["api", "rebuild"]:
+            self._send_json(self.store.db_rebuild())
+            return True
+        if parts == ["api", "resync"]:
+            self._send_json(self.store.resync())
+            return True
+        return False
+
     def _route_post(self):
+        """Dispatch ``POST`` to one route guard, in order.
+
+        Same contract as ``_route_get``: each guard answers the request and
+        returns ``True``, or returns ``False`` untouched.  The two guards
+        already extracted from the POST router -- ``_route_source_update_post``
+        and ``_route_new_post`` -- keep their leading position, and the
+        remaining predicates are mutually exclusive (the only prefix catch-all
+        is ``/api/trash``, which no other predicate matches).  Anything
+        unclaimed is a JSON 404.
+        """
         parts = self._parts()
         qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         if self._route_source_update_post(parts):
             return
         if self._route_new_post(parts):
             return
-        if parts == ["api", "sync"]:
-            data = self._body_json()
-            raw_name = data.get("name")
-            if not isinstance(raw_name, str) or not raw_name.strip():
-                raise StoreError("name must be a string")
-            name = raw_name.strip()
-            raw_from_scope = data.get("from_scope") or "global"
-            if not isinstance(raw_from_scope, str):
-                raise StoreError("from_scope must be a string")
-            from_scope = raw_from_scope.strip() or "global"
-            to_scopes = _scope_list(data)
-            force = bool(data.get("force"))
-            if not name:
-                raise StoreError("name is required for sync")
-            from .scopes import sync_skill as _sync_skill
-
-            self._send_json(_sync_skill(name, from_scope, to_scopes, force=force))
+        if self._route_sync_post(parts):
             return
-        if parts == ["api", "install"]:
-            data = self._body_json()
-            result = _registry_install_result(self.store, data)
-            if result is not None:
-                self._send_json(result)
-                return
-            raw_source = data.get("source")
-            if not isinstance(raw_source, str):
-                raise StoreError("source must be a string")
-            source = raw_source.strip()
-            if not source:
-                raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
-            from .cli_handlers import validated_install_source, validated_install_value
-
-            source = validated_install_source(source)
-            agents = data.get("agents")
-            skills_filter = data.get("skills")
-            raw_scope = data.get("scope", "global")
-            if not isinstance(raw_scope, str):
-                raise StoreError("scope must be a string")
-            scope = raw_scope.strip() or "global"
-            copy_mode = bool(data.get("copy"))
-            list_only = bool(data.get("list_only"))
-            if agents is not None and not isinstance(agents, list):
-                agents = [agents] if isinstance(agents, str) else None
-            if skills_filter is not None and not isinstance(skills_filter, list):
-                skills_filter = [skills_filter] if isinstance(skills_filter, str) else None
-            raw_runner = data.get("runner", "npx")
-            if not isinstance(raw_runner, str):
-                raise StoreError("runner must be a string")
-            runner = raw_runner.strip() or "npx"
-            allowed_runners = {"npx", "pnpm", "yarn", "bunx", "bun"}
-            if runner == "uvx":
-                raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python tools use pipx/uvx with a PyPI package.")
-            if runner not in allowed_runners:
-                raise StoreError(f"unsupported runner {runner!r}; use npx, pnpm, yarn, or bunx")
-            if runner == "npx":
-                cmd_parts = ["npx", "skills", "add", source]
-            elif runner == "pnpm":
-                cmd_parts = ["pnpm", "dlx", "skills", "add", source]
-            elif runner == "yarn":
-                cmd_parts = ["yarn", "dlx", "skills", "add", source]
-            elif runner in ("bunx", "bun"):
-                cmd_parts = ["bunx", "skills", "add", source]
-            else:
-                cmd_parts = ["npx", "skills", "add", source]
-            if scope == "global":
-                cmd_parts.append("-g")
-            if agents:
-                for a in agents:
-                    a = validated_install_value("agent", str(a))
-                    cmd_parts.extend(["-a", a])
-            if skills_filter:
-                for s in skills_filter:
-                    s = validated_install_value("skill", str(s))
-                    cmd_parts.extend(["-s", s])
-            if copy_mode:
-                cmd_parts.append("--copy")
-            if list_only:
-                cmd_parts.append("-l")
-            cmd_str = " ".join(cmd_parts)
-            if not data.get("run"):
-                self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
-                return
-            try:
-                proc = subprocess.run(  # nosec B603 - runner/options are allowlisted and argv is shell-free.
-                    cmd_parts, capture_output=True, text=True, timeout=120
-                )
-                self._send_json({
-                    "command": cmd_str,
-                    "runner": runner,
-                    "source": source,
-                    "executed": True,
-                    "exit_code": proc.returncode,
-                    "stdout": proc.stdout[-8000:],
-                    "stderr": proc.stderr[-8000:],
-                })
-            except subprocess.TimeoutExpired as exc:
-                self._send_json({"command": cmd_str, "error": f"timed out after 120s: {exc}", "executed": True}, 500)
-            except FileNotFoundError as exc:
-                raise StoreError(f"runner not found: {exc}")
+        if self._route_install_post(parts):
             return
-        if parts == ["api", "skills"]:
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            data = self._body_json()
-            name = data.pop("name", None)
-            description = data.pop("description", None)
-            if not isinstance(name, str) or not name.strip():
-                raise StoreError("name must be a non-empty string")
-            if not isinstance(description, str) or not description.strip():
-                raise StoreError("description must be a non-empty string")
-            fields = _validated_skill_fields(data)
-            if scope != "global":
-                from .scopes import create_skill as _create_skill
-
-                self._send_json(_create_skill(scope, name, description, **fields), 201)
-                return
-            self._send_json(self.store.create(name, description, **fields), 201)
-        elif len(parts) == 4 and parts[:2] == ["api", "skills"] and parts[3] in ("disable", "enable"):
-            name = parts[2]
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            if scope != "global":
-                from .scopes import toggle_skill as _toggle_skill
-
-                self._send_json(_toggle_skill(scope, name, enable=(parts[3] == "enable")))
-                return
-            action = getattr(self.store, parts[3])
-            action(name)
-            self._send_json({"name": name, parts[3]: True})
-        elif parts[:2] == ["api", "trash"]:
-            if len(parts) == 3 and parts[2] == "purge":
-                self._send_json(self.store.purge_trash())
-            elif len(parts) == 3:
-                snapshot = qs.get("snapshot", [None])[0]
-                if snapshot:
-                    scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-                    if scope == "global":
-                        self._send_json(self.store.restore(parts[2], snapshot=snapshot))
-                    else:
-                        from .scopes import restore_snapshot as _restore_snapshot
-
-                        self._send_json(_restore_snapshot(scope, parts[2], snapshot))
-                else:
-                    self._send_json(self.store.restore(parts[2]))
-            else:
-                self._send_error(404, "unknown endpoint", code="unknown_endpoint")
-        elif parts == ["api", "templates"]:
-            data = self._body_json()
-            name = data.get("name")
-            if not isinstance(name, str) or not name.strip():
-                raise StoreError("template name must be a non-empty string")
-            body = data.get("body")
-            if body is not None and not isinstance(body, str):
-                raise StoreError("template body must be a string")
-            from .templates import create_template
-
-            try:
-                path = create_template(self.store.templates_dir, name, data.get("body") or None)
-            except FileExistsError as exc:
-                raise StoreError(str(exc)) from exc
-            except ValueError as exc:
-                raise StoreError(str(exc)) from exc
-            self._send_json({"name": name, "path": str(path)}, 201)
-        elif parts == ["api", "validate"]:
-            from .validator import validate_skill
-
-            data = self._body_json()
-            raw_name = data.get("name")
-            if not isinstance(raw_name, str) or not raw_name.strip():
-                raise StoreError("skill name must be a non-empty string")
-            name = raw_name.strip()
-            requested_scope = data.get("scope", "global")
-            if not isinstance(requested_scope, str) or not requested_scope.strip():
-                raise StoreError("scope must be a non-empty string")
-            requested_scope = requested_scope.strip()
-            if requested_scope == "global":
-                record = self.store.get(name)
-            else:
-                from .scopes import get_skill as _get_scope_skill
-
-                record = _get_scope_skill(requested_scope, name)
-            if not record.get("path"):
-                raise StoreError(f"skill '{name}' has no directory on disk")
-            result = validate_skill(name, Path(record["path"]))
-            self._send_json(
-                _validate_payload(
-                    self.store,
-                    data,
-                    name,
-                    Path(record["path"]),
-                    {
-                        "valid": result.valid,
-                        "issues": [
-                            {"level": issue.level, "key": issue.key, "message": issue.message}
-                            for issue in result.issues
-                        ],
-                    },
-                )
-            )
-        elif parts == ["api", "rebuild"]:
-            self._send_json(self.store.db_rebuild())
-        elif parts == ["api", "resync"]:
-            self._send_json(self.store.resync())
-        else:
-            self._send_error(404, "unknown endpoint", code="unknown_endpoint")
-
+        if self._route_skill_write_post(parts, qs):
+            return
+        if self._route_skill_toggle_post(parts, qs):
+            return
+        if self._route_trash_post(parts, qs):
+            return
+        if self._route_templates_post(parts):
+            return
+        if self._route_validate_post(parts):
+            return
+        if self._route_index_post(parts):
+            return
+        self._send_error(404, "unknown endpoint", code="unknown_endpoint")
     # -- PATCH routes -----------------------------------------------------
 
     def _route_patch(self):
