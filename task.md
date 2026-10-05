@@ -57,6 +57,13 @@ gates now run. Full evidence in @docs/06-progress-log.md.
 - [x] D3-7: one error shape — `{"error", "code"}` — for every route.
 - [x] D3-12: the validated, normalised host is what binds; a bind failure is a
   clean `StoreError`, not a raw `gaierror`.
+- [/] Four parallel worktrees in flight (`wt`): agent-scope read cost (§D1),
+  frontend state registries + request amplification (§C2/§G6), `examples/`
+  in the sdist (§A8), `_route_get` route table (§C4 #3). Disjoint file
+  ownership; this session keeps every doc and every merge.
+- [ ] C4 #4, second half only: the one-document invariant is implemented twice
+  — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
+  nothing keeping them equivalent. Needs a session that owns `scopes.py`.
 - [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
   rebuilt from the current tree, not the `6733da9` hashes in the progress log.
 - [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes

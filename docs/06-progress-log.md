@@ -4,6 +4,60 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — Four worktrees, four independent tasks, one owner per file
+
+**[NOTE]** The remaining audit work was fanned out to four subagents, each in
+its own `git worktree` (worktrunk `wt v0.80.0`), with **disjoint file
+ownership** — `AGENTS.md`'s "one writer per working tree" rule, satisfied by
+never letting two sessions touch the same file:
+
+| worktree | task | files owned |
+|---|---|---|
+| `skills-manager.d1scopes` | §D1: agent-scope read cost (3.326 s at 1,965 skills) | `scopes.py`, `loader.py` |
+| `skills-manager.frontendregistry` | §C2 / §G6: three divergent state registries, the hand-copied Escape ladder, request amplification | `webui/app.js`, `domain.js`, `index.html` |
+| `skills-manager.examples-sdist` | §A8: `examples/` is absent from the sdist | `MANIFEST.in`, `pyproject.toml`, `check_package_data.py` |
+| `skills-manager.routeget` | §C4 #3: split `_route_get` (complexity 96, budget 15) | `webapp.py` |
+
+This session kept `docs/`, `task.md`, `docs/04-store-api.md`,
+`docs/08-web-ui.md` and every merge, so no two sessions edit one document.
+Each agent was told to report what needs documenting rather than write it.
+
+**[NOTE] A fifth slot was dropped after the claim failed verification.**
+§C4 #4 recommends *"one `@store_error_adapter` replacing 9 identical
+adapters; move `_reject_both_documents` to `path_safety.py`"*. Measured:
+
+```text
+grep -rn "store_error_adapter" --include=*.py .   -> 0 hits
+except StoreError blocks in webapp.py             -> 2   (the audit says 9)
+```
+
+**`@store_error_adapter` does not exist in this repository.** The nine
+`str(exc)` sites the audit's count came from are three distinct patterns — a
+diagnostic payload, a status mapping, and a re-wrap — not nine copies of one
+adapter. Spending a parallel slot on refactoring a symbol that does not exist
+would have been wasted work.
+
+The recommendation's **second half is real and still open**: the one-document
+invariant (`a skill directory must not hold both SKILL.md and
+SKILL.md.disabled`) is implemented twice, as `_reject_both_documents` in
+`store.py` and inline at `scopes.py:795`, with different wording and nothing
+keeping them equivalent. That is exactly the "duplicated guard that drifts"
+class the audit was looking for, and it is queued for a session that owns
+`scopes.py`.
+
+**[NOTE] Four audit claims have now failed verification** — recorded because
+the whole point of this audit pass was to measure rather than trust:
+
+1. **§A2** claimed `AGENTS.md` carried the stale in-process-`RLock` locking
+   claim. It does not; only `docs/01-architecture.md` did.
+2. **§A9** described the registry `hash` field as usable for verification. It
+   is not — ten candidate algorithms were checked against a live payload and
+   none matched, so integrity rests on the manager's own framed `snapshot_hash`
+   and the upstream value is carried as `upstream_hash_verified: false`.
+3. **§G2 #5** ("Show scope controls" → "Filters and scopes") rests on the claim
+   that the disclosure holds filters. It does not; that label was reverted.
+4. **§C4 #4** names a decorator that does not exist and overstates `2` as `9`.
+
 ## 2026-10-05 — D3-6, D3-7, D3-12: the last three error-contract gaps
 
 **[SPEC]** All three reproduced on the live server first. D3-6 was worse than
