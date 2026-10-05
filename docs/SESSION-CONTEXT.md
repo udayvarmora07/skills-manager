@@ -199,6 +199,12 @@ for py in python3.11 python3 "$(uv python find 3.13)" "$(uv python find 3.14)"; 
 done
 ```
 
+A third trap is platform, not version: a test that `os.chdir`s into a
+`TemporaryDirectory` and restores the cwd with `addCleanup` runs its cleanup
+*after* the directory is deleted. Linux allows removing the cwd; Windows raises
+`WinError 32`, so such a test passes locally and fails on every Windows leg.
+Restore the cwd in a `finally` **inside** the `with`.
+
 Two interpreter-dependent traps this has already caught: `Path.is_relative_to()`
 delegated to `relative_to()` before 3.14, so patching one to count the other
 counts stdlib internals; and `Path.is_file()` raised `PermissionError` for an

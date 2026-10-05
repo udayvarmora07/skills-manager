@@ -272,21 +272,28 @@ class PackageDataBuildToolTests(unittest.TestCase):
             dist.mkdir()
             (dist / "a-1.0-py3-none-any.whl").write_bytes(b"")
             (dist / "a-1.0.tar.gz").write_bytes(b"")
+            # Restore the cwd *before* the TemporaryDirectory is cleaned up.
+            # An addCleanup would run after the `with` block exits, leaving the
+            # process inside the directory it is trying to delete -- which
+            # Linux allows and Windows refuses with WinError 32, so the test
+            # passed locally and failed on every Windows leg.
             previous = os.getcwd()
-            os.chdir(root)
-            self.addCleanup(os.chdir, previous)
-            report = check_package_data.ArchiveReport(
-                path=dist / "a-1.0-py3-none-any.whl", kind="wheel", webui_members=(), vue_size=0
-            )
-            with mock.patch("check_package_data.inspect_archive", return_value=report), mock.patch(
-                "check_package_data.clean_install"
-            ) as install:
-                # The project root stays the real checkout; only the *dist dir*
-                # is relative, which is the shape `--dist-dir dist --install`
-                # uses and the defect this pins.
-                code = check_package_data.run_check(
-                    check_package_data.ROOT, install=True, dist_dir=Path("dist")
+            try:
+                os.chdir(root)
+                report = check_package_data.ArchiveReport(
+                    path=dist / "a-1.0-py3-none-any.whl", kind="wheel", webui_members=(), vue_size=0
                 )
+                with mock.patch("check_package_data.inspect_archive", return_value=report), mock.patch(
+                    "check_package_data.clean_install"
+                ) as install:
+                    # The project root stays the real checkout; only the *dist
+                    # dir* is relative, which is the shape
+                    # `--dist-dir dist --install` uses and the defect this pins.
+                    code = check_package_data.run_check(
+                        check_package_data.ROOT, install=True, dist_dir=Path("dist")
+                    )
+            finally:
+                os.chdir(previous)
             self.assertEqual(code, 0)
             recorded = [call.args[0] for call in install.call_args_list]
             self.assertEqual(len(recorded), 2)

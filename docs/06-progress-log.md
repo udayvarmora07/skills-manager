@@ -54,6 +54,15 @@ nothing in the local loop did — a green local run said nothing about the two
 versions that failed. `docs/SESSION-CONTEXT.md` now records that the local
 gate must include every interpreter `uv` can supply, not just the default one.
 
+**3. A Windows-only teardown failure, in a test this session added.**
+`test_dist_dir_install_receives_absolute_artifact_paths` `os.chdir`'d into its
+`TemporaryDirectory` and restored the cwd with `addCleanup`, which runs *after*
+the `with` block exits — so the temp directory was removed while it was still
+the process cwd. **Linux allows removing the cwd; Windows refuses with
+`WinError 32`.** It passed locally and failed on every Windows leg. The restore
+is now a `finally` *inside* the `with`, and an AST sweep confirms no other test
+has the shape.
+
 **Verified on all four locally available interpreters**, full 1,102-test suite
 each: **py3.11 OK, py3.12 OK, py3.13 OK, py3.14 OK**, plus
 `check_complexity.py`, `check_docs.py`, both smokes, both `node --check`, and
