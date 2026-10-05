@@ -557,6 +557,22 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 
 .sidebar.list-pane { min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
+/* The list pane and the document pane were both `--surface`, so in dark theme
+   they measured 1.00:1 and the only thing separating them was a 1px `--border`
+   edge at 1.46:1 — below the 3:1 that WCAG 1.4.11 asks of a boundary whose job
+   is to identify a component. Two adjacent dark *surfaces* cannot reach 3:1
+   tastefully (even near-black against `--surface` is only ~1.30:1), so the
+   contrast has to ride on the divider rather than on the fill step. Recessing
+   the list pane onto the canvas plane separates the two panes by tone as well,
+   and darkening it (rather than lightening it past `--surface-2`) keeps
+   `--border-strong` at >=3:1 against both panes -- it would fall to 3.01:1
+   against `#282f3a` if this pane were elevated instead.
+   Only the colour is overridden: the <=760px block below still zeroes the
+   border width, so no divider is drawn where the panes are separate states. */
+[data-theme="dark"] .sidebar.list-pane {
+  background: var(--bg);
+  border-right-color: var(--border-strong);
+}
 .sidebar.list-pane .filters { padding: 16px 16px 8px; }
 .sidebar.list-pane .library-switch { justify-content: flex-end; padding: 16px 16px 8px; }
 .sidebar.list-pane .listpane-head { flex: none; padding: 0 16px 12px; border-bottom: 1px solid var(--border); }
