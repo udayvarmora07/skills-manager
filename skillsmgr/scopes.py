@@ -291,62 +291,31 @@ def _global_row_path(store: Store, name: str, paths_module):
         return None
 
 
-def scan_scope(scope_id: str) -> list[dict]:
-    """List skills in one scope, annotated with scope fields."""
-    if scope_id == "global":
-        store = _global_store()
-        rows = store.list()
-        physical_root = str(store.skills_dir.resolve())
-        for r in rows:
-            r["scope"] = "global"
-            r["scope_label"] = "Global"
-            if not r.get("path"):
-                r["path"] = _global_row_path(store, r["name"], paths)
-            r["physical_root"] = physical_root
-            if r.get("path"):
-                try:
-                    r["physical_path"] = str(Path(r["path"]).resolve())
-                except OSError:
-                    r["physical_path"] = str(r["path"])
-            # Enrich global rows with tokens if missing.  ``Store.list()``
-            # already estimated them from the same bytes while observing the
-            # row, so this fallback only runs for a row whose loader pass did
-            # not produce them -- it used to re-read and re-parse every
-            # SKILL.md on every merged request (docs/24 §D1).
-            if "tokens" not in r or not r.get("tokens"):
-                try:
-                    from .tokens import estimate as _est
+def _physical_path(path: str) -> str:
+    """The resolved physical spelling of *path*.
 
-                    p = paths.safe_skill_path(store.skills_dir, r["name"])
-                    raw = ""
-                    for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                        if cand.is_file():
-                            raw = cand.read_text(encoding="utf-8")
-                            break
-                    tok = _est(raw)
-                    r["tokens"] = tok["tokens"]
-                    r["tokens_method"] = tok["method"]
-                    r["tokens_pct"] = tok["pct_window"]
-                    r["chars"] = tok["chars"]
-                except Exception as exc:
-                    _diagnose("global scope token enrichment failed", exc)
-                    r.setdefault("tokens", 0)
-                    r.setdefault("tokens_method", "heuristic")
-            r.setdefault("tokens_pct", 0)
-            r.setdefault("chars", 0)
-            r["root_availability"] = "writable"
-            r["discovery_recursive"] = False
-            r["consumer"] = "skills-manager"
-        return _annotate_instance_states(rows)
-    scope = _scope_by_id(scope_id)
-    if scope is None:
-        raise StoreError(f"unknown scope {scope_id!r}")
-    # SEC-10/§D1: a flat record used to carry no path, so the loop below
-    # re-derived it for every row -- re-resolving the scope base and re-running
-    # the name/containment check the scan had already performed.  The scan can
-    # hand over the exact entry it validated instead.
-    entries = scan_dir(scope.base, recursive=scope.recursive, annotate_paths=True)
-    physical_root = str(_resolved_scope_root(scope))
+    ``Path(path).resolve()`` and ``os.path.realpath(path)`` answer the same
+    question, but only the second is ``os.path.realpath`` itself; wrapping it in
+    ``Path`` reparsed every component of every row, which was the largest
+    single cost left in the per-row annotation loop (docs/24 §D1).  The
+    best-effort fallback the old expression had is kept: a row whose path
+    cannot be resolved is still a row the user has to see.
+    """
+    try:
+        return os.path.realpath(path)
+    except OSError:
+        return str(path)
+
+
+def _annotate_scope_entries(entries: list[dict], scope: Scope, physical_root: str) -> list[dict]:
+    """Stamp the per-scope fields on every entry a scan of *scope* produced.
+
+    Split out of :func:`scan_scope` because two of the answers are functions of
+    the scope, not of the row: ``_availability`` costs an ``is_dir`` and an
+    ``os.access`` per call and used to be asked once per skill, and the
+    physical root is resolved once for the whole scan.
+    """
+    availability = _availability(scope)
     for e in entries:
         e["scope"] = scope.id
         e["scope_label"] = scope.label
@@ -357,19 +326,77 @@ def scan_scope(scope_id: str) -> list[dict]:
         except (ValueError, OSError):
             continue
         e["physical_root"] = physical_root
-        try:
-            e["physical_path"] = str(Path(e["path"]).resolve())
-        except OSError:
-            e["physical_path"] = str(e["path"])
+        e["physical_path"] = _physical_path(e["path"])
         e["status"] = "disabled" if e.get("disabled") else "active"
         e.setdefault("tokens_pct", 0)
         e.setdefault("chars", 0)
-        e["root_availability"] = _availability(scope)
+        e["root_availability"] = availability
         e["discovery_recursive"] = scope.recursive
         e["consumer"] = scope.consumer
         if isinstance(e.get("provenance"), dict):
             e["provenance"]["scope"] = scope.id
             e["provenance"]["consumer"] = scope.consumer
+    return entries
+
+
+def _enrich_global_row(r: dict, store: Store, physical_root: str) -> None:
+    """Stamp the global-scope fields on one row from ``Store.list()``."""
+    r["scope"] = "global"
+    r["scope_label"] = "Global"
+    if not r.get("path"):
+        r["path"] = _global_row_path(store, r["name"], paths)
+    r["physical_root"] = physical_root
+    if r.get("path"):
+        r["physical_path"] = _physical_path(r["path"])
+    # Enrich global rows with tokens if missing.  ``Store.list()`` already
+    # estimated them from the same bytes while observing the row, so this
+    # fallback only runs for a row whose loader pass did not produce them --
+    # it used to re-read and re-parse every SKILL.md on every merged request
+    # (docs/24 §D1).
+    if "tokens" not in r or not r.get("tokens"):
+        try:
+            from .tokens import estimate as _est
+
+            p = paths.safe_skill_path(store.skills_dir, r["name"])
+            raw = ""
+            for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
+                if cand.is_file():
+                    raw = cand.read_text(encoding="utf-8")
+                    break
+            tok = _est(raw)
+            r["tokens"] = tok["tokens"]
+            r["tokens_method"] = tok["method"]
+            r["tokens_pct"] = tok["pct_window"]
+            r["chars"] = tok["chars"]
+        except Exception as exc:
+            _diagnose("global scope token enrichment failed", exc)
+            r.setdefault("tokens", 0)
+            r.setdefault("tokens_method", "heuristic")
+    r.setdefault("tokens_pct", 0)
+    r.setdefault("chars", 0)
+    r["root_availability"] = "writable"
+    r["discovery_recursive"] = False
+    r["consumer"] = "skills-manager"
+
+
+def scan_scope(scope_id: str) -> list[dict]:
+    """List skills in one scope, annotated with scope fields."""
+    if scope_id == "global":
+        store = _global_store()
+        rows = store.list()
+        physical_root = str(store.skills_dir.resolve())
+        for r in rows:
+            _enrich_global_row(r, store, physical_root)
+        return _annotate_instance_states(rows)
+    scope = _scope_by_id(scope_id)
+    if scope is None:
+        raise StoreError(f"unknown scope {scope_id!r}")
+    # SEC-10/§D1: a flat record used to carry no path, so the loop below
+    # re-derived it for every row -- re-resolving the scope base and re-running
+    # the name/containment check the scan had already performed.  The scan can
+    # hand over the exact entry it validated instead.
+    entries = scan_dir(scope.base, recursive=scope.recursive, annotate_paths=True)
+    _annotate_scope_entries(entries, scope, str(_resolved_scope_root(scope)))
     return _annotate_instance_states(sorted(entries, key=lambda r: (r["name"].lower(), r.get("path", ""))))
 
 

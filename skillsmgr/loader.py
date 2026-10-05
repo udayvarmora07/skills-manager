@@ -6,7 +6,12 @@ dirs). Keeps FS parsing consistent; FS stays source of truth.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import os
+import threading
+from collections import OrderedDict
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .frontmatter import FrontmatterError, parse_frontmatter
@@ -234,7 +239,239 @@ def _unreadable_record(skill_dir: Path, read_error: str, disabled: int) -> dict:
     return record
 
 
-def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
+def document_reuse_worthwhile(document_count: int) -> bool:
+    """Whether reuse can pay for itself across *document_count* documents.
+
+    **[SPEC]** A bounded LRU cannot beat a sequential scan larger than its own
+    bound.  The scan visits documents in a stable order, so by the time a second
+    pass reaches a document the first pass published, that entry has long since
+    been evicted: the hit rate collapses to *zero* and the reader pays the
+    bookkeeping for no reuse at all.  Measured at 5,000 documents through a
+    1,000-entry bound, the second pass re-derived 5,001 documents.
+
+    Above the bound the honest answer is therefore to skip reuse rather than
+    thrash -- the caller keeps exactly the behaviour it had before the reuse
+    existed, with none of its cost.
+    """
+    return document_count <= MAX_DOCUMENT_CACHE
+
+
+#: Bounded, process-local reuse of a derived document record.
+#:
+#: **Why the key is the content hash and not ``(mtime_ns, size)``.**  The audit
+#: recommended the latter; measurement rejected it on this repository's
+#: supported platforms.  An ``(mtime_ns, size)`` key is blind by construction to
+#: an edit that keeps the byte count identical and lands inside the filesystem's
+#: mtime granularity, which is one second on HFS+ and two on FAT and is
+#: routinely one on network mounts.  A content hash has no granularity at all:
+#: different bytes are always a different key, so the reused record is provably
+#: the record those exact bytes produce.  Reading the document is required to
+#: learn the hash, so the guarantee is exact rather than statistical, and the
+#: read is the cheapest part of the work.
+#:
+#: **What the key must also carry, because it is not a fact about the bytes.**
+#: ``disabled`` and ``document_conflict`` describe which of the two document
+#: names exists and whether the *other* one does too -- ``SKILL.md`` and
+#: ``SKILL.md.disabled`` may hold byte-identical content, and a second document
+#: dropped in beside an unchanged one is exactly the state a toggle would
+#: destroy (STORE-3/SCOPE-13).  The document path is therefore part of the key,
+#: which carries the name, and ``decode_error`` is carried because two different
+#: undecodable byte sequences can produce the same U+FFFD replacement text.
+#:
+#: **Why 4,096.**  One request derives every document in every scope, so the
+#: bound has to exceed a full library or :func:`document_reuse_worthwhile`
+#: switches reuse off.  4,096 covers roughly twice the largest library measured
+#: here (2,000 rows) and retains about 3.5 KiB per entry (measured: 3.6x its own
+#: document), so the ceiling is about 14 MiB.
+MAX_DOCUMENT_CACHE = 4096
+
+#: The only record values that are containers rather than immutable scalars.
+#: Everything else a loader record holds is a ``str``/``int``/``float``/``bool``/
+#: ``None``, so copying the mapping and copying these four is equivalent to a
+#: whole-record ``copy.deepcopy`` -- pinned against ``copy.deepcopy`` on real
+#: records by ``test_the_isolated_copy_equals_a_whole_record_deepcopy`` -- and it
+#: is paid on *every* load, hit or miss, so its cost lands on both.
+_MUTABLE_RECORD_KEYS = (
+    "portable_frontmatter",
+    "frontmatter_extensions",
+    "provenance",
+    "registry_provenance",
+)
+
+#: Beyond this nesting depth the value is handed to ``copy.deepcopy``, which is
+#: both cycle-safe and exact.  Frontmatter cannot reach it; the constant exists
+#: so an unexpectedly deep or self-referential value is copied *correctly*
+#: rather than by a recursion this module would have to get right forever.
+_COPY_MAX_DEPTH = 12
+_COPY_SCALARS = (str, bytes, int, float, bool, type(None))
+
+#: The format ``observations.document_observations`` stamps ``observed_at``
+#: with.  Reused here rather than re-derived so the two producers of the field
+#: cannot drift; pinned against the original by
+#: ``test_the_loader_stamp_format_is_the_observation_format``.
+_OBSERVED_AT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+_document_cache: "OrderedDict[tuple, dict]" = OrderedDict()
+_document_cache_lock = threading.Lock()
+
+
+def _observed_at() -> str:
+    """The read-time observation stamp, in the observation format."""
+    return datetime.now(timezone.utc).strftime(_OBSERVED_AT_FORMAT)
+
+
+def _copy_value(value, depth: int = 0):
+    """Return a copy of *value* sharing no mutable object with it.
+
+    Equivalent to ``copy.deepcopy`` for the values a loader record can hold --
+    JSON-shaped data from the frontmatter parser and from ``json.loads`` -- and
+    measured at roughly a third of its cost, which matters because this runs on
+    every load.  Anything it does not recognise, and anything deeper than
+    :data:`_COPY_MAX_DEPTH`, is handed straight to ``copy.deepcopy``.
+    """
+    if value.__class__ in _COPY_SCALARS or depth >= _COPY_MAX_DEPTH:
+        return value
+    if isinstance(value, dict):
+        return {key: _copy_value(item, depth + 1) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy_value(item, depth + 1) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_copy_value(item, depth + 1) for item in value)
+    return copy.deepcopy(value)
+
+
+def isolated_record(record: dict) -> dict:
+    """Return a copy of *record* sharing no mutable object with it.
+
+    Callers annotate what they are handed -- ``scopes.scan_scope`` writes
+    ``record["provenance"]["scope"]``, the store writes ``"global"`` -- so
+    neither the cache nor one caller may ever reach another's object.
+    """
+    out = dict(record)
+    for key in _MUTABLE_RECORD_KEYS:
+        value = out.get(key)
+        if isinstance(value, (dict, list, tuple)):
+            out[key] = _copy_value(value)
+    return out
+
+
+def _document_cache_key(
+    skill_dir: Path, document: str, text: str, disabled: int, conflict: bool, decode_error
+) -> tuple:
+    """Identity of one *derivation*, from the bytes and the filesystem facts.
+
+    The document's own path leads the key because the derived record reports it
+    verbatim as ``provenance.path``: two callers reach the same physical file
+    through different spellings -- ``scan_dir`` addresses a skill below the
+    *resolved* scope root, ``hygiene`` through a recursive record's ``path``
+    below the unresolved base -- and each has always reported the spelling it
+    was given.  ``os.path.realpath`` was the obvious identity here and was
+    measured: it costs one ``lstat`` per path component and buys nothing this
+    spelling does not already buy, because ``scan_dir`` hands every scope the
+    same resolved root.  So does ``skill_dir / document``: building a second
+    ``Path`` re-parsed every component and cost 17 microseconds per load against
+    1 for the concatenation below.
+
+    The path already carries the document's *name*, so it and ``disabled`` are
+    each redundant with the other; both are kept because neither is the kind of
+    thing to infer later, and each costs nothing.
+    """
+    return (
+        str(skill_dir) + os.sep + document,
+        hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        disabled,
+        conflict,
+        decode_error,
+    )
+
+
+def _document_cache_lookup(key: tuple) -> dict | None:
+    """Return an independent copy of a cached record, or ``None``.
+
+    The copy is re-stamped on the way out.  A hit is still a genuine
+    observation: the document was re-read and re-hashed to *prove* these are
+    the same bytes, so ``observed_at`` must say when this read happened rather
+    than when this process first derived them -- otherwise a refresh button
+    reports an observation from before the session started, and the field stops
+    meaning what ``document_observations`` says it means.  It reaches the
+    global Store too (``observed_at`` is in ``Store._OBSERVED_KEYS``) and
+    ``insights.provenance_summary`` surfaces it as evidence.
+
+    The stamp lands on the copy, never on the stored entry: an entry whose
+    stamp crept forward on every hit would describe nothing at all.  One
+    ``datetime.now()`` per hit is noise against the work a hit avoids.
+    """
+    with _document_cache_lock:
+        record = _document_cache.get(key)
+        if record is not None:
+            _document_cache.move_to_end(key)
+    if record is None:
+        return None
+    out = isolated_record(record)
+    out["observed_at"] = _observed_at()
+    return out
+
+
+def _document_cache_store(key: tuple, record: dict) -> None:
+    """Publish a derived record, evicting the least recently used entries.
+
+    A bounded table, because the web UI is a long-lived process and an
+    unbounded one would grow for the life of the session.  Nothing is
+    persisted: the table is module state and dies with the interpreter.
+    """
+    with _document_cache_lock:
+        _document_cache[key] = record
+        _document_cache.move_to_end(key)
+        while len(_document_cache) > MAX_DOCUMENT_CACHE:
+            _document_cache.popitem(last=False)
+
+
+def document_cache_size() -> int:
+    """Number of derived records currently held (read-only introspection)."""
+    with _document_cache_lock:
+        return len(_document_cache)
+
+
+def clear_document_cache() -> None:
+    """Drop every derived record.  Nothing on disk is affected."""
+    with _document_cache_lock:
+        _document_cache.clear()
+
+
+def _registry_provenance_fields(skill_dir: Path) -> dict:
+    """The registry sidecar answer for one skill, read on *every* load.
+
+    Deliberately never reused.  A provenance sidecar is a filesystem fact
+    rather than a fact about ``SKILL.md``'s bytes -- writing one changes nothing
+    about the document -- and ``read_provenance`` additionally reconciles it
+    against the skill directory's *other* files, which the document hash does
+    not cover.  Reuse keyed on the document would therefore serve a stale
+    provenance answer, so this probe is the one thing a warm read keeps doing.
+    In a library that did not come from the registry it is one ``lexists``.
+    """
+    try:
+        from .registry import read_provenance
+
+        provenance = read_provenance(skill_dir)
+    except (OSError, StoreError) as exc:
+        return {"registry_provenance_error": str(exc)}
+    return {"registry_provenance": provenance} if provenance is not None else {}
+
+
+def _apply_registry_provenance(record: dict, fields: dict) -> dict:
+    """Overlay a freshly probed sidecar answer onto *record*."""
+    record.pop("registry_provenance", None)
+    record.pop("registry_provenance_error", None)
+    record.update(fields)
+    if "registry_provenance_error" in fields:
+        # A stale or malformed sidecar is drift, never silent trust.
+        record["malformed"] = True
+    return record
+
+
+def load_skill(
+    skill_dir: Path, *, include_husks: bool = False, reuse: bool = True
+) -> dict:
     """Load one skill directory (SKILL.md or SKILL.md.disabled).
 
     An undecodable document never raises: it is reported as a ``malformed``
@@ -244,6 +481,11 @@ def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
     With ``include_husks`` a directory holding *no* document is reported as a
     ``malformed`` drift row instead of raising ``SkillNotFound`` (STORE-13);
     the store's own scans opt in, agent-scope scans keep the old contract.
+
+    ``reuse=False`` skips the bounded derived-record reuse entirely, which is
+    how :func:`document_reuse_worthwhile` is acted on: a caller that knows it is
+    about to load more documents than the bound can hold passes ``False`` and
+    keeps exactly the pre-reuse cost instead of thrashing.
     """
     text, disabled, read_error, conflict = _probe_document(skill_dir)
     if text is None:
@@ -263,6 +505,29 @@ def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
         # PermissionError abort every scope view (SCOPE-4).
         return _unreadable_record(skill_dir, read_error, disabled)
     decode_error = read_error
+    cache_key = None
+    if reuse:
+        # The document was read, so its bytes are known: everything below is a
+        # pure function of those bytes plus the two filesystem facts the probe
+        # already returned (``disabled`` and ``conflict``).  A repeat request
+        # reuses the derived record instead of re-parsing, re-hashing,
+        # re-estimating and re-probing the provenance sidecar (docs/24 §D1,
+        # second half).  The probe still runs first, so a deleted document, a
+        # rename, a conflicting second document and a decoding failure are each
+        # still observed.
+        cache_key = _document_cache_key(
+            skill_dir,
+            _DISABLED_DOCUMENT if disabled else _ACTIVE_DOCUMENT,
+            text,
+            disabled,
+            conflict,
+            decode_error,
+        )
+        cached = _document_cache_lookup(cache_key)
+        if cached is not None:
+            return _apply_registry_provenance(
+                cached, _registry_provenance_fields(skill_dir)
+            )
     # A mixed state is drift the user has to settle by hand (see
     # conflicting_documents, whose answer the probe already returned): the
     # invisible second document would be destroyed by the next toggle, so it
@@ -309,21 +574,17 @@ def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
         "chars": tok["chars"],
     }
     record.update(document_observations(skill_dir, raw_text, data))
-    # Registry provenance is a filesystem sidecar, not an index column.  A
-    # stale or malformed sidecar is visible drift rather than silently being
-    # treated as trustworthy metadata.
-    try:
-        from .registry import read_provenance
-
-        registry_provenance = read_provenance(skill_dir)
-    except (OSError, StoreError) as exc:
-        registry_provenance = None
-        record["registry_provenance_error"] = str(exc)
-        malformed = True
-    if registry_provenance is not None:
-        record["registry_provenance"] = registry_provenance
     record["malformed"] = malformed
-    return record
+    # Publish a snapshot for the next read.  A copy, because callers annotate
+    # the record they were handed; ``_document_cache_lookup`` copies again on
+    # the way out, so no caller and the cache never share an object.  The
+    # sidecar answer is deliberately not part of what is published.
+    if cache_key is not None:
+        _document_cache_store(cache_key, isolated_record(record))
+    # Registry provenance is a filesystem sidecar, not an index column, and is
+    # probed on every load so a stale or malformed one is visible drift rather
+    # than silently being treated as trustworthy metadata.
+    return _apply_registry_provenance(record, _registry_provenance_fields(skill_dir))
 
 
 def _husk_record(skill_dir: Path) -> dict:
@@ -400,6 +661,11 @@ def scan_dir(
     §D1).  It is opt-in because a flat record without ``path`` is what the
     other callers (``effective``, ``cli_handlers``, the web route) consume, and
     the records they see are unchanged.
+
+    The scan also decides whether the derived-record reuse is worth running at
+    all: a scan holding more documents than the bounded cache can hold would
+    evict every entry before the next request reached it, so this one is
+    measured up front and turned off (:func:`document_reuse_worthwhile`).
     """
     entries: list[dict] = []
     try:
@@ -422,6 +688,7 @@ def scan_dir(
             candidates = sorted(path for path in root.iterdir() if path.is_dir())
         except OSError:
             return entries
+    reuse = document_reuse_worthwhile(len(candidates))
     for child in candidates:
         # A candidate enumerated from ``root`` itself is a direct child, and
         # its relative parts are its own name; only a deeper candidate (a
@@ -452,7 +719,9 @@ def scan_dir(
             entries.append(entry)
             continue
         try:
-            entry = load_skill(named, include_husks=include_husks)
+            entry = load_skill(
+                named, include_husks=include_husks, reuse=reuse
+            )
             if recursive:
                 entry["path"] = str(child)
             elif annotate_paths:
