@@ -518,6 +518,41 @@ def _scope_list(data: dict, name: str = "to_scopes") -> list[str]:
     return scopes
 
 
+# Paging parameters a client might reasonably send that this API does not
+# implement. They are refused rather than ignored: a caller that pages and
+# silently gets the whole set cannot tell its request was ignored (docs/24
+# §D3-9).
+_UNIMPLEMENTED_PAGING_PARAMS = ("page", "per_page", "perpage", "cursor",
+                                "before", "after", "start", "skip", "first")
+MAX_PAGE_LIMIT = 500
+
+
+def _page_rows(rows: list, qs: dict[str, list[str]]) -> tuple[list, int]:
+    """Apply opt-in ``limit``/``offset`` and return ``(page, total)``.
+
+    Paging is opt-in so the web UI, which asks for ``/api/skills?scope=all``
+    with no paging parameters and needs every row, is unaffected.  ``limit`` is
+    capped so one request cannot ask for an unbounded page, and an
+    out-of-range ``offset`` is an empty page rather than an error.
+    """
+    unsupported = [name for name in _UNIMPLEMENTED_PAGING_PARAMS if name in qs]
+    if unsupported:
+        raise StoreError(
+            f"paging parameter(s) {', '.join(unsupported)} are not supported; "
+            "use limit and offset"
+        )
+    total = len(rows)
+    # ``limit`` is only a limit when the client sent one; 0 is a bad value, not
+    # a synonym for "unpaged". ``offset`` applies on its own.
+    limit = _int_param(qs, "limit", None, maximum=MAX_PAGE_LIMIT) if "limit" in qs else None
+    if limit is not None and limit < 1:
+        raise StoreError("limit must be at least 1")
+    offset = _int_param(qs, "offset", 0)
+    if limit is None:
+        return rows[offset:], total
+    return rows[offset:offset + limit], total
+
+
 def _batch_plan(operation: str, targets: list[dict], data: dict) -> dict:
     from .catalog import plan_hash
 
@@ -592,17 +627,26 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # quiet by default
         pass
 
-    def _send(self, status: int, body: bytes, ctype: str = "application/json; charset=utf-8"):
+    def _send(self, status: int, body: bytes, ctype: str = "application/json; charset=utf-8",
+              extra_headers: dict[str, str] | None = None):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        # Added after the status line: a header set before ``send_response``
+        # lands in the buffer ahead of it and corrupts the response.
+        self._send_extra_headers(extra_headers)
         self._send_security_headers()
         self.end_headers()
         # A HEAD response carries the same headers as the equivalent GET but no
         # body (BUG-9); Content-Length still describes the entity that a GET
         # would have returned.
         self._write_body(_head_safe_body(self.command, body))
+
+    def _send_extra_headers(self, extra_headers: dict[str, str] | None) -> None:
+        """Emit per-response headers (``X-Total-Count`` and friends)."""
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
 
     def _write_body(self, body: bytes) -> None:
         """Write a response without treating a disconnected client as a bug."""
@@ -689,8 +733,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
             "form-action 'none'",
         )
 
-    def _send_json(self, obj, status: int = 200) -> None:
-        self._send(status, _json_bytes(obj))
+    def _send_json(self, obj, status: int = 200,
+                   extra_headers: dict[str, str] | None = None) -> None:
+        self._send(status, _json_bytes(obj), extra_headers=extra_headers)
+
+    def _send_page(self, rows: list, qs: dict[str, list[str]]) -> None:
+        """Send one page of ``rows`` with an ``X-Total-Count`` header.
+
+        The header is set before the body so ``HEAD`` reports the size of the
+        page a ``GET`` would have returned.
+        """
+        page, total = _page_rows(rows, qs)
+        self._send_json(page, extra_headers={"X-Total-Count": str(total)})
 
     def _send_error(self, status: int, message: str) -> None:
         payload = getattr(message, "as_dict", lambda: {"error": str(message)})()
@@ -924,7 +978,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
                     rows = _list_all()
                 _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
+                self._send_page(rows, qs)
                 return
             if scope and scope != "global":
                 from .scopes import scan_scope as _scan_scope, search_all as _search_all
@@ -934,7 +988,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 else:
                     rows = _scan_scope(scope)
                 _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
+                self._send_page(rows, qs)
                 return
             # scope == "" or "global": use the scope adapter so wildcard
             # validation and body-aware ranking share one StoreError seam.
@@ -948,7 +1002,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 # Add token enrichment from actual files
                 _enrich_rows_with_tokens(self.store, rows, "all-scope list")
                 _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
+                self._send_page(rows, qs)
             else:
                 rows = self.store.list()
                 for r in rows:
@@ -957,7 +1011,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 # Token enrichment for list rows
                 _enrich_rows_with_tokens(self.store, rows, "global list")
                 _enrich_rows_with_catalog(self.store, rows)
-                self._send_json(rows)
+                self._send_page(rows, qs)
             return
         if parts == ["api", "search"]:
             scope = (qs.get("scope", [""])[0] or "global").strip() or "global"

@@ -211,7 +211,7 @@ new persistence or authority.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/api/skills[?scope=SCOPE]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata |
+| GET | `/api/skills[?scope=SCOPE][&q=TERM][&limit=N][&offset=N]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata. **Opt-in paging:** `limit`/`offset` bound the page and every response carries `X-Total-Count` (the unpaged total). An unpaged request still returns every row, because the web UI depends on it. Paging parameters this API does not implement (`page`, `per_page`, `cursor`, `before`, `after`, `start`, `skip`, `first`) are a `400` naming `limit`/`offset`, not silently ignored; `limit` is capped at 500 (docs/24 §D3-9) |
 | GET | `/api/skills/<name>[?scope=SCOPE]` | — | full record incl. body + path |
 | GET | `/api/skills/<name>/raw[?scope=SCOPE]` | — | raw SKILL.md text (text/plain) |
 | POST | `/api/skills[?scope=SCOPE]` | `{name, description, category?, version?, license?, compatibility?, allowed_tools?, body?}` | created record (201) |

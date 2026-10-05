@@ -4,6 +4,37 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — D3-9: `/api/skills` has a real paging contract
+
+**[SPEC]** Closed @docs/24 §D3-9. Measured first: `?limit=5`, `?offset=3`,
+`?page=2`, `?per_page=2` and `?cursor=abc` on `/api/skills` were **all silently
+ignored** — the same full row set came back every time, ~1 MB at 1,000 skills.
+
+**The paging contract is opt-in.** The web UI asks for `/api/skills?scope=all`
+with no paging parameters and needs every row for the Library, so an unpaged
+request still returns everything. What changed is that a paging parameter
+which *is* supplied is honoured, and one which is **not implemented** is
+refused rather than ignored — `page`, `per_page`, `cursor`, `before`, `after`,
+`start`, `skip` and `first` all answer `400` naming `limit`/`offset`. `limit`
+is capped at 500 so one request cannot ask for an unbounded page, `offset`
+applies on its own, an out-of-range `offset` is an empty page rather than an
+error, and every response carries `X-Total-Count` (the *unpaged* total, so a
+client can page without a second request).
+
+**Three defects were mine, and only the tests caught them:**
+
+1. `X-Total-Count` set before `send_response` landed in the header buffer
+   *ahead of the status line*, and the client read `X-Total-Count: 12` as the
+   HTTP status. Fixed by giving `_send` an explicit extra-header slot rather
+   than letting a caller call `send_header` too early.
+2. `limit=0` collided with the "unpaged" sentinel and silently meant
+   "unpaged" instead of being the bad value it is.
+3. `offset` on its own did nothing, because the slice was gated on `limit`.
+   A caller asking for "everything after row 10" got everything.
+
+**Red-first:** `tests/test_audit_d3_pagination.py`, 14 tests — **11 failures +
+3 errors** before, 14/14 after.
+
 ## 2026-10-05 — D3-8: a parameter that cannot be used is a 400
 
 **[SPEC]** Closed @docs/24 §D3-8. Both shapes reproduced on the live server
