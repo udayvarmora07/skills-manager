@@ -144,6 +144,24 @@ response was readable because a browser enforces CORS only on non-simple reads.
 - JSON mutation endpoints require `Content-Type: application/json`; raw archive
   and multipart import keep their explicitly documented content types.
 
+**[SPEC] A parameter that cannot be used is a `400`, never a silent default**
+(docs/24 §D3-8). `?limit=abc`, `?limit=`, `?limit=1.5`, `?limit=١٢٣` and
+`?window=bogus` were all answered `200` with the documented default substituted,
+so a client could not tell its request had been ignored. Numeric parameters are
+matched against `^[0-9]+$` rather than `int()`, because `int(" 5 ")`,
+`int("1_0")` and `int("١٢٣")` all succeed and silently accepting them is the
+same defect in smaller clothes. Query strings are parsed with
+`keep_blank_values=True`, so `?limit=` is distinguishable from an absent `limit`
+at all — without it `parse_qs` drops the pair and the two look identical.
+
+`to_scopes` is validated the same way on every route that takes it.
+`/api/sync` validated nothing: `to_scopes: [123]` answered `200` and reflected
+the integer back as an `"unknown scope"`, and `to_scopes: "global"` — a string
+where a list was expected — answered `200` by iterating the string's
+**characters**, returning one "unknown scope" entry per letter. A *well-formed*
+scope id that simply does not exist is still reported in `skipped`, because that
+is an answer rather than a malformed request.
+
 **Other verbs.** `HEAD` mirrors the equivalent `GET`: identical status, headers
 and `Content-Length`, with the body suppressed (a `HEAD /api/skills` is how a
 client checks reachability without transferring data). `OPTIONS` and `TRACE` are

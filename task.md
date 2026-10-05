@@ -48,7 +48,9 @@ gates now run. Full evidence in @docs/06-progress-log.md.
 - [x] D3-5: an unsafe upload part rejects the whole upload with a 400 naming
   the part, instead of vanishing under a `200 {"skipped": []}` payload.
   Both upload paths now share one predicate.
-- [ ] D3-8: invalid numeric query parameters are silently coerced.
+- [x] D3-8: unparseable numerics, unknown windows and malformed scope
+  lists are 400s instead of silent defaults — including `/api/sync`
+  iterating a string `to_scopes` one character at a time.
 - [ ] D3-9: no pagination; unknown paging params silently ignored.
 - [ ] D3-6 / D3-7 / D3-12: `get()`/`list()` disagree, two error-body shapes,
   unstripped bind host raises a raw `gaierror`.

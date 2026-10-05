@@ -4,6 +4,48 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — D3-8: a parameter that cannot be used is a 400
+
+**[SPEC]** Closed @docs/24 §D3-8. Both shapes reproduced on the live server
+first, and the scope half was worse than the audit recorded.
+
+**Numerics and windows.** `?limit=abc` answered `200` with 50 rows;
+`?window=bogus` answered `200` with Claude's window. A client could not tell
+its request had been ignored. `_int_param()` and `_window_param()` now raise a
+clean `StoreError` naming the parameter and the valid choices.
+
+One subtlety worth recording: the guard matches `^[0-9]+$` rather than
+calling `int()`, because `int(" 5 ")`, `int("1_0")` and `int("١٢٣")` **all
+succeed** — accepting them silently is the same defect in smaller clothes.
+
+**A second, quieter defect fell out of writing the test.** `?limit=` was still
+answered `200`, and so was `?limit=%20`. The cause was not the validator:
+`urllib.parse.parse_qs` **drops blank values by default**, so `?limit=` and an
+absent `limit` were literally the same dictionary. All five query-string parse
+sites now pass `keep_blank_values=True`. That is a broader change than the fix
+itself, which is why it is called out here and why the full 991-test suite was
+re-run rather than only the new tests.
+
+**Scopes.** `/api/sync` validated nothing:
+
+```text
+to_scopes: [123]     -> 200 {"skipped": [{"scope": 123, "reason": "unknown scope"}]}
+to_scopes: "global"  -> 200 {"skipped": [{"scope": "g", ...}, {"scope": "l", ...},
+                                         {"scope": "o", ...}, {"scope": "b", ...},
+                                         {"scope": "a", ...}, {"scope": "l", ...}]}
+```
+
+The second is the one worth remembering: a **string where a list was expected**
+was iterated character by character, so a client that sent `"global"` got six
+"unknown scope" entries and a success status. `_scope_list()` is now shared by
+`/api/sync` and the batch plan. A *well-formed* scope id that does not exist is
+still reported in `skipped` — that is an answer, not a malformed request.
+
+**Red-first:** `tests/test_audit_d3_parameter_coercion.py`, 15 tests — **16
+failures + 1 error** before, 15/15 after. One of the 15 was my test being wrong
+rather than the code: it interpolated raw Arabic-Indic digits into a URL
+unencoded, which is a test bug, so the value is now percent-encoded.
+
 ## 2026-10-05 — A generic agent manual arrived; one part was adopted, the rest was not
 
 **[NOTE]** `AGENTS-1.md` (repo root) is a **template for a multi-tenant SaaS

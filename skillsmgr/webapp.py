@@ -454,12 +454,76 @@ def _batch_targets(data: dict) -> list[dict]:
     return [_resolve_batch_target(item, records, seen) for item in raw]
 
 
+_INT_RE = re.compile(r"^[0-9]+$")
+
+
+def _int_param(qs: dict[str, list[str]], name: str, default: int, *, maximum: int | None = None) -> int:
+    """Return a bounded integer query parameter, or raise a clean 400.
+
+    A parameter that cannot be parsed used to be replaced by its default, so
+    ``?limit=abc`` answered 200 with 50 rows and a client could not tell its
+    request had been ignored (docs/24 §D3-8).  ``^[0-9]+$`` rather than
+    ``int()`` because ``int(" 5 ")``, ``int("1_0")`` and ``int("١٢٣")`` all
+    succeed -- silently accepting those is the same defect in smaller clothes.
+    """
+    raw = qs.get(name, [None])[0]
+    if raw is None:
+        return default
+    text = raw.strip()
+    if not _INT_RE.match(text):
+        raise StoreError(f"{name} must be a whole number, got {raw!r}")
+    value = int(text)
+    if maximum is not None:
+        value = min(value, maximum)
+    return value
+
+
+def _window_param(qs: dict[str, list[str]], name: str = "window") -> str:
+    """Return the requested context window, or raise a clean 400.
+
+    ``?window=bogus`` used to answer 200 with Claude's window, so a typo looked
+    like a successful budget report for a window nobody asked about.
+    """
+    from .tokens import WINDOWS as _WINDOWS
+
+    raw = (qs.get(name, ["claude"])[0] or "claude").strip() or "claude"
+    if raw not in _WINDOWS:
+        raise StoreError(
+            f"unknown {name} {raw!r}; choose one of {', '.join(sorted(_WINDOWS))}"
+        )
+    return raw
+
+
+def _scope_list(data: dict, name: str = "to_scopes") -> list[str]:
+    """Return a validated list of scope ids, or raise a clean 400.
+
+    ``/api/sync`` validated nothing: ``to_scopes: [123]`` answered 200 and
+    reflected the integer back as an "unknown scope", and ``to_scopes:
+    "global"`` answered 200 by iterating the string's *characters* -- six
+    "unknown scope" entries, one per letter of "global" (docs/24 §D3-8).
+    """
+    raw = data.get(name)
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise StoreError(f"{name} must be a list of scope ids")
+    scopes: list[str] = []
+    for entry in raw:
+        if not isinstance(entry, str):
+            raise StoreError(f"{name} entries must be scope id strings, got {entry!r}")
+        trimmed = entry.strip()
+        if not trimmed:
+            raise StoreError(f"{name} entries must not be empty")
+        scopes.append(trimmed)
+    return scopes
+
+
 def _batch_plan(operation: str, targets: list[dict], data: dict) -> dict:
     from .catalog import plan_hash
 
     options = {
         "force": bool(data.get("force")),
-        "to_scopes": sorted({str(scope) for scope in (data.get("to_scopes") or [])}),
+        "to_scopes": sorted(set(_scope_list(data))),
     }
     return {
         "operation": operation,
@@ -817,7 +881,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         parts = self._parts()
         if self._serve_static():
             return
-        qs = parse_qs(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         if self._route_source_update_get(parts, qs):
             return
         if parts == ["api", "scopes"]:
@@ -979,11 +1043,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json({"templates": list_templates(self.store.templates_dir)})
         elif parts == ["api", "history"]:
             name = qs.get("name", [None])[0]
-            try:
-                limit = int(qs.get("limit", ["50"])[0])
-            except ValueError:
-                limit = 50
-            limit = max(1, min(limit, MAX_HISTORY_LIMIT))
+            limit = max(1, _int_param(qs, "limit", 50, maximum=MAX_HISTORY_LIMIT))
             if qs.get("snapshots", ["0"])[0] in ("1", "true", "yes") and name:
                 scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
                 if scope == "global":
@@ -999,7 +1059,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(self.store.history(name=name, limit=limit))
         elif parts == ["api", "stats"]:
             st = self.store.stats()
-            win_qs = (qs.get("window", ["claude"])[0] or "claude").strip()
+            win_qs = _window_param(qs)
             try:
                 from .scopes import list_scopes as _list_scopes
                 from .tokens import WINDOWS as _WINDOWS
@@ -1047,7 +1107,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 st.setdefault("degraded", []).append("scopes")
             self._send_json(st)
         elif parts == ["api", "tokens"]:
-            win = (qs.get("window", ["claude"])[0] or "claude").strip()
+            win = _window_param(qs)
             name = (qs.get("name", [""])[0] or "").strip()
             scope = (qs.get("scope", ["all"])[0] or "all").strip()
             text = (qs.get("text", [""])[0] or "")
@@ -1271,7 +1331,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def _route_post(self):
         parts = self._parts()
-        qs = parse_qs(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         if self._route_source_update_post(parts):
             return
         if self._route_new_post(parts):
@@ -1286,7 +1346,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not isinstance(raw_from_scope, str):
                 raise StoreError("from_scope must be a string")
             from_scope = raw_from_scope.strip() or "global"
-            to_scopes = data.get("to_scopes")
+            to_scopes = _scope_list(data)
             force = bool(data.get("force"))
             if not name:
                 raise StoreError("name is required for sync")
@@ -1484,7 +1544,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def _route_patch(self):
         parts = self._parts()
-        qs = parse_qs(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             data = self._body_json()
@@ -1529,13 +1589,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
         parts = self._parts()
         if self._route_source_update_delete(parts):
             return
-        self._delete_route(parts, parse_qs(urlparse(self.path).query))
+        self._delete_route(parts, parse_qs(urlparse(self.path).query, keep_blank_values=True))
 
     # -- PUT routes -------------------------------------------------------
 
     def _route_put(self):
         parts = self._parts()
-        qs = parse_qs(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         ctype = self.headers.get("Content-Type", "")
         if parts == ["api", "import"] and ctype.lower().startswith("multipart/form-data"):
             boundary_m = re.search(r"boundary=([^;]+)", ctype)
