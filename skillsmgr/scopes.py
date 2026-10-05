@@ -341,7 +341,11 @@ def scan_scope(scope_id: str) -> list[dict]:
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    entries = scan_dir(scope.base, recursive=scope.recursive)
+    # SEC-10/§D1: a flat record used to carry no path, so the loop below
+    # re-derived it for every row -- re-resolving the scope base and re-running
+    # the name/containment check the scan had already performed.  The scan can
+    # hand over the exact entry it validated instead.
+    entries = scan_dir(scope.base, recursive=scope.recursive, annotate_paths=True)
     physical_root = str(_resolved_scope_root(scope))
     for e in entries:
         e["scope"] = scope.id
