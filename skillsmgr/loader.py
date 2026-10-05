@@ -73,6 +73,13 @@ def required_field_gaps(data: dict) -> list[str]:
     return gaps
 
 
+#: The two names a skill document may hold.  ``active`` is what a loader reads,
+#: ``disabled`` the renamed form a disable/enable toggles between.
+_ACTIVE_DOCUMENT = "SKILL.md"
+_DISABLED_DOCUMENT = "SKILL.md.disabled"
+_DOCUMENT_NAMES = frozenset({_ACTIVE_DOCUMENT, _DISABLED_DOCUMENT})
+
+
 def conflicting_documents(skill_dir: Path) -> bool:
     """True when a skill directory holds *both* SKILL.md and SKILL.md.disabled.
 
@@ -83,33 +90,58 @@ def conflicting_documents(skill_dir: Path) -> bool:
     snapshot taken.  Every entry point that toggles or installs a skill has to
     refuse this state instead of guessing.
     """
-    return (skill_dir / "SKILL.md").is_file() and (skill_dir / "SKILL.md.disabled").is_file()
+    return (skill_dir / _ACTIVE_DOCUMENT).is_file() and (
+        skill_dir / _DISABLED_DOCUMENT
+    ).is_file()
 
 
-def read_skill_or_report(skill_dir: Path) -> tuple[str | None, int, str | None]:
-    """Pick a skill's document and read it, reporting unreadable files.
+def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]:
+    """Pick a skill's document, reporting unreadable files and the conflict state.
 
-    Returns ``(text, disabled, read_error)``.  ``is_file()`` and
+    Returns ``(text, disabled, read_error, conflict)``.  ``is_file()`` and
     ``read_bytes()`` both raise ``OSError`` for an unreadable file or an
     unsearchable directory, and one such entry used to abort *every* scope
     view with a raw ``PermissionError`` (SCOPE-4).  The filesystem is the
     source of truth, so an unreadable document is reported as drift with the
     reason rather than being allowed to take the whole scan down.
+
+    ``conflict`` is the same answer :func:`conflicting_documents` gives, taken
+    from the probe this function has to make anyway instead of re-stat'ing
+    both names for every loaded document (docs/24 §D1): with an active
+    document the only remaining question is whether the disabled one is also
+    there, and with a disabled document the active one is already known absent.
     """
-    for filename, disabled in (("SKILL.md", 0), ("SKILL.md.disabled", 1)):
+    for filename, disabled in ((_ACTIVE_DOCUMENT, 0), (_DISABLED_DOCUMENT, 1)):
         candidate = skill_dir / filename
         try:
             is_file = candidate.is_file()
         except OSError as exc:
-            return None, disabled, f"{candidate} cannot be read ({exc.strerror or exc})"
+            return None, disabled, f"{candidate} cannot be read ({exc.strerror or exc})", False
         if not is_file:
             continue
         try:
             text, decode_error = read_skill_text(candidate)
         except OSError as exc:
-            return None, disabled, f"{candidate} cannot be read ({exc.strerror or exc})"
-        return text, disabled, decode_error
-    return None, 0, None
+            return None, disabled, f"{candidate} cannot be read ({exc.strerror or exc})", False
+        other = _DISABLED_DOCUMENT if not disabled else _ACTIVE_DOCUMENT
+        return text, disabled, decode_error, (skill_dir / other).is_file()
+    return None, 0, None, False
+
+
+def read_skill_or_report(skill_dir: Path) -> tuple[str | None, int, str | None]:
+    """Pick a skill's document and read it, reporting unreadable files.
+
+    Returns ``(text, disabled, read_error)``.  :func:`_probe_document` owns the
+    read and additionally reports the conflicting-document state this shape
+    has never carried; dropping it keeps the documented three-value contract.
+
+    **[NOTE]** This is the three-value view, not the read path: ``load_skill``
+    needs the conflict state as well and calls the probe directly, so nothing
+    in the package calls this today.  It is kept as the documented shape rather
+    than deleted, and can go if the maintainer prefers no unused surface.
+    """
+    text, disabled, read_error, _conflict = _probe_document(skill_dir)
+    return text, disabled, read_error
 
 
 def name_is_addressable(name: str) -> bool:
@@ -206,7 +238,7 @@ def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
     ``malformed`` drift row instead of raising ``SkillNotFound`` (STORE-13);
     the store's own scans opt in, agent-scope scans keep the old contract.
     """
-    text, disabled, read_error = read_skill_or_report(skill_dir)
+    text, disabled, read_error, conflict = _probe_document(skill_dir)
     if text is None:
         if read_error is None:
             if include_husks:
@@ -225,9 +257,9 @@ def load_skill(skill_dir: Path, *, include_husks: bool = False) -> dict:
         return _unreadable_record(skill_dir, read_error, disabled)
     decode_error = read_error
     # A mixed state is drift the user has to settle by hand (see
-    # conflicting_documents): the invisible second document would be destroyed
-    # by the next toggle, so it must never be reported as a healthy skill.
-    conflict = conflicting_documents(skill_dir)
+    # conflicting_documents, whose answer the probe already returned): the
+    # invisible second document would be destroyed by the next toggle, so it
+    # must never be reported as a healthy skill.
     malformed = decode_error is not None or conflict
     try:
         data, body = parse_frontmatter(text)
@@ -319,7 +351,24 @@ def _husk_record(skill_dir: Path) -> dict:
     return record
 
 
-def scan_dir(root: Path, *, recursive: bool = False, include_husks: bool = False) -> list[dict]:
+def _document_dirs(entries) -> set[Path]:
+    """Parent directories of every skill document among *entries*.
+
+    One walk collects both document names.  ``rglob("SKILL.md")`` and
+    ``rglob("SKILL.md.disabled")`` each traverse the whole tree, so every
+    recursive scope root was walked twice per request; ``rglob("*")`` visits
+    exactly the same entries and the name test below selects the same set.
+    """
+    return {path.parent for path in entries if path.name in _DOCUMENT_NAMES}
+
+
+def scan_dir(
+    root: Path,
+    *,
+    recursive: bool = False,
+    include_husks: bool = False,
+    annotate_paths: bool = False,
+) -> list[dict]:
     """Scan a skill root, optionally walking nested skill directories.
 
     Recursive discovery is opt-in because consumers differ: some treat a root
@@ -334,6 +383,16 @@ def scan_dir(root: Path, *, recursive: bool = False, include_husks: bool = False
     ``include_husks`` additionally reports direct subdirectories that hold no
     document at all (STORE-13); it is off by default so agent-scope scans keep
     listing only real skills.
+
+    ``annotate_paths`` records the validated document directory as ``path`` on
+    every entry, including the flat ones that used to carry none.  The value is
+    the *contained named entry* under the resolved root, which is exactly the
+    path :func:`skillsmgr.scopes.scan_scope` otherwise re-derived per row --
+    re-deriving it re-resolved the scope base and re-ran the containment check
+    the scan had already performed, for every skill on every request (docs/24
+    §D1).  It is opt-in because a flat record without ``path`` is what the
+    other callers (``effective``, ``cli_handlers``, the web route) consume, and
+    the records they see are unchanged.
     """
     entries: list[dict] = []
     try:
@@ -347,28 +406,30 @@ def scan_dir(root: Path, *, recursive: bool = False, include_husks: bool = False
     resolved_root = Path(root).expanduser().resolve()
     if recursive:
         try:
-            candidates = sorted(
-                {path.parent for path in root.rglob("SKILL.md")}
-                | {path.parent for path in root.rglob("SKILL.md.disabled")}
-            )
+            candidates = sorted(_document_dirs(root.rglob("*")))
         except OSError:
             # One unsearchable directory in the tree must not abort the scan.
-            candidates = sorted(
-                {path.parent for path in root.glob("SKILL.md")}
-                | {path.parent for path in root.glob("SKILL.md.disabled")}
-            )
+            candidates = sorted(_document_dirs(root.glob("*")))
     else:
         try:
             candidates = sorted(path for path in root.iterdir() if path.is_dir())
         except OSError:
             return entries
     for child in candidates:
+        # A candidate enumerated from ``root`` itself is a direct child, and
+        # its relative parts are its own name; only a deeper candidate (a
+        # recursive root) needs the general form.  pathlib's ``relative_to``
+        # reparses both operands and cost about as much as the containment
+        # check below (docs/24 §D1).
+        if child.parent == root:
+            relative_parts: tuple[str, ...] = (child.name,)
+        else:
+            try:
+                relative_parts = child.relative_to(root).parts
+            except (ValueError, OSError):
+                continue
         try:
-            relative = child.relative_to(root)
-        except (ValueError, OSError):
-            continue
-        try:
-            named = paths.contained_entry_under(resolved_root, *relative.parts)
+            named = paths.contained_entry_under(resolved_root, *relative_parts)
         except ValueError as exc:
             # SCOPE-2: a skill directory that is a symlink out of the root is
             # invisible to every read view, yet every name-addressed operation
@@ -387,6 +448,8 @@ def scan_dir(root: Path, *, recursive: bool = False, include_husks: bool = False
             entry = load_skill(named, include_husks=include_husks)
             if recursive:
                 entry["path"] = str(child)
+            elif annotate_paths:
+                entry["path"] = str(named)
             entries.append(entry)
         except (SkillNotFound, OSError):
             continue
