@@ -210,6 +210,10 @@ class CrossPlatformContractTests(unittest.TestCase):
             name: (_VENDORED_VUE if name == check_package_data.VUE_MEMBER else b"asset")
             for name in check_package_data.expected_webui_members()
         }
+        # A valid artifact also ships the packaged example (audit A8).
+        members.update(
+            {name: (ROOT / name).read_bytes() for name in check_package_data.expected_example_members()}
+        )
         with tempfile.TemporaryDirectory() as directory:
             dist_dir = Path(directory) / "dist"
             dist_dir.mkdir()
@@ -247,6 +251,10 @@ class CrossPlatformContractTests(unittest.TestCase):
             name: (_VENDORED_VUE if name == check_package_data.VUE_MEMBER else b"asset")
             for name in check_package_data.expected_webui_members()
         }
+        # A valid artifact also ships the packaged example (audit A8).
+        members.update(
+            {name: (ROOT / name).read_bytes() for name in check_package_data.expected_example_members()}
+        )
         with tempfile.TemporaryDirectory() as directory:
             dist_dir = Path(directory) / "dist"
             dist_dir.mkdir()
