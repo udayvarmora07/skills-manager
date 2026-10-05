@@ -1,8 +1,8 @@
 # Docs Index — Skills Manager
 
-**Version 0.4.7**
+**Version 0.4.8**
 
-**AI manifest**: Entry point to the project docs. Every doc **in this tree** follows HADS: H1 title, version line, AI manifest, then `[SPEC]`/`[NOTE]`/`[?]` block markers on their own bold lines — and `check_docs.py` now enforces those three header facts for every `docs/*.md`, plus valid local links/anchors, table integrity, and the surface-parity checks below. Project files that live at the repository root (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, `TODO.md`, `PLAN.md`, the threat model, the security report) carry their own header conventions and are deliberately outside the HADS contract. The index was refreshed on 2026-09-23; flag stale facts in `06-progress-log.md`.
+**AI manifest**: Entry point to the project docs. Every doc **in this tree** follows HADS: H1 title, version line, AI manifest, then `[SPEC]`/`[NOTE]`/`[?]` block markers on their own bold lines — and `check_docs.py` now enforces those three header facts for every `docs/*.md`, plus valid local links/anchors, table integrity, and the surface-parity checks below. Project files that live at the repository root (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, `TODO.md`, `PLAN.md`, the threat model, the security report) carry their own header conventions and are deliberately outside the HADS contract. `docs/archive/` is outside the HADS header contract (`check_docs.py` globs `docs/*.md` non-recursively) but is still held to link, anchor, table and trailing-newline integrity, and carries the header facts by hand. The index was refreshed on 2026-10-05; flag stale facts in `06-progress-log.md`.
 
 ## Document map
 
@@ -40,7 +40,10 @@
 | @docs/ADR-008-source-lock-and-update-preview.md | Read-only source identity, whole-tree candidate comparison, and review gating | Any provenance, source-lock, or update-preview change |
 | @docs/ADR-009-backup-sync-dry-run-planner.md | Bounded manifests, dry-run deltas, three-way conflicts, and recovery evidence | Any backup, Git, or sync-planner change |
 | @docs/ADR-004-team-sharing-signed-bundles.md | Team sharing design plus offline HMAC manifest evidence; crypto/distribution/metadata policy resolved, archive workflow unimplemented | Any bundle-signing, team-distribution, or review-workflow change |
-| @docs/06-progress-log.md | Dated log of changes, decisions, bugs | Before/after any session; keep updated |
+| @docs/06-progress-log.md | Dated log of changes, decisions, bugs — **digest + entries from 2026-09-23 onward** | Before/after any session; keep updated |
+| @docs/archive/README.md | Index of `docs/archive/`: the cut-off rule, and the archived progress-log slices | When you need history older than 2026-09-23 |
+| @docs/archive/06-progress-log-2026-09.md | Verbatim archived entries, 2026-09-04 … 2026-09-22 (160 entries) | Only when the resident log's pointer is not enough |
+| @docs/archive/06-progress-log-2026-08.md | Verbatim archived entries, 2026-08-13 … 2026-08-16 (+2 undated) | Only for the pre-web-UI GTK4 era |
 | @docs/07-context-strategy.md | Hot/warm/cold loading model, compaction anchors | Long sessions, context management |
 | @docs/SESSION-CONTEXT.md | Fast re-anchor cache: current state, common tasks, gotchas | Start of any session (preferred over re-reading source) |
 
@@ -50,6 +53,8 @@
 2. `docs/README.md` (this file).
 3. Topic docs just-in-time per the map above — never all at once.
 4. `docs/06-progress-log.md` to sync on recent changes, then update it when done.
+   It carries a digest plus entries dated **2026-09-23 onward**; older history is
+   in `docs/archive/` — load it only when the digest's pointers are not enough.
 
 ## HADS conventions used here
 

@@ -1,6 +1,6 @@
 # Task Checklist — Skills Manager
 
-**Version 0.8.8**
+**Version 0.9.0**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
@@ -41,10 +41,37 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   on every request, with no observation reuse. Measured 3.7 s at 1,965 real
   skills. This is the same O(n) cost the global half no longer pays, and it is
   the largest remaining item in the default view.
+- [x] D2: `/api/doctor?scope=all` no longer walks every scope root twice.
+  `_doctor_scope_enrichment` takes **one** merged snapshot
+  (`records = scopes.list_all()`) and summarises both the `scopes` and
+  `duplicates` sections from it, using the existing `records=` seam that
+  `/api/stats` already used. Probed by counting the call: `scopes.list_all()`
+  is invoked **exactly once** per request. (The audit measured this route at
+  51 s; that wall-clock figure was **not** re-measured here — only the
+  mechanism that caused it was.)
 - [x] D3-4: `GET /api/skills` no longer creates the data layout or the index,
   and a damaged layout answers one repairable 404 instead of four 400s beside
   two 200s. Also fixed two non-hermetic test suites that read the real `$HOME`.
-- [ ] D3-3: `GET /api/export` writes an unpruned archive on every call.
+- [x] D3-1 / D3-2: a non-UTF-8 `SKILL.md` no longer answers the raw route with
+  a 400 carrying the interpreter's own codec text, and no longer answers the
+  list route with a raw 500. Both read sites go through `_skill_text()`
+  (`skillsmgr/webapp.py`). Probed on a live loopback server with a deliberately
+  corrupt `SKILL.md`: `/api/skills/<n>/raw` → **404**
+  `{"error": "skill '…' has no readable SKILL.md", "code": "not_found"}` with no
+  codec text in the body, and `/api/skills/<n>` → **200**.
+- [x] D3-3: `GET /api/export` no longer writes an unpruned archive on every
+  call. `_serve_export` builds into a `tempfile.mkdtemp()` staging directory and
+  removes it in a `finally`; the CLI keeps its documented behaviour of writing to
+  `backups/`. Probed with three consecutive downloads: `backups/` empty before
+  and after, zero staging directories left behind.
+- [x] D3-10: `Sec-Fetch-Site` is compared after `.strip().lower()`
+  (`web_security.py`), so surrounding whitespace and casing cannot smuggle a
+  cross-site request past the policy. Probed: `cross-site`, `" cross-site "`,
+  `Cross-Site` and `"  CROSS-SITE\t"` all → **403**; `same-origin` → **200**.
+- [x] D3-11: `PUT /api/import` matches its multipart content-type
+  case-insensitively at both call sites (`skillsmgr/webapp.py`). Probed:
+  `multipart/form-data`, `MULTIPART/FORM-DATA` and `Multipart/Form-Data` all
+  → **200**.
 - [x] D3-5: an unsafe upload part rejects the whole upload with a 400 naming
   the part, instead of vanishing under a `200 {"skipped": []}` payload.
   Both upload paths now share one predicate.
@@ -68,22 +95,61 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   now fails the gate whenever an entry sits above its measured metric.
 - [x] §C2/§G6: five observed-state predicates collapsed to one seam, one
   Escape rule, one transport. Requests across 10 navigations 17 -> 9.
-- [x] §D1 (agent scopes): the scan stops re-deriving what it validated.
+- [x] §D1 (agent scopes, narrow): the scan stops re-deriving what it validated
+  (`282cf2a`, merged as `0439fb5`). This is **not** the item below — the
+  observation-reuse half is still open.
 - All four parallel branches merged; ladder green at 1,102 tests including
   the browser harness.
 - [ ] C4 #4, second half only: the one-document invariant is implemented twice
   — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
   nothing keeping them equivalent. Needs a session that owns `scopes.py`.
-- [ ] **Context budget:** `docs/06-progress-log.md` is 38,729 words / ~92.8k
-  tokens as actually loaded — bigger than the whole MCP tool surface, and
-  14.5% of a 1M-token session before any work starts. The audit's own §C1
-  figure (45.7k) was both stale and arithmetically low. Archive entries older
-  than a fixed date to `docs/archive/` behind a one-page digest. Append-only
-  policy and `check_docs.py` structure make this a decision, not a cleanup.
+- [x] **Context budget:** `docs/06-progress-log.md` measured 313,968 characters
+  / 40,906 words / 4,004 lines and was being injected into the context window of
+  every session before any work started. Rule adopted: **an entry stays resident
+  if and only if its dated heading is 2026-09-23 or later**; everything dated
+  2026-09-22 or earlier moved verbatim to `docs/archive/`. The file now measures
+  **64,666 characters / 9,478 words / 1,091 lines** — 79% fewer characters, 77%
+  fewer words — and carries a digest plus the 21 resident entries. 170 older
+  dated entries and two undated trailing checklists moved to
+  `docs/archive/06-progress-log-2026-09.md` and
+  `docs/archive/06-progress-log-2026-08.md`, verified byte-identical to the
+  source at the moment of the cut. `check_docs.py` needed no change, and the
+  gate was proved to still watch `docs/archive/` by injecting four defects into
+  an archive file and confirming each was caught. See @docs/archive/README.md
+  and @docs/06-progress-log.md.
 - [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
   rebuilt from the current tree, not the `6733da9` hashes in the progress log.
 - [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes
   (G8): rendered review required, not a diff.
+
+### Why five of the six items above were stale
+
+**[NOTE]** D2, D3-1, D3-2, D3-10 and D3-11 are all verified done, and they are
+the sharpest part of this reconciliation: **five of them were not merely
+unchecked in this file, they were absent from it entirely.** Only D3-3 appeared
+and was `[ ]`. So the file was not "behind" on those items — it had no record
+of them at all, which is worse for a document whose stated job is to be the
+single source of truth for remaining work: an item missing from the list is an
+item nobody will pick up, and an item wrongly open is an item somebody will
+re-do.
+
+**What went wrong.** Work landed in branches whose commits recorded the finding
+id in the code and in `docs/06-progress-log.md`, but the `task.md` line was
+never touched. The parallel-worktree pattern makes this likely rather than
+accidental: a branch that owns `skillsmgr/**` and `tests/**` has no reason to
+edit this file, and `AGENTS.md` asks each session to update `task.md` without
+giving it an owner. Every one of the five was caught in review, not by the
+checklist.
+
+**What prevents a recurrence, and what does not.** `check_docs.py` cannot help
+here: it checks documentation against *source surfaces* (CLI commands, REST
+routes, `Store` methods), and none of these five items has a source surface to
+drift from. Do not add a gate for it. What actually works is ownership — a
+finding id that is closed in a commit must close its `task.md` line in the same
+commit, or the commit message must say why not. Until that is a rule someone
+enforces, the honest position is that `task.md` is a *good* checklist, not a
+complete one, and this pass found the gap by reading the code rather than the
+file.
 
 ## Next five audit-derived tasks — planned 2026-09-23
 
@@ -444,7 +510,7 @@ optional `python3 -m build` artifact check remains unavailable because the
 - [x] Refreshed @docs/08-web-ui.md and @docs/06-progress-log.md without changing
   runtime, API, schema, CLI, dependency, or product behavior.
 
-## Current state — 2026-09-22 (authoritative; older milestones below are dated records)
+## Current state — 2026-09-22 (dated record; the authoritative section is the 2026-10-04 one above)
 
 - **DEL-00: DONE (2026-09-18).** The pre-existing registry network/provenance
   batch is identified and kept separate from the product UX work. The current
