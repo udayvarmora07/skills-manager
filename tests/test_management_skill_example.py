@@ -13,7 +13,9 @@ from skillsmgr import cli
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples/skills-manager-management/SKILL.md"
+#: The example ships inside the package (audit A8), so it lives under
+#: `skillsmgr/examples/` rather than a repository-only `examples/` directory.
+EXAMPLE = REPO_ROOT / "skillsmgr/examples/skills-manager-management/SKILL.md"
 
 
 class ManagementSkillExampleTests(unittest.TestCase):

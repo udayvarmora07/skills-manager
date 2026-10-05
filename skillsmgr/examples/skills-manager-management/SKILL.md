@@ -133,14 +133,15 @@ separate approval before any invocation.
 
 ## Manual opt-in installation
 
-This example is not installed by the package or by this workflow. Only when
-the user asks to install it into the shared Agents/Command Code scope, ask them
-to review the destination and run these commands themselves from the repository
-root:
+This example ships inside the installed distribution but is **never copied into
+an agent scope automatically**. It is also present in a source checkout at
+`skillsmgr/examples/skills-manager-management/SKILL.md`. Only when the user asks
+to install it into the shared Agents/Command Code scope, ask them to review the
+destination and run these commands themselves:
 
 ```sh
 mkdir -p "$HOME/.agents/skills/skills-manager-management"
-cp examples/skills-manager-management/SKILL.md \
+cp skillsmgr/examples/skills-manager-management/SKILL.md \
   "$HOME/.agents/skills/skills-manager-management/SKILL.md"
 ```
 

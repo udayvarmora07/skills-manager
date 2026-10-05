@@ -35,6 +35,23 @@ from typing import Mapping
 ROOT = Path(__file__).resolve().parent
 WEBUI_ROOT = Path("skillsmgr") / "webui"
 VUE_MEMBER = "skillsmgr/webui/static/vendor/vue.global.prod.js"
+#: The agent-facing management example.  It used to live only in the repository
+#: (``examples/``), so it reached nobody who installed the distribution — which
+#: is backwards, because it is the one artifact that lets an AI agent drive this
+#: tool safely.  Shipping it as package data is what makes it reachable; the
+#: checks below are what stop that from silently regressing.
+EXAMPLES_ROOT = Path("skillsmgr") / "examples"
+
+#: A clean install is the only evidence that the example actually reaches
+#: ``site-packages`` rather than merely existing inside the archive.
+INSTALL_PROBE = (
+    "from pathlib import Path; import skillsmgr; "
+    "root=Path(skillsmgr.__file__).parent; "
+    "vue=root/'webui/static/vendor/vue.global.prod.js'; "
+    "skill=root/'examples/skills-manager-management/SKILL.md'; "
+    "assert vue.is_file() and vue.stat().st_size > 0, vue; "
+    "assert skill.is_file() and skill.read_bytes().startswith(b'---'), skill"
+)
 
 #: SEC-9: the vendored bundle executes same-origin with access to every local
 #: REST endpoint, including all mutations, and a 158 KB minified blob cannot be
@@ -57,6 +74,13 @@ class BuildFailed(RuntimeError):
     """The build tool ran but failed to produce distributions."""
 
 
+#: A corrupt, truncated, or mislabelled artifact is a gate verdict, not a
+#: crash.  ``run_check`` reports these as ``FAIL`` so a release job reads the
+#: packaging decision instead of a stack trace.  ``AssertionError`` stays a
+#: separate first entry so the specific reason is never flattened.
+_ARCHIVE_ERRORS = (OSError, EOFError, zipfile.BadZipFile, tarfile.TarError, UnicodeError)
+
+
 @dataclass(frozen=True)
 class ArchiveReport:
     """Deterministic package-data facts collected from one archive."""
@@ -67,6 +91,7 @@ class ArchiveReport:
     vue_size: int
     license_expression: str = ""
     license_files: tuple[str, ...] = ()
+    example_members: tuple[str, ...] = ()
 
 
 def verify_vendored_vue(payload: bytes, *, source: str) -> int:
@@ -125,6 +150,112 @@ def expected_webui_members(project_root: Path = ROOT) -> tuple[str, ...]:
     if VUE_MEMBER not in files:
         raise AssertionError(f"missing vendored Vue source file: {VUE_MEMBER}")
     return tuple(files)
+
+
+def expected_example_members(project_root: Path = ROOT) -> tuple[str, ...]:
+    """Return the sorted example files that package-data must include.
+
+    Derived from the source tree rather than a hand-written list, so adding an
+    example is a normal edit and dropping one from the artifacts fails the gate
+    instead of quietly shipping a distribution without it.
+    """
+
+    examples = project_root / EXAMPLES_ROOT
+    if not examples.is_dir():
+        raise AssertionError(f"missing packaged example directory: {examples}")
+    return tuple(
+        sorted(
+            EXAMPLES_ROOT.joinpath(path.relative_to(examples)).as_posix()
+            for path in examples.rglob("*")
+            if path.is_file()
+        )
+    )
+
+
+#: A frontmatter header is a handful of lines; refusing to walk further means a
+#: pathological example cannot turn a packaging gate into a file reader.
+_MAX_FRONTMATTER_LINES = 64
+
+
+def _frontmatter_name(text: str) -> str | None:
+    """Return the ``name:`` value of a bounded leading frontmatter block.
+
+    Returns ``None`` when the block is absent, unterminated within the bound,
+    or declares no name -- all of which the caller reports the same way.
+    """
+
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:_MAX_FRONTMATTER_LINES]:
+        if line.strip() == "---":
+            break
+        key, separator, value = line.partition(":")
+        if separator and key.strip() == "name":
+            return value.strip().strip("'\"") or None
+    return None
+
+
+def example_document_error(member: str, payload: bytes) -> str | None:
+    """Return why a packaged example is unusable as a skill, or ``None``.
+
+    Only ``SKILL.md`` documents are loadable, so only they are constrained.  The
+    rule is intentionally narrow and deliberately local: this check exists to
+    catch an example that was renamed or truncated in a way that makes it inert,
+    not to re-validate the skill.  ``skillsmgr.validator`` stays the authority
+    for what a *managed* skill may contain; importing the package under
+    inspection here would couple the packaging gate to the code it packages.
+    """
+
+    if PurePosixPath(member).name != "SKILL.md":
+        return None
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return f"{member} is not valid UTF-8: {exc}"
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return f"{member} declares no frontmatter block"
+    name = _frontmatter_name(text)
+    if not name:
+        return f"{member} declares no frontmatter name"
+    directory = PurePosixPath(member).parent.name
+    if name != directory:
+        return f"{member} frontmatter name {name!r} does not match its directory {directory!r}"
+    return None
+
+
+def verify_example_documents(
+    files: Mapping[str, bytes], project_root: Path, source: str
+) -> tuple[str, ...]:
+    """Assert the artifact ships exactly the reviewed, loadable example set."""
+
+    expected = expected_example_members(project_root)
+    prefix = EXAMPLES_ROOT.as_posix() + "/"
+    actual = tuple(sorted(name for name in files if name.startswith(prefix)))
+    if actual != expected:
+        missing = sorted(set(expected) - set(actual))
+        unexpected = sorted(set(actual) - set(expected))
+        details = []
+        if missing:
+            details.append(f"missing={missing}")
+        if unexpected:
+            details.append(f"unexpected={unexpected}")
+        raise AssertionError(f"{source} example package-data mismatch: " + "; ".join(details))
+    for name in expected:
+        # Byte identity is what makes "the example reached a consumer" a claim
+        # rather than a hope.  It also stays correct across EOL translation,
+        # because the build reads the very same working-tree bytes.
+        try:
+            source_bytes = (project_root / name).read_bytes()
+        except OSError as exc:
+            raise AssertionError(f"cannot read repository example source {name}: {exc}") from exc
+        if files[name] != source_bytes:
+            raise AssertionError(f"{source} packaged example {name} differs from the repository source")
+        problem = example_document_error(name, source_bytes)
+        if problem:
+            raise AssertionError(f"{source} packaged example is unusable: {problem}")
+    return actual
 
 
 def _canonical_member(name: str, kind: str) -> str | None:
@@ -298,7 +429,8 @@ def inspect_archive(path: Path, project_root: Path = ROOT) -> ArchiveReport:
         raise AssertionError(f"{path.name} contains no vendored Vue payload: {VUE_MEMBER}")
     vue_size = verify_vendored_vue(vue, source=path.name)
     license_expression, license_files = verify_license_metadata(files, kind, project_root, path.name)
-    return ArchiveReport(path, kind, actual, vue_size, license_expression, license_files)
+    example_members = verify_example_documents(files, project_root, path.name)
+    return ArchiveReport(path, kind, actual, vue_size, license_expression, license_files, example_members)
 
 
 def _build_error(result: subprocess.CompletedProcess[str]) -> RuntimeError:
@@ -371,12 +503,9 @@ def clean_install(artifact: Path, temporary_root: Path) -> None:
         if "No module named" in output or "No matching distribution" in output:
             raise BuildUnavailable(f"isolated install tooling unavailable for {artifact.name}: {output}")
         raise BuildFailed(f"isolated install failed for {artifact.name}:\n{output}")
-    probe = (
-        "from pathlib import Path; import skillsmgr; "
-        "p=Path(skillsmgr.__file__).parent/'webui/static/vendor/vue.global.prod.js'; "
-        "assert p.is_file() and p.stat().st_size > 0, p"
+    probe_result = subprocess.run(
+        [str(python), "-c", INSTALL_PROBE], cwd=temporary_root, env=env, capture_output=True, text=True
     )
-    probe_result = subprocess.run([str(python), "-c", probe], cwd=temporary_root, env=env, capture_output=True, text=True)
     if probe_result.returncode:
         raise AssertionError(f"clean install probe failed for {artifact.name}: {probe_result.stderr.strip()}")
 
@@ -402,7 +531,10 @@ def run_check(project_root: Path = ROOT, *, install: bool = False, require_build
     )
 
     if dist_dir is not None:
-        dist_dir = Path(dist_dir)
+        # Resolve before globbing: `clean_install` runs pip with cwd set to a
+        # temporary directory, so a relative artifact path would name a file
+        # that does not exist there and every install would fail.
+        dist_dir = Path(dist_dir).resolve()
         wheels = sorted(dist_dir.glob("*.whl"))
         sdists = sorted(
             [path for pattern in ("*.tar.gz", "*.tar.bz2", "*.tar.xz") for path in dist_dir.glob(pattern)]
@@ -416,12 +548,13 @@ def run_check(project_root: Path = ROOT, *, install: bool = False, require_build
             return 1
         try:
             reports = [inspect_archive(wheels[0], project_root), inspect_archive(sdists[0], project_root)]
-        except AssertionError as exc:
+        except (AssertionError, *_ARCHIVE_ERRORS) as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
         for report in reports:
             print(
                 f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; "
+                f"{len(report.example_members)} example files; "
                 f"Vue {report.vue_size} bytes; {report.license_expression} license)"
             )
         if install:
@@ -452,12 +585,13 @@ def run_check(project_root: Path = ROOT, *, install: bool = False, require_build
             return 1
         try:
             reports = [inspect_archive(wheel, project_root), inspect_archive(sdist, project_root)]
-        except AssertionError as exc:
+        except (AssertionError, *_ARCHIVE_ERRORS) as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
         for report in reports:
             print(
                 f"PASS: {report.kind} {report.path.name} ({len(report.webui_members)} web UI files; "
+                f"{len(report.example_members)} example files; "
                 f"Vue {report.vue_size} bytes; {report.license_expression} license)"
             )
         if install:
