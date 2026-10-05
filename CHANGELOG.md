@@ -51,8 +51,41 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   `label-content-name-mismatch`; adapter links rendered in default browser blue;
   the trash purge control now names what it destroys and sits below the list it
   removes.
+- **The agent-facing management skill now ships.** It was absent from the sdist
+  *and* the wheel, so `pip install` gave no access to the only artifact that
+  lets an AI agent drive this tool safely. It ships as package data, and the
+  packaging gate now proves it is present and readable.
+- **A read no longer writes.** `GET /api/skills` (and the other read routes)
+  created four directories and a 32 KB SQLite index on first request, and a
+  damaged layout answered a mixture of `400`s and `200`s. Reads now create
+  nothing, and a broken layout answers one repairable `404` naming the path.
+- **An unsafe multipart upload part no longer vanishes.** It was skipped while
+  the response still said `200 {"skipped": []}` — user data silently dropped
+  under a payload claiming nothing was skipped.
+- **`GET /api/export` no longer writes an archive** into `<data>/backups` on
+  every request; it streams the download and leaves nothing behind.
+- **Bad query parameters are `400`s, not silent defaults.** This includes
+  `/api/sync` iterating a string `to_scopes` one character at a time.
+- **One error shape everywhere:** `{"error", "code"}`, so a client can branch on
+  one key.
+- **A skill whose directory is gone is a `404` in REST** and no longer serves
+  its stored body, while `doctor()` still reports it as a stale row.
+- **The web server binds the host it validated.** A trailing space or a bare
+  IPv6 literal passed the loopback policy and then raised a raw `gaierror`.
+- **One Ctrl-C no longer permanently wedges a coalesced read endpoint.**
 
 ### Changed
+
+- **The primary read path is 34-40% faster** (interleaved A/B at 1,200 skills:
+  `list()` -34%, `list_all()` -40%, `doctor()` -16%, `search()` -39%).
+- **The two god routers were split.** `_route_get` 89 -> 13 and `_route_post`
+  80 -> 11, guarded by 16 characterisation tests that pass on the pre-refactor
+  tree as well.
+- **`GET /api/skills` accepts opt-in `limit`/`offset`** with `X-Total-Count`;
+  paging parameters that are not implemented are refused rather than ignored.
+- **The complexity ratchet fails when a baseline entry sits above its measured
+  metric.** It previously carried silent headroom -- `_route_get` was recorded
+  at 96 while the code measured 13 -- and the ratchet only fails on *increase*.
 
 - **The complexity ratchet now measures real modules.** It tracked `cli.py`, which
   became a 160-line adapter in a CLI split, leaving 2,076 lines of CLI logic

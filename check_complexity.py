@@ -351,6 +351,37 @@ def unresolved_baseline_keys(
     return sorted(key for key in functions if key not in measured)
 
 
+def slack_baseline_keys(
+    metrics: Iterable[FunctionMetric], baseline: Mapping[str, object]
+) -> list[str]:
+    """Return baseline entries sitting *above* their measured complexity.
+
+    ``unresolved_baseline_keys`` catches the opposite failure -- an entry that
+    guards nothing.  This catches the other one: an entry whose recorded number
+    is higher than the function actually measures, because a refactor made it
+    simpler and the baseline was never regenerated.  The ratchet only fails on
+    *increase*, so a stale-high entry is silent headroom nobody is tracking:
+    ``_route_get`` sat recorded at 96 while the code measured 13, which would
+    have let complexity grow back sevenfold without a word (docs/24 A4).
+
+    Regenerate with ``--write-baseline``.  This is why refreshing a baseline
+    *downward* is required and refreshing it *upward* to silence an increase is
+    forbidden: this function is what makes the difference detectable.
+    """
+    functions = baseline.get("functions")
+    if not isinstance(functions, Mapping):
+        raise ValueError("baseline must contain functions")
+    slack: list[str] = []
+    for metric in metrics:
+        record = functions.get(metric.key)
+        if not isinstance(record, Mapping):
+            continue
+        recorded = record.get("complexity")
+        if isinstance(recorded, int) and recorded > metric.complexity:
+            slack.append(f"{metric.key}: baseline {recorded} > measured {metric.complexity}")
+    return sorted(slack)
+
+
 def evaluate_metrics(
     metrics: Iterable[FunctionMetric], baseline: Mapping[str, object]
 ) -> list[ComplexityViolation]:
@@ -444,12 +475,19 @@ def main(argv: list[str] | None = None) -> int:
     if parse_errors:
         return 1
     stale = unresolved_baseline_keys(metrics, baseline)
+    slack = slack_baseline_keys(metrics, baseline)
     for key in stale:
         print(
             f"ERROR: baseline entry no longer resolves to a measured function: {key}\n"
             f"       it guards nothing; regenerate with --write-baseline if the move was intended"
         )
-    if violations or stale:
+    for entry in slack:
+        print(
+            f"ERROR: baseline entry is above the measured metric: {entry}\n"
+            "       a stale-high entry is silent guard headroom; regenerate with "
+            "--write-baseline (raising a baseline to silence an increase is forbidden)"
+        )
+    if violations or stale or slack:
         return 1
     print(
         f"COMPLEXITY CHECK PASSED: {len(metrics)} functions across "

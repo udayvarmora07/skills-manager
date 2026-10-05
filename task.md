@@ -57,13 +57,26 @@ gates now run. Full evidence in @docs/06-progress-log.md.
 - [x] D3-7: one error shape — `{"error", "code"}` — for every route.
 - [x] D3-12: the validated, normalised host is what binds; a bind failure is a
   clean `StoreError`, not a raw `gaierror`.
-- [/] Four parallel worktrees in flight (`wt`): agent-scope read cost (§D1),
-  frontend state registries + request amplification (§C2/§G6), `examples/`
-  in the sdist (§A8), `_route_get` route table (§C4 #3). Disjoint file
-  ownership; this session keeps every doc and every merge.
+- [x] §C4 #3: `_route_get` 89 → 13 and `_route_post` 80 → 11, guarded by 16
+  characterisation tests that passed on the pre-refactor tree too. Merged.
+- [x] §A8: `skillsmgr/examples/skills-manager-management/` ships as package
+  data (it was absent from the sdist **and** the wheel), and the packaging
+  gate now proves it is present. Merged.
+- [x] Complexity ratchet: the baseline was carrying silent guard headroom
+  (`_route_get` recorded 96, measured 13, and the ratchet only fails on
+  *increase*). Regenerated with 0 entries raised, and `slack_baseline_keys()`
+  now fails the gate whenever an entry sits above its measured metric.
+- [/] Still in flight: agent-scope read cost (§D1) and frontend state
+  registries + request amplification (§C2/§G6).
 - [ ] C4 #4, second half only: the one-document invariant is implemented twice
   — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
   nothing keeping them equivalent. Needs a session that owns `scopes.py`.
+- [ ] **Context budget:** `docs/06-progress-log.md` is 38,729 words / ~92.8k
+  tokens as actually loaded — bigger than the whole MCP tool surface, and
+  14.5% of a 1M-token session before any work starts. The audit's own §C1
+  figure (45.7k) was both stale and arithmetically low. Archive entries older
+  than a fixed date to `docs/archive/` behind a one-page digest. Append-only
+  policy and `check_docs.py` structure make this a decision, not a cleanup.
 - [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
   rebuilt from the current tree, not the `6733da9` hashes in the progress log.
 - [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes

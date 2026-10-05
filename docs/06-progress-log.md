@@ -4,6 +4,120 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — Two parallel branches merged; the complexity ratchet had a hole
+
+**[SPEC]** Two of the four worktree branches are in: the god-router split
+(§C4 #3) and the packaged example (§A8). Both are merged, the ladder is green
+on the merged tree (**1,046 tests**), and each is recorded below.
+
+### The god routers are no longer gods — and the ratchet had a hole
+
+| function | before | after | LOC |
+|---|---|---|---|
+| `_route_get` | **89** | **13** | 311 → 36 |
+| `_route_post` | **80** | **11** | 210 → 34 |
+
+Twenty-four per-route guards with a `(parts, qs) -> bool` dispatcher; nothing
+went over budget, and two guards were split further rather than parked at
+exactly 15. Guarded by `tests/test_audit_route_table.py`: **16 characterisation
+tests that passed 16/16 on the pre-refactor tree** and again after, pinning
+status, body shape, the stable error `code`, the security header set on
+successes *and* errors, and **29 near-miss paths that must keep answering
+`unknown_endpoint`**. It went red exactly once — for a real defect the
+refactor introduced, a dropped `self.` that turned `/api/tokens?name=` into a
+500. A separate 106-observation probe reports byte-identical responses before
+and after.
+
+**[SPEC] The audit's numbers for this were wrong again, and in an instructive
+way.** It quotes `_route_get` at complexity 96 and "89 branches". **96 is what
+`complexity-baseline.json` recorded** — the branch quoted the baseline file
+instead of measuring; the code had already fallen to 89. And "89 branches" is
+the *complexity* number mislabelled.
+
+**That mistake is not harmless, and finding it exposed a real defect in the
+gate itself.** Because the baseline recorded 96 while the code measured 89,
+and the ratchet fails only on *increase*, that entry had been carrying **7
+points of silent guard headroom** the whole time — and after the refactor it
+would have carried 83, letting complexity grow back from 13 to 96 without a
+word. The same shape as §A4: a gate that reports PASS about slack nobody is
+tracking.
+
+So the baseline was regenerated — and the diff was audited before committing:
+**0 entries raised, 8 lowered, 53 added, 0 removed.** Refreshing a baseline
+*downward* is now *required*, because it is the only way the guard keeps
+pointing at reality.
+
+`slack_baseline_keys()` makes that durable. It is the mirror of the existing
+`unresolved_baseline_keys()` (which catches an entry that guards *nothing*):
+this one catches an entry that guards *less than it claims*. Red-first proof —
+injecting the old `96` makes the gate fail with
+
+```text
+ERROR: baseline entry is above the measured metric: …::_route_get: baseline 96 > measured 13
+```
+
+and injecting a five-branch bump into the real function now fails with
+`complexity 13 -> 18`, which the stale baseline would have waved through.
+Three regression tests pin it, including one asserting no real repository entry
+is above its measured metric. **Raising a baseline to silence an increase
+remains forbidden; this check is what makes the difference visible.**
+
+### The agent-facing skill now ships — and the audit understated why
+
+`examples/skills-manager-management/` is the only artifact that lets an AI
+agent drive this tool safely. §A8 said it was missing from the sdist.
+Measured with a real build (throwaway venv, pinned hash-verified toolchain,
+`--no-isolation`): it was missing from the **sdist and the wheel**, so
+`pip install skill-control-plane` gave zero access to it.
+
+Shipped as package data at `skillsmgr/examples/`. Sdist-only would not have
+fixed it — PyPI's default for `pip install` is the wheel, and an sdist is
+rebuilt into a wheel that drops non-package files. `MANIFEST.in` needed no
+change; `skillsmgr/examples/` has no `__init__.py`, so `packages.find` leaves
+it inert data that cannot shadow a real `examples` package on a consumer's
+import path.
+
+`check_package_data.py` now proves the example is present and readable, and —
+the more valuable half — the prohibitions it always had (`tests/`, `docs/`,
+`.env`, a database, bytecode, the vendored Vue sha256, PEP 639 MIT metadata)
+finally have **offline coverage that fires against a real artifact**. The old
+gate happily accepted an archive that silently dropped the agent entry point.
+
+**[NOTE] The remaining gap is a decision, not a defect.** Nothing *offers* the
+example: no CLI command can, without locked-constraint-5 approval.
+`skills-mgr init --with-management-skill` is the follow-up to decide, and
+until then the docs must describe the manual path.
+
+## 2026-10-05 — The progress log is bigger than the audit said, by ~78%
+
+**[SPEC]** docs/24 §C1 flags `docs/06-progress-log.md` as "the pathological
+case its own hygiene report diagnoses" and quotes it at **34,282 words ≈ 45,700
+tokens**. Re-measured on the current tree:
+
+```text
+38,729 words   297,773 characters   3,749 lines
+~80k tokens at 3.7 chars/token
+92.8k tokens as actually loaded (reported by /context for this session)
+```
+
+Two errors, not one. The file grew, and the audit's **own arithmetic was
+low**: 34,282 words at 45,700 tokens implies ~3 characters per word, which is
+below what English prose costs in subword tokens even then. So the figure was
+an undercount for the size it measured, not just a stale size.
+
+**Why this is not a documentation nit.** Memory files are injected into every
+session's context window. In this session they consumed **145.4k of 1M tokens
+(14.5%)**, of which this one file is 92.8k — larger than the entire MCP tool
+surface. The audit's recommendation ("archive the progress log by year and
+point the compaction anchor at a bounded digest") is right and is roughly
+**twice as urgent** as the number it was written against.
+
+**[NOTE] Not done here, deliberately.** The log is append-only by policy and
+`check_docs.py` enforces its HADS structure, so pruning it is a decision, not
+a cleanup. The smallest change that would recover most of the context is to
+move entries older than a fixed date into `docs/archive/` and leave a one-page
+digest in its place. Recorded in `task.md` for the maintainer.
+
 ## 2026-10-05 — Four worktrees, four independent tasks, one owner per file
 
 **[NOTE]** The remaining audit work was fanned out to four subagents, each in

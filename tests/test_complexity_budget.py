@@ -130,6 +130,49 @@ class ComplexityRatchetTests(unittest.TestCase):
         # And it is not counted as a complexity violation -- it is its own class.
         self.assertEqual(check_complexity.evaluate_metrics(metrics, baseline), [])
 
+    def test_a_baseline_entry_above_the_measured_metric_is_reported(self) -> None:
+        """A stale-high entry is silent guard headroom (docs/24 A4).
+
+        The ratchet only fails on *increase*, so a baseline that records a
+        number higher than the function measures lets complexity grow back
+        unnoticed.  ``_route_get`` sat recorded at 96 while the code measured
+        13, which would have allowed a sevenfold regrowth with no complaint.
+        """
+        source = "def demo(v):\n" + "".join(
+            f"    if v == {i}:\n        return {i}\n" for i in range(12)
+        ) + "    return -1\n"
+        metrics = check_complexity.collect_metrics(source, "synthetic.py")
+        self.assertEqual(13, metrics[0].complexity)
+        baseline = {"threshold": 15, "functions": {metrics[0].key: {"complexity": 96}}}
+        slack = check_complexity.slack_baseline_keys(metrics, baseline)
+        self.assertEqual([f"{metrics[0].key}: baseline 96 > measured 13"], slack)
+        # ... and it is not a violation-of-budget in its own right: 13 <= 15.
+        self.assertEqual([], check_complexity.evaluate_metrics(metrics, baseline))
+
+    def test_a_baseline_entry_at_or_below_the_measured_metric_is_not_slack(self) -> None:
+        source = "def demo(v):\n" + "".join(
+            f"    if v == {i}:\n        return {i}\n" for i in range(12)
+        ) + "    return -1\n"
+        metrics = check_complexity.collect_metrics(source, "synthetic.py")
+        for recorded in (13, 12):
+            with self.subTest(recorded=recorded):
+                baseline = {
+                    "threshold": 15,
+                    "functions": {metrics[0].key: {"complexity": recorded}},
+                }
+                self.assertEqual([], check_complexity.slack_baseline_keys(metrics, baseline))
+
+    def test_no_real_repository_entry_is_above_its_measured_metric(self) -> None:
+        """The checked-in baseline tracks reality, so the guard has no slack."""
+        metrics, parse_errors = check_complexity.scan_repository()
+        self.assertEqual([], parse_errors)
+        baseline = check_complexity.load_baseline()
+        self.assertEqual(
+            [],
+            check_complexity.slack_baseline_keys(metrics, baseline),
+            "a baseline entry is above its measured metric; regenerate with --write-baseline",
+        )
+
     def test_the_ratchet_covers_the_modules_that_hold_the_logic(self) -> None:
         """The 2026-09-09 CLI split left 2,076 lines outside the ratchet.
 

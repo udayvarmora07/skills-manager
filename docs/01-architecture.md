@@ -43,6 +43,7 @@ skills-manager/
     bundles.py       # offline HMAC manifest evidence; no archive integration
     registry.py      # bounded skills.sh API, cache, snapshots, provenance
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
+    examples/       # the agent-facing management skill, shipped as package data
   smoke_store.py     # smoke test driving the Store API (hermetic fixture)
   smoke_web.py       # smoke test driving the REST API (hermetic fixture)
   smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers
