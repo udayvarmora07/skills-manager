@@ -37,6 +37,39 @@
 - **ALWAYS**: keep the filesystem as source of truth; surface `StoreError`/`SkillNotFound` as clean dialogs/errors, never raw tracebacks; run `python3 smoke_store.py` after touching `store.py` and `python3 smoke_web.py` after touching `webapp.py`; update `task.md` and `docs/06-progress-log.md` after each change.
 - Never fabricate metrics or docs facts; if unsure, mark `[?]` and ask.
 
+## Hostile self-review before declaring done
+
+**[SPEC]** A green ladder is evidence about the *tests*, not about the change.
+Run these before calling anything done — and again before committing, against
+the diff rather than the intention:
+
+1. How would a malicious or careless caller abuse this? (traversal, replay,
+   race, enumeration, a value that reaches the filesystem or a terminal)
+2. What happens at 0 items, 1 item, and 10,000 items?
+3. What if it runs twice, concurrently, or out of order?
+4. What if the client double-clicks, refreshes, or disconnects mid-flow?
+5. Does every new branch also have a `finally`/rollback, and does every new
+   claim in a docstring or doc have a reader?
+6. Would this still be true if the thing I checked is partial, corrupt, or
+   missing — not just happy?
+7. Is there a simpler way?
+
+Then: **re-run the ladder on the current tree** (another session may have
+edited it), and state plainly what you verified, what you assumed, and what you
+could not check.
+
+**[NOTE]** This is not decorative. On 2026-10-05 a review against exactly this
+list found **six** defects in a change that had already passed 937 tests and
+every gate — including a `GET /api/history` that answered HTTP 500 with
+`no such table: history`, and a docstring promising a write path behaved a way
+it did not. See `docs/06-progress-log.md`.
+
+**Stuck protocol.** Max 5 attempts at the same failure with the same approach;
+after 2, change approach (re-read the error, check the docs for the *installed*
+version, bisect, reduce to a minimal repro). After 5, write down what you tried
+and what you learned, move to the next unblocked task, and say so. Never disable
+a test, a lint rule, or a gate to get to green.
+
 ## Concurrent writers
 
 **[SPEC]** One writer per working tree, per task. This repo has been edited by two

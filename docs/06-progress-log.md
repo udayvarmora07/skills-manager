@@ -4,6 +4,48 @@
 
 **AI manifest**: Dated, append-only record of changes, decisions, and bugs for skills-manager. Read before/after every session (docs/README.md reading order). Facts flagged stale here are corrected in the owning doc. Newest entry on top.
 
+## 2026-10-05 — A generic agent manual arrived; one part was adopted, the rest was not
+
+**[NOTE]** `AGENTS-1.md` (repo root) is a **template for a multi-tenant SaaS
+product** — TypeScript/Next.js/Postgres/Redis/Kubernetes defaults, a
+signup→payment lifecycle, billing/GTM/legal phases, and `<<PLACEHOLDERS>>`
+still unfilled. It is not written for this project, and most of it does not
+apply. Recorded here so a future session does not helpfully "modernise" this
+codebase to match it.
+
+**Adopted** — the parts that are non-conflicting and that this session proved
+worth their cost, folded into `AGENTS.md`:
+
+- **§9.3's hostile self-review checklist**, made a standing gate before
+  declaring done. This is not decorative: run against `cfdf56a`/`b258c23` it
+  found **six** defects in code that had already passed 937 tests and every
+  gate — a `GET /api/history` answering HTTP 500 with `no such table: history`,
+  a write path still emitting the interpreter text the fix promised to remove,
+  two routes answering 200 beside four answering 404, `Path.exists()` making a
+  dangling symlink read as an empty library, a `doctor()["repair"]` field with
+  no reader, and a `_coalesced_read` that leaked its in-flight entry on
+  `KeyboardInterrupt` so one Ctrl-C permanently wedged that endpoint.
+- **§4.2's inner build loop with an escalation rule** (max 5 attempts; change
+  approach after 2) and **§4.5's stuck protocol**.
+- **§1's "you never hide uncertainty"** — already in force; kept explicit.
+
+**Deliberately not adopted**, because each would break something this repo
+holds on purpose:
+
+| Template says | This repo | Why |
+|---|---|---|
+| §7 TypeScript/Next.js/Postgres/Redis, shadcn/ui | stdlib-only Python + SQLite index, vendored Vue, no build step | Locked constraints 3 and 4. §7 itself says "override only via ADR". |
+| §6 SaaS lifecycle (billing, orgs, tenancy, RLS) | a single-developer local tool | Not this product. |
+| §12 `docs/PROJECT_STATE.md`, `DECISIONS.md`, `ROADMAP.md`, `LESSONS.md` | `AGENTS.md` + `docs/SESSION-CONTEXT.md` + `docs/ADR-*` + `task.md` + `docs/06-progress-log.md` | Equivalent records exist and are enforced by `check_docs.py`; renaming would break every `@docs/` pointer. |
+| §8 "never commit to `main` directly" | commits land on `main` | A workflow change is the owner's call, not a side effect of adding a file. |
+| §13 command placeholders | the verification loop in @docs/SESSION-CONTEXT.md | The real commands are already written down and true. |
+
+**Not restructured:** `AGENTS.md` is deliberately a small router-style hot cache
+— docs/24 §C1 calls this repository "the pathological case its own hygiene
+report diagnoses", because `docs/06-progress-log.md` alone is ~45,700 tokens.
+The adopted rules went into `AGENTS.md`'s existing "Judgment boundaries"
+section rather than replacing it with a 523-line manual.
+
 ## 2026-10-05 — D3-5: an unsafe upload part no longer vanishes
 
 **[SPEC]** Closed @docs/24 §D3-5. Reproduced on the live `PUT /api/import`
