@@ -550,6 +550,61 @@ class WebAppHandler(BaseHTTPRequestHandler):
             # of view; there is no useful error response left to send.
             return
 
+    def _stream_file(self, path: Path, chunk_size: int = 64 * 1024) -> None:
+        """Send a file in bounded chunks, tolerating a client that leaves.
+
+        An export is as large as the library, so buffering it whole held one
+        full copy in memory per concurrent download, on top of the file.
+        """
+        try:
+            with path.open("rb") as handle:
+                while True:
+                    chunk = handle.read(chunk_size)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Same contract as _write_body: the client is already gone and
+            # there is no useful error response left to send.
+            return
+
+    def _serve_export(self, qs: dict[str, list[str]]) -> None:
+        """Stream an export download without leaving an archive behind.
+
+        A download is a read: the archive is built in a private temporary
+        directory and removed afterwards.  This used to call ``export()`` with
+        no destination, so every request created
+        ``<data>/backups/export-<timestamp>.tar.gz`` and never removed it --
+        and `backups/` has no retention, so a browser prefetch, a retry or a
+        double click grew it permanently with archives nobody asked to keep
+        (docs/24 §D3-3).  The CLI keeps its documented behaviour: it passes no
+        destination and still writes to `backups/`.
+        """
+        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        if scope != "global":
+            self._send_error(400, "export is only available for the global scope")
+            return
+        full = qs.get("full", ["0"])[0] in ("1", "true", "yes")
+        staging = tempfile.mkdtemp(prefix="skillsmgr-webui-export-")
+        try:
+            archive = self.store.export(
+                dest=Path(staging) / f"{'full-export' if full else 'export'}.tar.gz",
+                full=full,
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "application/gzip")
+            self.send_header(
+                "Content-Disposition", f'attachment; filename="{archive.name}"'
+            )
+            self.send_header("Content-Length", str(archive.stat().st_size))
+            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
+            self.end_headers()
+            if self.command != "HEAD":
+                self._stream_file(archive)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
     def _send_security_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -1068,20 +1123,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 )
             )
         elif parts == ["api", "export"]:
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            if scope != "global":
-                self._send_error(400, "export is only available for the global scope")
-                return
-            archive = self.store.export(full=qs.get("full", ["0"])[0] in ("1", "true", "yes"))
-            body = archive.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/gzip")
-            self.send_header("Content-Disposition", f'attachment; filename="{archive.name}"')
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self._send_security_headers()
-            self.end_headers()
-            self._write_body(body)
+            self._serve_export(qs)
         else:
             self._send_error(404, "unknown endpoint")
 

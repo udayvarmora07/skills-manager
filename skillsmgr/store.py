@@ -200,7 +200,12 @@ def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
     if owner:
         try:
             result = func()
-        except Exception as exc:
+        except BaseException as exc:
+            # ``BaseException``, not ``Exception``: a KeyboardInterrupt inside
+            # the read used to skip this cleanup, leaving the flight registered
+            # with its event never set -- so the *next* caller for that key
+            # waited forever.  Because list/search/stats/doctor coalesce on
+            # fixed keys, one Ctrl-C permanently wedged that endpoint.
             with flights_lock:
                 flight["error"] = exc
                 flights.pop(key, None)
@@ -945,7 +950,11 @@ class Store:
         from whatever surface reported it.
         """
         for path in self._managed_layout_dirs():
-            if path.exists() and not path.is_dir():
+            # ``lexists``, not ``exists``: a *dangling* symlink is a broken
+            # layout, and ``exists`` follows the link and reports it absent --
+            # which turned a whole library behind a dangling link into an
+            # apparently empty one.
+            if os.path.lexists(path) and not path.is_dir():
                 raise self._layout_error(path, "a directory")
         # The index is the one component that must *not* be a directory.
         if self.db_path.is_dir():
@@ -1006,6 +1015,19 @@ class Store:
             return []
         try:
             return [dict(row) for row in conn.execute(query, params).fetchall()]
+        except sqlite3.Error as exc:
+            # The read seam proved only that *a* skills table exists, not that
+            # this query's table or columns do.  A hand-truncated or partially
+            # created index would otherwise escape as a raw driver error --
+            # HTTP 500 with "no such table: history" in the server log, which is
+            # exactly what ``_connect`` promises cannot happen.  The driver's
+            # own wording stays on stderr: it is the useful part for a
+            # maintainer and must not reach the client (D3-1's lesson).
+            _diagnose("skill index read failed", exc)
+            raise StoreError(
+                f"the skill index {self.db_path} cannot answer this read; "
+                "rebuild it with `skills-mgr db rebuild`"
+            ) from exc
         finally:
             conn.close()
 
@@ -1026,7 +1048,14 @@ class Store:
         return row is not None
 
     def _ensure_store_dirs(self) -> None:
-        """Create the private data directories needed by Store operations."""
+        """Create the private data directories needed by Store operations.
+
+        The layout is checked *before* anything is created, so a damaged
+        component is reported as :class:`StoreLayoutError` -- naming the path
+        and its repair -- instead of ``mkdir_private``'s own text, which names
+        an internal path and hands the user no way forward.
+        """
+        self._check_store_layout()
         for path in (
             self.data_dir,
             self.skills_dir,
@@ -2096,6 +2125,7 @@ class Store:
 
     def trash_list(self) -> list[dict]:
         """List soft-deleted skills in the trash directory."""
+        self._check_store_layout()
         if not self.trash_dir.is_dir():
             return []
         result = []
@@ -2252,12 +2282,19 @@ class Store:
         counter, because ``export()`` and ``backup()`` share a one-second
         timestamp and used to silently overwrite each other.
         """
-        self._init_db()
-        self.backups_dir.mkdir(parents=True, exist_ok=True)
+        # Not ``_init_db()``: an export never reads the index (it scans the
+        # tree), so bootstrapping was pure side effect -- it created the whole
+        # layout and a 32 KB index just to serve a download (docs/24 §D3-3).
+        self._check_store_layout()
         stem = "full-export" if full else "export"
         if dest is None:
+            self.backups_dir.mkdir(parents=True, exist_ok=True)
             dest = _unique_dest(self.backups_dir, f"{stem}-{_trash_timestamp()}", ".tar.gz")
         else:
+            # A caller-supplied destination is not in `backups/`, so this must
+            # not create `backups/` either: the web route stages a download in a
+            # private temporary directory and would otherwise leave an empty
+            # directory behind on every request (docs/24 §D3-3).
             dest = Path(dest).expanduser()
             dest.parent.mkdir(parents=True, exist_ok=True)
         entries = self._scan_dir(self.skills_dir)

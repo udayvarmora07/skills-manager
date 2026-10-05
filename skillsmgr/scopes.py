@@ -234,6 +234,11 @@ def list_scopes(
     """
     from .tokens import aggregate as _agg
 
+    # A broken layout is one condition with one answer, whatever the route.
+    # Reporting the global root as ``missing`` -- and ``writable`` -- while four
+    # other routes answer 404 was how the UI ended up half-broken and
+    # half-looking-healthy (docs/24 §D3-4).
+    _global_store()._check_store_layout()
     by_scope: dict[str, list[dict]] | None = None
     if records is not None:
         by_scope = {}

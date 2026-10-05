@@ -215,6 +215,31 @@ def validate_cli_combinations(args) -> None:
             raise StoreError("update mutations cannot use --scope all; choose one exact scope")
 
 
+# Commands that only read. They never create the data layout, the index file
+# or the schema, so `doctor` can report a lost index instead of rebuilding it
+# before it looks.
+_READ_ONLY_COMMANDS = frozenset(
+    {"list", "ls", "view", "search", "stats", "doctor", "history", "scopes", "tokens"}
+)
+
+
+def _is_read_only(args) -> bool:
+    return getattr(args, "command", None) in _READ_ONLY_COMMANDS
+
+
+def _ensure_index_for(store: Store, args) -> None:
+    """Bootstrap the index, unless this command only reads.
+
+    A read command must not bootstrap: `skills-mgr doctor` recreating the index
+    before it audits is how a lost index could never be reported -- the exact
+    "a read that repairs the disk on its way to answering" defect docs/24 §D3-4
+    closed on the web side.  Reads handle an absent index themselves
+    (docs/04-store-api.md), so nothing needs the bootstrap here.
+    """
+    if not _is_read_only(args):
+        store.init_db()
+
+
 def make_store(args) -> Store:
     """Build a Store for parsed CLI args, honoring ``--data-dir``/color flags."""
     if args.data_dir:
@@ -224,10 +249,7 @@ def make_store(args) -> Store:
     elif args.color == "never":
         colors.COLORS.enabled = False
     store = Store()
-    # Ensure the index schema exists so every command (not just `init` and
-    # read paths that self-initialize) works on a fresh data directory;
-    # `init_db` is idempotent and runs after name validation.
-    store.init_db()
+    _ensure_index_for(store, args)
     return store
 
 
@@ -837,6 +859,20 @@ def _render_hygiene_text(report: dict) -> None:
             )
 
 
+def _print_doctor_index_report(report: dict) -> None:
+    """Show what to do about the index, not only that something is wrong.
+
+    A ``repair`` line with no reader is a promise nobody keeps, and "database
+    integrity check failed" is the wrong wording for an index that was never
+    built.
+    """
+    for line in report.get("repair") or []:
+        print(f"  repair: {line}")
+    integrity = report.get("db_integrity")
+    if integrity and integrity not in ("ok", "unindexed"):
+        print(f"  database integrity check failed: {integrity}")
+
+
 def cmd_doctor(args, store: Store) -> int:
     scope = scope_from_args(args)
     from . import scopes
@@ -906,8 +942,7 @@ def cmd_doctor(args, store: Store) -> int:
             f"  {len(report['undecodable_documents'])} skill document(s) not valid UTF-8: "
             f"{names}{suffix} - re-save as UTF-8"
         )
-    if report.get("db_integrity") and report["db_integrity"] != "ok":
-        print(f"  database integrity check failed: {report['db_integrity']}")
+    _print_doctor_index_report(report)
     # Also show scope summary when --scope all.
     if scope == "all":
         try:
