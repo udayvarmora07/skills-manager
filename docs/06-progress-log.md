@@ -299,8 +299,8 @@ toolchain (`setuptools==84.0.0`, `build 1.2.2.post1`, Python 3.12.3),
 
 | artifact | bytes | sha256 |
 |---|---|---|
-| `skill_control_plane-1.0.2-py3-none-any.whl` | 369,397 | `efee22f311284e33bf811ce52571d8a365547e56f1ecc2f0b14585d3b3d5dded` |
-| `skill_control_plane-1.0.2.tar.gz` | 348,984 | `817c46f5cd1ea3733a41fa90d370861c194be26375c7ce743389fffe417ba770` |
+| `skill_control_plane-1.0.2-py3-none-any.whl` | 380,909 | `032ae3682afb50ebbfc5e252ef40c26fa7e29d9bdb2e91ccfdea158746c86ce8` |
+| `skill_control_plane-1.0.2.tar.gz` | 361,035 | `fc0f34cb723774dedc5566a0bdfed267d435c3b13d66ddac14584ca82791982e` |
 
 **[SPEC] These supersede the 2026-09-23 hashes** (`2d7beb9b…` / `3e8aa27a…`, from
 commit `6733da9`). That entry is marked as superseded in place rather than left
