@@ -1166,13 +1166,15 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if len(q) > MAX_QUERY_LEN:
             self._send_error(400, "search query too long")
             return True
-        if scope in ("all", ""):
-            if scope == "all":
-                from .scopes import search_all as _search_all
+        # ``scope`` cannot be empty: line above coerces "", "   " and an absent
+        # parameter all to "global".  A ``scope in ("all", "")`` test therefore
+        # had an unreachable else-branch calling ``self.store.search(q)``, which
+        # read as though that were a live path and hid where search really runs
+        # (``scopes.search_all``).  Removed rather than left to mislead.
+        if scope == "all":
+            from .scopes import search_all as _search_all
 
-                rows = _search_all(q, scope_id="all", store=self.store)
-            else:
-                rows = self.store.search(q)
+            rows = _search_all(q, scope_id="all", store=self.store)
             _enrich_rows_with_catalog(self.store, rows)
             self._send_json(rows)
         elif scope == "global":

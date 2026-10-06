@@ -53,12 +53,12 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
-## Current state (measured 2026-10-06 on `8669742`)
+## Current state (measured 2026-10-06 on the search-record pass)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.
 
-- `python3 -m unittest discover -s tests` — **1,207 tests, OK** (120.7 s).
-- `python3 check_complexity.py` — **688 functions across 16 files**, new-function
+- `python3 -m unittest discover -s tests` — **1,211 tests, OK** (108.5 s).
+- `python3 check_complexity.py` — **689 functions across 16 files**, new-function
   budget ≤ 15, no ratchet increase.
 - `python3 check_docs.py` — **PASSED**. `python3 smoke_store.py` and
   `python3 smoke_web.py` — both green on this base commit.
@@ -132,10 +132,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-10-06)
 
-**[NOTE]** 23 dated entries; full text follows.
+**[NOTE]** 24 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-10-06 | A search body cost one document read per row, to compute nothing |
 | 2026-10-06 | G8 shipped inside the tagged 1.0.2, and five records still said it had not |
 | 2026-10-06 | The action-pin gates were blind to half the workflow |
 | 2026-10-06 | The default Library view stopped re-deriving an unchanged document |
@@ -162,6 +163,80 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-10-06 — A search body cost one document read per row, to compute nothing
+
+**[SPEC]** The open item recorded a measured cost — 498 ms at 600 skills, 600
+cache hits and 600 misses — and a correct explanation: a reuse-cache *hit* still
+costs a file read plus the sha256 that forms the key. Two of its three
+conclusions were wrong.
+
+**The call site was wrong.** The per-row `Store.get()` was never in
+`Store.search()`; it was in `scopes._global_search_records`, which the route
+reaches through `search_all()`. And the route's own `Store.search()` call was
+**dead code**: `scope = (qs.get("scope", [""])[0] or "global").strip() or "global"`
+coerces `""`, `"   "` and an absent parameter all to `"global"`, so the
+`if scope in ("all", "")` test could never take its `else`. That branch is
+removed, and a source-reading test now fails if a `Store.search` call reappears
+in `_route_search_get` — a behavioural test cannot see it, because it is
+unreachable.
+
+**The waste was bigger than "a per-row SQLite query".** `Store.get()` returns
+`body` **from the index** (`SELECT *`) and spends its document read only filling
+`Store._OBSERVED_KEYS`, which does not include `body` and which this caller
+discarded entirely. So the old form re-read and re-hashed **every document in
+the library to derive metadata nobody looked at**. The reuse cache could not
+help: proving the bytes unchanged *is* the file read.
+
+**[SPEC] Fixed with one `SELECT name, body`** over the existing private
+`Store._index_rows` read seam — not a new public `Store` method, which is
+locked-constraint 5. `scopes` already reached a private `Store` method
+(`_check_store_layout`), so this crosses a line that already exists.
+
+Interleaved A/B, hermetic, best-of-5 per arm:
+
+| rows | old (per-row `Store.get`) | new (one `SELECT`) | change |
+|---|---|---|---|
+| 200 | 100.0 ms | 32.6 ms | **3.07x, −67.4%** |
+| 1,000 | 564.7 ms | 183.9 ms | **3.07x, −67.4%** |
+
+Flat across a 5x change in size, because both arms are O(n) and only the per-row
+constant moves.
+
+**[NOTE] "Byte-identical" was checked, and was nearly a false claim.** At 300
+skills every compared field matched. At 1,000 skills the first run reported the
+outputs as *differing* — the only field, across all 1,000 rows, was
+`observed_at`, and only because the two arms ran one second apart
+(`12:04:52Z` vs `12:04:53Z`). That field records *when the read happened*, so
+two runs seconds apart cannot agree. Recorded here rather than smoothed over,
+because the same check at a smaller size would have said "identical" and been
+wrong at the larger one.
+
+**[SPEC] The body *source* is deliberately unchanged** — still the index,
+exactly as `Store.search()` has always used it — so `skills-mgr search` and the
+web route keep agreeing on what a body match means. Making this route
+filesystem-authoritative would leave the CLI disagreeing with it, which is worse
+than the staleness it removes. That is now pinned by a test, so a future
+"fix" cannot silently open the split.
+
+**Red-first:** the counting test reports **5 `Store.get()` calls before, 0
+after**; the dead-branch test fails against the pre-change `webapp.py`. Two
+further tests pin the preserved behaviour (bodies attached, never `None`;
+unresynced disk edits not searchable) and pass both before and after, which is
+what guard tests are for.
+
+The complexity ratchet caught the dict comprehension as `+1` on
+`_global_search_records`; that was **restored by extraction**
+(`_indexed_bodies`), not by re-baselining. Removing the dead branch then left
+`_route_search_get`'s baseline stale-high at 8 against a measured 7, so the
+baseline was refreshed — and the refresh was **audited before committing**:
+**0 entries raised, 1 lowered, 1 added, 0 removed**, every other diff line a
+`lineno` shift. Refreshing downward is required, because it is the only way the
+guard keeps pointing at reality.
+
+No CLI command, public `Store` method, SQLite schema, or dependency changed.
+The two doc lines describing the old "public `list()`/`get()` seam" are updated
+in the same commit.
 
 ## 2026-10-06 — G8 shipped inside the tagged 1.0.2, and five records still said it had not
 

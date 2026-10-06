@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import json
@@ -124,6 +125,104 @@ class SearchRankingTests(SearchContractCase):
         self.assertEqual(
             [record["name"] for record in self.store.search("needle")],
             ["global-body", "global-description"],
+        )
+
+
+class SearchRecordLoadingTests(SearchContractCase):
+    """Pin *how many* documents a search reads, not only what it returns.
+
+    A test that asserts the returned rows passes equally before and after the
+    per-row ``Store.get()`` is removed, so it cannot see this defect at all. The
+    wasted work was invisible to every ranking test in this file.
+    """
+
+    def test_global_search_records_do_not_re_read_every_document(self):
+        self.add_global_fixtures()
+        calls = {"get": 0}
+        original = self.store.get
+
+        def counting_get(name):
+            calls["get"] += 1
+            return original(name)
+
+        self.store.get = counting_get
+        try:
+            records = scopes._global_search_records(self.store)
+        finally:
+            self.store.get = original
+
+        self.assertGreater(len(records), 1, "fixture should produce several records")
+        self.assertEqual(
+            calls["get"], 0,
+            "a search body must not cost one Store.get() per row: Store.get() "
+            "returns body from the index and spends its document read filling "
+            "_OBSERVED_KEYS, which this caller discards entirely",
+        )
+
+    def test_global_search_records_attach_the_indexed_body(self):
+        self.add_global_fixtures()
+        records = {r["name"]: r for r in scopes._global_search_records(self.store)}
+        self.assertIn("needle", records["global-body"]["body"])
+        self.assertIn("body", records["global-description"])
+        # A row the caller holds must never be left without a body string,
+        # because the ranking scorer matches against it unconditionally.
+        for name, record in records.items():
+            self.assertIsInstance(record["body"], str, name)
+
+    def test_search_bodies_are_never_read_from_a_stale_document(self):
+        """Bodies come from the index, so an unresynced disk edit is not matched.
+
+        This is the behaviour the optimisation had to *preserve*. If a future
+        change makes this route filesystem-authoritative, ``skills-mgr search``
+        (which matches on the indexed body via ``Store.search()``) and this
+        route would disagree about the same query -- a worse defect than the
+        staleness, so it is pinned rather than left to be discovered.
+        """
+        self.add_global_fixtures()
+        self.assertEqual(
+            [r["name"] for r in scopes.search_all("needle", scope_id="global")],
+            ["global-body", "global-description"],
+        )
+        path = Path(self.store.skills_dir) / "global-body" / "SKILL.md"
+        text = path.read_text(encoding="utf-8").replace(
+            "needle in the body", "kettle in the body",
+        )
+        path.write_text(text, encoding="utf-8")
+        self.assertEqual(
+            [r["name"] for r in scopes.search_all("kettle", scope_id="global")],
+            [],
+            "an unresynced on-disk edit must not become searchable yet",
+        )
+
+    def test_the_search_route_has_no_second_unreachable_search_path(self):
+        """``scope`` is coerced non-empty, so a ``""`` branch can never run.
+
+        The route used to test ``scope in ("all", "")`` and keep an else-branch
+        calling ``self.store.search(q)``. It was unreachable on every request,
+        so no behavioural test can see it -- it read as a live path and hid
+        where search actually runs. Only reading the source catches this, which
+        is the same reason ``tests/test_one_document_invariant.py`` has one
+        source-reading test.
+        """
+        source = Path(scopes.__file__).resolve().parent / "webapp.py"
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        route = next(
+            node
+            for cls in tree.body if isinstance(cls, ast.ClassDef)
+            for node in cls.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_route_search_get"
+        )
+        called = [
+            ast.unparse(node.func)
+            for node in ast.walk(route)
+            if isinstance(node, ast.Call)
+        ]
+        self.assertNotIn(
+            "self.store.search",
+            called,
+            "_route_search_get must route every scope through scopes.search_all; "
+            "a Store.search call here is either dead code or a second, "
+            "differently-behaving search path",
         )
 
 

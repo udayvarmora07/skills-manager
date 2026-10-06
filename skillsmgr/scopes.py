@@ -1003,14 +1003,43 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
     return {"name": name, "snapshot": snapshot, "scope": scope_id}
 
 
+def _indexed_bodies(store: Store) -> dict[str, str]:
+    """Map every indexed skill name to its stored body, in one read."""
+    return {
+        row["name"]: row["body"]
+        for row in store._index_rows("SELECT name, body FROM skills")
+    }
+
+
 def _global_search_records(store: Store | None = None) -> list[dict]:
-    """Return global list rows with bodies loaded through Store's public API."""
+    """Return global list rows with their indexed bodies attached.
+
+    Bodies come from one ``SELECT name, body`` rather than a ``Store.get()`` per
+    row.  ``Store.get()`` returns ``body`` *from the index* and spends its
+    document read filling ``Store._OBSERVED_KEYS`` -- and this caller discards
+    every one of those keys, so the old form re-read and re-hashed every
+    document in the library to derive metadata nobody looked at.  It was the
+    whole cost of the call: the reuse cache cannot help, because proving the
+    bytes unchanged *is* the file read.
+
+    The body **source is deliberately unchanged** -- still the index, exactly as
+    ``Store.search()`` has always used it -- so the CLI and the web route keep
+    agreeing on what a body match means.  Making this route filesystem-
+    authoritative instead would leave ``skills-mgr search`` disagreeing with it,
+    which is a worse defect than the staleness it removes.
+
+    One ``_index_rows`` call rather than a new public ``Store`` method: the read
+    seam already exists, it is what every other read uses, and a new public
+    method is locked-constraint 5.  ``scopes`` already reaches a private ``Store``
+    method (``_check_store_layout``), so this crosses the same line that already
+    exists rather than drawing a new one.
+    """
     store = store or _global_store()
+    bodies = _indexed_bodies(store)
     records: list[dict] = []
     for row in store.list():
         record = dict(row, scope="global", scope_label="Global")
-        full = store.get(row["name"])
-        record["body"] = full.get("body", "")
+        record["body"] = bodies.get(row["name"], "")
         records.append(record)
     return records
 

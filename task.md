@@ -157,13 +157,54 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   `GET /api/skills?scope=global` read every document twice and the second read
   **clobbered a correct token estimate with 0** for any non-UTF-8 document
   (reproduced on the pre-change tree: 84 -> 0). Fixed in `21b755c`.
-- [ ] `/api/search` pays a full `Store.get()` per row for one field. Measured at
-  600 skills: 498 ms, 600 cache hits + 600 misses -- the reuse cache already
-  halves it, because a *hit* still costs a file read plus the sha256 that forms
-  the key. The remainder is a per-row SQLite query for a row the caller already
-  holds. Removing it needs a new `Store` method (locked constraint 5) or a
-  targeted body read; neither is quick, and it is not an outage at the measured
-  ~1,965-skill library.
+- [x] **`/api/search` no longer pays a `Store.get()` per row.** The measurement in
+  this item was sound and its reuse-cache explanation was correct, but **two of
+  its three conclusions were wrong**, and re-deriving them is the whole content
+  of this entry. The per-row `get()` was never in `Store.search()` — it was in
+  `scopes._global_search_records`, which the route reaches through
+  `search_all()`. And the route's *own* `Store.search()` call
+  (`webapp.py`, inside `if scope in ("all", "")`) was **dead code**: the line
+  above it coerces `""`, `"   "` and an absent parameter all to `"global"`, so
+  `scope` can never be empty and the `else` could never run. That branch is
+  removed, and a source-reading test now fails if a `Store.search` call
+  reappears in `_route_search_get` — a behavioural test cannot see it, because
+  it is unreachable.
+
+  The waste was larger than "a per-row SQLite query". `Store.get()` returns
+  `body` **from the index** (`SELECT *`) and spends its document read only
+  filling `Store._OBSERVED_KEYS`, which does not include `body`, and which this
+  caller discarded entirely. So the old form re-read and re-hashed **every
+  document in the library to derive metadata nobody looked at** — and the reuse
+  cache could not help, because proving the bytes unchanged *is* the file read.
+  Fixed with one `SELECT name, body` over the existing private
+  `Store._index_rows` read seam. Red-first: the counting test reports
+  **5 `Store.get()` calls before, 0 after**; the dead-branch test fails against
+  the pre-change `webapp.py`.
+
+  **[SPEC] The body *source* is deliberately unchanged** — still the index,
+  exactly as `Store.search()` has always used it — so `skills-mgr search` and
+  the web route keep agreeing on what a body match means. Making this route
+  filesystem-authoritative instead would leave the CLI disagreeing with it,
+  which is a worse defect than the staleness it removes; that behaviour is now
+  pinned by a test so a future "fix" cannot silently introduce the split.
+
+  **No new CLI command and no new public `Store` method** (locked constraint 5
+  untouched). `scopes` already reached a private `Store` method
+  (`_check_store_layout`), so this crosses an existing line. The two owning
+  doc lines that described the old "public `list()`/`get()` seam" are updated in
+  the same commit.
+
+  **Measured, not asserted.** Interleaved A/B on a hermetic 200-skill store,
+  best-of-5 per arm: **100.0 ms → 32.6 ms (3.07x, −67.4%)**. At 1,000 skills:
+  **564.7 ms → 183.9 ms (3.07x, −67.4%)** — flat, because both arms are O(n) and
+  only the per-row constant changes.
+  **Output equality checked field by field at both sizes.** At 300 skills:
+  `differing keys: NONE`. At 1,000 skills the *only* differing field across all
+  1,000 rows is `observed_at`, and only because the two arms ran one second
+  apart (`12:04:52Z` vs `12:04:53Z`) — it records *when the read happened*, so
+  two runs seconds apart cannot agree. Everything else, including `body`,
+  matched exactly. An earlier "byte-identical" claim would have been wrong on
+  that one field, which is why it was checked rather than assumed.
 - [x] **C4 #4, second half: the one-document invariant got one enforcement
   point** (`cf40958`). The audit called it "implemented twice"; it was
   **implemented four times** — `store._reject_both_documents`,
