@@ -980,6 +980,144 @@ class ReuseAboveTheBoundTests(ScopeReadCase):
             loader.document_reuse_worthwhile(loader.MAX_DOCUMENT_CACHE + 1)
         )
 
+    def test_every_mutable_field_leaves_the_cache_as_an_independent_object(self):
+        """The promise is "shares no mutable object", not "shares no dict".
+
+        ``missing_required`` is a ``list`` and was absent from
+        ``_MUTABLE_RECORD_KEYS``. Because ``dict(record)`` copies only the
+        mapping, the cache, every hit and every caller shared one list: a
+        caller appending to it wrote straight through into the cache and into
+        every later read in the process. Nothing mutated it at the time, so the
+        documentation was false rather than the behaviour being visibly wrong.
+
+        Red-first with the field missing from the constant, ``a`` and ``b``
+        below are the *same* list and the leak is observable.
+        """
+        record = {
+            "name": "demo",
+            "missing_required": ["name"],
+            "portable_frontmatter": {"a": 1},
+            "frontmatter_extensions": {"b": 2},
+            "provenance": {"path": "/x"},
+            "registry_provenance": {"source": "s"},
+            "tokens": 1,
+        }
+        a = loader.isolated_record(record)
+        b = loader.isolated_record(record)
+        for key, value in record.items():
+            if not isinstance(value, (dict, list, tuple)):
+                continue
+            self.assertIsNot(
+                a[key], b[key],
+                f"{key} must not be the same object across two reads",
+            )
+        a["missing_required"].append("INJECTED")
+        self.assertEqual(
+            record["missing_required"], ["name"],
+            "a caller mutation must not reach the source",
+        )
+        self.assertEqual(
+            loader.isolated_record(record)["missing_required"], ["name"],
+            "a caller mutation must not reach the next read",
+        )
+
+    def test_a_real_record_carries_no_uncopied_container(self):
+        """The isolation test must run on a real record, not a hand-written one.
+
+        A sibling test iterated ``_MUTABLE_RECORD_KEYS`` itself, so a field
+        *missing from that constant* was structurally incapable of failing it.
+        This one loads a real document and asks what ``load_skill`` actually
+        returns -- the mechanism-is-not-the-property failure, a fourth instance
+        of a class this repository has hit three times.
+        """
+        root = self._seed_flat(1)
+        skill_dir = root / "flat-0"
+        record = loader.load_skill(skill_dir)
+        containers = {
+            key: value
+            for key, value in record.items()
+            if isinstance(value, (dict, list, tuple))
+        }
+        self.assertTrue(containers, "the record must expose at least one container")
+        for key in containers:
+            self.assertIn(
+                key, loader._MUTABLE_RECORD_KEYS,
+                f"{key} is a {type(containers[key]).__name__} on a real record "
+                "but is not in _MUTABLE_RECORD_KEYS, so it is shared",
+            )
+
+    def test_a_value_past_the_copy_depth_bound_is_copied_not_returned(self):
+        """The depth guard promised ``deepcopy`` and returned identity.
+
+        Returning ``value`` there would hand the caller and the cache the same
+        object -- strictly worse sharing than the ``deepcopy`` the docstring
+        described. Currently unreachable from a real document (the parser never
+        nests deeply), which is exactly why a doc/code mismatch survives here.
+
+        Red-first: ``_copy_value(value, depth=99) is value`` was True.
+        """
+        nested = {"k": "v"}
+        copied = loader._copy_value(nested, depth=99)
+        self.assertEqual(copied, nested)
+        self.assertIsNot(
+            copied, nested,
+            "past the bound the value must be copied, not handed back by identity",
+        )
+
+    def test_the_bound_decision_counts_what_the_cache_already_retains(self):
+        """The cache is process-global; every caller measures one batch.
+
+        ``scopes.list_all()`` walks the scopes in sequence, so a per-scan
+        judgement made eight 700-skill scopes each read "700 <= 4096, reuse is
+        on" against a 5,600-document aggregate -- measured 0% reuse and +9.6%
+        over running with reuse off, which is the failure the guard exists to
+        prevent.
+
+        Red-first: comparing the scan alone returns True here whatever the cache
+        already holds.
+        """
+        loader.clear_document_cache()
+        self.addCleanup(loader.clear_document_cache)
+        with mock.patch.object(loader, "MAX_DOCUMENT_CACHE", 100):
+            # Occupancy 0: the scan alone decides.
+            self.assertTrue(loader.document_reuse_worthwhile(100))
+            self.assertFalse(loader.document_reuse_worthwhile(101))
+            # Occupancy 60: only 40 more fit.
+            for i in range(60):
+                loader._document_cache_store((f"held-{i}",), {"name": f"n{i}"})
+            self.assertEqual(loader.document_cache_size(), 60)
+            self.assertTrue(loader.document_reuse_worthwhile(40))
+            self.assertFalse(loader.document_reuse_worthwhile(41))
+
+    def test_a_merged_sweep_above_the_bound_skips_rather_than_thrashes(self):
+        """Eight scopes of 700 must not each decide on their own size.
+
+        Red-first: before the occupancy term, every scope saw 700 <= 4096 and
+        reuse stayed on for all eight -- 0% reuse and a net loss.
+        """
+        loader.clear_document_cache()
+        self.addCleanup(loader.clear_document_cache)
+        per_scope, scopes_count = 700, 8
+        with mock.patch.object(loader, "MAX_DOCUMENT_CACHE", 2000):
+            decisions = []
+            for scope_index in range(scopes_count):
+                decisions.append(loader.document_reuse_worthwhile(per_scope))
+                if decisions[-1]:
+                    for i in range(per_scope):
+                        # Distinct keys per scope: the same keys would overwrite
+                        # one another and occupancy would never grow.
+                        loader._document_cache_store(
+                            (f"s{scope_index}k{i}",), {"name": f"n{i}"}
+                        )
+        self.assertGreater(
+            sum(decisions), 0, "the early scopes genuinely fit and must reuse"
+        )
+        self.assertLess(
+            sum(decisions), scopes_count,
+            "a 5,600-document aggregate must not have every scope reuse",
+        )
+        self.assertLessEqual(loader.document_cache_size(), 2000)
+
     def test_a_scan_beyond_the_bound_still_reports_everything_it_found(self):
         """Turning reuse off must not change a single reported row."""
         root = self._seed_flat(6)

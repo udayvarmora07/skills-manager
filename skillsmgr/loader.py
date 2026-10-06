@@ -290,8 +290,33 @@ def document_reuse_worthwhile(document_count: int) -> bool:
     Above the bound the honest answer is therefore to skip reuse rather than
     thrash -- the caller keeps exactly the behaviour it had before the reuse
     existed, with none of its cost.
+
+    **[SPEC] The bound is compared against what is *already retained*, not
+    against this scan alone.**  The cache is process-global module state while
+    every caller measures one batch, and the merged Library view
+    (``scopes.list_all()``) walks the scopes in sequence.  Judging each scope on
+    its own made eight 700-skill scopes each read "700 <= 4096, reuse is on"
+    against a 5,600-document aggregate: measured 0% reuse and +9.6% over running
+    with reuse off, which is the failure this function exists to prevent.
+    Counting occupancy turns the aggregate case into a partial win -- the early
+    scopes still hit, the later ones are skipped rather than thrashing.
+
+    **[?] This mitigates the aggregate case; it does not solve it.** Measured
+    on a merged sweep of 8 scopes x 700 documents against the 4,096 bound, warm:
+    reuse off 821.4 ms, per-scan judgement 892.0 ms (+8.6%), occupancy-aware
+    872.3 ms (+6.2%). Once the *working set* exceeds the bound an LRU cannot hit
+    above its own size no matter how the decision is sliced, so a net loss over
+    running with reuse off is structural, not a bug in the slicing. The correct
+    fix is an aggregate decision made once by ``scopes.list_all()`` and threaded
+    down through ``scan_scope``/``scan_dir``; it needs the merged candidate
+    count, which for a recursive scope is the walk itself. Recorded rather than
+    half-built: the real library measured on this machine is ~1,965 documents,
+    well under the bound, where reuse wins ~30%.
+
+    Taking the lock here is safe: every caller decides *outside*
+    ``_document_cache_lookup``/``_document_cache_store``.
     """
-    return document_count <= MAX_DOCUMENT_CACHE
+    return document_cache_size() + document_count <= MAX_DOCUMENT_CACHE
 
 
 #: Bounded, process-local reuse of a derived document record.
@@ -325,13 +350,21 @@ MAX_DOCUMENT_CACHE = 4096
 
 #: The only record values that are containers rather than immutable scalars.
 #: Everything else a loader record holds is a ``str``/``int``/``float``/``bool``/
-#: ``None``, so copying the mapping and copying these four is equivalent to a
+#: ``None``, so copying the mapping and copying these is equivalent to a
 #: whole-record ``copy.deepcopy`` -- pinned against ``copy.deepcopy`` on real
 #: records by ``test_the_isolated_copy_equals_a_whole_record_deepcopy`` -- and it
 #: is paid on *every* load, hit or miss, so its cost lands on both.
+#:
+#: ``missing_required`` was missing from this list and is a ``list``.  Because
+#: ``dict(record)`` copies only the mapping, the cached entry, every hit and
+#: every caller all shared one list object: a caller appending to it wrote
+#: straight through into the cache and into every later read in the process.
+#: Nothing mutated it at the time, so the promise was false rather than the
+#: behaviour being wrong -- which is the harder defect to notice.
 _MUTABLE_RECORD_KEYS = (
     "portable_frontmatter",
     "frontmatter_extensions",
+    "missing_required",
     "provenance",
     "registry_provenance",
 )
@@ -367,8 +400,14 @@ def _copy_value(value, depth: int = 0):
     every load.  Anything it does not recognise, and anything deeper than
     :data:`_COPY_MAX_DEPTH`, is handed straight to ``copy.deepcopy``.
     """
-    if value.__class__ in _COPY_SCALARS or depth >= _COPY_MAX_DEPTH:
+    if value.__class__ in _COPY_SCALARS:
         return value
+    if depth >= _COPY_MAX_DEPTH:
+        # Deliberately NOT ``return value``. Returning the value itself would
+        # hand the caller and the cache the same object, which is strictly
+        # worse than the sharing ``deepcopy`` would have avoided -- the docstring
+        # above promised a copy and this branch was not one.
+        return copy.deepcopy(value)
     if isinstance(value, dict):
         return {key: _copy_value(item, depth + 1) for key, item in value.items()}
     if isinstance(value, list):

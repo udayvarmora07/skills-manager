@@ -1379,8 +1379,16 @@ class Store:
         # by it rather than trusted over it.
         result = [r for r in rows if r["name"] in on_disk]
         resolved_root = self.skills_dir.expanduser().resolve()
+        # The derived-record reuse is bounded, and a scan larger than the bound
+        # evicts every entry before the next pass reaches it -- measured at
+        # 4,300 global skills: 0% reuse on a warm pass and +10.8% over running
+        # with reuse switched off.  So the batch decides once, here, rather than
+        # paying the bookkeeping for nothing (docs/24 §D1).
+        from .loader import document_reuse_worthwhile
+
+        reuse = document_reuse_worthwhile(len(result))
         for record in result:
-            self._observe_index_row(record, resolved_root)
+            self._observe_index_row(record, resolved_root, reuse=reuse)
         return result
 
     # Observation keys copied from a loaded document onto a record.  One list,
@@ -1418,7 +1426,9 @@ class Store:
             "canonical name rule and cannot be addressed by name"
         )
 
-    def _observe_index_row(self, record: dict, resolved_root: Path | None = None) -> None:
+    def _observe_index_row(
+        self, record: dict, resolved_root: Path | None = None, *, reuse: bool = True
+    ) -> None:
         """Merge live filesystem observations into one ``list()`` row.
 
         ``resolved_root`` is the already-resolved skills directory a scan
@@ -1440,7 +1450,7 @@ class Store:
             return
         skill_dir = _observed_skill_path(self.skills_dir, resolved_root, record["name"])
         try:
-            observed = load_skill(skill_dir)
+            observed = load_skill(skill_dir, reuse=reuse)
         except (OSError, SkillNotFound, UnicodeError, StoreError):
             return
         for key in self._OBSERVED_KEYS + self._TOKEN_KEYS:

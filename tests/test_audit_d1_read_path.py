@@ -322,3 +322,47 @@ class ScanScopeGlobalReadTests(ReadPathTestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class StoreListReuseGuardTests(ReadPathTestCase):
+    """``Store.list()`` must consult the reuse guard before loading a batch.
+
+    ``loader.scan_dir`` and ``hygiene._prepare_records`` both decide once per
+    batch; the global half of the Library view did not, so a store above the
+    bound measured 0% reuse on a warm pass and +10.8% against running with reuse
+    switched off -- the failure the guard exists to prevent, on the default
+    global read.
+
+    Red-first: before ``reuse`` was threaded through, the cache filled to the
+    bound instead of staying empty.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from skillsmgr import loader
+
+        self.loader = loader
+        loader.clear_document_cache()
+        self.addCleanup(loader.clear_document_cache)
+
+    def test_a_store_above_the_bound_lists_everything_and_reuses_nothing(self):
+        self.seed(6)
+        # seed() indexes the store, which populates the reuse cache at the real
+        # bound. Clear it so this measures `list()` and nothing before it.
+        self.loader.clear_document_cache()
+        with mock.patch.object(self.loader, "MAX_DOCUMENT_CACHE", 4):
+            rows = self.store.list()
+            self.assertEqual(6, len(rows), "turning reuse off must not change a single row")
+            self.assertEqual(
+                0, self.loader.document_cache_size(),
+                "a batch above the bound must not populate the cache it cannot hold",
+            )
+
+    def test_a_store_within_the_bound_still_reuses(self):
+        self.seed(4)
+        with mock.patch.object(self.loader, "MAX_DOCUMENT_CACHE", 64):
+            self.store.list()
+            self.assertEqual(4, self.loader.document_cache_size())
+            self.loader.clear_document_cache()
+            self.store.list()
+            self.assertEqual(4, self.loader.document_cache_size())
