@@ -208,10 +208,18 @@ def check_documented_source_symbols(root: Path = ROOT) -> list[str]:
         store_symbols = _parse_module_symbols(store_path)
         tree = ast.parse(store_path.read_text(encoding="utf-8"))
         store_class = next((n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Store"), None)
-        store_methods = {
-            n.name for n in (store_class.body if store_class else [])
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
+        store_methods = set()
+        for n in store_class.body if store_class else []:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                store_methods.add(n.name)
+            elif isinstance(n, (ast.Assign, ast.AnnAssign)):
+                # A class-level constant is as real a symbol as a method. The
+                # 2026-10-06 loader entry cites `Store._OBSERVED_KEYS`, and
+                # indexing methods alone reported that true claim as
+                # nonexistent -- pushing an author to weaken the prose rather
+                # than fix a real reference.
+                targets = n.targets if isinstance(n, ast.Assign) else [n.target]
+                store_methods.update(t.id for t in targets if isinstance(t, ast.Name))
         store_symbols |= store_methods
     else:
         store_symbols = set()

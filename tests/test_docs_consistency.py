@@ -99,6 +99,41 @@ class DocumentationConsistencyTests(unittest.TestCase):
                 errors = check_docs.check_documented_source_symbols(root)
         self.assertEqual(errors, ["docs/04-store-api.md: documented source symbol does not exist: Store.removed"])
 
+    def test_documented_store_class_constant_resolves(self):
+        """A class-level constant is as real a symbol as a method.
+
+        The extractor indexed ``FunctionDef``/``AsyncFunctionDef`` bodies only,
+        so a doc naming a real class attribute — ``Store._OBSERVED_KEYS`` is one
+        the 2026-10-06 loader entry cites — was reported as a nonexistent
+        symbol. The failure mode is the wrong one: the gate pushes an author to
+        *weaken a true claim* rather than to fix a real reference.
+
+        Red-first: with the attribute form excluded, ``STORE_KEYS`` was reported
+        missing and this assertion failed.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "skillsmgr").mkdir()
+            (root / "skillsmgr" / "store.py").write_text(
+                "class Store:\n"
+                "    _OBSERVED_KEYS = (\"content_hash\",)\n"
+                "    _ANNOTATED: dict = {}\n"
+                "    def list(self):\n        return []\n",
+                encoding="utf-8",
+            )
+            (root / "docs").mkdir()
+            (root / "docs" / "04-store-api.md").write_text(
+                "Store._OBSERVED_KEYS, Store._ANNOTATED, Store.list(), Store.nope()\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(check_docs, "CURRENT_DOCS", ("docs/04-store-api.md",)):
+                errors = check_docs.check_documented_source_symbols(root)
+        self.assertEqual(
+            errors,
+            ["docs/04-store-api.md: documented source symbol does not exist: Store.nope"],
+            "only the genuinely missing symbol may be reported",
+        )
+
     def test_source_and_project_versions_must_align(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
