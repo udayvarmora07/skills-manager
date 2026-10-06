@@ -187,8 +187,18 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   across two builds; the sdist is **not** — all payloads match but 7
   build-generated members get wall-clock mtimes and the gzip header MTIME is
   wall-clock. Content-reproducible, container bytes are not.
-- [ ] Publish 1.0.2 — **blocked on maintainer approval.** The artifacts are built
-  and verified; nothing was tagged, uploaded, or pushed.
+- [/] Publish 1.0.2 — **tagged and staged; BLOCKED on an external TestPyPI
+  outage.** `v1.0.2` is pushed at `ef9bfd6`; CI is 16/16 green; `build release
+  artifacts`, `verify exact artifacts` and `attest build provenance` all passed.
+  `publish to TestPyPI` fails with `audience retrieval failed: repository at
+  test.pypi.org responded with unexpected 503: Service Unavailable` — the
+  OIDC trusted-publishing endpoint, on TestPyPI's *API* side (its `/simple/`
+  index answers 200 while the JSON API answers 503, sampled repeatedly).
+  **Nothing partial shipped**: `publish to PyPI`, `github release` and
+  `postpublish-verify` were all `skipped`, and pypi.org still reports v1.0.1 as
+  latest. Re-running the failed jobs is the whole fix once TestPyPI recovers.
+  Not worked around by publishing straight to PyPI — the TestPyPI stage is the
+  gate, and skipping it is the failure mode SEC-7 exists to prevent.
 - [ ] Structural UI changes (audit G8): rendered review required, not a diff.
 - [x] `check_docs.py` source-symbol extraction covered a class's methods but not
   its class-level attribute assignments, so a documented reference to a real class
