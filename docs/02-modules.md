@@ -1,8 +1,8 @@
 # Modules — Skills Manager
 
-**Version 0.9.1**
+**Version 0.10.0**
 
-**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-09-23 (CLI 28+10+3=41 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; launcher executable discovery rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
+**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-10-06 (CLI 28+10+3=41 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; `loader.py` holds a bounded process-local derived-record reuse keyed on the sha256 of the document bytes, with a thrash-cliff guard and an `observed_at` re-stamp; launcher executable discovery rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
 
 ## `__init__.py`
 
@@ -61,6 +61,55 @@ Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label,
 ## `loader.py`
 
 Shared SKILL.md loader + directory scanner (`load_skill`, `scan_dir`) used by both Store and scopes — keeps FS parsing consistent (frontmatter parse, token estimate, disabled detection, derived observations, and recursive discovery).
+
+**[SPEC] Bounded derived-record reuse.** `load_skill(..., reuse=True)` reuses a
+previously derived record instead of re-parsing, re-hashing and re-estimating an
+unchanged document. The key is the **sha256 of the document bytes** plus the
+filesystem facts that are *not* facts about those bytes — `disabled`,
+`document_conflict`, `decode_error` — plus the document path, which leads the key
+because the derived record reports it verbatim as `provenance.path` (two callers
+spell the same physical file differently and each keeps its own spelling).
+`os.path.realpath` was the obvious identity and was measured: one `lstat` per path
+component for no gain, since `scan_dir` hands every scope the same resolved root.
+
+The content hash is deliberate and is **not** the `(mtime_ns, size)` key the audit
+recommended. An `(mtime_ns, size)` key is blind by construction to a same-size edit
+landing inside the filesystem's mtime granularity — 1 s on HFS+, 2 s on FAT,
+routinely 1 s on network mounts — and this repository has macOS and Windows legs.
+Reading the document is required to learn the hash anyway, and it is the cheapest
+part of the work, so the guarantee is exact rather than statistical.
+
+Three measured facts shape the design:
+
+- **Reuse is a process-local warm win, not a per-request one.** The audit's
+  "scoped to one request" scoping buys a cold request nothing — instrumented at
+  exactly 1.00 parse per row per request. Warm dominates because `webui/app.js`
+  calls `loadSkills()` after ~20 mutation sites and deliberately never caches a
+  completed read. Interleaved A/B, 9 alternating rounds, hermetic `HOME` and data
+  dir: 1,200 rows warm 387.5 → 273.5 ms (−29.4%) / cold 424.9 → 419.7 ms (−1.2%);
+  2,000 rows warm 711.1 → 495.6 ms (−30.3%) / cold 655.0 → 655.6 ms (+0.1%). Cold
+  is flat and reported as flat; GC churn from retention is the largest residual,
+  about 6 points of cold cost.
+- **A bounded LRU cannot beat a sequential scan larger than itself.**
+  `document_reuse_worthwhile(document_count)` measures up front and returns
+  `False` above `MAX_DOCUMENT_CACHE = 4096`, and `scan_dir` then passes
+  `reuse=False` — the caller keeps exactly its pre-reuse behaviour with none of
+  its cost. Measured at 5,000 documents through a 1,000-entry bound, the second
+  pass re-derived 5,001 documents: 0% reuse, strictly worse than no cache.
+- **A hit re-stamps `observed_at` on the copy that leaves the cache.** A hit is
+  still a real observation — the bytes were re-read and hashed to prove they are
+  the same bytes — so `observed_at` must say when *this read* happened. The stored
+  entry is not mutated and no content-derived field is re-stamped. This matters
+  beyond the agent-scope path: `observed_at` is listed in the `Store` class's
+  `_OBSERVED_KEYS` tuple, so the global path is affected too, and
+  `insights.provenance_summary()` surfaces it.
+
+Registry provenance is deliberately **not** reused. A provenance sidecar is a
+filesystem fact rather than a fact about `SKILL.md`'s bytes, so it is re-probed on
+every load and a stale or malformed sidecar stays visible as drift. The
+containment realpath is likewise retained as a security contract. Every value
+leaving the cache is an independent copy (`isolated_record`, bounded depth
+`_COPY_MAX_DEPTH = 12`), so no caller and the cache never share an object.
 
 ## `observations.py`
 

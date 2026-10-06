@@ -36,11 +36,22 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   a **public-contract change** — the `malformed`/`decode_error` signals the
   Overview's attention queue is built on come from that read. Needs a decision,
   not an optimisation pass.
-- [ ] D1 (agent scopes, measured 2026-10-05): `scopes.list_all()` — the default
-  Library view — re-reads and re-parses **every document in every agent scope**
+- [x] D1 (agent scopes, measured 2026-10-05): `scopes.list_all()` — the default
+  Library view — re-read and re-parsed **every document in every agent scope**
   on every request, with no observation reuse. Measured 3.7 s at 1,965 real
-  skills. This is the same O(n) cost the global half no longer pays, and it is
-  the largest remaining item in the default view.
+  skills. Fixed by a bounded, process-local derived-record reuse in `loader.py`,
+  keyed on the **sha256 of the document bytes** plus the filesystem facts that are
+  not facts about those bytes and the document path. The audit's recommended
+  `(mtime_ns, size)` key was **rejected by measurement**: it is blind by
+  construction to a same-size edit inside the filesystem's mtime granularity
+  (1 s HFS+, 2 s FAT, ~1 s on network mounts) and this repo has macOS and
+  Windows legs. Interleaved A/B, 9 alternating rounds: 1,200 rows warm −29.4% /
+  cold −1.2%; 2,000 rows warm −30.3% / cold +0.1%. **Cold is flat and reported as
+  flat.** `document_reuse_worthwhile()` switches reuse off above the bound, so a
+  scan larger than the cache keeps its exact pre-reuse behaviour instead of
+  thrashing (5,000 docs through a 1,000-entry bound re-derived 5,001 — 0% reuse).
+  A hit re-stamps `observed_at` on the copy leaving the cache, because a hit is
+  still a real observation; the stored entry is not mutated.
 - [x] D2: `/api/doctor?scope=all` no longer walks every scope root twice.
   `_doctor_scope_enrichment` takes **one** merged snapshot
   (`records = scopes.list_all()`) and summarises both the `scopes` and
@@ -98,8 +109,28 @@ gates now run. Full evidence in @docs/06-progress-log.md.
 - [x] §D1 (agent scopes, narrow): the scan stops re-deriving what it validated
   (`282cf2a`, merged as `0439fb5`). This is **not** the item below — the
   observation-reuse half is still open.
-- All four parallel branches merged; ladder green at 1,102 tests including
-  the browser harness.
+- All four parallel branches merged; ladder green at **1,141 tests** on `b50ca1e`
+  (120.0 s) with `check_docs.py` and `check_complexity.py` (**686** functions
+  across 16 files) green, and both smokes green on the `522b81f` base.
+- [x] Dark-theme pane separation (audit G2 #7): the list and detail panes
+  measured 1.00:1 and were separated only by a 1px 1.46:1 border. The divider is
+  now 3.43:1 against the detail pane and 3.96:1 against the list pane, panes
+  1.16:1. Two adjacent dark surfaces cannot reach 3:1 tastefully, so the contrast
+  rides on the boundary. The list pane recedes onto `--bg`; elevating it to
+  `--surface-2` would have dropped `--border-strong` to 3.01:1 and degraded every
+  form control. Light theme deliberately untouched. **The audit's other half was
+  already satisfied on 2026-10-04** — the real defect was that the pane divider
+  never used `--border-strong`.
+- [x] **CI pin-gate blind spot (`b50ca1e`):** both action-pin gates required a
+  leading `- ` before `uses:`, so the two-line `- name:` / `uses:` step form was
+  invisible to both. **20 of 29** `actions/*` sites were checked; **9 were not** —
+  `setup-node`, both `upload-artifact`, all five `download-artifact`, and
+  `actions/attest-build-provenance`, the release attestation. Proven red-first:
+  repinning the attestation to a floating `@v2` or to 40 zeros left the suite
+  green. `EXPECTED_FIRST_PARTY_SHAS` already carried entries for four of them;
+  they were written expecting enforcement and were never read. Fixed test-only;
+  the real tree passes with the fix, so the gate was blind, not the workflows
+  wrong.
 - [ ] C4 #4, second half only: the one-document invariant is implemented twice
   — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
   nothing keeping them equivalent. Needs a session that owns `scopes.py`.
@@ -117,10 +148,29 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   gate was proved to still watch `docs/archive/` by injecting four defects into
   an archive file and confirming each was caught. See @docs/archive/README.md
   and @docs/06-progress-log.md.
-- [ ] Publish 1.0.2 — **blocked on maintainer approval**; artifacts must be
-  rebuilt from the current tree, not the `6733da9` hashes in the progress log.
-- [ ] Dark-theme pane separation (audit G2 #7) and the structural UI changes
-  (G8): rendered review required, not a diff.
+- [x] 1.0.2 artifacts built from the current tree (`522b81f`) with the pinned
+  hash-verified toolchain (`setuptools==84.0.0`, `build 1.2.2.post1`, Python
+  3.12.3, `--no-isolation`): wheel `efee22f311284e33bf811ce52571d8a365547e56f1ecc2f0b14585d3b3d5dded`
+  (369,397 bytes), sdist `817c46f5cd1ea3733a41fa90d370861c194be26375c7ce743389fffe417ba770`
+  (348,984 bytes). **These supersede** the `6733da9` hashes (`2d7beb9b…` /
+  `3e8aa27a…`) still recorded in the 2026-09-23 progress entry, which is now
+  marked superseded in place. Verified with a **second implementation** (42/42
+  checks), not by trusting the gate: the management-skill example is present in
+  both artifacts *and* an actual `site-packages` install, 46/46 `skillsmgr/` files
+  are byte-identical across both artifacts and against the source tree, and
+  neither artifact carries `tests/`, `docs/`, `.env`, a database or bytecode.
+  Reproducibility: with `SOURCE_DATE_EPOCH` pinned the wheel is byte-identical
+  across two builds; the sdist is **not** — all payloads match but 7
+  build-generated members get wall-clock mtimes and the gzip header MTIME is
+  wall-clock. Content-reproducible, container bytes are not.
+- [ ] Publish 1.0.2 — **blocked on maintainer approval.** The artifacts are built
+  and verified; nothing was tagged, uploaded, or pushed.
+- [ ] Structural UI changes (audit G8): rendered review required, not a diff.
+- [ ] `check_docs.py` source-symbol extraction covers a class's methods but not
+  its class-level attribute assignments, so a documented reference to a real class
+  constant (e.g. `Store`'s `_OBSERVED_KEYS`) is reported as a nonexistent symbol.
+  Hit while writing the `loader.py` entry; prose was reworded rather than
+  weakened. `check_docs.py` and `tests/**` belong to another session.
 
 ### Why five of the six items above were stale
 
@@ -158,7 +208,9 @@ file.
 - [x] T1: Review the five current Dependabot GitHub Actions PRs and record a
   supported disposition for each in @docs/23-github-actions-dependency-pr-review-2026-09-23.md.
 - [/] T2: Prepare the metadata-corrected package release; publish only after
-  exact candidate review and maintainer approval.
+  exact candidate review and maintainer approval. **Preparation is complete** —
+  the 1.0.2 artifacts are built from `522b81f` and independently verified (see the
+  artifact item above). Only the publish step remains, and it is human-gated.
 - [x] T3: Measure cold and warm full-inventory behavior at 100, 1,000, and
   10,000 actual skill files; record the bounded 10,000-run limit in
   @docs/16-product-baseline-2026-09-18.md.
