@@ -101,6 +101,44 @@ def conflicting_documents(skill_dir: Path) -> bool:
     ).is_file()
 
 
+def reject_conflicting_documents(
+    skill_dir: Path, name: str, *, scope_id: str | None = None
+) -> None:
+    """Raise :class:`StoreError` unless *skill_dir* holds exactly one document.
+
+    **This is the single enforcement point of the one-document invariant.**
+    It was enforced in two places with two mechanisms and two wordings -- the
+    store toggles called :func:`conflicting_documents` while the scope toggle
+    re-implemented the condition with ``Path.is_file()`` inline -- so the two
+    copies could disagree about the same directory without any test failing
+    (docs/24 §C4 #4).  Every path that can install or toggle a skill routes
+    through here instead.
+
+    ``scope_id`` is optional because it is genuine diagnostic value the global
+    store has no equivalent of: the same skill name exists in several agent
+    roots, and "which copy is ambiguous?" needs an answer.  It is a clause on
+    one message, not a second message -- ``tests/test_one_document_invariant.py``
+    pins both shapes so a future edit cannot silently drop the clause or split
+    the wording again.
+
+    **[SPEC]** Raises ``StoreError``, not a new class: REST maps ``StoreError``
+    to ``400`` and the CLI to exit ``1``, and neither knows a subclass.
+    ``loader`` already imports ``StoreError`` from ``store`` at module level,
+    so this adds no import edge -- ``store`` imports ``loader`` lazily from
+    inside functions, which is what keeps that direction acyclic.  Raising it
+    from ``path_safety`` instead (the audit's suggestion) would need
+    ``path_safety -> store`` while ``store -> path_safety`` already exists at
+    module level, i.e. a real cycle.
+    """
+    if not conflicting_documents(skill_dir):
+        return
+    where = f" in scope '{scope_id}'" if scope_id else ""
+    raise StoreError(
+        f"skill '{name}' has both SKILL.md and SKILL.md.disabled{where}; "
+        "remove one of the two documents first"
+    )
+
+
 def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]:
     """Pick a skill's document, reporting unreadable files and the conflict state.
 
