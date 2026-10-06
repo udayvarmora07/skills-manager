@@ -138,6 +138,23 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   `max_instances` to 10,000 — above the bound and above this repo's own documented
   10,000-inventory benchmark. The decision is now made once per batch, **after**
   the truncation, and both tests are mutation-caught.
+- [x] **D1 lazy observations: measured, declined, and a real bug found instead.** The
+  premise did not survive measurement: skipping the document read saves 53.1% at
+  1,200 skills (155.3 -> 72.8 ms), not the 54%-of-82% docs/24 inferred from
+  cProfile -- cProfile inflates per-row Python overhead against syscalls. Roughly
+  half the cost is not the read, so laziness would trade away user-visible drift
+  reporting for less than half the latency. **Not shipped**; the seam is in place
+  if that trade is ever worth making. What the investigation found instead:
+  `GET /api/skills?scope=global` read every document twice and the second read
+  **clobbered a correct token estimate with 0** for any non-UTF-8 document
+  (reproduced on the pre-change tree: 84 -> 0). Fixed in `21b755c`.
+- [ ] `/api/search` pays a full `Store.get()` per row for one field. Measured at
+  600 skills: 498 ms, 600 cache hits + 600 misses -- the reuse cache already
+  halves it, because a *hit* still costs a file read plus the sha256 that forms
+  the key. The remainder is a per-row SQLite query for a row the caller already
+  holds. Removing it needs a new `Store` method (locked constraint 5) or a
+  targeted body read; neither is quick, and it is not an outage at the measured
+  ~1,965-skill library.
 - [ ] C4 #4, second half only: the one-document invariant is implemented twice
   — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
   nothing keeping them equivalent. Needs a session that owns `scopes.py`.
