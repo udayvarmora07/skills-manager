@@ -360,6 +360,36 @@ def _apply_token_estimate(record: dict, tok) -> None:
     record["chars"] = tok["chars"]
 
 
+def _row_needs_token_read(row: dict) -> bool:
+    """Whether *row* still has to have its document read for an estimate.
+
+    ``Store.list()`` observes every document and derives
+    ``tokens``/``tokens_method``/``tokens_pct``/``chars`` from the very bytes it
+    just read, so a row that already carries an estimate does not need the
+    document opened again.
+
+    The test is ``not row.get("tokens")`` rather than ``"tokens" not in row`` so
+    a *zero* estimate still falls through: a document that genuinely occupies no
+    context, and a document the loader could not read at all, are then enriched
+    rather than reported as a bare zero.
+    """
+    return not row.get("tokens")
+
+
+def _enrich_one_row_with_tokens(store: Store, row: dict, physical_root: str) -> None:
+    """Stamp the physical-path fields, then estimate tokens only if needed."""
+    row.setdefault("physical_root", physical_root)
+    if row.get("path"):
+        try:
+            row.setdefault("physical_path", str(Path(row["path"]).resolve()))
+        except OSError:
+            row.setdefault("physical_path", str(row["path"]))
+    if _row_needs_token_read(row):
+        from .tokens import estimate as _est
+
+        _apply_token_estimate(row, _est(_skill_text(store.skills_dir / row["name"])))
+
+
 def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None:
     """Add token estimates to list rows, reporting a failure instead of hiding it.
 
@@ -367,19 +397,31 @@ def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None
     ``except Exception: pass``, so a crash left a ``200`` payload silently
     missing documented keys (which is what produced BUG-7).  A failure is now
     diagnosed and marked on the rows it affected.
+
+    **A row that already carries an estimate is not re-read** (docs/24 §D1,
+    lazy-observations follow-up).  This loop used to re-read every document and
+    then *overwrite* the identical value ``Store.list()`` had already derived
+    from the same bytes.  Measured on this tree at 1,200 skills:
+    ``GET /api/skills?scope=global`` read every document **twice** (2.0x), and
+    this function was 17-19% of that route.
+
+    It was also a correctness bug, not only waste.  The second read went through
+    :func:`_skill_text`, which decodes with a bare
+    ``read_text(encoding="utf-8")`` -- forbidden by SESSION-CONTEXT gotcha #10 --
+    so a non-UTF-8 document yielded ``""`` and **clobbered a correct 277-token
+    estimate with 0**.  ``GET /api/skills?scope=global`` therefore reported a
+    malformed document as occupying no context at all, quietly under-counting it
+    against every context-budget figure.  ``scopes._enrich_global_row`` already
+    carried exactly this guard; this copy never received it.
+
+    The decision is :func:`_row_needs_token_read`, and the per-row work is
+    :func:`_enrich_one_row_with_tokens`, so the fallback stays reachable for the
+    rows that need it and disappears for the rows that do not.
     """
     try:
         physical_root = str(store.skills_dir.resolve())
-        from .tokens import estimate as _est
-
         for row in rows:
-            row.setdefault("physical_root", physical_root)
-            if row.get("path"):
-                try:
-                    row.setdefault("physical_path", str(Path(row["path"]).resolve()))
-                except OSError:
-                    row.setdefault("physical_path", str(row["path"]))
-            _apply_token_estimate(row, _est(_skill_text(store.skills_dir / row["name"])))
+            _enrich_one_row_with_tokens(store, row, physical_root)
     except Exception as exc:
         _diagnose(f"{label} token enrichment failed", exc)
         for row in rows:
