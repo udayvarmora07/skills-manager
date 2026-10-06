@@ -1,6 +1,6 @@
 # Progress Log — Skills Manager
 
-**Version 0.5.0**
+**Version 0.6.0**
 
 **AI manifest**: Dated record of changes, decisions, and bugs for skills-manager,
 newest entry on top. **Since 2026-10-05 this file is a digest plus the entries
@@ -53,17 +53,29 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
-## Current state (measured 2026-10-06 on `docs-context-budget`, base `b50ca1e`)
+## Current state (measured 2026-10-06 on `8669742`)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.
 
-- `python3 -m unittest discover -s tests` — **1,141 tests, OK** (120.0 s).
-- `python3 check_complexity.py` — **686 functions across 16 files**, new-function
+- `python3 -m unittest discover -s tests` — **1,207 tests, OK** (120.7 s).
+- `python3 check_complexity.py` — **688 functions across 16 files**, new-function
   budget ≤ 15, no ratchet increase.
 - `python3 check_docs.py` — **PASSED**. `python3 smoke_store.py` and
   `python3 smoke_web.py` — both green on this base commit.
-- `main` is green on all 15 CI jobs (run `37311664410` at `522b81f`); the five
-  Dependabot action PRs are still open and all still **request changes**.
+- **1.0.2 is tagged (`v1.0.2` at `ef9bfd6`) and blocked on an external outage,
+  not on anything in this repository.** `CI` is 16/16 green on that commit;
+  `build release artifacts`, `verify exact artifacts` and `attest build
+  provenance` passed. `publish to TestPyPI` fails with
+  `audience retrieval failed: repository at test.pypi.org responded with
+  unexpected 503` — the OIDC trusted-publishing endpoint, on TestPyPI's *API*
+  side. **Re-probed 2026-10-06 during the next-tasks pass: `/api/v1/` still
+  answers 503 while `/simple/` answers 200**, the same split as before, so the
+  blocker is unchanged and re-running the failed jobs remains the whole fix.
+  `publish to PyPI`, `github release` and `postpublish-verify` were all
+  `skipped`; nothing partial shipped and pypi.org still reports v1.0.1 as
+  latest.
+- The five Dependabot action PRs are still open and all still **request
+  changes** (re-verified 2026-10-06).
 - Python 3.10–3.14 are the supported matrix and CI proves all five. **A green run
   on the default interpreter is not evidence about the other four** — two of the
   three 2026-10-05 CI failures were invisible locally, and one was a real product
@@ -120,10 +132,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-10-06)
 
-**[NOTE]** 22 dated entries; full text follows.
+**[NOTE]** 23 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-10-06 | G8 shipped inside the tagged 1.0.2, and five records still said it had not |
 | 2026-10-06 | The action-pin gates were blind to half the workflow |
 | 2026-10-06 | The default Library view stopped re-deriving an unchanged document |
 | 2026-10-06 | Dark-theme panes had no boundary, only a 1px border |
@@ -149,6 +162,49 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-10-06 — G8 shipped inside the tagged 1.0.2, and five records still said it had not
+
+**[SPEC] This is a documentation-integrity finding, not a UI finding.** The
+§G8 structural UI work landed in `6f72f0d` and merged as `f11549a`, both
+**inside the tagged `v1.0.2`**. All three recommendations in @docs/24 §G8 are
+implemented, pinned by 27 tests in `tests/test_g8_ui_structure_contracts.py`
+(`Ran 27 tests ... OK`), and rendered evidence is committed at
+`.specs/evidence/ui-g8-release-1.0.2-2026-10-06/` with a sha256 per capture.
+
+**[SPEC] Five records still described it as not done.**
+
+| Record | What it said |
+|---|---|
+| `task.md` | `- [ ] Structural UI changes (audit G8): rendered review required, not a diff.` Written by `911ca48` at 10:53; the merge landed at 13:04 the same day and **no later commit touched the line.** |
+| `docs/06-progress-log.md:1194` | `**[NOTE] Not done, deliberately.** … the structural UI changes (G8) are visual decisions that need rendered review` — written by `a1aceea1`, and **never superseded**, so the log's own last word on G8 was "not done". |
+| `docs/SESSION-CONTEXT.md` | **Zero occurrences of "G8".** Its top block is v1.14.0 on base `b50ca1e`, which predates the merge. |
+| `CHANGELOG.md` | **Zero occurrences of "G8"**, and none of the attention queue, the overview rework, or the Library density work — in the release that ships all of them. |
+| `docs/08-web-ui.md` | §Overview-first shell still pointed its visual evidence at the pre-G8 `.specs/evidence/ui-overview-2026-09-21-final/`. |
+
+**[NOTE] The CHANGELOG one is the sharpest.** `v1.0.2` is tagged and staged; its
+publish job fails only on a TestPyPI outage (re-probed this session, still 503
+on `/api/v1/`, 200 on `/simple/`). The moment that clears, the release job
+publishes an artifact whose changelog never mentions its largest user-visible
+change.
+
+**[SPEC] What is genuinely still open, and was left open.** The G8 *review*,
+not the G8 *work*: `REVIEW.md` records no human perceptual review, no
+non-Chromium engine, no forced-colors mode, no 200%/400% zoom and no screen
+reader. The harness renders; it does not sign off. Marking that done from a
+green render would be exactly the fabricated-evidence class this repository
+keeps refusing, so the line now records the implementation as complete and the
+human gate as outstanding.
+
+**[NOTE] The cause is the one already recorded on 2026-10-05**, where five items
+turned out to be *missing* from `task.md` rather than merely unchecked: a
+finding closed in a commit does not close its checklist line in the same commit.
+Two more stale lines surfaced in the same pass — `C4 #4` (shipped in `cf40958`,
+still `[ ]`) and a `D1 (lazy observations)` line asking for a decision the
+maintainer had already made and a later entry in the same section recorded. All
+three are corrected now. The prevention is still ownership, not a gate:
+`check_docs.py` cannot catch a checklist claim with no source surface to drift
+from.
 
 ## 2026-10-06 — The action-pin gates were blind to half the workflow
 
@@ -1194,6 +1250,13 @@ deliberate decision, so the label stands.
 structural UI changes (G8) are visual decisions that need rendered review, not a
 diff. Publishing 1.0.2 still requires maintainer approval. The audit's
 `[AGENT]`-marked competitive figures were not re-verified.
+
+**[NOTE] Both G2 #7 and G8 have since landed** — G2 #7 in the 2026-10-06 dark-theme
+entry above, G8 in `6f72f0d`/`f11549a` inside the tagged `v1.0.2`. What remains
+for G8 is the *human* perceptual review, not the rendered one. Publishing 1.0.2
+still requires maintainer approval, and is additionally blocked on an external
+TestPyPI outage. Marked in place rather than left to read as current, following
+this file's precedent for the superseded 2026-09-23 artifact hashes.
 
 ## 2026-09-23 — Final next-five candidate verification
 

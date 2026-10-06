@@ -32,10 +32,19 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   document just to recompute a token estimate the loader had already produced.
   Interleaved A/B at 1,200 skills: `Store.list()` −34%, `scopes.list_all()`
   (the default Library view) −40%, `Store.doctor()` −16%, `search` −39%.
-- [ ] D1 (lazy observations): making `list()` skip the document read entirely is
-  a **public-contract change** — the `malformed`/`decode_error` signals the
-  Overview's attention queue is built on come from that read. Needs a decision,
-  not an optimisation pass.
+- [x] D1 (lazy observations): **resolved, not outstanding.** This line asked for a
+  decision; the decision was made and is recorded further down this same section
+  (see "D1 lazy observations: measured, declined, and a real bug found instead").
+  The premise did not survive measurement — skipping the read saves 53.1% at
+  1,200 skills, not the ~44% docs/24 inferred from cProfile, which inflates
+  per-row Python overhead against syscalls — so laziness would trade away
+  user-visible drift reporting (`malformed`/`decode_error`, which the Overview
+  attention queue is built on) for less than half the latency. **Not shipped**;
+  the maintainer explicitly deferred it on 2026-10-05 because the seam needed is
+  a new `Store` method (locked constraint 5). What the investigation found
+  instead was a real bug, fixed in `21b755c`. Kept as a pointer rather than
+  deleted: two entries for one item, contradicting each other, is how this file
+  goes stale in the first place.
 - [x] D1 (agent scopes, measured 2026-10-05): `scopes.list_all()` — the default
   Library view — re-read and re-parsed **every document in every agent scope**
   on every request, with no observation reuse. Measured 3.7 s at 1,965 real
@@ -155,9 +164,32 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   holds. Removing it needs a new `Store` method (locked constraint 5) or a
   targeted body read; neither is quick, and it is not an outage at the measured
   ~1,965-skill library.
-- [ ] C4 #4, second half only: the one-document invariant is implemented twice
-  — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
-  nothing keeping them equivalent. Needs a session that owns `scopes.py`.
+- [x] **C4 #4, second half: the one-document invariant got one enforcement
+  point** (`cf40958`). The audit called it "implemented twice"; it was
+  **implemented four times** — `store._reject_both_documents`,
+  `loader.conflicting_documents`, an inline `dst.is_file()` in
+  `scopes.toggle_skill`, and a third condition inside `archive.has_skill_document`.
+  The two *writable-side* copies were behaviourally **equivalent**, proven by
+  running the full state matrix (active-only / disabled-only / both / neither ×
+  enable × disable) on 3.11–3.14: `scopes` reaches `dst.is_file()` only after
+  `src.is_file()` returned true, so "src and dst" collapses to "dst". So this was
+  a duplicated guard **capable of drifting, not one that had drifted** — recorded
+  that way deliberately, because the stronger claim was not what the evidence
+  supported. `loader.reject_conflicting_documents()` is now the single seam
+  (`store.py:98`, `scopes.py:833` toggle, `scopes.py:883` sync), with an optional
+  `scope_id` clause answering "which copy is ambiguous?" for the multi-root agent
+  case the global store has no equivalent of. `StoreError` is unchanged, so REST
+  stays 400 and the CLI stays exit 1.
+  **The real finding was a behaviour gap the refactor exposed:** `sync_skill`
+  *created* the mixed state every other path refuses to install — reported
+  `{'synced': [...], 'skipped': []}` while installing a state the tool then
+  refuses to toggle, with no route back. It now refuses the mixed **source** up
+  front, before any target is touched, so a refused sync is a no-op rather than a
+  partial install. Pinned by `tests/test_one_document_invariant.py` (16 tests,
+  4 failures + 5 errors against the pre-change source); one reads the source tree
+  because a behavioural test alone cannot catch the *next* copy.
+  **The stale wording above named `scopes.py:795`, which had already moved — the
+  line number was recorded, not re-derived.**
 - [x] **Context budget:** `docs/06-progress-log.md` measured 313,968 characters
   / 40,906 words / 4,004 lines and was being injected into the context window of
   every session before any work started. Rule adopted: **an entry stays resident
@@ -199,7 +231,24 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   latest. Re-running the failed jobs is the whole fix once TestPyPI recovers.
   Not worked around by publishing straight to PyPI — the TestPyPI stage is the
   gate, and skipping it is the failure mode SEC-7 exists to prevent.
-- [ ] Structural UI changes (audit G8): rendered review required, not a diff.
+- [x] **Structural UI changes (audit G8): implemented, merged, tagged, and
+  rendered.** All three §G8 recommendations in @docs/24 landed in `6f72f0d` and
+  merged as `f11549a`, **inside the tagged `v1.0.2`**, pinned by 27 tests in
+  `tests/test_g8_ui_structure_contracts.py` (run: `Ran 27 tests ... OK`): the
+  Overview hero is gone from both `index.html` and `styles.css` and the
+  attention queue leads (`index.html:413`); the Library uses one 40px filter
+  bar (`styles.css:496`) with uniform scope/state suppressed to screen-reader-
+  only text, an 11px type floor and 56px rows (`styles.css:710`); and the
+  primary line is scope + state with paths demoted into `<details>` disclosures
+  carrying a Copy button (`index.html:588`, `:715`). Rendered evidence is
+  committed at `.specs/evidence/ui-g8-release-1.0.2-2026-10-06/` (six viewports
+  plus a `REVIEW.md` with a sha256 per capture).
+  **What is still NOT done, and is not an agent's to do:** `REVIEW.md` records
+  that no human perceptual review was performed, and no non-Chromium engine,
+  forced-colors mode, 200%/400% zoom, or screen reader was exercised. The
+  harness renders; it does not sign off. That gate is the same one as the
+  unrun participant sessions in @docs/25-design-partner-pilot-kit.md, and it
+  stays open rather than being marked done by an agent.
 - [x] `check_docs.py` source-symbol extraction covered a class's methods but not
   its class-level attribute assignments, so a documented reference to a real class
   constant (e.g. `Store`'s `_OBSERVED_KEYS`) was reported as a nonexistent symbol.

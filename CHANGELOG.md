@@ -104,6 +104,22 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   tool cache, rather than passing `--no-sandbox` and weakening the pinned SEC-15
   decision.
 
+- **The Library was reworked so the Overview leads with what needs attention.**
+  The Overview hero is gone and the attention queue is the first block on the
+  page; the duplicated "Observed state" panel it displaced now appears once, as
+  the `Observed copies` / `Malformed` / `Unaddressable` metrics of the summary
+  list. The Library uses a single 40px filter bar instead of stacked controls,
+  suppresses a uniform scope or state to screen-reader-only text rather than
+  repeating it on every row, holds an 11px type floor and 56px rows, and makes
+  each row's primary line the scope and observed state — paths move into
+  disclosures carrying a Copy button, and the `Largest:` chip row is deleted
+  from every viewport. Rendered evidence for six viewports is committed at
+  `.specs/evidence/ui-g8-release-1.0.2-2026-10-06/`.
+  **Not yet done:** no human perceptual review, no non-Chromium engine, no
+  forced-colors mode, no 200%/400% zoom, and no screen-reader pass — the
+  harness renders, it does not sign off. That gate is the participant pilot in
+  `docs/25-design-partner-pilot-kit.md`, which has not been run.
+
 ### Tests
 
 - 902 tests, up from 888. New coverage: the purge invariant across ten

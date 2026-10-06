@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.9.1**
+**Version 0.10.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -395,6 +395,28 @@ feedback, divergent detail, destructive confirmation, disabled filtering,
 recovery, and dark theme; those probes reported zero console/runtime errors,
 failed requests, or page overflow. Human participant/usability and external
 communication approval remain pending.
+
+**[SPEC] The Overview and Library were then restructured (audit §G8, shipped
+inside `v1.0.2`).** The `overview-hero` is gone from both `index.html` and
+`styles.css` and `attention-queue` is the page's first block; the duplicate
+"Observed state" panel it displaced survives once, as the `Observed copies` /
+`Malformed` / `Unaddressable` `<dt>` rows of the metrics list. The Library uses
+one 40px filter bar (`.library-bar`), suppresses a uniform scope or state to
+`sr-only` text rather than repeating it per row, holds an 11px type floor
+(`0.6875rem`) and 56px rows, and makes each row's primary line the scope and
+observed state — paths are demoted into `<details class="instance-path">` and
+`<details class="quality-path">` carrying a Copy button, and the `Largest:` chip
+row is deleted at every viewport. Pinned by 27 tests in
+`tests/test_g8_ui_structure_contracts.py`. Current rendered evidence is
+`.specs/evidence/ui-g8-release-1.0.2-2026-10-06/` (six viewports plus a
+`REVIEW.md` with a sha256 per capture); the `ui-overview-2026-09-21-final/`
+directory above is the earlier pass and still describes the pre-G8 shell.
+
+**[?]** That `REVIEW.md` records what the harness did **not** cover: no
+non-Chromium engine, no forced-colors mode, no 200%/400% zoom, no screen
+reader, and **no human perceptual review**. The structural choices above are
+therefore rendered and machine-checked but not human-signed-off, which is the
+same open gate as the participant sessions in @docs/25-design-partner-pilot-kit.md.
 
 The acceptance pass also records the shipped corrections: union counting for
 malformed/unaddressable observations, enabled/parsed/addressable active-count

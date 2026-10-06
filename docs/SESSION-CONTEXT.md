@@ -2,6 +2,24 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Version 1.15.0** (2026-10-06: record-closure pass after the G8 merge.
+**1,207 tests, 688 complexity-tracked functions**, measured on `8669742`. This
+block exists because a whole feature was missing from five records at once: §G8's
+structural UI landed in `6f72f0d`/`f11549a` **inside the tagged `v1.0.2`**, yet
+`task.md`, this file, `CHANGELOG.md`, `docs/08-web-ui.md` and this log's own
+2026-10-04 entry all still described it as not done — and `CHANGELOG.md`, the
+release-facing one, would have shipped an artifact whose changelog never
+mentions its largest user-visible change. Two further stale `task.md` lines were
+corrected in the same pass: **C4 #4** (shipped in `cf40958`) and a **D1
+(lazy observations)** line asking for a decision the maintainer had already made
+and recorded elsewhere in the same section. **1.0.2 is tagged at `ef9bfd6` and
+blocked only on an external TestPyPI outage**, re-probed this session
+(`/api/v1/` 503, `/simple/` 200); `CI` is green on that commit. What remains open
+for G8 is the **human** perceptual review — no non-Chromium engine, no
+forced-colors, no 200%/400% zoom, no screen reader — which the harness cannot
+perform and which is deliberately left unclaimed. The 1.14.0 block below records
+its own dated measurement and is left as history.)
+
 **Version 1.14.0** (2026-10-06: agent-scope reuse, the action-pin gate blind
 spot, rebuilt 1.0.2 artifacts. **1,141 tests, 686 complexity-tracked
 functions**, both measured on `b50ca1e`. `main` is green on all 15 CI jobs;
