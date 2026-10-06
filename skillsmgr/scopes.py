@@ -18,7 +18,12 @@ from pathlib import Path
 from . import paths
 from .diagnostics import diagnose as _diagnose
 from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
-from .loader import load_skill, read_skill_text_strict, scan_dir
+from .loader import (
+    load_skill,
+    read_skill_text_strict,
+    reject_conflicting_documents,
+    scan_dir,
+)
 from . import root_discovery as _root_discovery
 from .store import (
     SkillNotFound,
@@ -820,12 +825,12 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
             raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
         # SCOPE-13: with both documents present the rename below would land on top
         # of the other one and destroy it, with no snapshot.  Refuse instead of
-        # guessing which document the user meant.
-        if dst.is_file():
-            raise StoreError(
-                f"skill '{name}' has both SKILL.md and SKILL.md.disabled in scope "
-                f"'{scope_id}'; remove one of the two documents first"
-            )
+        # guessing which document the user meant.  The guard is the shared one
+        # (docs/24 §C4 #4) so the scope adapter and the store cannot drift apart;
+        # it used to re-implement the condition inline with ``dst.is_file()``.
+        # ``src.is_file()`` is already true here, so the shared predicate (which
+        # tests both names) cannot disagree with the old inline check.
+        reject_conflicting_documents(skill_dir, name, scope_id=scope_id)
         try:
             src.rename(dst)
         except FileNotFoundError:
@@ -868,6 +873,14 @@ def sync_skill(
     src_dir = Path(src["path"])
     if not src_dir.is_dir():
         raise SkillNotFound(f"source skill '{name}' has no directory in scope '{from_scope}'")
+    # SCOPE-14: the copy below is a whole-tree ``copytree``, so a source holding
+    # both documents *created* the mixed state in every target -- the one thing
+    # ``Store.add`` (STORE-3) and both archive importers refuse to install, and
+    # the one thing every toggle then refuses forever with no route back
+    # through sync while the source stayed mixed.  Refuse the source up front,
+    # before any target is touched, so a refused sync is a no-op rather than a
+    # partial install.
+    reject_conflicting_documents(src_dir, name, scope_id=from_scope)
 
     if to_scopes is None:
         if from_scope == "global":

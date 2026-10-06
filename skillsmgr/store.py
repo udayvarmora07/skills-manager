@@ -88,16 +88,14 @@ def _mutation_lock(path: Path):
 def _reject_both_documents(skill_dir: Path, name: str) -> None:
     """Refuse a directory that holds both SKILL.md and SKILL.md.disabled.
 
-    Shared by the store and the scope adapters so the one-document invariant
-    has a single wording and a single enforcement point.
+    A thin adapter over :func:`loader.reject_conflicting_documents`, which is
+    the single enforcement point shared with the scope adapters (docs/24
+    §C4 #4).  Kept as a module-level name because the store call sites are
+    what they are; it holds no logic of its own.
     """
-    from .loader import conflicting_documents
+    from .loader import reject_conflicting_documents
 
-    if conflicting_documents(skill_dir):
-        raise StoreError(
-            f"skill '{name}' has both SKILL.md and SKILL.md.disabled; "
-            "remove one of the two documents first"
-        )
+    reject_conflicting_documents(skill_dir, name)
 
 
 def _with_skill_lock(skill_dir: Path, func, *args, **kwargs):
