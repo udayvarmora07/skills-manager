@@ -131,6 +131,13 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   they were written expecting enforcement and were never read. Fixed test-only;
   the real tree passes with the fix, so the gate was blind, not the workflows
   wrong.
+- [x] **Hygiene thrashed the new reuse cache (`5aec3c2`):** the §D1 work added a
+  4,096-entry bound and `document_reuse_worthwhile()` precisely because a bounded
+  LRU cannot beat a sequential scan larger than itself. `loader.scan_dir`
+  consulted it; `hygiene._prepare_records` did not, and `hygiene_report` defaults
+  `max_instances` to 10,000 — above the bound and above this repo's own documented
+  10,000-inventory benchmark. The decision is now made once per batch, **after**
+  the truncation, and both tests are mutation-caught.
 - [ ] C4 #4, second half only: the one-document invariant is implemented twice
   — `_reject_both_documents` (`store.py`) and inline at `scopes.py:795` — with
   nothing keeping them equivalent. Needs a session that owns `scopes.py`.
@@ -166,11 +173,13 @@ gates now run. Full evidence in @docs/06-progress-log.md.
 - [ ] Publish 1.0.2 — **blocked on maintainer approval.** The artifacts are built
   and verified; nothing was tagged, uploaded, or pushed.
 - [ ] Structural UI changes (audit G8): rendered review required, not a diff.
-- [ ] `check_docs.py` source-symbol extraction covers a class's methods but not
+- [x] `check_docs.py` source-symbol extraction covered a class's methods but not
   its class-level attribute assignments, so a documented reference to a real class
-  constant (e.g. `Store`'s `_OBSERVED_KEYS`) is reported as a nonexistent symbol.
-  Hit while writing the `loader.py` entry; prose was reworded rather than
-  weakened. `check_docs.py` and `tests/**` belong to another session.
+  constant (e.g. `Store`'s `_OBSERVED_KEYS`) was reported as a nonexistent symbol.
+  Hit while writing the `loader.py` entry; fixed in `3ff1b7e` once the gate and
+  `tests/**` were free, red-first. The failure mode was backwards — the gate was
+  pressuring an author to *weaken a true claim* rather than to fix a real
+  reference.
 
 ### Why five of the six items above were stale
 
