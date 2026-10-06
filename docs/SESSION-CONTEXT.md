@@ -2,10 +2,23 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Version 1.14.0** (2026-10-06: agent-scope reuse, the action-pin gate blind
+spot, rebuilt 1.0.2 artifacts. **1,141 tests, 686 complexity-tracked
+functions**, both measured on `b50ca1e`. `main` is green on all 15 CI jobs;
+the five Dependabot action PRs are all still open and all still **request
+changes**, though three of the five reasons changed. The `loader.py` derived-record
+reuse is keyed on the sha256 of the document bytes — *not* `(mtime_ns, size)`,
+which measurement rejected as blind to a same-size edit inside the filesystem's
+mtime granularity — and switches itself off above its bound. Both action-pin gates
+were blind to 9 of 29 `actions/*` sites, including the release attestation; fixed
+in `b50ca1e`, test-only. The 1.0.2 artifacts were rebuilt from `522b81f` and
+independently verified; **publishing remains human-gated**. The 1.13.0 block
+below records its own dated measurement and is left as history.)
+
 **Version 1.13.0** (2026-10-05: context-budget pass. **1,102 tests,
-683 complexity-tracked functions**, both measured on this tree.
+683 complexity-tracked functions**, both measured on that tree.
 `docs/06-progress-log.md` is now a digest plus the entries dated **2026-09-23
-and later** — 69,013 bytes / 10,066 words, down from 313,968 / 40,906. The
+and later** — 64,666 bytes / 9,478 words, down from 313,968 / 40,906. The
 older append-only history moved verbatim to @docs/archive/README.md, which
 indexes the two slices and states the cut-off rule. `check_docs.py` needed no
 change: its HADS loop globs `docs/*.md` non-recursively, so archive files are
@@ -89,7 +102,30 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 - **GUI**: **local web UI** (see @docs/08-web-ui.md). Replaced GTK4 (`gui.py` deleted 2026-08-14; @docs/05-gui-plan.md kept as a labelled historical record). `webui` is the command, `gui` is its alias.
   - Backend: `skillsmgr/webapp.py` (stdlib `ThreadingHTTPServer`, 127.0.0.1, port 8765 default) + private policy modules `web_security.py` / `web_serialization.py` / `web_upload.py`.
   - Frontend: `skillsmgr/webui/` (`preferences.js` bootstraps local theme/text-size before `styles.css`; `domain.js` loads before `app.js`; Vue 3.5.13 vendored, no build step). Scope switcher in topbar persists `activeScope` to `localStorage` (`skillsmgr-scope`); Settings persists the regional format preference in `skillsmgr-locale`.
-- **Tests**: stdlib `unittest` regression/contract suite — **1,102 tests green 2026-10-05** (`python3 -m unittest discover -s tests`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (**683 functions across 16 files**, budget ≤ 15, and a hard failure on any baseline key that no longer resolves), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
+- **Tests**: stdlib `unittest` regression/contract suite — **1,141 tests green 2026-10-06** (`python3 -m unittest discover -s tests`, 120.0 s on `b50ca1e`), plus `python3 smoke_store.py` (Store API), `python3 smoke_web.py` (REST API, shared `smoke_fixtures.py` lifecycle helpers), and repository gates `python3 check_docs.py`, `python3 check_complexity.py` (**686 functions across 16 files**, budget ≤ 15, and a hard failure on any baseline key that no longer resolves), and `python3 check_package_data.py` (vendored Vue sha256 passes; the optional `python3 -m build` tool is unavailable in this environment). Dev-only `browser_harness.py` (system-Chrome CDP with sandbox enabled, explicit loopback binding, trusted PATH discovery, 320/400/640/900/1280/1440px) is green; the current Lighthouse snapshot reports zero failed audits.
+- **Agent-scope read cost (2026-10-06, §D1 second half)**: `loader.py` holds a
+  bounded, process-local reuse of the derived document record, keyed on the
+  **sha256 of the document bytes** plus the filesystem facts that are not facts
+  about those bytes (`disabled`, `document_conflict`, `decode_error`) and the
+  document path. The audit's `(mtime_ns, size)` recommendation was **rejected by
+  measurement**: it is blind by construction to a same-size edit inside the
+  filesystem's mtime granularity (1 s HFS+, 2 s FAT, ~1 s on network mounts) and
+  this repo has macOS and Windows legs. Interleaved A/B over 9 alternating rounds:
+  1,200 rows warm −29.4% / cold −1.2%; 2,000 rows warm −30.3% / cold +0.1% —
+  **cold is flat and reported as flat**. `document_reuse_worthwhile()` switches
+  reuse off above `MAX_DOCUMENT_CACHE`, because a bounded LRU cannot beat a
+  sequential scan larger than itself. A hit re-stamps `observed_at` on the copy
+  leaving the cache (a hit is still a real observation); the stored entry is never
+  mutated. Registry provenance is deliberately **not** reused. See the `loader.py`
+  entry in @docs/02-modules.md.
+- **Action-pin gate blind spot (`b50ca1e`, 2026-10-06)**: both pin gates required
+  a leading `- ` before `uses:`, so the two-line `- name:` / `uses:` form was
+  invisible to both — **9 of 29** `actions/*` sites, including
+  `actions/attest-build-provenance` (the release attestation) and
+  `softprops/action-gh-release` (the GitHub Release upload step). Proven
+  red-first: repinning the attestation to a floating `@v2` or to 40 zeros left the
+  suite green. Fixed test-only; the real tree passes with the fix, so **the gate
+  was blind, not the workflows wrong**.
 - **Client contract (2026-09-11, #8)**: the REST API is the surface for local non-browser
   clients (editor extensions, scripts). Address it at `127.0.0.1` — `Host: localhost:<port>`
   is rejected on **every** request under the default bind, reads included (issue #14 F-2) —
@@ -123,8 +159,11 @@ advisory eval harness, both shipped by extending existing surfaces only — see
   shipped as an `import`-only extension with bounded preflight and guarded
   extraction; L5's offline/file-based halves are shipped while provider-backed
   registry/eval work stays deferred; and L6's `skill-control-plane` 1.0.1
-  release is published and verified. External screenshots and consented
-  participant sessions remain human-gated.
+  release is published and verified. The **1.0.2** candidate was rebuilt from
+  `522b81f` and independently verified on 2026-10-06 (wheel `efee22f3…`, sdist
+  `817c46f5…`), superseding the `6733da9` hashes; **it is not published** —
+  tagging, upload, and any external communication all require maintainer approval.
+  External screenshots and consented participant sessions remain human-gated.
 - **CLI bugs fixed 2026-08-14** (were crashing): `export`, `backup`, `db rebuild` (all treated Path/dict wrong), `doctor` (printed "integrity check failed" when ok).
 
 ## Common tasks (router)
@@ -209,6 +248,22 @@ advisory eval harness, both shipped by extending existing surfaces only — see
     contract; but `_all_markdown()` walks `docs/` recursively, so archive files
     ARE held to trailing-newline, table-integrity, `@docs/` pointer and
     markdown-anchor rules. Nothing in `docs/archive/` is a current claim.
+
+26. **Ask a PR's head commit, not its rollup and not its branch tip.**
+    `gh pr statusCheckRollup` mixes in base-branch results and can report a state
+    the head never had — on 2026-10-06 it showed PR #18's
+    `browser smoke and frontend syntax` green while the head commit's
+    `/check-runs` showed it failing. And `gh pr view N --json commits -q
+    '.commits[-1].oid'` returns Dependabot's **branch tip**, including its own
+    "update branch" merge commits, which is not the commit that made the change;
+    comparing it against documented review SHAs wrongly suggested all five had
+    gone stale. Use `/commits/<head-sha>/check-runs` and
+    `gh pr diff N | grep -E '^\+.*uses:'`.
+27. **`check_docs.py` indexes a class's methods, not its attributes.** A
+    documented reference to a real class-level constant (e.g. `Store`'s
+    `_OBSERVED_KEYS`) is reported as a nonexistent source symbol. Reword the
+    prose rather than weakening the claim; the extractor lives in `check_docs.py`,
+    which another session owns.
 
 ## Verification loop (run all, all must pass)
 
@@ -323,6 +378,8 @@ tests/test_frontend_seam_contracts.py # one state predicate, one transport
 tests/test_insights_contracts.py  # insights hermetic contracts (57 tests)
 tests/test_audit_batch5_contracts.py  # SEC-4..SEC-9 + SEC-13 regressions
 tests/test_audit_batch8_contracts.py  # SEC-14..SEC-18 regressions
+tests/test_ci_release_contracts.py    # action-pin gates; both YAML step forms
+tests/test_docs_consistency.py       # the HADS/link/parity gate's own contracts
 tests/test_audit_batch9_contracts.py  # FM-19 reference normalization regression
 tests/test_audit_sec19_contracts.py   # SEC-19 trust-root regressions
 tests/test_eval_harness_contracts.py  # eval case/path/atomicity contracts

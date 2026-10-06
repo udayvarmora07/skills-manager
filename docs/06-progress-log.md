@@ -1,6 +1,6 @@
 # Progress Log — Skills Manager
 
-**Version 0.4.0**
+**Version 0.5.0**
 
 **AI manifest**: Dated record of changes, decisions, and bugs for skills-manager,
 newest entry on top. **Since 2026-10-05 this file is a digest plus the entries
@@ -31,6 +31,19 @@ entries) and @docs/archive/06-progress-log-2026-08.md (2026-08-13 …
 2026-08-16, 10 entries plus two undated trailing checklists). Archived text was
 verified byte-identical to the source file at the moment of the cut.
 
+**[NOTE] The resident window grows with active work, and that is a standing
+pressure worth watching.** After the cut the file measured 64,666 characters /
+9,478 words / 1,091 lines. Adding the four 2026-10-06 entries brought it to
+**78,050 / 11,470 / 1,307** — **+21% in one session**. That is still 75% smaller
+than the 313,968-character pre-split figure, and every added entry satisfies the
+rule above, so nothing is misfiled. But the rule is date-based, not size-based,
+and several consecutive active days of substantive work will push this back
+toward the problem @docs/24 §C1 diagnosed. **If it passes roughly 100,000
+characters, the cut-off date is the wrong lever and the next boundary should be
+size-driven instead** — with the resident digest kept at its current length and
+everything above it moved to `docs/archive/`. Recording the trend here is cheaper
+than rediscovering it later.
+
 **This is a move, not a deletion.** Every archived entry describing a decision
 has a surviving owning doc: the ADR set,
 @docs/19-safe-local-source-update-implementation-plan.md,
@@ -40,15 +53,17 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
-## Current state (measured 2026-10-05 on `docs-context-budget`, base `522b81f`)
+## Current state (measured 2026-10-06 on `docs-context-budget`, base `b50ca1e`)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.
 
-- `python3 -m unittest discover -s tests` — **1,102 tests, OK** (152.7 s).
-- `python3 check_complexity.py` — **683 functions across 16 files**, new-function
+- `python3 -m unittest discover -s tests` — **1,141 tests, OK** (120.0 s).
+- `python3 check_complexity.py` — **686 functions across 16 files**, new-function
   budget ≤ 15, no ratchet increase.
 - `python3 check_docs.py` — **PASSED**. `python3 smoke_store.py` and
-  `python3 smoke_web.py` — green on this base commit.
+  `python3 smoke_web.py` — both green on this base commit.
+- `main` is green on all 15 CI jobs (run `37311664410` at `522b81f`); the five
+  Dependabot action PRs are still open and all still **request changes**.
 - Python 3.10–3.14 are the supported matrix and CI proves all five. **A green run
   on the default interpreter is not evidence about the other four** — two of the
   three 2026-10-05 CI failures were invisible locally, and one was a real product
@@ -85,13 +100,34 @@ entries that introduced them:
   `addressable` lazy) was explicitly deferred by the maintainer on 2026-10-05: it
   is a public-contract change, and adding a fetch-on-demand path would be a new
   `Store` method, which is locked-constraint 5.
+- **Agent-scope document reuse is keyed on the content hash, never on
+  `(mtime_ns, size)`, and switches itself off above its bound.** An
+  `(mtime_ns, size)` key is blind by construction to a same-size edit inside the
+  filesystem's mtime granularity, and this repository has macOS and Windows legs.
+- **A cache hit re-stamps `observed_at`; it does not serve a stale one.** A hit
+  is still a real observation, and `observed_at` is surfaced by
+  `insights.provenance_summary()` for a tool whose pitch is trustworthy
+  provenance.
+- **Registry provenance is never reused.** A provenance sidecar is a filesystem
+  fact, not a fact about `SKILL.md`'s bytes; re-probing keeps a stale sidecar
+  visible as drift.
+- **A gate that reports PASS about a path it cannot see is not a gate.** Two such
+  instances are now on the record: BUG-13/SEC-13 (the sdist member inspector) and
+  `b50ca1e` (the action-pin gates, blind to 9 of 29 sites). Prove a gate by
+  mutation, not by inspection.
+- **The 1.0.2 artifact hashes of record are those built from `522b81f`.** The
+  `6733da9` hashes remain only inside the superseded 2026-09-23 entry.
 
-## Resident entry index (2026-09-23 … 2026-10-05)
+## Resident entry index (2026-09-23 … 2026-10-06)
 
-**[NOTE]** 21 dated entries; full text follows.
+**[NOTE]** 22 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-10-06 | The action-pin gates were blind to half the workflow |
+| 2026-10-06 | The default Library view stopped re-deriving an unchanged document |
+| 2026-10-06 | Dark-theme panes had no boundary, only a 1px border |
+| 2026-10-06 | The 1.0.2 artifacts were rebuilt and independently verified |
 | 2026-10-05 | CI went red on `main`; two failures, one of them a real product bug |
 | 2026-10-05 | A `git add -A` broke a documented policy; corrected before push |
 | 2026-10-05 | The frontend had five copies of one predicate, not three |
@@ -113,6 +149,184 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-10-06 — The action-pin gates were blind to half the workflow
+
+**[SPEC] This is the security finding of the session.** Both action-pin gates
+required a leading `- ` before `uses:`, but a step may equally put `uses:` on the
+line after `- name:`. Both forms are used in this repository, and the two-line
+form was invisible to **both** gates.
+
+- **20 of 29** `actions/*` sites were checked; **9 were not**: `setup-node`, both
+  `upload-artifact`, all five `download-artifact`, and
+  `actions/attest-build-provenance` — **the release provenance attestation**.
+  The third-party gate had the identical blind spot, and `softprops/action-gh-release`
+  (the GitHub Release upload step) is written exactly that way, so it was unchecked
+  too.
+- `EXPECTED_FIRST_PARTY_SHAS` already carried entries for `upload-artifact`,
+  `setup-node`, `download-artifact` and `attest-build-provenance`. **They were
+  written expecting enforcement and were never read.**
+
+**[SPEC] Proven red-first rather than argued.** Repinning the release attestation
+to a floating `@v2` tag left `test_sec14_every_first_party_action_is_pinned`
+**green**; so did repinning it to 40 zeros. Both gates reported PASS about a path
+they could not see — the repository's own documented failure mode, and the second
+recorded instance of it after BUG-13/SEC-13, where the sdist member inspector
+reported PASS about a member it could not see.
+
+Fixed on `main` as `b50ca1e`, **test-only**: both parsers now treat the dash as
+optional and four new tests pin it, each mutation-caught. The real tree passes with
+the fix, so all nine previously-invisible sites already carried correct reviewed
+SHAs — **the gate was blind, not the workflows wrong.** No workflow file, product
+source, CLI surface, Store method, schema, or dependency changed.
+
+**[NOTE] A gate limitation found while documenting this.** `check_docs.py`'s
+source-symbol check indexes a class's `FunctionDef`/`AsyncFunctionDef` bodies but
+not class-level attribute assignments, so a documented reference to a real class
+constant is reported as a nonexistent symbol. It fired on `Store`'s
+`_OBSERVED_KEYS` tuple while writing the `loader.py` entry. The prose was
+reworded to keep the claim rather than weaken it, and the limitation is left
+recorded here rather than fixed, because `check_docs.py` and `tests/**` are owned
+by another session. Extending the extractor to class attributes is a one-line
+change for whoever holds those files.
+
+**[NOTE] What this means for the five open Dependabot PRs.** Before the fix, #19
+(the attestation), #18 (`setup-node`) and #17 (`softprops/action-gh-release`) would
+**not** have been caught by either gate at all. #15 and #16 write `- uses:` on the
+dash line and were always covered. See @docs/23-github-actions-dependency-pr-review-2026-09-23.md.
+
+## 2026-10-06 — The default Library view stopped re-deriving an unchanged document
+
+**[SPEC] §D1's second half.** `scopes.list_all()` — the default Library view —
+re-read and re-parsed every document in every agent scope on every request,
+measured at 3.7 s over 1,965 real skills. This was the same O(n) full-document-parse
+cost the *global* half stopped paying in the 2026-10-04 §D1 pass, and D1's fix did
+not touch it: agent-scope rows go through `loader.scan_dir` → `load_skill` per row,
+not through `_observe_index_row`.
+
+`loader.py` now holds a bounded, process-local reuse of the derived record.
+
+**[SPEC] The key is the sha256 of the document bytes**, plus the filesystem facts
+that are *not* facts about those bytes (`disabled`, `document_conflict`,
+`decode_error`) and the document path. The audit had recommended `(mtime_ns, size)`.
+**Measurement rejected that**, and the reason is the kind worth keeping: an
+`(mtime_ns, size)` key is blind *by construction* to a same-size edit landing inside
+the filesystem's mtime granularity — 1 s on HFS+, 2 s on FAT, routinely 1 s on
+network mounts — and this repository has macOS and Windows legs. Reading the
+document is required to learn the hash anyway, and it is the cheapest part of the
+work, so the guarantee is exact rather than statistical.
+
+Three measured findings shaped the design:
+
+- **The audit's "scoped to one request" buys a cold request nothing** —
+  instrumented at exactly 1.00 parse per row per request. The win is warm, and warm
+  dominates: `webui/app.js` calls `loadSkills()` after ~20 mutation sites and
+  deliberately never caches a completed read.
+- **A bounded LRU cannot beat a sequential scan larger than itself.** 5,000
+  documents through a 1,000-entry bound re-derived 5,001 on the second pass — 0%
+  reuse, strictly worse than no cache. `document_reuse_worthwhile()` measures up
+  front and switches reuse off above the bound, so the caller keeps exactly its
+  pre-reuse behaviour with none of its cost.
+- **Registry provenance is deliberately not reused.** A provenance sidecar is a
+  filesystem fact, not a fact about `SKILL.md`'s bytes, so it is re-probed on every
+  load and a stale or malformed sidecar stays visible as drift.
+
+Interleaved A/B, 9 alternating rounds, hermetic `HOME` and data dir:
+
+| rows | warm pre → post | cold pre → post |
+|---|---|---|
+| 1,200 | 387.5 → 273.5 ms (**−29.4%**) | 424.9 → 419.7 ms (**−1.2%**) |
+| 2,000 | 711.1 → 495.6 ms (**−30.3%**) | 655.0 → 655.6 ms (**+0.1%**) |
+
+**[NOTE] Cold is flat and is reported as flat.** GC churn from retention is the
+largest residual, about 6 points of cold cost. A single before/after pair was not
+used for this measurement — the 2026-10-04 §D1 entry records that a single pair
+showed no change at all where interleaving showed −34%.
+
+**[SPEC] A defect found in review, not by the tests: a cache hit returned a stale
+`observed_at`.** That silently changed the field from "when this read happened" to
+"when this process first derived these bytes". It is not cosmetic:
+`observed_at` is in `Store._OBSERVED_KEYS`, so the **global** path was affected
+too, and `insights.provenance_summary()` surfaces it — for a tool whose pitch is
+trustworthy provenance, that is the wrong answer. A hit *is* still a real
+observation (the bytes were re-read and hashed to prove they are the same bytes),
+so the fix re-stamps `observed_at` on **the copy that leaves the cache**; the
+stored entry is not mutated and the content-derived fields are not re-stamped.
+
+**Three existing test docstrings had stated as their reason for stripping the field
+that it "is stamped with `datetime.now()`".** That reasoning was false for cached
+rows between the introduction and the fix. The lesson is the one already written
+into this log's own §A1 entry, applied again: **a green subagent report is not a
+review.** The suite was green on the tree that carried the defect.
+
+Red-first: 16 mutations, 16 caught. Two guards initially had no teeth and the
+*tests* were rewritten rather than the behaviour accepted; the bounding test went
+vacuous once the size guard landed and was rewritten to exercise eviction.
+
+No CLI command, Store method, SQLite schema, runtime dependency, or frontend build
+step changed. The registry-provenance probe and the containment realpath are both
+security contracts and are deliberately retained. See the `loader.py` entry in
+@docs/02-modules.md.
+
+## 2026-10-06 — Dark-theme panes had no boundary, only a 1px border
+
+**[SPEC] docs/24 §G2 #7, the half that was still open.** The list and detail panes
+measured **1.00:1** against each other in dark theme — identical surfaces — and
+were separated only by a 1px border at **1.46:1**. Two regions a user is expected
+to read as different things, indistinguishable and without a perceivable edge.
+
+- The divider is now **3.43:1** against the detail pane and **3.96:1** against the
+  list pane; the panes themselves are **1.16:1**.
+- Two adjacent dark *surfaces* cannot reach 3:1 tastefully — near-black `#06080a`
+  against `--surface` is 1.30:1 — so the contrast rides on the boundary, which is
+  where WCAG 1.4.11 actually applies.
+- The list pane recedes onto `--bg`. Elevating it to `--surface-2` instead would
+  have dropped `--border-strong` to **3.01:1** and degraded every form control, so
+  that was measured and rejected rather than assumed.
+- **Light theme is deliberately untouched.**
+
+**[NOTE] The audit's other half was already satisfied.** Pushing `--border-strong`
+toward 3:1 was completed on 2026-10-04; the real defect was that **the pane
+divider never used it.** A boundary token existing at a compliant contrast is not
+the same as the element that needs the boundary actually referencing it — the same
+"present but unwired" class as §A4's stale complexity baseline.
+
+## 2026-10-06 — The 1.0.2 artifacts were rebuilt and independently verified
+
+**[SPEC]** Built from the current tree (`522b81f`) with the pinned hash-verified
+toolchain (`setuptools==84.0.0`, `build 1.2.2.post1`, Python 3.12.3),
+`--no-isolation`:
+
+| artifact | bytes | sha256 |
+|---|---|---|
+| `skill_control_plane-1.0.2-py3-none-any.whl` | 369,397 | `efee22f311284e33bf811ce52571d8a365547e56f1ecc2f0b14585d3b3d5dded` |
+| `skill_control_plane-1.0.2.tar.gz` | 348,984 | `817c46f5cd1ea3733a41fa90d370861c194be26375c7ce743389fffe417ba770` |
+
+**[SPEC] These supersede the 2026-09-23 hashes** (`2d7beb9b…` / `3e8aa27a…`, from
+commit `6733da9`). That entry is marked as superseded in place rather than left
+alongside, so two hash sets never read as equally current in the resident file.
+
+**[SPEC] Verified with a second implementation rather than by trusting the gate**,
+because this repository has a recorded incident of a gate reporting PASS about
+something it could not see. 42/42 checks: `skillsmgr/examples/skills-manager-management/`
+is present in **both** artifacts **and** in an actual `site-packages` install; 46/46
+`skillsmgr/` files are byte-identical across the two artifacts and against the
+source tree; no `tests/`, `docs/`, `.env`, database or bytecode in either.
+
+**[NOTE]** `check_package_data.py --dist-dir` PASSes on both. `--dist-dir --install`
+gives the wheel a clean-install PASS; the **sdist is UNAVAILABLE** through that
+path because `venv` no longer seeds `setuptools` on 3.12 and the sdist needs
+`--no-build-isolation`. That gap was closed by verifying the pinned
+`setuptools-84.0.0` wheel's sha256 against the lock **before** installing it, then
+completing the sdist smoke by hand.
+
+**Reproducibility, honestly bounded.** With `SOURCE_DATE_EPOCH` pinned the **wheel
+is byte-identical across two builds**. The **sdist is not**: all file payloads
+match, but 7 build-generated members get wall-clock mtimes and the gzip header
+MTIME is wall-clock. Content-reproducible; container bytes are not.
+
+**[SPEC] Still blocked on maintainer approval.** Nothing was tagged, published, or
+pushed.
 
 ## 2026-10-05 — `task.md` reconciled against the tree; five closed items were missing entirely
 
@@ -1018,6 +1232,12 @@ diff. Publishing 1.0.2 still requires maintainer approval. The audit's
 
 ## 2026-09-23 — Package release candidate selected
 
+**[NOTE] SUPERSEDED 2026-10-06.** The hashes below were built from commit
+`6733da9` and are **not** the current candidate. The current 1.0.2 artifacts,
+built from `522b81f`, are `efee22f3…` (wheel, 369,397 bytes) and `817c46f5…`
+(sdist, 348,984 bytes) — see the 2026-10-06 entry above. They are retained here
+as the dated record of the 2026-09-23 slice, not as the artifact of record.
+
 - Rechecked PyPI and repository tags: published version/tag is `1.0.1` and
   the next unused candidate is `1.0.2`. Updated the project package version
   and confirmed README installation wording reflects the existing PyPI
@@ -1062,6 +1282,15 @@ diff. Publishing 1.0.2 still requires maintainer approval. The audit's
 - The current `main` run fails the purge regression on Python 3.10/3.11; the
   local Python 3.11.15 focused run passed and its cause remains unresolved.
   No external review/comment, workflow pin change, or merge was made.
+
+**[NOTE] Re-verified 2026-10-06.** The purge regression is fixed (finding A1) and
+`main` is green on all 15 jobs. All five PRs are still open, all five still
+recommend **request changes**, and all five recorded SHAs are confirmed exact
+against the `uses:` line each PR introduces. **Three of the five reasons changed**:
+#17 and #19 need a rebase and (for #19) a different action version, and #18's
+actual failure is a missing `Tighten the Node tool cache permissions` step its
+branch predates — not the ESM migration this entry predicted. See the
+re-verification section at the top of @docs/23-github-actions-dependency-pr-review-2026-09-23.md.
 
 ## 2026-09-23 — Next five audit-derived tasks planned
 
