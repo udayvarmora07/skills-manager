@@ -9,6 +9,7 @@ hygiene (SEC-18).
 from __future__ import annotations
 
 import os
+import re
 import stat
 import tempfile
 import unittest
@@ -31,21 +32,96 @@ EXPECTED_FIRST_PARTY_SHAS = {
     "actions/attest-build-provenance": "96b4a1ef7235a096b17240c259729fdd70c83d45",
 }
 
+# A step may declare its action on the same line as the list dash
+# (``- uses: actions/x@sha``) or on the line after ``- name:``
+# (``        uses: actions/x@sha``).  Both are ordinary YAML and both are used
+# in this repository.  The leading ``-`` is therefore OPTIONAL here.
+#
+# It was not, and that made this gate report PASS about nine pin sites it never
+# read -- including the release attestation, all five artifact
+# download/upload sites, and setup-node.  Repinning
+# ``actions/attest-build-provenance`` to a floating ``@v2`` tag left this test
+# green.  This is the repository's own recorded failure mode: a gate that
+# reports PASS about a path it cannot see is not a gate.
+_FIRST_PARTY_PIN_RE = re.compile(
+    r"^\s*(?:-\s+)?uses:\s+(actions/[A-Za-z0-9_.-]+)@([^\s#]+)"
+)
+
+
+def _first_party_pins(text: str) -> list[tuple[str, str]]:
+    """Every ``actions/*`` pin in *text*, in either YAML step form."""
+    return [(m.group(1), m.group(2)) for m in
+            (_FIRST_PARTY_PIN_RE.match(line) for line in text.splitlines()) if m]
+
+
+def _unreviewed_first_party_pins(workflow: Path) -> list[tuple[str, str]]:
+    """Pins in *workflow* whose ref is not that action's reviewed full SHA."""
+    return [
+        (action, ref)
+        for action, ref in _first_party_pins(workflow.read_text(encoding="utf-8"))
+        if ref != EXPECTED_FIRST_PARTY_SHAS.get(action)
+    ]
+
 
 class WorkflowHardeningTests(unittest.TestCase):
     def test_sec14_every_first_party_action_is_pinned(self):
         for workflow in (WORKFLOWS / "ci.yml", WORKFLOWS / "release.yml"):
-            for line in workflow.read_text(encoding="utf-8").splitlines():
-                stripped = line.strip()
-                if not stripped.startswith("- uses: actions/"):
-                    continue
-                action, ref = stripped[len("- uses: "):].split("@", 1)
-                ref = ref.split("#", 1)[0].strip()
+            for action, ref in _first_party_pins(workflow.read_text(encoding="utf-8")):
                 self.assertEqual(
                     ref,
                     EXPECTED_FIRST_PARTY_SHAS.get(action),
                     f"{workflow.name}: {action} must use its reviewed full SHA",
                 )
+
+    def test_sec14_reads_both_yaml_step_forms(self):
+        """A pin on the line after ``- name:`` is as pinned as one on the dash.
+
+        Red-first: with a mandatory leading ``-`` this fixture yields nothing,
+        so the gate covered only the sites it happened to be written against.
+        """
+        dash_form = "      - uses: actions/checkout@" + "a" * 40 + "\n"
+        name_form = (
+            "      - name: Attest\n"
+            "        uses: actions/attest-build-provenance@" + "b" * 40 + "\n"
+        )
+        pins = _first_party_pins(dash_form + name_form)
+        self.assertEqual(
+            [action for action, _ in pins],
+            ["actions/checkout", "actions/attest-build-provenance"],
+            "both YAML step forms must be read, or the gate has a blind spot",
+        )
+        self.assertEqual([ref for _, ref in pins], ["a" * 40, "b" * 40])
+
+    def test_sec14_rejects_an_unreviewed_attestation_sha(self):
+        """The blind spot was exploitable, not theoretical.
+
+        Repinning the release attestation to a floating ``@v2`` tag -- or to any
+        unreviewed SHA -- used to leave this gate **green**, because the line was
+        never read.  Red-first: with the old mandatory-dash parser this
+        fixture yields ``[]`` and the assertion fails, which is exactly the
+        silent pass being pinned shut.
+        """
+        reviewed = EXPECTED_FIRST_PARTY_SHAS["actions/attest-build-provenance"]
+        step = "      - name: Attest\n        uses: actions/attest-build-provenance@{}\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            workflow = Path(tmp) / "release.yml"
+
+            workflow.write_text(step.format(reviewed), encoding="utf-8")
+            self.assertEqual(_unreviewed_first_party_pins(workflow), [])
+
+            workflow.write_text(step.format("v2"), encoding="utf-8")
+            self.assertEqual(
+                _unreviewed_first_party_pins(workflow),
+                [("actions/attest-build-provenance", "v2")],
+                "a floating tag on the attestation must be rejected",
+            )
+
+            workflow.write_text(step.format("0" * 39 + "1"), encoding="utf-8")
+            self.assertEqual(
+                _unreviewed_first_party_pins(workflow),
+                [("actions/attest-build-provenance", "0" * 39 + "1")],
+                "an unreviewed attestation SHA must be rejected",
+            )
 
     def test_sec17_release_writer_has_a_protected_environment(self):
         text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")

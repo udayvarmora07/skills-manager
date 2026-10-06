@@ -24,8 +24,14 @@ _VENDORED_VUE = (ROOT / check_package_data.VUE_MEMBER).read_bytes()
 # (``owner/repo/.github/workflows/x.yml@ref``).  The old pattern required
 # ``owner/repo@`` immediately, so every reusable-workflow reference escaped the
 # pin check entirely.
+#
+# The leading ``-`` is optional for the same reason it is in
+# ``_FIRST_PARTY_PIN_RE`` (see ``tests/test_audit_batch8_contracts.py``): a step
+# may put ``uses:`` on the line after ``- name:``, and
+# ``softprops/action-gh-release`` -- the GitHub Release upload step -- is
+# written exactly that way.  With a mandatory dash this regex read nothing there.
 _THIRD_PARTY_PIN_RE = re.compile(
-    r"^\s*-\s*uses:\s*(?!actions/|github/)"
+    r"^\s*(?:-\s+)?uses:\s*(?!actions/|github/)"
     r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[^\s@#]+)?)@([^\s#]+)"
 )
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -177,6 +183,47 @@ class CiWorkflowContractTests(unittest.TestCase):
                 _SHA_RE.match(ref),
                 "fixture unpinned ref must fail the SHA pin assertion pattern",
             )
+
+    def test_third_party_pin_check_reads_both_yaml_step_forms(self):
+        """A third-party action on the line after ``- name:`` is still a pin.
+
+        Red-first: with a mandatory leading ``-`` this fixture returned ``[]``
+        and the check silently passed over ``softprops/action-gh-release``,
+        which is how the GitHub Release upload step is written here.
+        """
+        dash_form = "      - uses: pypa/gh-action-pypi-publish@" + "a" * 40 + "\n"
+        name_form = (
+            "      - name: Release\n"
+            "        uses: softprops/action-gh-release@" + "b" * 40 + " # v2.3.3\n"
+        )
+        self.assertEqual(
+            _third_party_pins(dash_form + name_form),
+            [
+                ("pypa/gh-action-pypi-publish", "a" * 40),
+                ("softprops/action-gh-release", "b" * 40),
+            ],
+            "both YAML step forms must be read, or the gate has a blind spot",
+        )
+
+    def test_the_release_upload_action_is_actually_covered(self):
+        """The real workflow, not a fixture.
+
+        Guards against the blind spot returning *and* against the action moving
+        to an unchecked form without anyone noticing.
+        """
+        release = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        checked = dict(_third_party_pins(release))
+        self.assertIn(
+            "softprops/action-gh-release",
+            checked,
+            "the GitHub Release upload step must be inside the pin check",
+        )
+        self.assertIsNotNone(
+            _SHA_RE.match(checked["softprops/action-gh-release"]),
+            "the GitHub Release upload step must be pinned to a full SHA",
+        )
 
 
 class CrossPlatformContractTests(unittest.TestCase):
