@@ -481,37 +481,49 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .rail-action:hover { background: var(--surface); color: var(--text); }
 .rail-action svg { width: 15px; height: 15px; flex: none; }
 
-.filters {
+/* One control bar. Filters, list mode, presentation, and the tag disclosure sit
+   on a single 40px row instead of three stacked rows, which is most of the
+   chrome the audit measured above the first Library row. Each group keeps its
+   own role/label, so only the height changed. */
+.library-bar {
   display: flex;
-  gap: var(--s2);
-  padding: var(--s2) var(--s4);
+  align-items: center;
+  gap: 4px var(--s2);
+  /* The list pane is 320-380px wide and the three groups need ~480px. The bar
+     stays a single 40px strip at the wide end and folds to a second chip line
+     only where the pane is too narrow, rather than overflowing it. */
+  flex-wrap: wrap;
+  min-height: 40px;
+  padding: 5px var(--s4);
+  border-bottom: 1px solid var(--border);
 }
+.library-bar .chip { white-space: nowrap; padding: 3px 7px; font-size: 0.6875rem; }
+.library-bar .chip-count { font-size: 0.625rem; margin-left: 2px; }
+.browse-switch svg { width: 12px; height: 12px; }
+.library-bar .tag-filter-details summary { font-size: 0.6875rem; }
 
-.library-switch {
-  display: flex;
-  gap: var(--s2);
-  padding: 0 var(--s4) var(--s2);
-}
-
+.filters,
+.library-switch,
 .browse-switch {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--s2);
-  padding: 0 var(--s4) var(--s2);
+  gap: 4px;
 }
-.browse-label { margin-right: 2px; color: var(--text-muted); font-size: 0.6875rem; font-weight: 650; }
-.browse-switch .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding-inline: 9px; }
-.browse-switch svg { width: 14px; height: 14px; }
+.library-switch { margin-left: auto; padding-left: var(--s2); border-left: 1px solid var(--border); }
+.browse-switch .chip { display: inline-flex; align-items: center; gap: 5px; padding-inline: 8px; }
+.browse-switch svg { width: 13px; height: 13px; }
 
-.tag-filter-details { margin: 0 16px 8px; border-bottom: 1px solid var(--border); }
-.tag-filter-details summary { display: flex; align-items: center; gap: 8px; min-height: 36px; cursor: pointer; list-style: none; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; }
+.tag-filter-details { padding: 0 var(--s4); border-bottom: 1px solid var(--border); }
+.tag-filter-details summary { display: flex; align-items: center; gap: 8px; min-height: 30px; cursor: pointer; list-style: none; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
 .tag-filter-details summary::-webkit-details-marker { display: none; }
-.tag-filter-details summary::after { content: "+"; margin-left: auto; color: var(--text-muted); font-size: 1.125rem; font-weight: 400; }
+.tag-filter-details summary::after { content: "+"; color: var(--text-muted); font-size: 0.875rem; font-weight: 400; line-height: 1; }
 .tag-filter-details[open] summary::after { content: "–"; }
 .tag-filter-details summary .hint { font-weight: 400; }
 .tag-filter-current { color: var(--accent-text); font-weight: 600; }
-.tag-filter { display: flex; gap: var(--s2); padding: 0 0 var(--s2); flex-wrap: wrap; max-height: 76px; overflow-y: auto; }
+/* The tag list drops below the bar as an absolutely-positioned panel so
+   opening it does not push the rows down. */
+.tag-filter-details { position: relative; }
+.tag-filter { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; display: flex; gap: 4px; padding: 6px; flex-wrap: wrap; width: max-content; max-width: min(320px, 60vw); max-height: 200px; overflow-y: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
 .batchbar, .selection-hint {
   display: flex;
   align-items: center;
@@ -524,7 +536,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .batchbar > div { display: grid; min-width: 90px; }
 .batch-tag-input { min-width: 130px; max-width: 190px; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
-.selection-hint { background: var(--surface); color: var(--text-muted); }
+.selection-hint { flex-wrap: nowrap; background: var(--surface); color: var(--text-muted); font-size: 0.75rem; }
+.selection-toggle, .selection-hint .btn { white-space: nowrap; }
+.selection-hint > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selection-toggle { border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .row-select { width: 18px; height: 18px; flex: none; accent-color: var(--accent); cursor: pointer; }
 .sidepanel { overflow-y: auto; padding: var(--s2) var(--s4); }
@@ -573,15 +587,21 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   background: var(--bg);
   border-right-color: var(--border-strong);
 }
-.sidebar.list-pane .filters { padding: 16px 16px 8px; }
-.sidebar.list-pane .library-switch { justify-content: flex-end; padding: 16px 16px 8px; }
+.sidebar.list-pane .library-bar { padding: 5px 12px; }
+.sidebar.list-pane .tag-filter { left: -6px; }
 .sidebar.list-pane .listpane-head { flex: none; padding: 0 16px 12px; border-bottom: 1px solid var(--border); }
-.sidebar.list-pane .tag-filter-details { margin-inline: 16px; }
 .sidebar.list-pane .banner { flex: none; margin: 8px 16px; }
 .sidebar.list-pane .skilllist, .sidebar.list-pane .sidepanel { flex: 1; min-height: 0; overflow-y: auto; }
 .sidebar.list-pane .sidepanel { padding: 12px 16px; }
-.listpane-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
-.listpane-head h2 { margin: 0; font-size: 1.25rem; line-height: 1.2; letter-spacing: -.02em; }
+/* One line: the scope eyebrow, the heading, and the visible count. This was
+   the last block of stacked chrome above the first row. */
+.listpane-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.listpane-head > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.listpane-head-actions { display: flex; align-items: center; gap: var(--s2); flex: none; }
+.listpane-head .browse-switch .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; font-size: 0.6875rem; }
+.listpane-head .browse-switch svg { width: 12px; height: 12px; }
+.listpane-head .eyebrow { margin: 0; flex: none; }
+.listpane-head h2 { margin: 0; font-size: 1rem; line-height: 1.2; letter-spacing: -.01em; }
 .eyebrow { margin: 0 0 3px; color: var(--accent-text); font-size: 0.6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .list-count { display: grid; place-items: center; min-width: 28px; height: 24px; padding: 0 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 
@@ -593,6 +613,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 
 .tag-warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+
+/* An absolute path is evidence, not the primary line. It moves behind a
+   disclosure wherever a list previously led with it; the value itself is
+   unchanged and copyable. */
+.instance-path, .quality-path { margin-top: 6px; }
+.quality-path { grid-column: 1 / -1; }
+.instance-path summary, .quality-path summary { display: inline-flex; align-items: center; min-height: 24px; cursor: pointer; list-style: none; color: var(--text-muted); font-size: 0.75rem; }
+.instance-path summary::-webkit-details-marker, .quality-path summary::-webkit-details-marker { display: none; }
+.instance-path summary::before, .quality-path summary::before { content: "\203A"; margin-right: 5px; color: var(--accent-text); }
+.instance-path[open] summary::before, .quality-path[open] summary::before { content: "\2304"; }
+.instance-path code, .quality-path code { margin-top: 4px; overflow-wrap: anywhere; }
+/* The path and its Copy button share one line; `.copybtn` is a block-level
+   grid by default, which dropped it onto a line of its own. */
+.instance-path .copybtn, .quality-path .copybtn { display: inline-grid; vertical-align: middle; margin-left: 6px; }
 
 .row-tokens {
   font-size: 0.6875rem;
@@ -641,14 +675,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .budgetbar-fill.pct-warn { background: var(--warn); }
 .budgetbar-fill.pct-bad { background: var(--err); }
 
-.budgetbar-largest {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-  align-items: center;
-}
-
 .skilllist {
   list-style: none;
   margin: 0;
@@ -670,20 +696,32 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .skilllist li:hover { background: var(--surface-2); }
 .skilllist li.selected { background: var(--accent-soft); border-left-color: var(--accent); }
 
+/* ~56px rows. The description clamps to one line and the identity line only
+   takes a track when it renders something visible; a uniform scope or state is
+   still in the accessibility tree (sr-only), never removed from it. */
 .skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) {
   display: grid;
-  grid-template-columns: 18px 8px minmax(0, 1fr);
+  grid-template-columns: 16px 7px minmax(0, 1fr);
+  /* The badge track is only laid out when the row has badges; an auto track
+     with no content contributes nothing, so uniform rows still fit 56px. */
   grid-template-rows: auto auto auto;
-  align-items: start;
-  gap: 3px 10px;
+  align-items: center;
+  gap: 2px 9px;
+  min-height: 56px;
   min-width: 0;
-  padding: 11px 16px 12px;
+  padding: 7px 14px;
   border-left-width: 3px;
 }
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; margin-top: 2px; }
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; margin-top: 6px; }
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; }
+.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; margin-top: 0; }
+.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; }
+.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; align-self: center; }
+/* Scope + state sit under the name on the row's own track; the long
+   "scope - consumer" label wraps badly when squeezed into a side column.
+   A row whose values are all suppressed takes no track at all (see the
+   :has() rule below). */
 .skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .identity-summary { grid-column: 3; grid-row: 2; }
+/* A row whose every identity value is suppressed has nothing visible here. */
+.skilllist > li:not(.batchbar) .identity-summary:not(:has(.identity-observation :not(.sr-only))) { display: none; }
 .skilllist > .empty { display: block; padding: 48px 24px; }
 
 .dot {
@@ -697,15 +735,17 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .dot-muted { background: var(--text-muted); }
 
 .row-main { flex: 1; min-width: 0; }
-.row-name { font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; line-height: 1.35; }
-.row-desc { font-size: 0.78125rem; color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.4; }
+.row-name { font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; line-height: 1.3; }
+.row-desc { color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-height: 1.35; }
 .row-badges { grid-column: 3; grid-row: 3; display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; padding-top: 3px; }
 .row-badges .tag { max-width: 150px; }
 
-.identity-summary { display: grid; gap: 3px; min-width: 0; padding-top: 2px; }
-.identity-observation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: 0.6875rem; line-height: 1.35; }
+.identity-summary { display: grid; gap: 3px; min-width: 0; }
+/* 11px floor. The state badge was 10px, below every legibility floor,
+   and appeared on every row. */
+.identity-observation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: 0.6875rem; line-height: 1.3; }
 .identity-label { min-width: 0; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
-.identity-state { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 0.625rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.identity-state { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 0.6875rem; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .identity-state-ok { color: var(--ok); background: var(--ok-soft); }
 .identity-state-warn { color: var(--warn); background: var(--warn-soft); }
 
@@ -812,11 +852,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .first-scan-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .first-scan-actions .hint { flex: 1 1 220px; }
 .first-scan-guide :focus-visible { outline-offset: 3px; }
-.overview-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
-.overview-hero h1 { max-width: 680px; margin: 0; font-size: clamp(1.875rem, 4vw, 2.875rem); line-height: 1.08; font-weight: 650; }
-.overview-hero h1:focus-visible { border-radius: var(--radius-sm); }
-.overview-intro { max-width: 650px; margin: 14px 0 0; color: var(--text-muted); font-size: 1rem; line-height: 1.55; }
-.overview-hero-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); max-width: 340px; }
+/* One status line, not a hero. The h1 stays the programmatic focus target and
+   the shell's accessible name; it is sized as a heading rather than a poster so
+   the attention queue is the first substantial block on the page. */
+.overview-status { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s4); padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.overview-status h1 { margin: 0; font-size: 1.25rem; line-height: 1.2; font-weight: 650; letter-spacing: -.01em; }
+.overview-status h1:focus-visible { border-radius: var(--radius-sm); }
+.overview-statusline { margin: 0; color: var(--text-muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.overview-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); margin-left: auto; }
 .overview-health { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 28px; margin-top: 28px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); box-shadow: var(--shadow); }
 .overview-health-main { min-width: 0; }
 .overview-health-kicker { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.8125rem; font-weight: 650; }
@@ -835,6 +878,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-section-head h2 { margin: 0; font-size: 1.25rem; }
 .overview-section-note { margin: 6px 0 14px; color: var(--text-muted); font-size: 0.8125rem; }
 .attention-queue, .overview-compact { min-width: 0; }
+.attention-queue { margin-top: 20px; }
 .attention-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 .attention-item, .queue-clear { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .attention-index { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); font-weight: 750; }
@@ -843,7 +887,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .queue-clear { grid-template-columns: 30px minmax(0, 1fr) auto; }
 .overview-secondary { display: grid; align-content: start; gap: 20px; }
 .overview-compact { padding-top: 2px; }
-.overview-compact + .overview-compact { padding-top: 20px; border-top: 1px solid var(--border); }
 .overview-compact h2 { font-size: 1rem; }
 .text-button { min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: var(--accent-text); cursor: pointer; font: inherit; font-size: 0.8125rem; text-decoration: underline; text-underline-offset: 2px; }
 .overview-compact ul, .activity-list { list-style: none; margin: 10px 0 0; padding: 0; }
@@ -1542,19 +1585,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .layout.mobile-aux-view .sidebar.list-pane.aux-context-pane { display: none; }
   .layout.overview-view .sidebar.list-pane { display: none; }
   .sidebar.list-pane .listpane-head { order: 0; padding: 12px; }
-  .sidebar.list-pane .filters { order: 1; padding: 10px 12px 6px; }
-  .sidebar.list-pane .library-switch { order: 2; justify-content: flex-start; padding: 0 12px 8px; }
-  .sidebar.list-pane .browse-switch { order: 3; justify-content: flex-start; padding: 0 12px 8px; }
-  .sidebar.list-pane .tag-filter-details { order: 4; margin: 0 12px 8px; }
-  .sidebar.list-pane .tag-filter { padding-inline: 0; }
+  .sidebar.list-pane .library-bar { order: 1; flex-wrap: wrap; padding: 6px 12px; }
+  .sidebar.list-pane .filters, .sidebar.list-pane .library-switch { justify-content: flex-start; padding-left: 0; border-left: 0; }
+    .sidebar.list-pane .tag-filter-details { padding: 0 12px; }
+  .sidebar.list-pane .tag-filter { left: 12px; max-width: min(280px, calc(100vw - 48px)); }
   .sidebar.list-pane .banner { order: 5; margin: 8px 12px; }
   .sidebar.list-pane .skilllist, .sidebar.list-pane .sidepanel { order: 6; max-height: none; }
   .skill-grid { grid-template-columns: 1fr; padding: var(--s2) 12px 12px; }
   /* Scope, context, status, mode, and tags all follow the one filter toggle. */
-  .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .filters,
-  .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .library-switch,
-  .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .browse-switch,
-  .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .tag-filter-details { display: none; }
+  .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .library-bar { display: none; }
   .layout.mobile-detail-open .sidebar.list-pane { display: none; }
   .layout.mobile-detail-open .navigation-rail { display: flex; }
   .layout:not(.mobile-detail-open):not(.mobile-aux-view) .detail { display: none; }
@@ -1564,10 +1603,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .detail { padding: 16px; min-height: 0; }
   .layout.overview-view .detail { display: block; flex: 1; overflow-y: auto; }
   .overview-shell { max-width: none; }
-  .overview-hero { display: block; padding-bottom: 20px; }
-  .overview-hero h1 { font-size: clamp(1.75rem, 9vw, 2.375rem); }
-  .overview-intro { font-size: 0.875rem; }
-  .overview-hero-actions { justify-content: flex-start; max-width: none; margin-top: 18px; }
+  .overview-status { align-items: flex-start; flex-direction: column; gap: 6px; padding-bottom: 12px; }
+  .overview-status h1 { font-size: 1.125rem; }
+  .overview-actions { justify-content: flex-start; max-width: none; margin-left: 0; margin-top: 8px; }
   .overview-shell .btn { min-height: 44px; }
   .first-scan-guide { gap: 14px; margin-top: 16px; padding: 15px; }
   .first-scan-heading { display: block; }
