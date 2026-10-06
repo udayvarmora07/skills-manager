@@ -145,8 +145,14 @@ def _path(record: dict) -> Path | None:
         return None
 
 
-def _read_observation(record: dict, degraded: list[dict]) -> None:
-    """Fill missing live fields from one already-observed skill directory."""
+def _read_observation(record: dict, degraded: list[dict], *, reuse: bool = True) -> None:
+    """Fill missing live fields from one already-observed skill directory.
+
+    ``reuse`` is forwarded to :func:`loader.load_skill`'s bounded derived-record
+    reuse.  The caller measures it once for the whole batch, because a scan
+    holding more documents than the cache can retain evicts every entry before
+    the next pass reaches it -- see :func:`loader.document_reuse_worthwhile`.
+    """
     path = _path(record)
     if path is None or ("body" in record and "content_hash" in record):
         return
@@ -170,7 +176,7 @@ def _read_observation(record: dict, degraded: list[dict]) -> None:
         record["_filesystem_unavailable"] = True
         return
     try:
-        observed = loader.load_skill(path, include_husks=True)
+        observed = loader.load_skill(path, include_husks=True, reuse=reuse)
     except Exception as exc:  # a single disappearing/readable entry is bounded
         degraded.append({
             "instance": _bounded(_identity(record)),
@@ -240,8 +246,16 @@ def _prepare_records(records: list[dict], max_instances: int) -> tuple[list[dict
             "reason": f"physical-instance limit reached at {max_instances}; omitted {len(omitted)} instances",
             "truncated": True,
         })
+    # Measured AFTER the truncation above: this is the number of documents
+    # actually loaded, not ``len(records)``.  ``hygiene_report`` defaults
+    # ``max_instances`` to 10,000 and the reuse cache holds 4,096, so a scan
+    # above the bound would evict every entry before the next pass reached it
+    # and pay the bookkeeping for zero reuse -- a regression strictly worse
+    # than having no cache at all.  Measured at 5,000 documents through a
+    # 1,000-entry bound the second pass re-derived 5,001.
+    reuse = loader.document_reuse_worthwhile(len(prepared))
     for record in prepared:
-        _read_observation(record, degraded)
+        _read_observation(record, degraded, reuse=reuse)
         record["_issues"] = _validate_record(record, degraded)
         body = record.get("body")
         if not isinstance(body, str):

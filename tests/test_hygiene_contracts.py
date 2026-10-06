@@ -22,6 +22,78 @@ def _record(root: Path, name: str, *, scope: str = "global", body: str = "# Work
 
 
 class HygieneContracts(unittest.TestCase):
+    def test_a_batch_above_the_reuse_bound_loads_without_reuse(self):
+        """A scan larger than the reuse cache would thrash it; measure first.
+
+        ``hygiene_report`` defaults ``max_instances`` to 10,000 while the
+        derived-record reuse holds 4,096, so an above-bound scan evicts every
+        entry before the next pass reaches it and pays the bookkeeping for zero
+        reuse — measured at 5,000 documents through a 1,000-entry bound, where
+        the second pass re-derived 5,001.
+
+        Red-first: before ``reuse`` was threaded through, every load defaulted
+        to ``True``, so this assertion saw ``[True, True, ...]``. The bound is
+        patched to 3 rather than building 4,097 skill directories, because the
+        property under test is the decision, not the scale.
+        """
+        from skillsmgr import loader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            records = [_record(root, f"skill-{i}") for i in range(5)]
+            real = loader.load_skill
+            seen: list[bool] = []
+
+            def spy(path, **kwargs):
+                seen.append(kwargs.get("reuse", True))
+                return real(path, **kwargs)
+
+            loader.clear_document_cache()
+            try:
+                with mock.patch.object(loader, "MAX_DOCUMENT_CACHE", 3), \
+                        mock.patch.object(loader, "load_skill", spy):
+                    hygiene._prepare_records(records, 10)
+                self.assertEqual(seen, [False] * 5, "above the bound, reuse must be off")
+
+                seen.clear()
+                with mock.patch.object(loader, "MAX_DOCUMENT_CACHE", 3), \
+                        mock.patch.object(loader, "load_skill", spy):
+                    hygiene._prepare_records(records, 2)
+                # max_instances truncates to 2, which is now at the bound.
+                self.assertEqual(seen, [True, True], "at or below the bound, reuse stays on")
+            finally:
+                loader.clear_document_cache()
+
+    def test_the_reuse_decision_is_made_after_truncation(self):
+        """The bound is about documents *loaded*, not records supplied.
+
+        ``max_instances`` truncates before the loop, so a caller passing 10,000
+        records with ``max_instances=100`` loads 100 documents and must judge
+        reuse against 100. Red-first: judging against ``len(records)`` would
+        switch reuse off for a batch that fits many times over.
+        """
+        from skillsmgr import loader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            records = [_record(root, f"skill-{i}") for i in range(40)]
+            real = loader.load_skill
+            seen: list[bool] = []
+
+            def spy(path, **kwargs):
+                seen.append(kwargs.get("reuse", True))
+                return real(path, **kwargs)
+
+            loader.clear_document_cache()
+            try:
+                with mock.patch.object(loader, "MAX_DOCUMENT_CACHE", 20), \
+                        mock.patch.object(loader, "load_skill", spy):
+                    hygiene._prepare_records(records, 5)
+                self.assertEqual(len(seen), 5, "truncation bounds the work")
+                self.assertEqual(seen, [True] * 5, "5 loaded documents fit a 20-entry bound")
+            finally:
+                loader.clear_document_cache()
+
     def test_instruction_normalization_is_narrow(self):
         self.assertEqual(
             hygiene.normalize_instruction_body("\r\n  A  \r\n\r\nB\t \r\n"),
