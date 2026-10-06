@@ -62,18 +62,15 @@ with an owning doc, the owning doc wins.
   budget ≤ 15, no ratchet increase.
 - `python3 check_docs.py` — **PASSED**. `python3 smoke_store.py` and
   `python3 smoke_web.py` — both green on this base commit.
-- **1.0.2 is tagged (`v1.0.2` at `ef9bfd6`) and blocked on an external outage,
-  not on anything in this repository.** `CI` is 16/16 green on that commit;
-  `build release artifacts`, `verify exact artifacts` and `attest build
-  provenance` passed. `publish to TestPyPI` fails with
-  `audience retrieval failed: repository at test.pypi.org responded with
-  unexpected 503` — the OIDC trusted-publishing endpoint, on TestPyPI's *API*
-  side. **Re-probed 2026-10-06 during the next-tasks pass: `/api/v1/` still
-  answers 503 while `/simple/` answers 200**, the same split as before, so the
-  blocker is unchanged and re-running the failed jobs remains the whole fix.
-  `publish to PyPI`, `github release` and `postpublish-verify` were all
-  `skipped`; nothing partial shipped and pypi.org still reports v1.0.1 as
-  latest.
+- **1.0.2 is tagged at `ef9bfd6`; TestPyPI has shipped it and PyPI is waiting on
+  the maintainer.** The external TestPyPI outage that blocked this has cleared
+  (its `/_/oidc/audience` endpoint answers 200 again), the failed job was
+  re-run, and `publish to TestPyPI` **succeeded**. `publish to PyPI` is
+  `waiting` on the `release` environment's required reviewer — it did not
+  proceed unattended. pypi.org still reports v1.0.1 as latest until that
+  approval is given. **The hashes recorded for this release were wrong** (three
+  sets exist, none of them the artifact that shipped); see the 2026-10-06 entry
+  above, which verifies the published bytes against the tag instead.
 - The five Dependabot action PRs are still open and all still **request
   changes** (re-verified 2026-10-06).
 - Python 3.10–3.14 are the supported matrix and CI proves all five. **A green run
@@ -132,10 +129,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-10-06)
 
-**[NOTE]** 24 dated entries; full text follows.
+**[NOTE]** 25 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-10-06 | TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong |
 | 2026-10-06 | A search body cost one document read per row, to compute nothing |
 | 2026-10-06 | G8 shipped inside the tagged 1.0.2, and five records still said it had not |
 | 2026-10-06 | The action-pin gates were blind to half the workflow |
@@ -163,6 +161,62 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-10-06 — TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong
+
+**[SPEC] The external blocker cleared and the release moved.** The failing call
+was `audience retrieval failed: repository at test.pypi.org responded with
+unexpected 503` — against
+`https://test.pypi.org/_/oidc/audience`, the OIDC trusted-publishing endpoint.
+Re-probed later the same day: **200**, three consecutive samples, with
+`/simple/`, `/legacy/` and `/pypi/<name>/json` all 200 too. Re-running the
+failed job was the whole fix, exactly as the earlier entry said it would be.
+`publish to TestPyPI` **succeeded**. `publish to PyPI` is `waiting` on the
+`release` environment, whose required reviewer is `udayvarmora07` — so it did
+not and cannot proceed unattended. Not worked around by publishing straight to
+PyPI: the TestPyPI stage is the gate, and skipping it is the failure mode SEC-7
+exists to prevent.
+
+**[SPEC] Verifying the published bytes found that the recorded hashes were
+wrong.** Three different hash sets exist for 1.0.2 and **none of them is the
+artifact that shipped**:
+
+| source | wheel | sdist |
+|---|---|---|
+| `task.md` | `efee22f3…` (369,397 B) | `817c46f5…` (348,984 B) |
+| this log's 2026-10-06 entry | `032ae368…` (380,909 B) | `fc0f34cb…` (361,035 B) |
+| **actually published** | **`db2c07bb…` (380,909 B)** | **`a2962d4a…` (360,164 B)** |
+
+Two sets were recorded for one version. The documented "42/42 checks" and the
+"46/46 byte-identical" verifications were real — but they verified *a local
+build*, and the release workflow built its own.
+
+**[SPEC] The content is correct, verified against the tag rather than the docs.**
+All 46 `skillsmgr/` files are present, none extra, none missing. Exactly two
+differ from the working tree — `scopes.py` and `webapp.py` — and both are
+byte-identical to their `ef9bfd6` versions, because those are the only two files
+changed after the tag. `check_package_data.py --dist-dir` PASSes on the exact
+published bytes (6 web UI files, 2 example files, correct Vue sha256, MIT), and
+TestPyPI's own recorded digests match the download, so nothing was corrupted in
+transit.
+
+**[?]** Why the bytes differ, honestly bounded: this log already records that the
+sdist is **not** byte-reproducible (build-generated members get wall-clock
+mtimes, and the gzip header MTIME is wall-clock), and that the wheel is
+byte-identical across builds **only with `SOURCE_DATE_EPOCH` pinned**. The
+release workflow does not pin it, so a CI rebuild can never match a
+locally-recorded hash. That is a real reproducibility gap and it is recorded as
+such rather than guessed at.
+
+**[NOTE] Why this survived a gate that reports PASS — the repository's fourth
+recorded instance of its own lesson.** `verify exact artifacts` verifies the
+artifacts it builds in that run; it never compares them against the hashes
+written in `task.md`. So the documented hashes were never actually pinned to any
+release, and a green `verify` job was consistent with every one of them being
+wrong. That is *a gate that reports PASS about a path it cannot see is not a
+gate*, after BUG-13/SEC-13 (the sdist member inspector) and the two action-pin
+blind spots. Worth noting that three of the four instances were found by
+*measuring the artifact* rather than by reading a gate.
 
 ## 2026-10-06 — A search body cost one document read per row, to compute nothing
 

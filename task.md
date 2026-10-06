@@ -260,18 +260,47 @@ gates now run. Full evidence in @docs/06-progress-log.md.
   across two builds; the sdist is **not** — all payloads match but 7
   build-generated members get wall-clock mtimes and the gzip header MTIME is
   wall-clock. Content-reproducible, container bytes are not.
-- [/] Publish 1.0.2 — **tagged and staged; BLOCKED on an external TestPyPI
-  outage.** `v1.0.2` is pushed at `ef9bfd6`; CI is 16/16 green; `build release
-  artifacts`, `verify exact artifacts` and `attest build provenance` all passed.
-  `publish to TestPyPI` fails with `audience retrieval failed: repository at
-  test.pypi.org responded with unexpected 503: Service Unavailable` — the
-  OIDC trusted-publishing endpoint, on TestPyPI's *API* side (its `/simple/`
-  index answers 200 while the JSON API answers 503, sampled repeatedly).
-  **Nothing partial shipped**: `publish to PyPI`, `github release` and
-  `postpublish-verify` were all `skipped`, and pypi.org still reports v1.0.1 as
-  latest. Re-running the failed jobs is the whole fix once TestPyPI recovers.
-  Not worked around by publishing straight to PyPI — the TestPyPI stage is the
-  gate, and skipping it is the failure mode SEC-7 exists to prevent.
+- [/] Publish 1.0.2 — **TestPyPI SHIPPED; PyPI is `waiting` on the maintainer's
+  `release`-environment approval.** `v1.0.2` is pushed at `ef9bfd6`; CI is
+  16/16 green. The external outage that blocked this has cleared: the failing
+  call was `audience retrieval` against
+  `https://test.pypi.org/_/oidc/audience`, which answered 503 on 2026-10-06
+  morning and answers **200** now (three samples, with `/simple/`, `/legacy/`
+  and `/pypi/<name>/json` all 200). Re-running the failed job was the whole fix,
+  exactly as recorded. `publish to TestPyPI` **succeeded**; `publish to PyPI` is
+  `waiting` on the `release` environment, whose required reviewer is
+  `udayvarmora07` — it cannot and did not proceed unattended. Not worked around
+  by publishing straight to PyPI: the TestPyPI stage is the gate, and skipping it
+  is the failure mode SEC-7 exists to prevent.
+
+  **[SPEC] The hashes recorded for this release were WRONG, and verifying them
+  is what caught it.** Neither recorded set matches what actually shipped:
+
+  | source | wheel | sdist |
+  |---|---|---|
+  | recorded in `task.md` | `efee22f3…` (369,397 B) | `817c46f5…` (348,984 B) |
+  | recorded in the progress log | `032ae368…` (380,909 B) | `fc0f34cb…` (361,035 B) |
+  | **actually published** | **`db2c07bb…` (380,909 B)** | **`a2962d4a…` (360,164 B)** |
+
+  Two sets were recorded for the same version, and neither is the artifact that
+  published. **The content is correct** — verified against the tag, not against
+  the docs: all 46 `skillsmgr/` files present, none extra, none missing, and the
+  2 that differ from the working tree (`scopes.py`, `webapp.py`) are
+  byte-identical to their `ef9bfd6` versions, because those are the only two
+  files changed after the tag. `check_package_data.py --dist-dir` PASSes on the
+  exact published bytes (6 web UI files, 2 example files, correct Vue sha256,
+  MIT), and TestPyPI's own recorded digests match the download.
+  **[?]** Why the byte-level difference, honestly bounded: the shipped sdist is
+  documented as *not* byte-reproducible (wall-clock mtimes), and the wheel is
+  only byte-identical across builds *with `SOURCE_DATE_EPOCH` pinned* — the
+  release workflow evidently does not pin it, so a CI rebuild can never match a
+  locally-recorded hash. That is a real reproducibility gap, not a
+  mismeasurement, and it is left recorded rather than guessed at.
+  **[NOTE] The reason nobody noticed:** `verify exact artifacts` verifies the
+  artifacts it builds in-run; it never compares them against the hashes written
+  in `task.md`. This is the repository's own recurring lesson — *a gate that
+  reports PASS about a path it cannot see is not a gate* — in a fourth recorded
+  instance, after BUG-13/SEC-13 and the two action-pin gaps.
 - [x] **Structural UI changes (audit G8): implemented, merged, tagged, and
   rendered.** All three §G8 recommendations in @docs/24 landed in `6f72f0d` and
   merged as `f11549a`, **inside the tagged `v1.0.2`**, pinned by 27 tests in
