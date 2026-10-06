@@ -743,7 +743,13 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertIn("Effective state elsewhere remains unresolved", html)
         self.assertIn("undocumented order", html)
         self.assertIn("The scope list reports detected roots only", html)
-        guide = html[html.index('class="first-scan-guide"'):html.index('class="overview-empty"')]
+        # The guide is bounded by the next view, not by `overview-empty`. It used
+        # to sit *before* the empty state; §G8 moved it below the attention queue,
+        # and an `overview-empty` bound would then produce an empty slice and
+        # pass every assertion below without testing anything.
+        guide_start = html.index('class="first-scan-guide"')
+        guide = html[guide_start:html.index('class="detail-inner"', guide_start)]
+        self.assertGreater(len(guide), 2000, "first-scan guide slice collapsed to nothing")
         for path_access in ("root.path", "guideSampleRecord.path", "physical_path", "physical_root"):
             self.assertNotIn(path_access, guide)
         self.assertIn(".first-scan-steps { display: grid;", css)

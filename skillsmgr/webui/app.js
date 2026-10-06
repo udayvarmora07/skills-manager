@@ -153,6 +153,36 @@ createApp({
     },
     logicalSkills() { return groupLogicalSkills(this.filteredSkills, this.scopes); },
     visibleSkills() { return this.libraryMode === "instances" ? this.filteredSkills : this.logicalSkills; },
+
+    /* Every observation the Library rows render, read through the same seam the
+     * badges use. The uniform checks below only decide whether a value is
+     * *repeated on every row* -- they never re-derive the value itself, and the
+     * underlying `malformed` / `decode_error` / `addressable` signals are
+     * untouched. When a value is uniform the row keeps it in an `sr-only`
+     * span, so suppressing the visual never strips the accessible name.
+     *
+     * Suppression needs more than one visible row: with a single row every
+     * value is trivially "uniform", and hiding that row's only state badge
+     * would remove evidence rather than repetition. This is a cached computed,
+     * so it costs one pass per list change, not one pass per rendered row. */
+    visibleIdentityItems() {
+      return this.visibleSkills.length > 1
+        ? this.visibleSkills.flatMap((row) => this.identityItems(row))
+        : [];
+    },
+
+    uniformIdentityLabel() {
+      const labels = [...new Set(this.visibleIdentityItems.map((item) => item.label))];
+      return labels.length === 1 ? labels[0] : null;
+    },
+
+    uniformStateLabel() {
+      const items = this.visibleIdentityItems;
+      if (!items.length) return null;
+      const states = [...new Set(items.map((item) => item.stateLabel))];
+      return states.length === 1 && !items.some((item) => item.problem) ? states[0] : null;
+    },
+
     selectedLogical() {
       return groupLogicalSkills(this.skills, this.scopes).find((skill) => skill.name === this.selectedName) || null;
     },
@@ -656,6 +686,20 @@ createApp({
 
     groupTags(group) {
       return [...new Set((group.instances || []).flatMap((instance) => instance.tags || []))];
+    },
+
+    /* The row badge row is omitted entirely when it would be empty, so a list
+     * without tags or multi-copy groups does not reserve a blank grid track. */
+    rowBadgeItems(s) {
+      if (!s) return [];
+      if (this.libraryMode === "library") {
+        const tags = this.groupTags(s);
+        return (s.instanceCount > 1 ? [{ key: "copies", text: s.instanceCount + " copies", scope: true }] : [])
+          .concat(tags.map((tag) => ({ key: "tag:" + tag, text: "#" + tag })));
+      }
+      const tags = s.tags || [];
+      return (s.category ? [{ key: "category", text: s.category }] : [])
+        .concat(tags.map((tag) => ({ key: "tag:" + tag, text: "#" + tag })));
     },
 
     profileTargets() {
