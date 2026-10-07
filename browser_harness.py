@@ -431,6 +431,40 @@ def _stop_process(process: subprocess.Popen[str], label: str, timeout: float = 2
         print(f"warning: could not reap {label}", file=sys.stderr)
 
 
+def _launch_chrome(profile: Path, log, attempts: int = 3, timeout: float = 30.0):
+    """Start Chrome and wait for its DevTools endpoint, retrying on failure.
+
+    Chrome intermittently fails to bring the endpoint up on a shared CI
+    runner — the observed symptom is a dbus parse error followed by
+    "Chrome DevTools endpoint did not start" 30 seconds later. The job passed
+    on the next run with byte-identical code, which makes it an environment
+    flake rather than a product fault.
+
+    A gate that fails at random is not a gate; it is a coin flip that people
+    learn to re-run. One retry costs a few seconds and turns a known flake
+    into a non-event, and the escalation to three attempts keeps a genuinely
+    broken browser broken rather than papering over it.
+    """
+    command = [
+        _chrome(), "--headless=new", "--disable-gpu", "--disable-dev-shm-usage",
+        "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
+        "--user-data-dir=" + str(profile), "about:blank",
+    ]
+    last = None
+    for attempt in range(1, attempts + 1):
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=log, text=True)
+        try:
+            return process, _devtools_port(process, profile, log=log, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001 - any launch failure is retryable
+            last = exc
+            _stop_process(process, "chrome (failed launch)")
+            log.write(f"\n--- chrome launch attempt {attempt} failed: {exc}\n")
+            log.flush()
+            if attempt < attempts:
+                time.sleep(2.0)
+    raise RuntimeError(f"chrome did not expose DevTools after {attempts} attempts: {last}")
+
+
 def run() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep-profile", action="store_true")
@@ -485,9 +519,8 @@ def run() -> int:
         # its first real execution failed without a diagnosable cause.  The
         # sandbox stays enabled (SEC-15); only the reporting changes.
         chrome_log = open(Path(directory) / "chrome.stderr.log", "w+", encoding="utf-8")
-        chrome = subprocess.Popen([_chrome(), "--headless=new", "--disable-gpu", "--disable-dev-shm-usage", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--user-data-dir=" + str(profile), "about:blank"], stdout=subprocess.DEVNULL, stderr=chrome_log, text=True)
+        chrome, port = _launch_chrome(profile, chrome_log)
         try:
-            port = _devtools_port(chrome, profile, log=chrome_log)
             results = [
                 _run_probe(
                     server.url,

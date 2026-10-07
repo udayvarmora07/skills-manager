@@ -200,6 +200,59 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('<dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd>', html)
         self.assertIn('.overview-metrics small { display: block;', css)
 
+    def test_chrome_launch_retries_before_giving_up(self):
+        """A flaky runner must not turn this job into a coin flip.
+
+        Chrome intermittently fails to expose its DevTools endpoint on a shared
+        CI runner — dbus parse error, then "endpoint did not start" 30 seconds
+        later. On 2026-10-08 the `browser smoke` job failed that way on
+        `cd41db4` and passed on the identical tree one commit later. A gate
+        that fails at random is not a gate.
+
+        Driven for real against a browser that cannot exist, so the retry count
+        is observed rather than read.
+        """
+        import importlib.util
+        import io
+        import subprocess
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "browser_harness_launch", ROOT / "browser_harness.py"
+        )
+        harness = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(harness)
+
+        attempts = []
+        real_popen = subprocess.Popen
+
+        class _ImmediateExit(real_popen):  # type: ignore[misc]
+            def __init__(self, cmd, *a, **kw):
+                attempts.append(cmd)
+                super().__init__([sys.executable, "-c", "raise SystemExit(3)"],
+                                 *a, **kw)
+
+        def fake_popen(cmd, *a, **kw):
+            attempts.append(cmd)
+            proc = real_popen([sys.executable, "-c", "raise SystemExit(3)"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return proc
+
+        real_time = harness.time.sleep
+        harness.subprocess.Popen = fake_popen
+        harness.time.sleep = lambda *_: None
+        try:
+            with self.assertRaises(RuntimeError):
+                harness._launch_chrome(
+                    ROOT / "profile-does-not-matter", io.StringIO(), attempts=3
+                )
+        finally:
+            harness.subprocess.Popen = real_popen
+            harness.time.sleep = real_time
+        self.assertEqual(len(attempts), 3,
+                         "a browser that cannot start must be retried, not "
+                         "reported as a product failure on the first attempt")
+
     def test_harness_cleanup_cannot_fail_a_run(self):
         """A child that ignores SIGTERM must not turn a passing run red.
 
