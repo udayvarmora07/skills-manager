@@ -478,7 +478,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .menu hr { border: none; border-top: 1px solid var(--border); margin: var(--s2) 0; }
 .menu .menu-danger { color: var(--err); }
 .menu .menu-danger svg { color: var(--err); }
-.menu-label { padding: 8px 10px 4px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
+.menu-label { padding: 8px 10px 4px; color: var(--ink-3); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
 
 /* ---------------------------------------------------------------- layout */
 
@@ -527,7 +527,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .nav-group + .nav-group { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 /* Sentence case rather than tracked-out capitals — see DESIGN.md, "Don't
    change". The label still groups the six views; it just stops dressing up. */
-.nav-group-label { padding: 0 12px 5px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
+.nav-group-label { padding: 0 12px 5px; color: var(--ink-3); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
 
 .mobile-controls-toggle { display: none; }
 .compact-controls { display: contents; }
@@ -598,7 +598,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    whatever the subject, and it is the tell this replaces. */
 .rail-heading-label {
   margin: 0 4px 4px;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: .01em;
@@ -728,7 +728,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .listpane-head .browse-switch svg { width: 12px; height: 12px; }
 .listpane-head .eyebrow { margin: 0; flex: none; }
 .listpane-head h2 { margin: 0; font-size: 1rem; line-height: 1.2; letter-spacing: -.01em; }
-.eyebrow { margin: 0 0 3px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
+.eyebrow { margin: 0 0 3px; color: var(--ink-3); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
 .list-count { display: grid; place-items: center; min-width: 28px; height: 24px; padding: 0 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 
 .tag-scope {
@@ -1172,7 +1172,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .scope-meter-name { grid-area: name; max-width: none; }
   .scope-meter-track { grid-area: track; }
   .scope-meter-pct { grid-area: pct; }
-  .scope-meter-num { grid-area: tok; text-align: left; color: var(--ink-4); }
+  .scope-meter-num { grid-area: tok; text-align: left; color: var(--ink-3); }
   .budget-axis { order: -1; margin-bottom: var(--s2); }
   .budget-axis-label { transform: translateX(-100%); padding-right: 6px; }
 }
@@ -1385,7 +1385,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 
 .meta > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.meta dt { font-size: 0.6875rem; font-weight: 600; color: var(--ink-4); letter-spacing: 0.01em; }
+.meta dt { font-size: 0.6875rem; font-weight: 600; color: var(--ink-3); letter-spacing: 0.01em; }
 .meta dd { margin: 0; font-size: 0.875rem; overflow-wrap: anywhere; display: flex; align-items: center; gap: var(--s2); }
 .meta code { font-family: var(--mono); font-size: 0.8125rem; background: var(--code-bg); border-radius: 4px; padding: 1px 6px; }
 
@@ -1487,7 +1487,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .onboarding-empty { max-width: 680px; margin: 0 auto; }
 .onboarding-empty .eyebrow {
   margin: 0 0 var(--s1);
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.01em;

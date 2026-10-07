@@ -93,7 +93,6 @@ TEXT_CONTRACTS = (
     ("ink", "surface", 4.5, "body text"),
     ("ink-2", "surface", 4.5, "secondary text"),
     ("ink-3", "surface", 4.5, "tertiary text"),
-    ("ink-4", "surface", 4.5, "most de-emphasised text (usually a path)"),
     ("ok", "surface", 4.5, "active state label"),
     ("warn", "surface", 4.5, "divergent state label"),
     ("err", "surface", 4.5, "invalid state label"),
@@ -107,6 +106,18 @@ TEXT_CONTRACTS = (
     ("accent-ink", "accent", 4.5, "primary button label"),
 )
 
+# Text does not only land on the base surface. The first version of this gate
+# checked `--surface` alone and reported PASS, while the rail's group labels
+# measured **4.19:1 on --surface-2** in the real render — a gate reporting PASS
+# about a path it could not see, which is this repository's most repeated
+# lesson. Every ink step is therefore measured against every surface it can be
+# painted on.
+EVERY_SURFACE_CONTRACTS = tuple(
+    (ink, surface, 4.5, f"{ink} on {surface}")
+    for ink in ("ink", "ink-2", "ink-3")
+    for surface in ("surface", "surface-2", "surface-3")
+)
+
 # Non-text contrast is WCAG 1.4.11: 3:1. A boundary only needs it when it is
 # the thing that identifies the control.
 NONTEXT_CONTRACTS = (
@@ -114,6 +125,10 @@ NONTEXT_CONTRACTS = (
     ("line-3", "bg", 3.0, "control border on the page ground"),
     ("line-strong", "surface", 3.0, "focus ring"),
     ("accent", "surface", 3.0, "selection mark"),
+    # Non-text only. There is no room for a fourth *text* step in this ramp: it
+    # bottoms out at 4.60:1 on --surface-3, so nothing de-emphasised enough to
+    # be useful also clears 4.5:1 there. De-emphasised text uses --ink-3.
+    ("ink-4", "surface", 3.0, "non-text mark (not used for text)"),
     ("ok", "ok-bg", 3.0, "state dot"),
     ("warn", "warn-bg", 3.0, "state dot"),
     ("err", "err-bg", 3.0, "state dot"),
@@ -149,6 +164,8 @@ def check_theme(name: str, t: dict[str, str], failures: list[str]) -> None:
         print(f"  {'OK  ' if ok else 'FAIL'} {ratio:6.2f}:1 (need {need}) {why}")
 
     for fg, bg, need, why in TEXT_CONTRACTS:
+        check(fg, bg, need, why)
+    for fg, bg, need, why in EVERY_SURFACE_CONTRACTS:
         check(fg, bg, need, why)
     for fg, bg, need, why in NONTEXT_CONTRACTS:
         check(fg, bg, need, why)
