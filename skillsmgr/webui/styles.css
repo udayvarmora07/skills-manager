@@ -1,74 +1,150 @@
-/* Skills Manager — calm local developer workspace.
+/* Skills Manager — a measuring instrument laid over a pile of documents.
    The rail orients, the list lets people choose, and the document pane is the
-   work surface. All visual decisions live in this single cascade. */
+   work surface. All visual decisions live in this single cascade, and every
+   colour token below is re-measured by `check_design_tokens.py` in CI.
+   The contract and its rationale are in DESIGN.md at the repository root. */
+
+/* --- Vendored typefaces. Never a CDN: this app must work offline, and a
+   font request to a third party is a third party in the page. ------------- */
+@import url("static/fonts/plex.css");
 
 :root {
-  --s1: 4px;
-  --s2: 8px;
-  --s3: 12px;
-  --s4: 16px;
-  --s9: 32px;
+  /* type — one family for the interface, one mono for every identifier and
+     figure. IBM Plex rather than system-ui because this tool compares a file
+     on one machine with the same file on another; identical glyphs are a
+     correctness property here, not only a taste one. */
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --t-display: 600 26px/1.18 var(--sans); letter-spacing: -0.021em;
+  --t-title:   600 17px/1.30 var(--sans); letter-spacing: -0.014em;
+  --t-head:    600 13.5px/1.35 var(--sans); letter-spacing: -0.006em;
+  --t-body:    400 13px/1.55 var(--sans);
+  --t-sm:      400 12px/1.45 var(--sans);
+  --t-num:     500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
+  --t-id:      500 12.5px/1.35 var(--mono); letter-spacing: -0.01em;
+
+  /* space — 4px base, only the steps actually used */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s9: 32px;
+
+  /* radius — small and deliberate. A large radius applied to everything reads
+     as "template" before a single word of copy is read. */
+  --r-ctl: 4px;
+  --r-panel: 6px;
   --radius: 10px;
   --radius-sm: 6px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  --tr-fast: 150ms ease-out;
+  --radius-xs: 4px;
+
+  /* motion — 120ms on paint properties only. No bounce/elastic easing: it is
+     a dated tell and it makes a dense tool feel unsteady. */
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --dur: 120ms;
+  --tr-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  --rail-w: 210px;
+  --pane-w: 392px;
+  --measure: 68ch;
 }
 
 [data-theme="light"], [data-theme="system"] {
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #dce1e8;
-  --border-strong: #8a8f96;
-  --text: #20242c;
-  --text-muted: #626b79;
-  --accent: #a94b20;
-  --accent-hover: #903d19;
-  --accent-active: #743115;
-  --accent-soft: #f7e9e1;
-  --accent-text: #8f3d1a;
-  --on-accent: #ffffff;
-  --ok: #23734b;
-  --ok-soft: #e5f3eb;
-  --warn: #8a5a08;
-  --warn-soft: #fff3d8;
-  --err: #ad3029;
-  --err-soft: #f9e5e3;
+  --bg: #f2f3f1;
+  --surface: #fbfbfa;
+  --surface-2: #eceef0;
+  --surface-3: #e1e5e9;
+
+  --ink: #1a1c1f;
+  --ink-2: #454a50;
+  --ink-3: #5f666d;
+  --ink-4: #6b727a;
+
+  --line: #e4e6e9;
+  --line-2: #ccd0d6;
+  --line-3: #868d95;
+  --line-strong: #7d848c;
+
+  --accent: #0d6a63;
+  --accent-2: #0a524d;
+  --accent-3: #083f3b;
+  --accent-ink: #ffffff;
+  --accent-bg: #e2f0ee;
+  --accent-line: #a8d0cb;
+
+  --ok: #3f6b3f;   --ok-bg: #e9f0e9;   --ok-line: #c3d6c3;
+  --warn: #7d590e; --warn-bg: #f5f0e0; --warn-line: #ddcda2;
+  --err: #a33526;  --err-bg: #f7e8e5;  --err-line: #e2bdb4;
+  --mute: #5e646b; --mute-bg: #eceef0; --mute-line: #ccd0d6;
+
+  --code-bg: #eef0f2;
+  --overlay: rgba(20, 24, 28, 0.46);
+  --shadow: 0 1px 2px rgba(20, 26, 32, .06), 0 6px 20px -12px rgba(20, 26, 32, .20);
+  --shadow-lg: 0 8px 22px -10px rgba(20, 26, 32, .26), 0 20px 48px -20px rgba(20, 26, 32, .28);
+  --focus-ring: 0 0 0 3px rgba(13, 106, 99, .26);
+
+  /* Legacy names, aliased so the existing cascade has one source of truth. */
+  --border: var(--line);
+  --border-strong: var(--line-3);
+  --text: var(--ink);
+  --text-muted: var(--ink-3);
+  --accent-hover: var(--accent-2);
+  --accent-active: var(--accent-3);
+  --accent-soft: var(--accent-bg);
+  --accent-text: var(--accent);
+  --on-accent: var(--accent-ink);
+  --ok-soft: var(--ok-bg);
+  --warn-soft: var(--warn-bg);
+  --err-soft: var(--err-bg);
   --on-err: #ffffff;
-  --code-bg: #f3ede2;
-  --overlay: rgba(22, 28, 38, 0.52);
-  --shadow: 0 1px 2px rgba(26, 35, 48, .05), 0 8px 24px -14px rgba(26, 35, 48, .22);
-  --shadow-lg: 0 10px 28px -12px rgba(26, 35, 48, .28), 0 24px 60px -24px rgba(26, 35, 48, .3);
-  --focus-ring: 0 0 0 3px rgba(169, 75, 32, .27);
 }
 
 [data-theme="dark"] {
-  --bg: #15181e;
-  --surface: #20252e;
-  --surface-2: #282f3a;
-  --border: #37404c;
-  --border-strong: #6e7884;
-  --text: #edf0f5;
-  --text-muted: #a5afbd;
-  --accent: #e7a06f;
-  --accent-hover: #f0b187;
-  --accent-active: #d38958;
-  --accent-soft: #3b2c25;
-  --accent-text: #f1b287;
-  --on-accent: #24140d;
-  --ok: #74d3a0;
-  --ok-soft: #1c382a;
-  --warn: #e6bd67;
-  --warn-soft: #3b311b;
-  --err: #f08b84;
-  --err-soft: #402522;
-  --on-err: #241212;
-  --code-bg: #2a251e;
-  --overlay: rgba(0, 0, 0, .68);
-  --shadow: 0 1px 2px rgba(0, 0, 0, .36), 0 8px 24px -12px rgba(0, 0, 0, .52);
-  --shadow-lg: 0 12px 32px -12px rgba(0, 0, 0, .65), 0 28px 64px -22px rgba(0, 0, 0, .72);
-  --focus-ring: 0 0 0 3px rgba(231, 160, 111, .42);
+  --bg: #101316;
+  --surface: #171a1e;
+  --surface-2: #1e2227;
+  --surface-3: #272c32;
+
+  --ink: #eef1f3;
+  --ink-2: #c3c9cf;
+  --ink-3: #98a0a8;
+  --ink-4: #8b939b;
+
+  --line: #23282e;
+  --line-2: #31373e;
+  --line-3: #6a7178;
+  --line-strong: #6e757d;
+
+  --accent: #4fc7bd;
+  --accent-2: #7ad9d1;
+  --accent-3: #3ba79e;
+  --accent-ink: #06211f;
+  --accent-bg: #122b29;
+  --accent-line: #1d4744;
+
+  --ok: #7fb87f;   --ok-bg: #16211a;   --ok-line: #2a3a2a;
+  --warn: #d9ab52; --warn-bg: #241f14; --warn-line: #40361f;
+  --err: #e88b76;  --err-bg: #241614;  --err-line: #432420;
+  --mute: #98a0a8; --mute-bg: #1e2227; --mute-line: #31373e;
+
+  --code-bg: #12161a;
+  --overlay: rgba(0, 0, 0, .62);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .40), 0 6px 20px -10px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 10px 26px -10px rgba(0, 0, 0, .68), 0 22px 52px -20px rgba(0, 0, 0, .74);
+  --focus-ring: 0 0 0 3px rgba(79, 199, 189, .34);
+
+  --border: var(--line);
+  --border-strong: var(--line-3);
+  --text: var(--ink);
+  --text-muted: var(--ink-3);
+  --accent-hover: var(--accent-2);
+  --accent-active: var(--accent-3);
+  --accent-soft: var(--accent-bg);
+  --accent-text: var(--accent);
+  --on-accent: var(--accent-ink);
+  --ok-soft: var(--ok-bg);
+  --warn-soft: var(--warn-bg);
+  --err-soft: var(--err-bg);
+  --on-err: #2a0f0b;
 }
 
 [data-theme="light"] { color-scheme: light; }
@@ -288,29 +364,31 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  height: 36px;
-  padding: 0 var(--s4);
-  border-radius: var(--radius-sm);
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-ctl);
   border: 1px solid transparent;
   background: none;
   font-weight: 500;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color var(--tr-fast), border-color var(--tr-fast), transform var(--tr-fast), color var(--tr-fast);
+  /* Paint properties only. A scale-on-press transform makes a dense list feel
+     like it is breathing under the cursor. */
+  transition: background-color var(--tr-fast), border-color var(--tr-fast), color var(--tr-fast);
 }
 
-.btn:active { transform: scale(0.97); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
-.btn svg { width: 16px; height: 16px; flex: none; }
+.btn:active { background: var(--surface-2); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn svg { width: 15px; height: 15px; flex: none; }
 
 .btn-primary { background: var(--accent); color: var(--on-accent); }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .btn-primary:active:not(:disabled) { background: var(--accent-active); }
 
-.btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
-.btn-secondary:hover:not(:disabled) { background: var(--surface-2); }
+.btn-secondary { background: var(--surface); border-color: var(--line-3); color: var(--text); }
+.btn-secondary:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); }
 
 .btn-danger { background: var(--err); color: var(--on-err); }
 .btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
@@ -321,16 +399,34 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .btn-ghost { color: var(--text-muted); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 
-.btn-icon { width: 36px; padding: 0; }
+.btn-icon { width: 32px; padding: 0; }
 
-.btn-sm { padding: 2px 10px; font-size: 0.75rem; }
+.btn-sm { padding: 2px 8px; font-size: 0.75rem; height: 26px; }
 
 .command-trigger { gap: 6px; min-height: 44px; }
 .command-trigger-icon { display: none; width: 17px; height: 17px; flex: none; }
-.command-trigger kbd { padding: 1px 5px; font-size: 0.6875rem; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; }
+.command-trigger kbd {
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+}
 .actions-glyph { display: none; }
 
-.pill-warn { background: var(--warn-soft, #fdf3e3); color: var(--warn, #8a5a00); border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; margin-left: 8px; }
+/* A status flag, not a pill: the radius stays on the scale so it reads as a
+   label cut from the same stock as the row, not as a marketing badge. */
+.pill-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-ctl);
+  padding: 0 7px;
+  font-size: 0.75rem;
+  margin-left: var(--s2);
+}
 
 .dupe-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .dupe-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -358,7 +454,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   box-shadow: var(--shadow-lg);
   padding: var(--s2);
   z-index: 40;
-  animation: pop 0.15s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  animation: pop 0.15s cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 .menu button {
@@ -852,6 +948,133 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .first-scan-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .first-scan-actions .hint { flex: 1 1 220px; }
 .first-scan-guide :focus-visible { outline-offset: 3px; }
+/* ---- The context-budget meter ------------------------------------------
+   The one component in the app built to be looked at rather than read. It
+   exists because three of this machine's scope roots each hold more skill text
+   than an entire context window, which is a silent failure: nothing errors, the
+   files are all valid, and the agent is simply working from half its own rules.
+
+   The axis deliberately runs past 100%. On a 0-100% axis, 111% and 121% both
+   clamp to a full bar and the chart hides the one thing it exists to show. */
+.budget-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s5) var(--s6);
+  margin-top: var(--s5);
+  padding: var(--s5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.budget-hero-lead h2 {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 1.1875rem;
+  line-height: 1.32;
+  font-weight: 600;
+  letter-spacing: -.014em;
+}
+.budget-hero-lead p {
+  margin: var(--s2) 0 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+.budget-hero-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+
+.budget-hero-total { text-align: right; align-self: start; }
+.budget-hero-total .num {
+  display: block;
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  line-height: 1.05;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+.budget-hero-unit {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.budget-axis { position: relative; height: 14px; grid-column: 1 / -1; }
+.budget-axis-rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+.budget-axis-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(6px);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.scope-meter {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.scope-meter-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 92px 52px;
+  align-items: center;
+  gap: var(--s3);
+}
+.scope-meter-name {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scope-meter-track {
+  height: 8px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.scope-meter-fill { display: block; height: 100%; border-radius: var(--radius-xs); }
+.scope-meter-num { text-align: right; color: var(--text-muted); }
+.scope-meter-pct { text-align: right; font-weight: 600; }
+
+/* Colour is the *last* signal here, after position and length.
+   These classes are shared by the bar fill and the percentage label, so the
+   property has to be scoped to each — otherwise the label inherits the fill's
+   background and the figure sits on a block of colour. */
+.pct-ok   { color: var(--ok); }
+.pct-warn { color: var(--warn); }
+.pct-bad  { color: var(--err); }
+.scope-meter-fill.pct-ok   { background: var(--ok); }
+.scope-meter-fill.pct-warn { background: var(--warn); }
+.scope-meter-fill.pct-bad  { background: var(--err); }
+
+.budget-hero-foot {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+}
+.budget-hero-foot code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+
 /* One status line, not a hero. The h1 stays the programmatic focus target and
    the shell's accessible name; it is sized as a heading rather than a poster so
    the attention queue is the first substantial block on the page. */
@@ -1276,11 +1499,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
-  animation: pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  animation: pop 0.18s cubic-bezier(0.2, 0, 0.2, 1);
 }
 .modal-wide { width: min(760px, 100%); }
 .command-palette { width: min(680px, 100%); }
-@keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(6px); } }
+@keyframes pop { from { opacity: 0; transform: translateY(4px); } }
 
 .modal-head {
   display: flex;
@@ -1496,7 +1719,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   box-shadow: var(--shadow-lg);
   padding: 10px var(--s4);
   font-size: 0.84375rem;
-  animation: toast-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  animation: toast-in 0.18s cubic-bezier(0.2, 0, 0.2, 1);
 }
 @keyframes toast-in { from { opacity: 0; transform: translateX(12px); } }
 .toast svg { width: 16px; height: 16px; flex: none; }

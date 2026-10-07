@@ -263,6 +263,53 @@ createApp({
     disabledCount() { return this.skills.filter((s) => s.disabled).length; },
     trashCount() { return this.trashSkills.length; },
     allScopesCount() { return (this.scopes || []).reduce((n, s) => n + (s.count || 0), 0); },
+
+    /* Per-scope share of one context window, largest first.
+     *
+     * This is the most operationally consequential thing the tool observes: an
+     * agent that loads every skill under a root cannot fit them all. Every
+     * number here is arithmetic over what `/api/scopes` and `/api/stats`
+     * already report — nothing is inferred about which copy an agent would
+     * actually load, because the tool deliberately has no resolver.
+     *
+     * The axis runs to BUDGET_AXIS_MAX rather than 100 so that 111% and 121%
+     * render as visibly different bars. On a 0-100% axis both would clamp to a
+     * full bar and the chart would hide its own point.
+     */
+    scopeBudgetRows() {
+      const windowTokens = (this.budget && this.budget.window_tokens) || 0;
+      const rows = (this.scopes || [])
+        .filter(Boolean)
+        .map((s) => {
+          const tokens = s.tokens || 0;
+          const pct = windowTokens > 0 ? (tokens / windowTokens) * 100 : 0;
+          return {
+            id: s.id,
+            label: s.label,
+            tokens,
+            count: s.count || 0,
+            pct,
+            // Displayed figures are whole percent. A root at 121.061% and one
+            // at 118.996% are the same size bar; three decimals imply a
+            // precision the chars/4 estimator does not have.
+            pctRounded: Math.round(pct),
+            over: pct > 100,
+          };
+        })
+        .sort((a, b) => b.pct - a.pct);
+      return rows;
+    },
+    overBudgetScopeCount() {
+      return this.scopeBudgetRows.filter((r) => r.over).length;
+    },
+    budgetAxisMax() {
+      const peak = this.scopeBudgetRows.reduce((m, r) => Math.max(m, r.pct), 0);
+      return Math.max(125, Math.ceil(peak / 25) * 25);
+    },
+    scopeThresholdPos() {
+      const max = this.budgetAxisMax || 125;
+      return Math.max(0, Math.min(100, (100 / max) * 100)).toFixed(2) + "%";
+    },
     selectedDisabled() {
       return this.selected ? !!this.selected.disabled : false;
     },
@@ -590,6 +637,20 @@ createApp({
   },
 
   methods: {
+    /* Bar geometry for the context-budget meter. These are methods, not
+     * computeds: they take a percentage and return a CSS width, so a computed
+     * would have to be a computed *returning a function*, and unwrapping that
+     * inside a template render is exactly where a reactive proxy leaks into
+     * arithmetic. */
+    scopePctOf(pct) {
+      const max = this.budgetAxisMax || 125;
+      const v = Number(pct) || 0;
+      return Math.max(0, Math.min(100, (v / max) * 100)).toFixed(2) + "%";
+    },
+    scopePctClass(pct) {
+      const v = Number(pct) || 0;
+      return v > 100 ? "pct-bad" : v > 70 ? "pct-warn" : "pct-ok";
+    },
     renderMarkdown,
     tokenPctClass,
     tokenBarWidth,

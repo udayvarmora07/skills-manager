@@ -410,6 +410,44 @@
         </section>
 
         <template v-else-if="!banner">
+          <!-- The context budget is the most consequential thing this tool
+               observes, so it leads. Every agent that loads all skills from one
+               root starts with the rest of its instructions already truncated;
+               that is a silent, lossy failure, and burying it under a skill
+               count would be the wrong priority. The bar axis runs past 100%
+               on purpose — see scopeBudgetRows in app.js. -->
+          <section v-if="budget" class="budget-hero" aria-labelledby="budget-hero-title">
+            <div class="budget-hero-lead">
+              <h2 id="budget-hero-title">
+                <template v-if="overBudgetScopeCount">{{ formatNumber(overBudgetScopeCount) }} of {{ formatNumber(scopeBudgetRows.length) }} scope roots hold more skill text than one context window</template>
+                <template v-else>All {{ formatNumber(scopeBudgetRows.length) }} scope roots fit inside one context window</template>
+              </h2>
+              <p v-if="overBudgetScopeCount">Each bar is one root on its own. An agent that loads every skill below one of these roots begins with a truncated, silently lossy instruction set. Everything else on this page is secondary to that.</p>
+              <p v-else>Each bar is one root on its own, measured against a {{ budget.window }} window of {{ formatTokens(budget.window_tokens) }} tokens.</p>
+              <div class="budget-hero-actions">
+                <button class="btn btn-primary" type="button" @click="switchView('skills')">Trim the largest scopes</button>
+                <button class="btn btn-secondary" type="button" @click="openDoctor">See the breakdown</button>
+              </div>
+            </div>
+            <div class="budget-hero-total">
+              <span class="num">{{ formatTokens(budget.all_tokens) }}</span>
+              <span class="budget-hero-unit">tokens on disk<br>{{ formatNumber(budget.all_pct_window) }}% of one window</span>
+            </div>
+            <div class="budget-axis" aria-hidden="true">
+              <span class="budget-axis-rule" :style="{ left: scopeThresholdPos }"></span>
+              <span class="budget-axis-label" :style="{ left: scopeThresholdPos }">100% of one context window</span>
+            </div>
+            <ol class="scope-meter">
+              <li v-for="row in scopeBudgetRows" :key="row.id" class="scope-meter-row">
+                <span class="scope-meter-name">{{ row.label }}</span>
+                <span class="scope-meter-track"><span class="scope-meter-fill" :class="scopePctClass(row.pct)" :style="{ width: scopePctOf(row.pct) }"></span></span>
+                <span class="scope-meter-num num">{{ formatTokens(row.tokens) }}</span>
+                <span class="scope-meter-pct num" :class="scopePctClass(row.pct)">{{ formatNumber(row.pctRounded) }}%</span>
+              </li>
+            </ol>
+            <p v-if="!budget.has_tiktoken" class="budget-hero-foot">Counts are a chars/4 estimate. Install <code>tiktoken</code> for exact BPE figures.</p>
+          </section>
+
           <section class="attention-queue" aria-labelledby="attention-title">
             <div class="overview-section-head"><div><p class="eyebrow">Next actions</p><h2 id="attention-title">Attention queue</h2></div><span class="list-count">{{ formatNumber(overviewAttentionCount) }}</span></div>
             <p class="overview-section-note">Derived from observed instance state; no validation or provenance status is inferred here.</p>
