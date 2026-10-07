@@ -37,6 +37,12 @@ _STATIC_TYPES = {
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",
+    # The vendored typeface (SEC: offline by design). Serving woff2 as
+    # application/octet-stream happens to work for a same-origin @font-face
+    # fetch, but it is wrong on the wire and any stricter consumer downstream
+    # would refuse it.
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
 }
 
 _SKILL_FIELDS = ("description", "license", "category", "compatibility", "version", "allowed_tools", "body")

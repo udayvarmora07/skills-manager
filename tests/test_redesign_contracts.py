@@ -245,6 +245,32 @@ class DesignContractTests(unittest.TestCase):
         for face in faces:
             self.assertGreater((FONTS / face).stat().st_size, 1000, f"{face} looks empty")
 
+    def test_the_vendored_faces_cover_basic_latin(self):
+        """The first vendoring pass shipped faces that covered no ASCII.
+
+        Six @font-face rules were declared and 176 KB of woff2 sat in the
+        package, but every one of them carried only the `latin-ext`
+        unicode-range. No English character in this interface matched any
+        declared face, so the browser never fetched one, never reported an
+        error, and every visitor silently got the fallback — while the file
+        existed and every "is the font vendored" check passed.
+
+        This is the same failure as "declared but never shipped", one level
+        down: the bytes are present, the declaration is present, and the page
+        still renders in the wrong typeface. Assert the glyph coverage.
+        """
+        css = (FONTS / "plex.css").read_text(encoding="utf-8")
+        self.assertIn("U+0000-00FF", css,
+                      "no vendored face covers basic latin — the page will "
+                      "silently render in the fallback")
+        # Every src must resolve to a file that exists. A relative URL in a
+        # stylesheet is resolved against the *stylesheet's* own URL, so a
+        # wrong prefix 404s quietly rather than failing loudly.
+        for src in re.findall(r"url\(([^)]+)\)", css):
+            self.assertNotIn("http", src, f"{src} is a remote reference")
+            self.assertTrue((FONTS / src).is_file(), f"{src} does not exist beside plex.css")
+        self.assertGreaterEqual(len(re.findall(r"@font-face", css)), 4)
+
     def test_the_stylesheet_imports_the_vendored_faces(self):
         self.assertIn('static/fonts/plex.css', _read(CSS))
 
