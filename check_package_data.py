@@ -50,7 +50,16 @@ INSTALL_PROBE = (
     "vue=root/'webui/static/vendor/vue.global.prod.js'; "
     "skill=root/'examples/skills-manager-management/SKILL.md'; "
     "assert vue.is_file() and vue.stat().st_size > 0, vue; "
-    "assert skill.is_file() and skill.read_bytes().startswith(b'---'), skill"
+    "assert skill.is_file() and skill.read_bytes().startswith(b'---'), skill; "
+    # The typeface must reach an installed copy too. A stylesheet that names a
+    # face it does not ship is the 'declared but never shipped' failure: the
+    # app runs, every visitor sees the fallback, and nothing reports an error.
+    "fonts=root/'webui/static/fonts'; "
+    "faces=sorted(fonts.glob('*.woff2')); "
+    "assert len(faces) >= 4, faces; "
+    "assert all(f.stat().st_size > 1000 for f in faces), faces; "
+    "assert (fonts/'plex.css').is_file(), fonts; "
+    "assert 'IBMPlexSans' in {f.name.split('-')[0] for f in faces}, faces"
 )
 
 #: SEC-9: the vendored bundle executes same-origin with access to every local
