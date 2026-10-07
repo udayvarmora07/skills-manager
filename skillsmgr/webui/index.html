@@ -466,7 +466,10 @@
             <div class="overview-section-head"><div><p class="eyebrow">Next actions</p><h2 id="attention-title">Attention queue</h2></div><span class="list-count">{{ formatNumber(overviewAttentionCount) }}</span></div>
             <p class="overview-section-note">Derived from observed instance state; no validation or provenance status is inferred here.</p>
             <ol v-if="overviewAttention.length" class="attention-list">
-              <li v-for="item in overviewAttention" :key="item.key" class="attention-item">
+              <!-- data-attention is the stable identity of the queue item. The dev
+                   harness used to assert the item by matching its exact title copy,
+                   which breaks the moment the wording improves. -->
+              <li v-for="item in overviewAttention" :key="item.key" class="attention-item" :data-attention="item.key">
                 <span class="attention-index" aria-hidden="true">!</span>
                 <div><h3>{{ item.title }}</h3><p>{{ item.detail }}</p></div>
                 <button class="btn btn-secondary" type="button" @click="openOverviewAttention(item.key)">{{ item.action }}</button>

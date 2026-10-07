@@ -1155,6 +1155,28 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   font-size: 0.95em;
 }
 
+/* Narrow: the four-column meter row leaves the track about 40px wide, which
+   is not a meter, and the axis label runs off the right edge. Give each row a
+   full-width track and move the threshold caption above the list. */
+@media (max-width: 620px) {
+  .budget-hero { grid-template-columns: minmax(0, 1fr); }
+  .budget-hero-total { text-align: left; }
+  .scope-meter-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name  pct"
+      "track track"
+      "tok   tok";
+    gap: 3px var(--s2);
+  }
+  .scope-meter-name { grid-area: name; max-width: none; }
+  .scope-meter-track { grid-area: track; }
+  .scope-meter-pct { grid-area: pct; }
+  .scope-meter-num { grid-area: tok; text-align: left; color: var(--ink-4); }
+  .budget-axis { order: -1; margin-bottom: var(--s2); }
+  .budget-axis-label { transform: translateX(-100%); padding-right: 6px; }
+}
+
 /* One status line, not a hero. The h1 stays the programmatic focus target and
    the shell's accessible name; it is sized as a heading rather than a poster so
    the attention queue is the first substantial block on the page. */
