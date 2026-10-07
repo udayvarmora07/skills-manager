@@ -18,6 +18,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -398,6 +399,38 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     return json.loads(lines[-1])
 
 
+def _stop_process(process: subprocess.Popen[str], label: str, timeout: float = 20.0) -> None:
+    """Terminate a child and reap it, without ever raising from cleanup.
+
+    The harness used to do `chrome.terminate(); chrome.wait(timeout=5)` in its
+    `finally` block. On a busy shared runner Chrome routinely needs longer than
+    five seconds to exit after SIGTERM, and `Popen.wait` raises
+    `TimeoutExpired` when it does — from a cleanup path, which then *replaced
+    the real result*. A run that had passed every probe was reported as a
+    failure on 2026-10-06 for exactly this reason, and the traceback pointed
+    at the harness rather than at the product.
+
+    Cleanup must not be able to fail a run. Escalate TERM -> KILL, wait
+    generously, and swallow anything that is still wrong, because a browser
+    that will not die is worth a warning and not worth a red build.
+    """
+    if process.poll() is not None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:  # pragma: no cover - defensive
+        return
+    try:
+        process.kill()
+        process.wait(timeout=timeout)
+    except Exception:  # pragma: no cover - the process is already gone or unkillable
+        print(f"warning: could not reap {label}", file=sys.stderr)
+
+
 def run() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep-profile", action="store_true")
@@ -496,8 +529,7 @@ def run() -> int:
             print(json.dumps({"viewports": results, "scenarios": scenario_results, "passed": not failures}, indent=2))
             return 1 if failures else 0
         finally:
-            chrome.terminate()
-            chrome.wait(timeout=5)
+            _stop_process(chrome, "chrome")
             chrome_log.close()
             server.shutdown()
             server_thread.join(timeout=5)

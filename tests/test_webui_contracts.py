@@ -200,6 +200,52 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('<dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd>', html)
         self.assertIn('.overview-metrics small { display: block;', css)
 
+    def test_harness_cleanup_cannot_fail_a_run(self):
+        """A child that ignores SIGTERM must not turn a passing run red.
+
+        The harness reaped Chrome with `chrome.terminate(); chrome.wait(timeout=5)`
+        inside its `finally`. On a busy shared runner Chrome routinely needs
+        longer than five seconds to exit after SIGTERM, `Popen.wait` raises
+        `TimeoutExpired` when it does, and a raise from a cleanup path replaces
+        the real result. The 2026-10-06 `browser smoke` job failed that way on
+        a tree whose probes had all passed, and the traceback pointed at the
+        harness rather than at the product.
+
+        Exercised for real, against a child that deliberately ignores SIGTERM.
+        """
+        import importlib.util
+        import subprocess
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "browser_harness", ROOT / "browser_harness.py"
+        )
+        harness = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(harness)
+
+        # `signal.signal(SIGTERM, SIG_IGN)` makes the child deaf to terminate(),
+        # which is exactly the condition that used to raise.
+        script = (
+            "import signal, sys, time; "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "print('ready', flush=True); "
+            "time.sleep(120)"
+        )
+        child = subprocess.Popen(
+            [sys.executable, "-c", script], stdout=subprocess.PIPE, text=True
+        )
+        try:
+            self.assertEqual(child.stdout.readline().strip(), "ready")
+            # Must not raise, and must leave nothing running.
+            harness._stop_process(child, "stubborn-child", timeout=1.0)
+            self.assertIsNotNone(child.poll(), "child survived cleanup")
+            # An already-dead child is a no-op, not an error.
+            harness._stop_process(child, "already-dead", timeout=1.0)
+        finally:
+            if child.poll() is None:  # pragma: no cover - only on failure
+                child.kill()
+                child.wait(timeout=5)
+
     def test_browser_harness_is_hermetic_and_waits_for_stable_overview(self):
         source = _read(ROOT / "browser_harness.py")
         self.assertIn('os.environ["HOME"]', source)
