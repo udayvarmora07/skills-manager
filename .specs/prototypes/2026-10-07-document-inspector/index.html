@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Manager — Document Inspector (prototype B)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,450;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   DOCUMENT INSPECTOR — prototype B
+
+   The organising idea is different from prototype A, not just the paint:
+   navigation, reading and fact-finding are three columns of ONE thing.
+
+     scope tree  ->  the SKILL.md itself  ->  an inspector rail
+
+   A treats the skill as a row you inspect. B treats the document as the
+   product and everything else as apparatus around it — which is what it
+   actually is, since the document is what an agent loads into its context.
+   ========================================================================== */
+
+:root {
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --t-display: 600 27px/1.16 var(--sans); letter-spacing: -0.023em;
+  --t-title:   600 18px/1.28 var(--sans); letter-spacing: -0.015em;
+  --t-head:    600 13.5px/1.35 var(--sans); letter-spacing: -0.005em;
+  --t-body:    400 13.5px/1.55 var(--sans);
+  --t-read:    400 15px/1.68 var(--sans);   /* the document's own measure */
+  --t-sm:      400 12px/1.45 var(--sans);
+  --t-micro:   600 10px/1.3 var(--sans); letter-spacing: 0.085em;
+  --t-num:     500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
+  --t-id:      500 13px/1.35 var(--mono); letter-spacing: -0.012em;
+
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 22px; --s6: 28px; --s7: 40px; --s8: 56px;
+
+  --r: 4px; --r-panel: 7px; --r-sheet: 11px;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --dur: 130ms;
+
+  --tree-w: 264px;
+  --insp-w: 304px;
+  --measure: 68ch;
+}
+
+[data-theme="light"] {
+  --bg:        #faf7f1;
+  --paper:     #fffdf9;   /* the document sheet — the lightest thing here */
+  --surface:   #fffdf9;
+  --surface-2: #f3ede2;
+  --surface-3: #ebe3d4;
+  --ink:       #211e19;
+  --ink-2:     #4b453b;
+  --ink-3:     #797162;
+  --ink-4:     #a49a88;
+  --line:      #e7e0d2;
+  --line-2:    #d6cbb7;
+  --line-3:    #b8ab92;
+
+  --accent:     #9e4415;
+  --accent-ink: #fff;
+  --accent-bg:  #f7ece3;
+  --accent-line:#e5ccb7;
+
+  --ok:   #4f6b32; --ok-bg:   #eef1e6; --ok-line:   #d0dabe;
+  --warn: #8a6111; --warn-bg: #f7f0dd; --warn-line: #e1d1a9;
+  --err:  #96301d; --err-bg:  #f8eae5; --err-line:  #e6c7bb;
+  --mute-state: #797162; --mute-bg: #f0eadf; --mute-line: #ded5c3;
+
+  --sel: #f7ece2;
+  --focus: #9e4415;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg:        #16130e;
+  --paper:     #1c1812;
+  --surface:   #1d1913;
+  --surface-2: #241f18;
+  --surface-3: #2e271d;
+  --ink:       #f3ede1;
+  --ink-2:     #d0c7b7;
+  --ink-3:     #a09783;
+  --ink-4:     #726957;
+  --line:      #302a20;
+  --line-2:    #443c2e;
+  --line-3:    #5f5543;
+
+  --accent:     #e08a4e;
+  --accent-ink: #191108;
+  --accent-bg:  #2c2118;
+  --accent-line:#4e3823;
+
+  --ok:   #9dbb74; --ok-bg:   #222617; --ok-line:   #38462b;
+  --warn: #d9a441; --warn-bg: #2a2314; --warn-line: #463b20;
+  --err:  #e0775c; --err-bg:  #2c1a15; --err-line:  #4b2b21;
+  --mute-state: #a09783; --mute-bg: #241f18; --mute-line: #3b3428;
+
+  --sel: #2b2018;
+  --focus: #e08a4e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font: var(--t-body); -webkit-font-smoothing: antialiased; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+.num, td, th, .chip-n, kbd { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+/* ===================== TOPBAR ===================== */
+.topbar { height: 50px; flex: 0 0 50px; display: flex; align-items: center; gap: var(--s4);
+  padding: 0 var(--s5); background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; }
+.mark { width: 16px; height: 16px; border-radius: 2px; background: var(--accent); flex: none; position: relative; }
+.mark::after { content: ""; position: absolute; inset: 4px 4px auto 4px; height: 2px; background: var(--accent-ink); opacity: .9; }
+.mark::before { content: ""; position: absolute; inset: auto 4px 4px 4px; height: 2px; background: var(--accent-ink); opacity: .55; }
+.brand-name { font: var(--t-head); letter-spacing: -0.01em; }
+.brand-ver { font: var(--t-num); font-size: 10px; color: var(--ink-4); }
+.crumb { display: flex; align-items: center; gap: 8px; font: var(--t-sm); color: var(--ink-4); }
+.crumb b { font: var(--t-id); font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.crumb-sep { color: var(--line-3); }
+.omni { margin-left: auto; height: 30px; max-width: 380px; display: flex; align-items: center; gap: 8px;
+  padding: 0 8px 0 11px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--r); color: var(--ink-3); font: var(--t-sm); }
+.omni kbd { margin-left: auto; font: var(--t-num); font-size: 10px; padding: 2px 5px;
+  border: 1px solid var(--line-2); border-radius: 3px; color: var(--ink-4); background: var(--surface); }
+
+/* ===================== CONTROLS ===================== */
+.btn { height: 29px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px;
+  font: var(--t-head); font-weight: 500; font-size: 12.5px; color: var(--ink-2);
+  background: transparent; border: 1px solid transparent; border-radius: var(--r);
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.btn:hover { background: var(--surface-2); color: var(--ink); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { background: color-mix(in oklab, var(--accent) 88%, #000); color: var(--accent-ink); }
+.btn-ghost { color: var(--ink-3); }
+.btn-icon { width: 29px; padding: 0; justify-content: center; }
+.btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.chip { height: 24px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px;
+  font: var(--t-head); font-weight: 500; font-size: 11.5px; color: var(--ink-2);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.chip:hover { border-color: var(--line-2); background: var(--surface-2); }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip-n { font: var(--t-num); font-size: 10px; opacity: .6; }
+
+.st { display: inline-flex; align-items: center; gap: 5px; font: var(--t-head); font-weight: 500; font-size: 11.5px; white-space: nowrap; }
+.st::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: currentColor; flex: none; }
+.st-ok { color: var(--ok); } .st-warn { color: var(--warn); }
+.st-err { color: var(--err); } .st-mute { color: var(--mute-state); }
+.pill { display: inline-flex; align-items: center; height: 19px; padding: 0 6px; border-radius: 3px;
+  font: var(--t-head); font-weight: 500; font-size: 10.5px; border: 1px solid transparent; white-space: nowrap; }
+.p-warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+.p-err  { color: var(--err);  background: var(--err-bg);  border-color: var(--err-line); }
+.p-mute { color: var(--ink-3); background: var(--surface-2); border-color: var(--line); }
+.p-accent { color: var(--accent); background: var(--accent-bg); border-color: var(--accent-line); }
+.micro { font: var(--t-micro); text-transform: uppercase; color: var(--ink-4); }
+
+/* ===================== THREE COLUMNS ===================== */
+.shell { flex: 1; display: grid; grid-template-columns: var(--tree-w) 1fr var(--insp-w); min-height: 0; }
+
+/* ---------- 1. SCOPE TREE : navigation and selection are one thing ---------- */
+.tree { background: var(--surface); border-right: 1px solid var(--line);
+  overflow-y: auto; padding: var(--s3) 0 var(--s6); }
+.tree-sec { padding: 0 var(--s3) var(--s5); }
+.tree-head { display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px var(--s2); }
+.tree-head .micro { padding-left: 2px; }
+
+.grp { width: 100%; display: flex; align-items: center; gap: 7px; padding: 5px 8px;
+  border: 0; border-radius: var(--r); background: transparent; text-align: left; cursor: pointer;
+  font: var(--t-head); font-size: 12.5px; color: var(--ink); }
+.grp:hover { background: var(--surface-2); }
+.tw { width: 9px; height: 9px; flex: none; color: var(--ink-4); transition: transform var(--dur) var(--ease); }
+.grp.open .tw { transform: rotate(90deg); }
+.grp-n { margin-left: auto; font: var(--t-num); font-size: 10.5px; color: var(--ink-4); }
+/* No meter in the tree. A 26px bar next to a number reads as a stray dash,
+   and the number is the whole fact — the chart lives on the Overview. */
+.grp-pct { font: var(--t-num); font-size: 10.5px; color: var(--err); font-weight: 600; }
+
+.leaf { width: 100%; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px;
+  padding: 5px 8px 5px 24px; border: 0; border-radius: var(--r);
+  background: transparent; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease); }
+.leaf:hover { background: var(--surface-2); }
+.leaf.on { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+.leaf-name { font: var(--t-id); font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaf-mark { width: 6px; height: 6px; border-radius: 1px; flex: none; }
+.leaf-sub { grid-column: 1 / -1; font: var(--t-num); font-size: 10px; color: var(--ink-4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaf.on .leaf-sub { color: var(--ink-3); }
+
+/* ---------- 2. THE DOCUMENT : the hero ---------- */
+.doc-col { background: var(--bg); overflow-y: auto; }
+.sheet { max-width: calc(var(--measure) + var(--s7) * 2); margin: 0 auto; padding: var(--s7) var(--s7) var(--s8); }
+.doc-head { margin-bottom: var(--s6); }
+.doc-head h1 { margin: 0 0 var(--s3); font: var(--t-display); max-width: 22ch; }
+.doc-lede { margin: 0 0 var(--s5); font: var(--t-read); color: var(--ink-2); max-width: var(--measure); }
+.doc-byline { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  padding-bottom: var(--s5); border-bottom: 1px solid var(--line); }
+
+/* Reading rhythm: the document gets real typographic care, because it is
+   the artefact. 62px is the gap between a heading and its first line. */
+.prose { max-width: var(--measure); }
+.prose h2 { font: var(--t-title); margin: var(--s7) 0 var(--s3); }
+.prose h3 { font: var(--t-head); margin: var(--s6) 0 var(--s2); }
+.prose p { margin: 0 0 var(--s4); font: var(--t-read); color: var(--ink-2); }
+.prose ol, .prose ul { margin: 0 0 var(--s4); padding-left: 22px; font: var(--t-read); color: var(--ink-2); }
+.prose li { margin-bottom: var(--s2); }
+.prose li::marker { color: var(--ink-4); font-family: var(--mono); font-size: .85em; }
+.prose code { font: var(--t-num); font-size: 12.5px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; color: var(--ink); }
+.prose pre { font: var(--t-num); font-size: 12px; line-height: 1.7; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-panel); padding: var(--s4); margin: 0 0 var(--s4);
+  overflow-x: auto; color: var(--ink-2); }
+.prose blockquote { margin: 0 0 var(--s4); padding: 2px 0 2px var(--s4);
+  border-left: 2px solid var(--accent-line); font: var(--t-read); color: var(--ink-3); }
+
+/* The plain-language translation. This is the "learn it" half of the brief,
+   and it sits directly under the sentence it explains rather than in a Help pane. */
+.gloss { margin: 0 0 var(--s4); padding: var(--s3) var(--s4); background: var(--surface);
+  border: 1px solid var(--line); border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-panel) var(--r-panel) 0; }
+.gloss b { display: block; font: var(--t-head); font-size: 12px; color: var(--ink); margin-bottom: 3px; }
+.gloss p { margin: 0; font: var(--t-sm); color: var(--ink-3); max-width: 62ch; }
+
+.srcbar { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s7);
+  padding-top: var(--s4); border-top: 1px solid var(--line); }
+
+/* ---------- 3. INSPECTOR RAIL : facts, stacked and labelled ---------- */
+.insp { background: var(--surface); border-left: 1px solid var(--line); overflow-y: auto; }
+.insp-sec { padding: var(--s4) var(--s5); border-bottom: 1px solid var(--line); }
+.insp-sec > .micro { display: block; margin-bottom: var(--s3); }
+.kv { display: grid; grid-template-columns: 82px 1fr; gap: 7px var(--s3); align-items: baseline; }
+.kv dt { font: var(--t-sm); font-size: 11.5px; color: var(--ink-4); }
+.kv dd { margin: 0; font: var(--t-num); font-size: 11.5px; color: var(--ink); word-break: break-word; }
+.kv dd.txt { font-family: var(--sans); font-size: 12.5px; }
+
+.copy-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--s3);
+  padding: 9px 0; border-bottom: 1px solid var(--line); }
+.copy-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.copy-scope { font: var(--t-head); font-size: 12.5px; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.copy-path { font: var(--t-num); font-size: 10px; color: var(--ink-4); margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.act { display: flex; flex-direction: column; gap: 5px; }
+.act .btn { width: 100%; justify-content: flex-start; height: 31px; border-color: var(--line); background: var(--surface); }
+.act .btn:hover { border-color: var(--line-2); }
+.act .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); justify-content: center; }
+
+@media (max-width: 1080px) { .shell { grid-template-columns: 240px 1fr; } .insp { display: none; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="brand-name">Skills Manager</span>
+    <span class="brand-ver">1.0.2</span>
+  </div>
+  <span style="width:1px;height:18px;background:var(--line)"></span>
+  <nav class="crumb" aria-label="Location">
+    <span>Library</span><span class="crumb-sep">/</span>
+    <b>first-principles-production-engineering</b>
+  </nav>
+  <div class="omni" role="search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <span>Search skills&hellip;</span><kbd>&#8984;K</kbd>
+  </div>
+  <button class="btn btn-icon btn-ghost" id="theme" aria-label="Toggle theme">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/></svg>
+  </button>
+  <button class="btn btn-primary">New skill</button>
+</header>
+
+<main class="shell">
+
+  <!-- ========== COLUMN 1 — SCOPE TREE ==========
+       Navigation and selection are one structure here, not two stacked
+       panels. Each scope carries its context-budget share, because that is
+       the fact you want while you are choosing where to work. -->
+  <nav class="tree" aria-label="Skills by scope">
+    <div class="tree-sec">
+      <div class="tree-head"><span class="micro">All scopes</span><span class="chip-n micro">1,965 files</span></div>
+    </div>
+
+    <div class="tree-sec">
+      <div class="tree-head"><span class="micro">Roots</span><span class="chip-n micro">639 skills</span></div>
+
+      <button class="grp open" data-grp="s-opencode">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        opencode<span class="grp-pct">121%</span><span class="grp-n">519</span>
+      </button>
+      <div data-for="s-opencode">
+        <button class="leaf"><span class="leaf-name">bun</span><span class="st st-ok">Active</span><span class="leaf-sub">4,220 tok</span></button>
+        <button class="leaf"><span class="leaf-name">blue-green-deploy</span><span class="st st-ok">Active</span><span class="leaf-sub">2,450 tok</span></button>
+        <button class="leaf"><span class="leaf-name">brainstorming</span><span class="st st-ok">Active</span><span class="leaf-sub">3,595 tok</span></button>
+      </div>
+
+      <button class="grp open" data-grp="s-codex">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        codex<span class="grp-pct">119%</span><span class="grp-n">480</span>
+      </button>
+      <div data-for="s-codex">
+        <button class="leaf"><span class="leaf-name">claude-api</span><span class="st st-ok">Active</span><span class="leaf-sub">16,404 tok</span></button>
+        <button class="leaf"><span class="leaf-name">skill-creator</span><span class="st st-warn">Divergent</span><span class="leaf-sub">7,803 tok</span></button>
+      </div>
+
+      <button class="grp open" data-grp="s-agents">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        agents <span class="grp-n">122</span>
+      </button>
+      <div data-for="s-agents">
+        <button class="leaf"><span class="leaf-name">write-swift</span><span class="st st-ok">Active</span><span class="leaf-sub">9,748 tok</span></button>
+        <button class="leaf"><span class="leaf-name">ai-coding-agent-guardrails</span><span class="st st-warn">Divergent</span><span class="leaf-sub">7,074 tok</span></button>
+        <button class="leaf"><span class="leaf-name">kubernetes-skill</span><span class="st st-mute">Disabled</span><span class="leaf-sub">SKILL.md.disabled</span></button>
+        <button class="leaf"><span class="leaf-name">Legacy_ETL_v2</span><span class="st st-err">Unaddressable</span><span class="leaf-sub">name fails NAME_RE</span></button>
+      </div>
+
+      <button class="grp open" data-grp="s-global">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        global <span class="grp-n">5</span>
+      </button>
+      <div data-for="s-global">
+        <button class="leaf on"><span class="leaf-name">first-principles-production-engineering</span><span class="st st-warn">Divergent</span><span class="leaf-sub">8,076 tok &middot; 7 copies</span></button>
+      </div>
+
+      <button class="grp" data-grp="s-gemini">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        gemini<span class="grp-pct">111%</span><span class="grp-n">450</span>
+      </button>
+      <div data-for="s-gemini" hidden>
+        <button class="leaf"><span class="leaf-name">accessibility-compliance</span><span class="st st-ok">Active</span><span class="leaf-sub">8,012 tok &middot; differs</span></button>
+      </div>
+
+      <button class="grp" data-grp="s-claude">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        claude-code <span class="grp-n">329</span>
+      </button>
+      <div data-for="s-claude" hidden>
+        <button class="leaf"><span class="leaf-name">accessibility-compliance</span><span class="st st-err">Invalid</span><span class="leaf-sub">path escapes root</span></button>
+      </div>
+
+      <button class="grp" data-grp="s-cursor">
+        <svg class="tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        cursor <span class="grp-n">&mdash;</span>
+      </button>
+      <div data-for="s-cursor" hidden></div>
+    </div>
+
+    <div class="tree-sec">
+      <div class="tree-head"><span class="micro">Views</span></div>
+      <button class="leaf" style="padding-left:8px"><span class="leaf-name" style="font-family:var(--sans);font-weight:500;font-size:12.5px">Overview</span></button>
+      <button class="leaf" style="padding-left:8px"><span class="leaf-name" style="font-family:var(--sans);font-weight:500;font-size:12.5px">Quality</span><span class="leaf-sub">286 findings</span></button>
+      <button class="leaf" style="padding-left:8px"><span class="leaf-name" style="font-family:var(--sans);font-weight:500;font-size:12.5px">Recovery</span><span class="leaf-sub">2 recoverable</span></button>
+      <button class="leaf" style="padding-left:8px"><span class="leaf-name" style="font-family:var(--sans);font-weight:500;font-size:12.5px">Install</span></button>
+      <button class="leaf" style="padding-left:8px"><span class="leaf-name" style="font-family:var(--sans);font-weight:500;font-size:12.5px">Profiles</span></button>
+    </div>
+  </nav>
+
+  <!-- ========== COLUMN 2 — THE DOCUMENT ========== -->
+  <section class="doc-col" aria-label="Skill document">
+    <div class="sheet">
+      <header class="doc-head">
+        <h1>first-principles-production-engineering</h1>
+        <p class="doc-lede">First-principles production software engineering methodology for building,
+        debugging, testing and shipping. You MUST use this before writing non-trivial code.</p>
+        <div class="doc-byline">
+          <span class="st st-warn">Divergent</span>
+          <span class="pill p-warn">7 copies</span>
+          <span class="pill p-mute">3 distinct contents</span>
+          <span class="chip-n" style="margin-left:auto;color:var(--ink-4)">8,076 tokens per copy</span>
+        </div>
+      </header>
+
+      <article class="prose">
+        <h2>When to use this</h2>
+        <p>Before writing non-trivial code. Before debugging. Before optimising. Reach for the underlying
+        mechanism rather than the pattern you were given last time.</p>
+
+        <div class="gloss">
+          <b>What "Divergent" means here</b>
+          <p>Seven copies of this file exist on disk, and they are not the same file. Three different content
+          hashes are in play, so codex and opencode are reading one set of instructions while gemini is reading
+          another. This tool will not pick one for you — see the Copies panel on the right.</p>
+        </div>
+
+        <h2>Principle 1 — the mechanism is the thing</h2>
+        <p>When you reach for a familiar pattern, ask what makes it work. If you cannot answer, you are
+        cargo-culting. The answer is usually a constraint you have forgotten about: an invariant the runtime
+        maintains, a property the type system is enforcing, a failure mode the queue is designed to absorb.</p>
+
+        <h2>Principle 2 — measure before you change</h2>
+        <p>A change made without a measurement is a guess with extra steps. Establish the current behaviour
+        first, with something that would fail if the behaviour changed. Then change one thing.</p>
+
+        <ol>
+          <li>Reproduce the current behaviour in a check that fails when it regresses.</li>
+          <li>Change exactly one thing.</li>
+          <li>Re-run. If it does not move the number you were trying to move, revert and rethink.</li>
+        </ol>
+
+        <div class="gloss">
+          <b>Why this matters for a skills file</b>
+          <p>A skill is loaded into an agent's context, not read by a person under review. If the instructions
+          disagree between copies, the agents silently disagree with each other — and there is no error, because
+          each one is faithfully doing what its own copy says.</p>
+        </div>
+
+        <h2>Principle 3 — delete before you optimise</h2>
+        <p>Most performance work is removing work. Measure where the time actually goes before making it faster;
+        a large fraction of "slow" code is doing nothing at all.</p>
+
+        <h2>Frontmatter</h2>
+        <pre>---
+name: first-principles-production-engineering
+description: First-principles production software engineering
+  methodology for building, debugging, testing and shipping.
+license: MIT
+category: methodology
+compatibility: claude-code, codex, opencode, gemini
+---</pre>
+      </article>
+
+      <div class="srcbar">
+        <button class="btn">View raw source</button>
+        <button class="btn btn-ghost">Copy document</button>
+        <button class="btn btn-ghost">Compare against another copy</button>
+        <span class="chip-n" style="margin-left:auto;color:var(--ink-4)">SKILL.md &middot; 31,412 bytes</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== COLUMN 3 — INSPECTOR RAIL ==========
+       Facts, stacked and labelled. Not a card grid: a spec sheet you read
+       top to bottom. Each group answers exactly one question. -->
+  <aside class="insp" aria-label="Inspector">
+
+    <section class="insp-sec">
+      <span class="micro">Actions</span>
+      <div class="act">
+        <button class="btn btn-primary">Edit this skill</button>
+        <button class="btn">Update from folder&hellip;</button>
+        <button class="btn">Sync to other scopes&hellip;</button>
+        <button class="btn">Validate</button>
+        <button class="btn btn-ghost">History &amp; snapshots</button>
+      </div>
+    </section>
+
+    <section class="insp-sec">
+      <span class="micro">Metadata</span>
+      <dl class="kv">
+        <dt>Category</dt><dd class="txt">methodology</dd>
+        <dt>License</dt><dd class="txt">MIT</dd>
+        <dt>Version</dt><dd>&mdash;</dd>
+        <dt>Works with</dt><dd class="txt">claude-code, codex, opencode, gemini</dd>
+        <dt>Tools</dt><dd>&mdash;</dd>
+      </dl>
+    </section>
+
+    <section class="insp-sec">
+      <span class="micro">Observed</span>
+      <dl class="kv">
+        <dt>Content</dt><dd>a3f9c1&hellip;21</dd>
+        <dt>Metadata</dt><dd>7c04be&hellip;9e</dd>
+        <dt>Observed</dt><dd>2 minutes ago</dd>
+        <dt>Addressable</dt><dd class="txt">yes</dd>
+        <dt>Source</dt><dd class="txt">local &middot; not registry</dd>
+      </dl>
+    </section>
+
+    <section class="insp-sec">
+      <span class="micro">Copies &mdash; 7</span>
+
+      <div class="copy-row">
+        <div>
+          <div class="copy-scope"><span class="leaf-mark" style="background:var(--ok)"></span>global</div>
+          <div class="copy-path">~/.local/share/skills-manager/skills/&hellip;</div>
+        </div>
+        <span class="st st-ok">Active</span>
+      </div>
+      <div class="copy-row">
+        <div>
+          <div class="copy-scope"><span class="leaf-mark" style="background:var(--ok)"></span>codex</div>
+          <div class="copy-path">~/.codex/skills/first-principles&hellip;</div>
+        </div>
+        <span class="st st-ok">Active</span>
+      </div>
+      <div class="copy-row">
+        <div>
+          <div class="copy-scope"><span class="leaf-mark" style="background:var(--ok)"></span>opencode</div>
+          <div class="copy-path">~/.config/opencode/skills/first-prin&hellip;</div>
+        </div>
+        <span class="st st-ok">Active</span>
+      </div>
+      <div class="copy-row">
+        <div>
+          <div class="copy-scope"><span class="leaf-mark" style="background:var(--warn)"></span>gemini</div>
+          <div class="copy-path">~/.gemini/skills/first-principles&hellip;</div>
+        </div>
+        <span class="st st-warn">Differs</span>
+      </div>
+      <div class="copy-row">
+        <div>
+          <div class="copy-scope"><span class="leaf-mark" style="background:var(--ok)"></span>commandcode</div>
+          <div class="copy-path">~/.commandcode/skills/first-princi&hellip;</div>
+        </div>
+        <span class="st st-ok">Active</span>
+      </div>
+      <div class="copy-row">
+        <div>
+          <div class="copy-scope"><span class="leaf-mark" style="background:var(--err)"></span>agents</div>
+          <div class="copy-path">~/.agents/skills/first-principles&hellip;</div>
+        </div>
+        <span class="st st-err">Invalid</span>
+      </div>
+
+      <p style="margin:var(--s4) 0 0;font:var(--t-sm);color:var(--ink-4)">
+        No winner is elected. Codex loads every copy it finds; claude-code documents personal &gt; project;
+        where no order is documented this stays <code style="font:var(--t-num);font-size:11px">undocumented-precedence</code>.
+      </p>
+    </section>
+  </aside>
+</main>
+
+<script>
+document.querySelectorAll('.grp').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var box = document.querySelector('[data-for="' + b.dataset.grp + '"]');
+    if (!box) return;
+    var open = b.classList.toggle('open');
+    box.hidden = !open;
+  });
+});
+document.querySelectorAll('.leaf').forEach(function (l) {
+  l.addEventListener('click', function () {
+    document.querySelectorAll('.leaf').forEach(function (x) { x.classList.remove('on'); });
+    l.classList.add('on');
+  });
+});
+document.getElementById('theme').addEventListener('click', function () {
+  var el = document.documentElement;
+  el.dataset.theme = el.dataset.theme === 'dark' ? 'light' : 'dark';
+});
+
+/* Capture mode: ?shot=1 relaxes the fixed viewport for a full-page capture;
+   &theme=light|dark opens in a given theme. */
+{
+  var q = new URLSearchParams(location.search);
+  if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
+  if (q.get('shot') === '1') {
+    var st = document.createElement('style');
+    st.textContent = 'html,body{height:auto!important;overflow:visible!important}' +
+                     '.shell{min-height:820px}.tree,.doc-col,.insp{overflow:visible!important}';
+    document.head.appendChild(st);
+  }
+}
+</script>
+</body>
+</html>

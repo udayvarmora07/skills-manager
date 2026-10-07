@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Manager — Reconcile (prototype C)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   RECONCILE — prototype C
+
+   A third thesis, not a restyle.
+
+     A (Warm Instrument)   : a skill is a row you inspect
+     B (Document Inspector): a skill is a document you read
+     C (Reconcile)         : a skill is a DISAGREEMENT you resolve
+
+   The screen is a queue of things that are wrong, each one a job with a
+   preview, a resolution and a rollback. Browsing is demoted to a filter.
+
+   Visual: a ledger. Warm paper, ink rules, and the diff holds the only
+   colour in the interface — sage for added, brick for removed. There is no
+   brand accent competing with what "changed" means, because on this screen
+   "changed" is the entire subject.
+   ========================================================================== */
+
+:root {
+  --sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --t-display: 700 28px/1.14 var(--sans); letter-spacing: -0.026em;
+  --t-title:   600 18px/1.26 var(--sans); letter-spacing: -0.017em;
+  --t-head:    600 13.5px/1.34 var(--sans); letter-spacing: -0.006em;
+  --t-body:    400 13px/1.55 var(--sans);
+  --t-sm:      400 12px/1.45 var(--sans);
+  --t-micro:   600 10px/1.3 var(--sans); letter-spacing: 0.09em;
+  --t-num:     500 12px/1.3 var(--mono); font-variant-numeric: tabular-nums;
+  --t-id:      500 12.5px/1.35 var(--mono); letter-spacing: -0.012em;
+  --t-code:    400 12px/1.62 var(--mono);
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+  --s5: 22px; --s6: 28px; --s7: 40px; --s8: 56px;
+  --r: 4px; --r-panel: 7px;
+
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --dur: 130ms;
+  --rail-w: 258px;
+  --side-w: 50%;
+}
+
+[data-theme="light"] {
+  --bg:       #f6f3ec;
+  --paper:    #fdfbf6;
+  --surface:  #fdfbf6;
+  --surface-2:#f1ece1;
+  --surface-3:#e8e1d2;
+  --ink:      #1b1915;
+  --ink-2:    #46423a;
+  --ink-3:    #757063;
+  --ink-4:    #a29b8a;
+  --rule:     #e2dccd;
+  --rule-2:   #cdc5b1;
+  --rule-3:   #b0a692;
+
+  /* diff is the only chromatic voice in the interface */
+  --add-bg:   #e7efdd; --add-rule:#c2d6af; --add-ink:#3a5120; --add-mark:#5c7f33;
+  --del-bg:   #f8e6e0; --del-rule:#e0c2b7; --del-ink:#7c3320; --del-mark:#a64a30;
+
+  --accent:   #2c4a6e;      /* sober navy: navigation only, never decoration */
+  --accent-ink:#ffffff;
+  --accent-bg:#e6ecf3;
+  --focus:    #2c4a6e;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg:       #131210;
+  --paper:    #1a1815;
+  --surface:  #1a1815;
+  --surface-2:#221f1b;
+  --surface-3:#2b2722;
+  --ink:      #f0ece1;
+  --ink-2:    #cec7b8;
+  --ink-3:    #9d9583;
+  --ink-4:    #6f6857;
+  --rule:     #2e2a24;
+  --rule-2:   #423c32;
+  --rule-3:   #5b5344;
+
+  --add-bg:   #1f2c17; --add-rule:#3a4f2a; --add-ink:#a9d183; --add-mark:#8fbf5e;
+  --del-bg:   #301a13; --del-rule:#52301f; --del-ink:#e79c7f; --del-mark:#d9704a;
+
+  --accent:   #86aedc;
+  --accent-ink:#0f1216;
+  --accent-bg:#1b232d;
+  --focus:    #86aedc;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: var(--t-body);
+  -webkit-font-smoothing: antialiased; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+.num, th, td, kbd, .ln { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+/* ===================== TOPBAR ===================== */
+.top { height: 52px; flex: 0 0 52px; display: flex; align-items: center; gap: var(--s4);
+  padding: 0 var(--s5); background: var(--surface); border-bottom: 1px solid var(--rule); }
+.brand { display: flex; align-items: center; gap: 9px; }
+/* the mark is two ledger rules, not a logo */
+.brand-mark { width: 17px; height: 17px; border-radius: 2px; background: var(--ink); position: relative; flex: none; }
+.brand-mark::before, .brand-mark::after { content: ""; position: absolute; left: 3px; right: 3px; height: 1.5px; background: var(--paper); }
+.brand-mark::before { top: 5px; } .brand-mark::after { top: 10px; }
+.brand-name { font: var(--t-head); font-weight: 700; letter-spacing: -0.015em; }
+.brand-ver { font: var(--t-num); font-size: 10px; color: var(--ink-4); }
+
+.nav { display: flex; gap: 2px; margin-left: var(--s5); }
+.nav a { display: flex; align-items: center; gap: 6px; height: 29px; padding: 0 11px; border-radius: var(--r);
+  font: var(--t-head); font-size: 12.5px; color: var(--ink-2); text-decoration: none; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.nav a:hover { background: var(--surface-2); color: var(--ink); }
+.nav a.on { background: var(--surface-3); color: var(--ink); font-weight: 600; }
+.nav a .n { font: var(--t-num); font-size: 10px; color: var(--ink-4); }
+.nav a.on .n { color: var(--ink-2); }
+
+.omni { margin-left: auto; height: 31px; width: 300px; display: flex; align-items: center; gap: 8px;
+  padding: 0 8px 0 11px; background: var(--bg); border: 1px solid var(--rule);
+  border-radius: var(--r); color: var(--ink-3); font: var(--t-sm); }
+.omni kbd { margin-left: auto; font: var(--t-num); font-size: 10px; padding: 2px 5px;
+  border: 1px solid var(--rule-2); border-radius: 3px; color: var(--ink-4); background: var(--surface); }
+
+/* ===================== CONTROLS ===================== */
+.btn { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px;
+  font: var(--t-head); font-size: 12.5px; color: var(--ink-2); background: transparent;
+  border: 1px solid transparent; border-radius: var(--r); cursor: pointer; white-space: nowrap;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.btn:hover { background: var(--surface-2); color: var(--ink); }
+.btn-o { border-color: var(--rule); background: var(--surface); }
+.btn-o:hover { border-color: var(--rule-2); }
+.btn-go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn-go:hover { background: color-mix(in oklab, var(--accent) 88%, #000); color: var(--accent-ink); }
+.btn-ghost { color: var(--ink-3); }
+.btn-icon { width: 30px; padding: 0; justify-content: center; }
+.btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.btn-go svg { stroke-width: 2; }
+.micro { font: var(--t-micro); text-transform: uppercase; color: var(--ink-4); }
+
+/* ===================== SHELL ===================== */
+.shell { flex: 1; display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 0; }
+
+/* ---------- the queue rail ---------- */
+.rail { background: var(--surface); border-right: 1px solid var(--rule);
+  overflow-y: auto; padding: var(--s4) 0 var(--s7); }
+.rail-sec { padding: 0 var(--s4) var(--s6); }
+.rail-sec > .micro { display: block; padding: 0 8px var(--s2); }
+.q { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 8px; border: 0; border-radius: var(--r); background: transparent; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease); }
+.q:hover { background: var(--surface-2); }
+.q.on { background: var(--surface-3); }
+.q-mark { width: 7px; height: 7px; border-radius: 1px; flex: none; }
+.q-t { font: var(--t-head); font-size: 12.5px; color: var(--ink); }
+.q-n { font: var(--t-num); font-size: 11.5px; color: var(--ink-3); }
+
+.scope { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; padding: 5px 8px;
+  border: 0; border-radius: var(--r); background: transparent; text-align: left; cursor: pointer; }
+.scope:hover { background: var(--surface-2); }
+.scope-n { font: var(--t-head); font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
+.scope-c { font: var(--t-num); font-size: 11px; color: var(--ink-4); align-self: center; }
+.scope-p { grid-column: 1 / -1; font: var(--t-num); font-size: 10px; color: var(--ink-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-4); flex: none; }
+.dot.on { background: var(--accent); }
+
+/* ===================== WORKSPACE ===================== */
+.ws { background: var(--bg); overflow-y: auto; min-width: 0; }
+/* The sticky resolve bar floats over the diff, so the column carries
+   padding that lets the last lines scroll clear of it. */
+.ws-in { padding-bottom: 96px; }
+.ws-in { max-width: 1080px; margin: 0 auto; padding: var(--s7) var(--s6) var(--s8); }
+.ws-head { margin-bottom: var(--s6); }
+.ws-head h1 { margin: 0 0 8px; font: var(--t-display); max-width: 26ch; }
+.ws-head p { margin: 0; font: var(--t-body); color: var(--ink-3); max-width: 76ch; }
+
+/* ---------- a job in the queue ---------- */
+.job { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: var(--s4);
+  padding: var(--s5) var(--s4); background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--r-panel); margin-bottom: var(--s3); cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.job:hover { border-color: var(--rule-2); background: var(--paper); }
+.job-t { font: var(--t-title); font-size: 16px; margin: 0 0 5px; }
+.job-d { font: var(--t-body); color: var(--ink-3); margin: 0 0 var(--s3); max-width: 70ch; }
+.job-facts { display: flex; gap: var(--s5); flex-wrap: wrap; }
+.fact-k { font: var(--t-micro); text-transform: uppercase; color: var(--ink-4); display: block; margin-bottom: 2px; }
+.fact-v { font: var(--t-num); font-size: 13px; color: var(--ink); }
+.fact-v.cost { color: var(--del-mark); }
+.job-go { align-self: center; }
+
+/* the queue's own ledger foot */
+.ledger { margin-top: var(--s6); border-top: 2px solid var(--rule-2); }
+.ledger table { width: 100%; border-collapse: collapse; }
+.ledger th { font: var(--t-micro); text-transform: uppercase; color: var(--ink-4); text-align: left;
+  padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule); font-weight: 600; }
+.ledger td { padding: 9px var(--s3); border-bottom: 1px solid var(--rule); font: var(--t-sm); }
+.ledger td.n { font: var(--t-num); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.ledger td.id { font: var(--t-id); }
+.ledger th.r, .ledger td.r { text-align: right; }
+.ledger tr:hover td { background: var(--surface); }
+
+/* ===================== DIFF ===================== */
+.diff-top { display: flex; align-items: center; gap: var(--s3); padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--rule); margin-bottom: var(--s4); flex-wrap: wrap; }
+.diff-top .sep { width: 1px; height: 18px; background: var(--rule-2); }
+
+/* Each side is labelled by WHICH AGENT READS IT. No other skill manager
+   does this, and it is the whole reason the comparison is worth showing. */
+.side { display: flex; flex-direction: column; gap: 3px; padding: var(--s2) var(--s3);
+  border: 1px solid var(--rule); border-radius: var(--r); background: var(--surface); min-width: 0; }
+.side-name { font: var(--t-head); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.side-path { font: var(--t-num); font-size: 10px; color: var(--ink-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-pick { display: flex; gap: 4px; }
+
+.radio { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--rule-2);
+  background: var(--surface); cursor: pointer; flex: none; padding: 0;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.radio:hover { border-color: var(--ink-3); }
+.radio[aria-checked="true"] { border-color: var(--accent); background: var(--accent); }
+.radio[aria-checked="true"]::after { content: ""; display: block; width: 5px; height: 5px; margin: 3.5px;
+  border-radius: 50%; background: var(--accent-ink); }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--rule);
+  border-radius: var(--r-panel); overflow: hidden; background: var(--rule); }
+.col { background: var(--surface); min-width: 0; }
+.col-h { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--rule); background: var(--surface-2); }
+.col-h .micro { display: block; margin-bottom: 4px; }
+
+.lines { font: var(--t-code); }
+.ln { display: grid; grid-template-columns: 38px 14px 1fr; align-items: baseline; min-height: 21px; }
+.ln .no { color: var(--ink-4); font-size: 10.5px; text-align: right; padding-right: 9px; user-select: none; }
+.ln .sign { color: var(--ink-4); text-align: center; user-select: none; }
+.ln .src { white-space: pre-wrap; word-break: break-word; padding: 2px var(--s4) 2px 0; color: var(--ink-2); }
+.ln.add { background: var(--add-bg); }
+.ln.add .sign, .ln.add .src { color: var(--add-ink); }
+.ln.add .no { color: var(--add-rule); }
+.ln.del { background: var(--del-bg); }
+.ln.del .sign, .ln.del .src { color: var(--del-ink); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--del-ink) 45%, transparent); }
+.ln.del .no { color: var(--del-rule); }
+.ln.ctx .no { color: transparent; }
+.ln.gap { background: var(--surface-2); min-height: 24px; }
+.ln.gap .src { color: var(--ink-4); font-size: 10.5px; text-align: center; padding: 4px 0; letter-spacing: .06em; }
+
+.gloss { margin: var(--s4) 0; padding: var(--s3) var(--s4); background: var(--surface);
+  border: 1px solid var(--rule); border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-panel) var(--r-panel) 0; }
+/* The heading is its own class. Styling `b` as a block would break every
+   inline emphasis in the sentence beneath it into its own line. */
+.gloss-h { display: block; font: var(--t-head); font-size: 12px; margin-bottom: 3px; }
+.gloss b { font-weight: 600; color: var(--ink); }
+.gloss p { margin: 0; font: var(--t-sm); color: var(--ink-3); max-width: 84ch; }
+.gloss code { font: var(--t-num); font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+
+/* ---------- the resolution footer ---------- */
+.resolve { position: sticky; bottom: 0; margin-top: var(--s5); z-index: 2; padding: var(--s4);
+  background: var(--surface); border: 1px solid var(--rule-2); border-radius: var(--r-panel);
+  display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+  box-shadow: 0 1px 2px rgba(40,32,18,.05), 0 10px 24px -12px rgba(40,32,18,.22); }
+.resolve-what { font: var(--t-head); font-size: 12.5px; }
+.resolve-what small { display: block; font: var(--t-sm); font-weight: 400; color: var(--ink-3); margin-top: 2px; }
+.resolve-act { margin-left: auto; display: flex; gap: var(--s2); align-items: center; }
+.opt { display: flex; border: 1px solid var(--rule); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.opt button { height: 30px; padding: 0 12px; border: 0; border-right: 1px solid var(--rule);
+  background: transparent; font: var(--t-head); font-size: 12.5px; color: var(--ink-2); cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.opt button:last-child { border-right: 0; }
+.opt button:hover { background: var(--surface-2); }
+.opt button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Skills Manager</span>
+    <span class="brand-ver">1.0.2</span>
+  </div>
+  <nav class="nav" aria-label="Primary">
+    <a class="on" data-view="queue">Reconcile <span class="n">4</span></a>
+    <a data-view="library">Library <span class="n">639</span></a>
+    <a>Quality <span class="n">286</span></a>
+    <a>Install</a>
+    <a>Recovery <span class="n">2</span></a>
+  </nav>
+  <div class="omni" role="search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <span>Search skills&hellip;</span><kbd>&#8984;K</kbd>
+  </div>
+  <button class="btn btn-icon btn-ghost" id="theme" aria-label="Toggle theme">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/></svg>
+  </button>
+  <button class="btn btn-go">New skill</button>
+</header>
+
+<main class="shell">
+  <nav class="rail" aria-label="Work queue">
+    <div class="rail-sec">
+      <span class="micro">Needs a decision</span>
+      <button class="q on" data-view="queue">
+        <span class="q-mark" style="background:var(--add-mark)"></span>
+        <span class="q-t">Divergent groups</span><span class="q-n">286</span>
+      </button>
+      <button class="q">
+        <span class="q-mark" style="background:var(--del-mark)"></span>
+        <span class="q-t">Unreadable</span><span class="q-n">303</span>
+      </button>
+      <button class="q">
+        <span class="q-mark" style="background:var(--ink-4)"></span>
+        <span class="q-t">Disabled</span><span class="q-n">304</span>
+      </button>
+      <button class="q">
+        <span class="q-mark" style="background:var(--ink-3)"></span>
+        <span class="q-t">Bad names</span><span class="q-n">3</span>
+      </button>
+    </div>
+
+    <div class="rail-sec">
+      <span class="micro">Scopes</span>
+      <button class="scope"><span class="scope-n"><i class="dot on"></i>opencode</span><span class="scope-c">519</span><span class="scope-p">121% of window &middot; ~/.config/opencode</span></button>
+      <button class="scope"><span class="scope-n"><i class="dot on"></i>codex</span><span class="scope-c">480</span><span class="scope-p">119% of window &middot; ~/.codex</span></button>
+      <button class="scope"><span class="scope-n"><i class="dot on"></i>gemini</span><span class="scope-c">450</span><span class="scope-p">111% of window &middot; ~/.gemini</span></button>
+      <button class="scope"><span class="scope-n"><i class="dot on"></i>agents</span><span class="scope-c">122</span><span class="scope-p">40% of window &middot; ~/.agents</span></button>
+      <button class="scope"><span class="scope-n"><i class="dot on"></i>claude-code</span><span class="scope-c">329</span><span class="scope-p">5% of window &middot; ~/.claude</span></button>
+      <button class="scope"><span class="scope-n"><i class="dot on"></i>commandcode</span><span class="scope-c">60</span><span class="scope-p">5% of window &middot; ~/.commandcode</span></button>
+      <button class="scope"><span class="scope-n"><i class="dot"></i>cursor</span><span class="scope-c">&mdash;</span><span class="scope-p">root absent</span></button>
+    </div>
+
+    <div class="rail-sec">
+      <span class="micro">Index</span>
+      <div style="padding:2px 8px">
+        <span class="t-sm" style="color:var(--ink-3)">SQLite index healthy &middot; resynced 2m ago</span>
+      </div>
+    </div>
+  </nav>
+
+  <section class="ws" id="ws" aria-label="Workspace"></section>
+</main>
+
+<script>
+const QUEUE = `
+<div class="ws-in">
+  <header class="ws-head">
+    <h1>Your agents are reading different instructions from each other.</h1>
+    <p>1,965 skill files across 8 roots. 639 names. In 286 cases the copies with the same name do not
+    contain the same bytes — so codex, opencode and gemini are each following a different version of the
+    same instruction set. Nothing errors, because every agent is faithfully obeying its own copy.</p>
+  </header>
+
+  <div class="job" data-go="diff">
+    <span class="q-mark" style="background:var(--add-mark);margin-top:6px"></span>
+    <div>
+      <h2 class="job-t">286 groups where the copies disagree</h2>
+      <p class="job-d">Same skill name, different content hash. The most-used of these are read by every
+      agent you have installed, so the disagreement is live right now.</p>
+      <div class="job-facts">
+        <div><span class="fact-k">Groups</span><span class="fact-v">286</span></div>
+        <div><span class="fact-k">Instances affected</span><span class="fact-v">1,412</span></div>
+        <div><span class="fact-k">Read by all agents</span><span class="fact-v">21</span></div>
+        <div><span class="fact-k">Largest gap</span><span class="fact-v">64 lines</span></div>
+      </div>
+    </div>
+    <button class="btn btn-o job-go">Review &rarr;</button>
+  </div>
+
+  <div class="job">
+    <span class="q-mark" style="background:var(--del-mark);margin-top:6px"></span>
+    <div>
+      <h2 class="job-t">303 documents cannot be read</h2>
+      <p class="job-d">Almost all of them are symlinks whose target resolves outside the root that manages
+      them. The containment rule refuses to follow them, which is correct — but it means those skills are
+      invisible to validation and to token accounting.</p>
+      <div class="job-facts">
+        <div><span class="fact-k">Unreadable</span><span class="fact-v">303</span></div>
+        <div><span class="fact-k">Cause</span><span class="fact-v">escaping symlink</span></div>
+        <div><span class="fact-k">Affected skills</span><span class="fact-v">301</span></div>
+      </div>
+    </div>
+    <button class="btn btn-o job-go">Repair &rarr;</button>
+  </div>
+
+  <div class="job">
+    <span class="q-mark" style="background:var(--ink-4);margin-top:6px"></span>
+    <div>
+      <h2 class="job-t">304 disabled skills are still counted in your budgets</h2>
+      <p class="job-d">A disabled skill is renamed to <code>SKILL.md.disabled</code>, so no agent loads it —
+      but the token estimate still counts it. Three of your scopes report being over a context window partly
+      because of files nothing reads.</p>
+      <div class="job-facts">
+        <div><span class="fact-k">Disabled</span><span class="fact-v">304</span></div>
+        <div><span class="fact-k">Dead weight</span><span class="fact-v cost">612,044 tokens</span></div>
+        <div><span class="fact-k">Oldest</span><span class="fact-v">94 days</span></div>
+      </div>
+    </div>
+    <button class="btn btn-o job-go">Sweep &rarr;</button>
+  </div>
+
+  <div class="job">
+    <span class="q-mark" style="background:var(--ink-3);margin-top:6px"></span>
+    <div>
+      <h2 class="job-t">3 directory names cannot be addressed</h2>
+      <p class="job-d">An uppercase letter or an underscore. They still appear in the Library — the
+      filesystem is the source of truth — but any command that takes a skill name will refuse them.</p>
+      <div class="job-facts">
+        <div><span class="fact-k">Unaddressable</span><span class="fact-v">3</span></div>
+        <div><span class="fact-k">Example</span><span class="fact-v">Legacy_ETL_v2</span></div>
+      </div>
+    </div>
+    <button class="btn btn-o job-go">Show &rarr;</button>
+  </div>
+
+  <div class="ledger">
+    <div style="padding:var(--s3) var(--s3) 0"><span class="micro">Largest disagreements</span></div>
+    <table>
+      <thead><tr><th>Skill</th><th>Copies</th><th>Distinct</th><th>Scopes involved</th><th class="r">Gap</th></tr></thead>
+      <tbody>
+        <tr><td class="id">first-principles-production-engineering</td><td class="n">7</td><td class="n">3</td><td class="n">global, codex, opencode, gemini, commandcode, agents</td><td class="n r">64 lines</td></tr>
+        <tr><td class="id">skill-creator</td><td class="n">3</td><td class="n">2</td><td class="n">opencode, gemini, codex</td><td class="n r">31 lines</td></tr>
+        <tr><td class="id">ai-coding-agent-guardrails</td><td class="n">3</td><td class="n">2</td><td class="n">agents, codex, gemini</td><td class="n r">28 lines</td></tr>
+        <tr><td class="id">llm-app-security</td><td class="n">3</td><td class="n">2</td><td class="n">opencode, codex, gemini</td><td class="n r">22 lines</td></tr>
+        <tr><td class="id">accessibility-compliance</td><td class="n">4</td><td class="n">2</td><td class="n">codex, opencode, gemini</td><td class="n r">17 lines</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>`;
+
+const DIFF = `
+<div class="ws-in" style="max-width:1180px">
+  <header class="ws-head">
+    <h1 style="max-width:none">first-principles-production-engineering</h1>
+    <p>7 copies exist. 3 distinct contents. Comparing <b>codex</b> against <b>gemini</b> &mdash; the
+    two that disagree most. Every other copy is listed below the footer.</p>
+  </header>
+
+  <div class="diff-top">
+    <span class="st-diff" style="font:var(--t-head);font-size:12.5px">7 copies</span>
+    <span class="sep"></span>
+    <span style="font:var(--t-num);font-size:12px;color:var(--ink-2)">3 distinct hashes</span>
+    <span class="sep"></span>
+    <span style="font:var(--t-num);font-size:12px;color:var(--ink-3)">64 changed lines</span>
+    <div style="margin-left:auto;display:flex;gap:var(--s2)">
+      <button class="btn btn-o">Next disagreement &rarr;</button>
+      <button class="btn btn-ghost">Open raw</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <!-- LEFT: labelled by which agent reads it -->
+    <div class="col">
+      <div class="col-h">
+        <span class="micro">Side A &middot; selected</span>
+        <div class="side">
+          <div class="side-pick">
+            <button class="radio" role="radio" aria-checked="true" aria-label="Keep the codex version"></button>
+            <span class="side-name">codex <span class="t-num" style="color:var(--ink-4);font-size:11px">&middot; no-merge policy</span></span>
+          </div>
+          <div class="side-path">~/.codex/skills/first-principles-production-engineering/SKILL.md</div>
+        </div>
+      </div>
+      <div class="lines">
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">38</span><span class="sign"></span><span class="src">## Principle 2 — measure before you change</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">40</span><span class="sign"></span><span class="src">A change made without a measurement is a guess with</span></div>
+        <div class="ln ctx"><span class="no">41</span><span class="sign"></span><span class="src">extra steps. Establish the current behaviour first.</span></div>
+        <div class="ln del"><span class="no">42</span><span class="sign">−</span><span class="src">Then optimise the slowest part you can find.</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln gap"><span class="no"></span><span class="sign"></span><span class="src">14 unchanged lines</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">57</span><span class="sign"></span><span class="src">### A worked example</span></div>
+        <div class="ln del"><span class="no">58</span><span class="sign">−</span><span class="src">You have a p99 of 800ms and you think caching will help.</span></div>
+        <div class="ln del"><span class="no">59</span><span class="sign">−</span><span class="src">Add the cache. Measure. If p99 is still 800ms, the</span></div>
+        <div class="ln del"><span class="no">60</span><span class="sign">−</span><span class="src">cache was not the bottleneck — remove it again.</span></div>
+        <div class="ln add"><span class="no">58</span><span class="sign">+</span><span class="src">You have a p99 of 800ms and you think caching will</span></div>
+        <div class="ln add"><span class="no">59</span><span class="sign">+</span><span class="src">help. Profile first. Find the slowest 5% of requests —</span></div>
+        <div class="ln add"><span class="no">60</span><span class="sign">+</span><span class="src">caching only helps if they are I/O bound.</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">61</span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">62</span><span class="sign"></span><span class="src">## Principle 3 — delete before you optimise</span></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: labelled by which agent reads it -->
+    <div class="col">
+      <div class="col-h">
+        <span class="micro">Side B</span>
+        <div class="side">
+          <div class="side-pick">
+            <button class="radio" role="radio" aria-checked="false" aria-label="Keep the gemini version"></button>
+            <span class="side-name">gemini <span class="t-num" style="color:var(--ink-4);font-size:11px">&middot; extension &lt; user</span></span>
+          </div>
+          <div class="side-path">~/.gemini/skills/first-principles-production-engineering/SKILL.md</div>
+        </div>
+      </div>
+      <div class="lines">
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">38</span><span class="sign"></span><span class="src">## Principle 2 — measure first</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">40</span><span class="sign"></span><span class="src">A change made without a measurement is a guess with</span></div>
+        <div class="ln ctx"><span class="no">41</span><span class="sign"></span><span class="src">extra steps. Establish the current behaviour first.</span></div>
+        <div class="ln ctx"><span class="no">42</span><span class="sign"></span><span class="src">Profile before you change anything.</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln gap"><span class="no"></span><span class="sign"></span><span class="src">14 unchanged lines</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">57</span><span class="sign"></span><span class="src">### A worked example</span></div>
+        <div class="ln add"><span class="no">58</span><span class="sign">+</span><span class="src">You have a p99 of 800ms and you think caching will</span></div>
+        <div class="ln add"><span class="no">59</span><span class="sign">+</span><span class="src">help. Profile first. Find the slowest 5% of requests —</span></div>
+        <div class="ln add"><span class="no">60</span><span class="sign">+</span><span class="src">caching only helps if they are I/O bound.</span></div>
+        <div class="ln ctx"><span class="no"></span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">61</span><span class="sign"></span><span class="src"></span></div>
+        <div class="ln ctx"><span class="no">62</span><span class="sign"></span><span class="src">## Principle 3 — remove before you optimise</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gloss">
+    <b class="gloss-h">These two agents are not disagreeing with you. They are disagreeing with each other.</b>
+    <p>codex documents an explicit <code>no-merge</code> policy — it loads every copy it finds. gemini
+    documents a precedence order, but both copies are inside its user tier, so nothing here picks a winner.
+    That is why this screen shows you the two instructions side by side instead of telling you which one is
+    correct. <b>gemini's version is the better advice</b> — profiling before caching is right, and codex's
+    line is the mistake. But that judgement is yours to make, not the tool's.</p>
+  </div>
+
+  <div class="resolve">
+    <div class="resolve-what">
+      Resolving this group
+      <small>Snapshot <code style="font:var(--t-num);font-size:11px">snap_7c04be9e</code> keeps all 7 files. Fully reversible.</small>
+    </div>
+    <div class="resolve-act">
+      <div class="opt" role="group" aria-label="Resolution">
+        <button aria-pressed="true">Keep gemini everywhere</button>
+        <button aria-pressed="false">Keep codex everywhere</button>
+        <button aria-pressed="false">Merge</button>
+      </div>
+      <button class="btn btn-o">Preview 6 files</button>
+      <button class="btn btn-go">Resolve &amp; sync</button>
+    </div>
+  </div>
+</div>`;
+
+const ws = document.getElementById('ws');
+function setView(v) {
+  ws.innerHTML = v === 'diff' ? DIFF : QUEUE;
+  document.querySelectorAll('.nav a').forEach(function (a) {
+    a.classList.toggle('on', a.dataset.view === (v === 'diff' ? 'queue' : v));
+  });
+  ws.scrollTop = 0;
+}
+document.querySelectorAll('.nav a').forEach(function (a) {
+  a.addEventListener('click', function () { if (a.dataset.view) setView(a.dataset.view); });
+});
+document.querySelectorAll('.q').forEach(function (b) {
+  b.addEventListener('click', function () { setView(b.dataset.view || 'queue'); });
+});
+ws.addEventListener('click', function (e) {
+  if (e.target.closest('[data-go="diff"]')) setView('diff');
+  if (e.target.closest('.btn-go') && e.target.closest('.job')) setView('diff');
+});
+ws.addEventListener('click', function (e) {
+  var o = e.target.closest('.opt button');
+  if (o) { o.parentNode.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed','false'); }); o.setAttribute('aria-pressed','true'); return; }
+  var r = e.target.closest('.radio');
+  if (r) { document.querySelectorAll('.radio').forEach(function (x) { x.setAttribute('aria-checked','false'); }); r.setAttribute('aria-checked','true'); }
+});
+document.getElementById('theme').addEventListener('click', function () {
+  var el = document.documentElement;
+  el.dataset.theme = el.dataset.theme === 'dark' ? 'light' : 'dark';
+});
+
+/* Capture mode: ?shot=1 relaxes the fixed viewport; &view=queue|diff;
+   &theme=light|dark. */
+{
+  var q = new URLSearchParams(location.search);
+  if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
+  if (q.get('shot') === '1') {
+    var st = document.createElement('style');
+    st.textContent = 'html,body{height:auto!important;overflow:visible!important}' +
+                     '.shell{min-height:760px}.ws,.rail{overflow:visible!important}'+
+                     '.resolve{position:static!important}';
+    document.head.appendChild(st);
+  }
+  setView(q.get('view') || 'queue');
+}
+</script>
+</body>
+</html>
