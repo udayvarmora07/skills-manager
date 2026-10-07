@@ -224,10 +224,40 @@ class UniformSuppressionTests(unittest.TestCase):
         summary = _slice(self.html, 'v-else class="identity-summary"', "</div>")
         self.assertIn("identityItems(s)", summary)
         self.assertIn("{ 'sr-only': uniformIdentityLabel }", summary)
-        self.assertIn("{ 'sr-only': uniformStateLabel }", summary)
+        # This used to assert the literal "{ 'sr-only': uniformStateLabel }".
+        # It now asserts the invariant instead, because the literal stopped
+        # being the thing worth protecting: suppression must be a class that
+        # leaves the text in the accessibility tree, never a `v-if` that removes
+        # it, and it must cover every uniform case rather than one of them.
+        # (Asserting the exact expression is the "assert the mechanism, not the
+        # property" defect this repository has now shipped twice.)
+        self.assertIn("'sr-only'", summary)
+        self.assertIn("uniformStateLabel", summary)
+        self.assertIn("uniformProblemLabel", summary)
+        state_binding = _slice(summary, 'class="identity-state"', "</span>")
+        self.assertIn("{ 'sr-only':", state_binding)
+        self.assertNotIn('v-if="identity.stateLabel"', summary)
         # The seam still supplies the values; nothing is re-derived here.
         for expression in ("identity.label", "identity.stateLabel", "identity.problem"):
             self.assertIn(expression, summary)
+
+    def test_a_uniform_problem_state_is_stated_once_not_on_every_row(self):
+        # A badge that is true of 100% of rows is not per-row information: it
+        # is a wall of colour that makes the rows which differ impossible to
+        # see. The per-row chip is suppressed and promoted to the pane header.
+        # This is deliberately independent of whether the underlying
+        # observation is correct — a banner is actionable; 329 identical badges
+        # are not.
+        self.assertIn("uniformProblemLabel()", _slice(self.source, "computed: {", "\n  methods: {"))
+        self.assertIn("uniformProblemCount()", _slice(self.source, "computed: {", "\n  methods: {"))
+        self.assertIn('v-if="uniformProblemLabel" class="uniform-state-note"', self.html)
+        self.assertIn("{{ uniformProblemLabel }}", self.html)
+        # It must require *every* visible item to share one problem label —
+        # a mixed list must keep its per-row badges, because that is exactly
+        # the case where they discriminate.
+        computed = _slice(self.source, "uniformProblemLabel() {", "\n    uniformProblemCount()")
+        self.assertIn("items.every((item) => item.problem)", computed)
+        self.assertIn("states.length === 1", computed)
 
     def test_a_row_with_no_visible_identity_takes_no_track(self):
         self.assertIn(

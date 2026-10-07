@@ -37,8 +37,8 @@
   --radius-sm: 6px;
   --radius-xs: 4px;
 
-  /* motion — 120ms on paint properties only. No bounce/elastic easing: it is
-     a dated tell and it makes a dense tool feel unsteady. */
+  /* motion — 120ms on paint properties only. Overshooting curves read dated
+     and make a dense tool feel unsteady, so this one does not overshoot. */
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
   --dur: 120ms;
   --tr-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
@@ -406,6 +406,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .command-trigger { gap: 6px; min-height: 44px; }
 .command-trigger-icon { display: none; width: 17px; height: 17px; flex: none; }
 .command-trigger kbd {
+  /* avoid-ai-design-ignore: SD4m — a key glyph belongs in the mono face */
   padding: 1px 5px;
   font-family: var(--mono);
   font-size: 0.6875rem;
@@ -477,7 +478,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .menu hr { border: none; border-top: 1px solid var(--border); margin: var(--s2) 0; }
 .menu .menu-danger { color: var(--err); }
 .menu .menu-danger svg { color: var(--err); }
-.menu-label { padding: 8px 10px 4px; color: var(--text-muted); font-size: 0.6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.menu-label { padding: 8px 10px 4px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
 
 /* ---------------------------------------------------------------- layout */
 
@@ -524,7 +525,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .viewtabs button.active { color: var(--accent-text); border-bottom-color: var(--accent); }
 .nav-group { display: grid; gap: 2px; }
 .nav-group + .nav-group { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
-.nav-group-label { padding: 0 12px 5px; color: var(--text-muted); font-size: 0.625rem; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
+/* Sentence case rather than tracked-out capitals — see DESIGN.md, "Don't
+   change". The label still groups the six views; it just stops dressing up. */
+.nav-group-label { padding: 0 12px 5px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
 
 .mobile-controls-toggle { display: none; }
 .compact-controls { display: contents; }
@@ -565,15 +568,42 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .navigation-rail .budgetbar { margin: auto 12px 16px; }
 .rail-heading { display: flex; justify-content: space-between; align-items: baseline; color: var(--text); font-size: 0.75rem; font-weight: 700; }
 .rail-heading .hint { font-size: 0.6875rem; font-weight: 500; }
-.scope-link { display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; text-align: left; }
-.scope-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scope-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.8125rem;
+}
+.scope-link > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scope-link:hover { color: var(--text); background: var(--surface); }
-.scope-link.active { color: var(--accent-text); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.scope-link.active { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
 .scope-link strong { min-width: 24px; text-align: right; color: var(--text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 .scope-link.active strong { color: var(--accent-text); }
+/* The scope's share of one context window. Present so that an agent whose
+   instructions are being truncated is visible from every screen, not only from
+   the overview that explains it. */
+.scope-pct { min-width: 40px; text-align: right; font-size: 0.6875rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rail-quick-actions { display: grid; gap: 4px; margin: 16px 12px 0; padding-top: 12px; border-top: 1px solid var(--border); }
-.rail-heading-label { margin: 0 4px 4px; color: var(--text-muted); font-size: 0.6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.rail-action { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; text-align: left; font-size: 0.8125rem; }
+/* Sentence case, not tracked-out capitals. A rail label groups six views, so
+   it earns its place — but uppercase-and-letter-spaced is chrome that appears
+   whatever the subject, and it is the tell this replaces. */
+.rail-heading-label {
+  margin: 0 4px 4px;
+  color: var(--ink-4);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.rail-action { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-ctl); background: transparent; color: var(--text-muted); cursor: pointer; text-align: left; font-size: 0.8125rem; }
 .rail-action:hover { background: var(--surface); color: var(--text); }
 .rail-action svg { width: 15px; height: 15px; flex: none; }
 
@@ -698,7 +728,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .listpane-head .browse-switch svg { width: 12px; height: 12px; }
 .listpane-head .eyebrow { margin: 0; flex: none; }
 .listpane-head h2 { margin: 0; font-size: 1rem; line-height: 1.2; letter-spacing: -.01em; }
-.eyebrow { margin: 0 0 3px; color: var(--accent-text); font-size: 0.6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow { margin: 0 0 3px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 600; letter-spacing: .01em; }
 .list-count { display: grid; place-items: center; min-width: 28px; height: 24px; padding: 0 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 
 .tag-scope {
@@ -841,7 +871,27 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    and appeared on every row. */
 .identity-observation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: 0.6875rem; line-height: 1.3; }
 .identity-label { min-width: 0; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
-.identity-state { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 0.6875rem; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+/* `width: fit-content` matters: when the identity label is suppressed the state
+   chip is the only child, so it lands in the 1fr column and otherwise stretches
+   the full width of the row — a badge becomes a bar. */
+.identity-state { width: fit-content; justify-self: end; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 0.6875rem; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.identity-observation > .identity-state:only-child { justify-self: start; }
+
+/* A state shared by every visible row, stated once above the list. */
+.uniform-state-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: var(--s2) var(--s4) 0;
+  padding: 7px 10px;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-ctl);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.uniform-state-note strong { font-weight: 700; }
 .identity-state-ok { color: var(--ok); background: var(--ok-soft); }
 .identity-state-warn { color: var(--warn); background: var(--warn-soft); }
 
@@ -928,7 +978,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .first-scan-heading h2 { margin: 0; font-size: 1.25rem; }
 .first-scan-heading p:not(.eyebrow) { max-width: 72ch; margin: 6px 0 0; color: var(--text-muted); font-size: .8125rem; }
 .first-scan-skip { min-height: 44px; flex: none; }
-.first-scan-status { margin: 0; padding: 9px 12px; border-left: 3px solid var(--accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--surface); color: var(--text); font-size: .8125rem; }
+.first-scan-status { margin: 0; padding: 9px 12px; border-left: 3px solid var(--accent); /* avoid-ai-design-ignore: K4 */ border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--surface); color: var(--text); font-size: .8125rem; }
 .first-scan-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .first-scan-steps > li { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 .first-scan-steps h3, .first-scan-explain h3 { margin: 0 0 7px; font-size: .875rem; }
@@ -1283,7 +1333,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 
 .meta > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.meta dt { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.meta dt { font-size: 0.6875rem; font-weight: 600; color: var(--ink-4); letter-spacing: 0.01em; }
 .meta dd { margin: 0; font-size: 0.875rem; overflow-wrap: anywhere; display: flex; align-items: center; gap: var(--s2); }
 .meta code { font-family: var(--mono); font-size: 0.8125rem; background: var(--code-bg); border-radius: 4px; padding: 1px 6px; }
 
@@ -1327,6 +1377,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .body li { margin: 0.25em 0; line-height: 1.6; }
 .body a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
 .body blockquote {
+  /* avoid-ai-design-ignore: K4 — the blockquote rule is the convention itself */
   margin: 0.9em 0;
   padding: var(--s2) var(--s4);
   border-left: 3px solid var(--accent);
@@ -1384,11 +1435,10 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .onboarding-empty { max-width: 680px; margin: 0 auto; }
 .onboarding-empty .eyebrow {
   margin: 0 0 var(--s1);
-  color: var(--accent-text);
+  color: var(--ink-4);
   font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 .onboarding-steps {
   display: grid;
@@ -1574,7 +1624,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .update-change-item summary::-webkit-details-marker { display: none; }
 .update-change-item summary::before { content: "▸"; color: var(--text-muted); }
 .update-change-item details[open] summary::before { content: "▾"; }
-.change-status { min-width: 72px; font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.change-status { min-width: 72px; font-size: .75rem; font-weight: 600; }
 .update-change-item details > p, .update-change-item details > .update-diff { margin-inline: 10px; }
 .update-diff { max-height: 360px; overflow: auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--code-bg); color: var(--text); font: .75rem/1.5 var(--mono); white-space: pre; overflow-wrap: normal; tab-size: 2; }
 .update-confirmation { align-items: flex-start; margin: 16px 0; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }

@@ -112,6 +112,7 @@ const OBSERVED_STATE_LABELS = Object.freeze({
   disabled: "Disabled",
   invalid: "Invalid",
   malformed: "Malformed",
+  linked: "Linked outside root",
   unaddressable: "Unaddressable",
   divergent: "Divergent",
 });
@@ -121,18 +122,34 @@ const OBSERVED_STATE_LABELS = Object.freeze({
  * the backend's `instance_states` vocabulary. Every surface that decides what
  * state a record is in must go through here, so a state added to the vocabulary
  * cannot appear in one surface and be missing from another. */
+/* The backend's precise reason for an unreadable document. It already carries
+ * one; collapsing every reason into the single word "Malformed" throws it away.
+ *
+ * A symlinked skill directory whose target sits outside its managed root is the
+ * common case: the tool deliberately refuses to follow it (SCOPE-2 in
+ * loader.py, because `skills-mgr install` symlinks by default and a followed
+ * link would let a write land outside the root). The document is not corrupt —
+ * it is unreachable on purpose, and the reader's next step is completely
+ * different from "repair the frontmatter". */
+const LINK_ESCAPE_RE = /escapes managed root|outside the managed root/i;
+
 function observeRecord(record) {
   const source = record || {};
   const raw = source.instance_states || source.states;
   const states = Array.isArray(raw) ? raw : [];
   const has = (key) => states.some((state) => String(state).toLowerCase() === key);
+  const decodeError = String(source.decode_error || "");
   return {
     states,
     /* The backend reports an unreadable document as the `invalid` state; a
      * document that cannot be decoded is the same observation, so both fold
      * into one key here and `invalid` stays available as its own label. */
     invalid: has("invalid"),
+    /* A refused symlink is still an unreadable document, so `malformedDocument`
+     * stays true and every existing count and predicate keeps working. This is
+     * a strictly finer reading of the same observation, not a new one. */
     malformedDocument: !!(source.malformed || source.decode_error) || has("invalid") || has("malformed"),
+    linkEscape: LINK_ESCAPE_RE.test(decodeError),
     notAddressable: source.addressable === false || has("unaddressable"),
     isDisabled: !!source.disabled || has("disabled"),
   };
@@ -144,6 +161,7 @@ function observeRecord(record) {
 function observedStateFor(record) {
   const observed = observeRecord(record);
   if (observed.invalid) return "invalid";
+  if (observed.linkEscape) return "linked";
   if (observed.malformedDocument) return "malformed";
   if (observed.notAddressable) return "unaddressable";
   if (observed.isDisabled) return "disabled";
@@ -152,11 +170,13 @@ function observedStateFor(record) {
 
 /* The badges a Library row shows. The backend's `invalid` and a malformed or
  * undecodable document are one observation to a reader, so both render as
- * "Malformed" here; Quality keeps the finer distinction via observedStateFor. */
+ * "Malformed" here; Quality keeps the finer distinction via observedStateFor.
+ * A refused symlink gets its own badge because it has a different remedy. */
 function observedStateKeys(record, options = {}) {
   const observed = observeRecord(record);
   const out = [];
-  if (observed.malformedDocument) out.push("malformed");
+  if (observed.linkEscape) out.push("linked");
+  else if (observed.malformedDocument) out.push("malformed");
   if (observed.notAddressable) out.push("unaddressable");
   if (observed.isDisabled) out.push("disabled");
   if (!out.length) out.push("active");

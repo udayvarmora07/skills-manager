@@ -44,7 +44,11 @@ class FrontendSourceContractTests(unittest.TestCase):
         self.assertIn('this.overviewHistory = await api("/api/history?limit=8")', source)
         for expression in ("overviewDivergentGroups", "overviewMalformedCount", "overviewUnaddressableCount", "overviewInvalidRecords", "overviewDisabledCount"):
             self.assertIn(expression, source)
-        self.assertIn("malformed or unaddressable", source)
+        # The queue names its two observations separately: a refused symlink is
+        # not a malformed document and has a different remedy. What matters is
+        # that both counts come from the seam, never from an inference.
+        self.assertIn("linkEscape", source)
+        self.assertIn("unaddressable or unreadable", source)
         self.assertIn("no validation or provenance status is inferred", html)
         self.assertIn("Attention queue", html)
 
@@ -131,7 +135,7 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
 '''
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(result.stdout), {
-            "summary": {"observed": 5, "active": 2, "disabled": 1, "malformed": 1, "unaddressable": 0, "validityFlagged": 2, "divergent": 1, "provenance": 1},
+            "summary": {"observed": 5, "active": 2, "disabled": 1, "malformed": 1, "linked": 0, "unaddressable": 0, "validityFlagged": 2, "divergent": 1, "provenance": 1},
             "invalidLabel": "Invalid observed",
             "filtered": ["divergent"],
             "view": "skills",

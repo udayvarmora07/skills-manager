@@ -160,7 +160,8 @@ class SingleStateVocabularyTests(unittest.TestCase):
     #: have. A key with no label renders as a bare identifier in the UI.
     EXPECTED_LABELS = {
         "active": "Active", "disabled": "Disabled", "invalid": "Invalid",
-        "malformed": "Malformed", "unaddressable": "Unaddressable", "divergent": "Divergent",
+        "malformed": "Malformed", "linked": "Linked outside root",
+        "unaddressable": "Unaddressable", "divergent": "Divergent",
     }
 
     def test_every_state_the_backend_emits_has_a_label(self):

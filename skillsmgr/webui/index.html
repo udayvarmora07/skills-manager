@@ -139,7 +139,7 @@
       <div class="rail-heading"><span>Agent scopes</span><span class="hint">{{ formatNumber(allScopesCount) }} skills</span></div>
       <div class="scopebar" v-if="scopes && scopes.length">
         <button class="scope-link" :class="{ active: activeScope === 'all' }" @click="activeScope = 'all'" :aria-pressed="activeScope === 'all'"><span>All scopes</span><strong>{{ formatNumber(allScopesCount) }}</strong></button>
-        <button v-for="s in scopes.filter(Boolean)" :key="s.id" class="scope-link" :class="{ active: activeScope === s.id }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens'" @click="activeScope = s.id" :aria-pressed="activeScope === s.id"><span>{{ s.label }}</span><strong>{{ formatNumber(s.count) }}</strong></button>
+        <button v-for="s in scopes.filter(Boolean)" :key="s.id" class="scope-link" :class="{ active: activeScope === s.id, 'scope-link-over': scopeBudgetFor(s.id) && scopeBudgetFor(s.id).over }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens' + (scopePctFor(s.id) ? ' · ' + scopePctFor(s.id) + ' of one context window' : '')" @click="activeScope = s.id" :aria-pressed="activeScope === s.id"><span>{{ s.label }}</span><strong>{{ formatNumber(s.count) }}</strong><span v-if="scopePctFor(s.id)" class="scope-pct num" :class="scopePctClass(scopeBudgetFor(s.id).pct)">{{ scopePctFor(s.id) }}</span></button>
       </div>
 
       <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + formatTokens(budget.window_tokens) + ' tok)'">
@@ -211,6 +211,13 @@
           </button>
           </div>
         </div>
+        <!-- A state that is true of every visible row is stated once, here,
+             instead of as a badge on every row. The per-row chip stays in the
+             accessibility tree as sr-only, so nothing is lost. -->
+        <p v-if="uniformProblemLabel" class="uniform-state-note" role="status">
+          <span class="status-mark status-mark-warn" aria-hidden="true">!</span>
+          <span>All {{ formatNumber(uniformProblemCount) }} visible instances are <strong>{{ uniformProblemLabel }}</strong>. The per-row badge is hidden so any row that differs stays visible.</span>
+        </p>
       </div>
       <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
 
@@ -256,7 +263,7 @@
           <div v-else class="identity-summary" aria-label="Observed identity and state">
             <span v-for="identity in identityItems(s)" :key="identity.key" class="identity-observation">
               <span class="identity-label" :class="{ 'sr-only': uniformIdentityLabel }" :title="identity.label">{{ identity.label }}</span>
-              <span class="identity-state" :class="[identity.problem ? 'identity-state-warn' : 'identity-state-ok', { 'sr-only': uniformStateLabel }]" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
+              <span class="identity-state" :class="[identity.problem ? 'identity-state-warn' : 'identity-state-ok', { 'sr-only': uniformStateLabel || uniformProblemLabel }]" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
             </span>
           </div>
           <div v-if="rowBadgeItems(s).length" class="row-badges">
@@ -476,7 +483,7 @@
                 <div><dt>Logical skills</dt><dd>{{ formatNumber(overviewLogicalCount) }}<small>deduplicated names</small></dd></div>
                 <div><dt>Active instances</dt><dd>{{ formatNumber(overviewActiveCount) }}<small>enabled, parsed, addressable</small></dd></div>
                 <div><dt>Observed copies</dt><dd>{{ formatNumber(overviewInstanceCount) }}<small>physical instances</small></dd></div>
-                <div><dt>Malformed</dt><dd>{{ formatNumber(overviewMalformedCount) }}<small>undecodable or invalid</small></dd></div>
+                <div><dt>Malformed</dt><dd>{{ formatNumber(overviewMalformedCount) }}<small>undecodable or invalid</small></dd></div><div><dt>Linked outside root</dt><dd>{{ formatNumber(overviewLinkedCount) }}<small>symlink the tool refuses to follow</small></dd></div>
                 <div><dt>Unaddressable</dt><dd>{{ formatNumber(overviewUnaddressableCount) }}<small>name outside the canonical rule</small></dd></div>
                 <div><dt>Disabled</dt><dd>{{ formatNumber(overviewDisabledCount) }}<small>will be skipped</small></dd></div>
                 <div><dt>Recovery</dt><dd>{{ formatNumber(trashCount) }}<small>in global trash</small></dd></div>
@@ -771,7 +778,7 @@
         <section v-else class="quality-overview" aria-labelledby="quality-title">
           <div class="detail-head"><div><h1 id="view-title" tabindex="-1">Quality</h1><p class="lead">Review validity, physical state, provenance, and size without collapsing independent evidence into a score.</p></div><div class="detail-actions quality-actions"><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="switchView('skills')">Inspect in Library</button></div></div>
           <p id="quality-title" class="hint">Select a skill to inspect its exact physical copy. Risk, eval, usefulness, trust, and effective-load signals remain explicitly unavailable unless an existing API provides them.</p>
-          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ formatNumber(qualitySummary.observed) }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ formatNumber(qualitySummary.active) }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ formatNumber(qualitySummary.disabled) }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ formatNumber(qualitySummary.validityFlagged) }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Divergent groups</dt><dd>{{ formatNumber(qualitySummary.divergent) }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd></div></dl>
+          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ formatNumber(qualitySummary.observed) }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ formatNumber(qualitySummary.active) }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ formatNumber(qualitySummary.disabled) }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ formatNumber(qualitySummary.validityFlagged) }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Linked outside root</dt><dd>{{ formatNumber(qualitySummary.linked) }}<small>symlink the tool refuses to follow</small></dd></div><div><dt>Divergent groups</dt><dd>{{ formatNumber(qualitySummary.divergent) }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd></div></dl>
           <section class="quality-section"><h2>What this center can and cannot show</h2><ul class="quality-unavailable"><li><strong>Available</strong><span>Observed parser/addressability flags, physical copies and state, provenance fields when present, and token/size estimates.</span></li><li><strong>Not inferred</strong><span>No single quality score, safety/trust verdict, usefulness claim, or effective consumer load.</span></li></ul></section>
           <p v-if="!qualityRecords.length" class="empty compact-empty">No observed skills yet. Add or create a skill, then return here for independent evidence.</p>
           <section class="quality-section quality-hygiene" aria-labelledby="quality-hygiene-title">

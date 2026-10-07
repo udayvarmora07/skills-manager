@@ -183,6 +183,38 @@ createApp({
       return states.length === 1 && !items.some((item) => item.problem) ? states[0] : null;
     },
 
+    /* A state that is true of every visible row is not per-row information.
+     *
+     * `uniformStateLabel` already suppressed a uniformly-"Active" list. It
+     * deliberately did not suppress a uniformly *problem* state, because
+     * hiding a warning is worse than repeating it — but repeating it on 329
+     * rows is not the alternative. A badge on 100% of rows is a wall of colour
+     * that makes the one row which differs impossible to see, and it trains
+     * the reader to stop looking at the badge entirely.
+     *
+     * So a uniform problem state is suppressed per row and *promoted* to the
+     * pane header, where it is stated once with the count. Nothing is lost: the
+     * per-row chip stays in the accessibility tree as `sr-only`, exactly as the
+     * uniform-active case does.
+     *
+     * This is a presentation decision and it is deliberately independent of
+     * whether the underlying observation is correct. A scope where every skill
+     * really is malformed deserves one loud banner; a scope where the
+     * observation is wrong also deserves one loud banner — because a reader who
+     * sees one banner can act on it, and a reader looking at 329 identical
+     * badges cannot.
+     */
+    uniformProblemLabel() {
+      const items = this.visibleIdentityItems;
+      if (!items.length) return null;
+      if (!items.every((item) => item.problem)) return null;
+      const states = [...new Set(items.map((item) => item.stateLabel))];
+      return states.length === 1 ? states[0] : null;
+    },
+    uniformProblemCount() {
+      return this.visibleIdentityItems.length;
+    },
+
     selectedLogical() {
       return groupLogicalSkills(this.skills, this.scopes).find((skill) => skill.name === this.selectedName) || null;
     },
@@ -400,7 +432,15 @@ createApp({
       return this.overviewLogicalSkills.filter((group) => !!group.divergent);
     },
     overviewMalformedCount() {
-      return this.overviewRecords.filter((record) => observeRecord(record).malformedDocument).length;
+      return this.overviewRecords.filter((record) => {
+        const observed = observeRecord(record);
+        /* A refused symlink is reported on its own line; counting it here as
+         * "malformed" would both misname it and let the two totals disagree. */
+        return observed.malformedDocument && !observed.linkEscape;
+      }).length;
+    },
+    overviewLinkedCount() {
+      return this.overviewRecords.filter((record) => observeRecord(record).linkEscape).length;
     },
     overviewUnaddressableCount() {
       return this.overviewRecords.filter((record) => observeRecord(record).notAddressable).length;
@@ -414,11 +454,25 @@ createApp({
     overviewAttention() {
       const items = [];
       if (this.overviewInvalidRecords.length) {
-        const count = this.overviewInvalidRecords.length;
+        const records = this.overviewInvalidRecords;
+        const linked = records.filter((record) => observeRecord(record).linkEscape).length;
+        const other = records.length - linked;
+        const parts = [];
+        if (linked) {
+          parts.push(`${this.formatNumber(linked)} instance${linked === 1 ? " is" : "s are"} a symlink the tool refuses to follow because its target sits outside that scope's root`);
+        }
+        if (other) {
+          parts.push(`${this.formatNumber(other)} instance${other === 1 ? " is" : "s are"} unaddressable or unreadable`);
+        }
         items.push({
           key: "observed-invalid",
-          title: "Review malformed or unaddressable entries",
-          detail: `${count} observed instance${count === 1 ? " cannot" : "s cannot"} be treated as a normal addressable skill.`,
+          /* The title names both observations because they have different
+           * remedies, and "malformed" was wrong for a symlink: the document is
+           * not corrupt, it is unreachable on purpose. */
+          title: linked && !other
+            ? "Skills linked outside their scope root"
+            : "Review unreadable or unaddressable entries",
+          detail: `${parts.join("; ")}.`,
           action: "Review in Library",
         });
       }
@@ -508,6 +562,11 @@ createApp({
         active: records.filter((record) => stateOf(record) === "observed").length,
         disabled: records.filter((record) => stateOf(record) === "disabled").length,
         malformed: records.filter((record) => stateOf(record) === "malformed").length,
+        /* A refused symlink is its own bucket. Without it these records would
+         * fall out of the summary entirely — the seam now classifies them
+         * separately, and a summary that silently loses rows is worse than one
+         * that names them. */
+        linked: records.filter((record) => stateOf(record) === "linked").length,
         unaddressable: records.filter((record) => stateOf(record) === "unaddressable").length,
         validityFlagged: validityFlagged.length,
         divergent: logical.filter((group) => !!group.divergent).length,
@@ -650,6 +709,16 @@ createApp({
     scopePctClass(pct) {
       const v = Number(pct) || 0;
       return v > 100 ? "pct-bad" : v > 70 ? "pct-warn" : "pct-ok";
+    },
+    /* The rail carries the scope's share of one context window, so the thing
+     * that decides whether an agent is silently truncated is visible from every
+     * screen rather than only the overview. */
+    scopeBudgetFor(id) {
+      return this.scopeBudgetRows.find((r) => r.id === id) || null;
+    },
+    scopePctFor(id) {
+      const row = this.scopeBudgetFor(id);
+      return row ? row.pctRounded + "%" : "";
     },
     renderMarkdown,
     tokenPctClass,
