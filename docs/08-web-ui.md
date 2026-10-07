@@ -546,13 +546,63 @@ claimed.
 
 ## Design system (styles.css)
 
-- Register: product. Palette: cool neutral canvas (`#f5f6f8`), rail
-  (`#f0f2f5`), white content, and copper action (`#a94b20`) with authored dark
-  surfaces (`#15181e`, `#1b1f27`, `#20252e`) and copper (`#e7a06f`). Full
-  decisions are persisted in `.ui-craft/brief.md` and `.ui-craft/tokens.md`.
-- Spacing rhythm: 4 / 8 / 12 / 16 / 24 / 32px. Radius 6px fields, 8px
-  buttons, 10px panels, 16px dialogs. System UI stack + `ui-monospace` for
-  code/paths; no fetched fonts.
+**[SPEC] The contract is `DESIGN.md` at the repository root, not this section.**
+Every token, its measured contrast ratio, and the reasoning behind it live
+there, along with the refused defaults a later pass must not slide back into.
+`.ui-craft/brief.md` and `.ui-craft/tokens.md` are the *previous* system and
+are superseded. `check_design_tokens.py` re-derives every ratio from the
+shipped `styles.css` on each run and fails on a regression; a palette is a
+claim, and a claim nobody re-checks decays.
+
+- **Palette.** A cool bone ground (`#f2f3f1` light / `#101316` dark) rather
+  than the previous warm canvas, one reserved ink for selection, focus and
+  the single primary action (`#0d6a63` / `#4fc7bd`), and four status colours
+  that mean what they say. Every text pair clears 4.5:1 and every control
+  boundary clears the 3:1 that WCAG 1.4.11 asks of a non-text element — both
+  verified by the gate, not asserted.
+- **The prototype's palette was replaced on purpose.** The approved prototype
+  used parchment `#faf7f1` with copper `#9e4415`, and a near-black +
+  vermilion dark theme. Those are the first two entries in every published
+  AI-tell catalogue, and the mechanical scanner flagged the second one.
+  Composition, density, type and the honesty spine were kept as approved; the
+  ground and accent were re-derived from the subject. Every value was measured
+  before it was written.
+- **Type.** IBM Plex Sans for the interface and prose, IBM Plex Mono for every
+  identifier, path, content hash and figure, with `tabular-nums` so columns of
+  numbers align. Plex rather than `system-ui` for a functional reason as much
+  as an aesthetic one: this tool compares a file on one machine with the same
+  file on another, so identical glyphs are a correctness property.
+  **Vendored as static woff2** under `webui/static/fonts/` — never fetched
+  from a CDN at runtime, because the app must work offline and a font request
+  to a third party is a third party in the page. The contract test asserts the
+  faces cover basic Latin *and* that every `src` resolves to a file that
+  exists: a face that is declared and shipped but covers none of the glyphs
+  the page uses renders the fallback silently, which is what happened once.
+- **Spacing rhythm:** 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48px. **Radius:** 4px
+  controls, 6px panels, 10px dialogs — a large radius applied to everything
+  reads as a template before a word of copy is read.
+- **Motion:** 120ms on paint properties only, `cubic-bezier(0.2, 0, 0.2, 1)`.
+  No transforms on press, no overshooting curve, no entrance animation on
+  content that was already there. `prefers-reduced-motion` disables all of it,
+  and a gate fails on any curve whose y control point exceeds 1.
+- **The context-budget meter is the signature component.** Track, fill, and a
+  labelled 100% threshold rule, on an axis that runs to 125% so a root at 111%
+  and one at 121% render as visibly different bars instead of both clamping
+  full. It leads the Overview because it is the most operationally consequential
+  thing the tool observes, and below 620px each row switches to a full-width
+  track so the meter stays a meter.
+- **Observed state is named, never collapsed.** `linked` ("Linked outside
+  root") is a distinct state from `malformed`: a refused symlink is not a
+  corrupt document and has a different remedy. See
+  @docs/06-progress-log.md for why that distinction was added.
+- **Rows group their observed identities by state, problems first**, so the
+  scopes that agree are one line and the ones that do not are their own line
+  above them. A value shared by every visible row is stated once in the pane
+  header rather than badged 300 times; the per-row chip stays in the
+  accessibility tree as `sr-only`.
+- **Labels are sentence case.** A tracked-out ALL-CAPS eyebrow above a heading
+  is chrome that appears whatever the subject and reads as generated. Data-table
+  headers keep theirs: a caps header is a table convention, not that tell.
 - Full state coverage: loading (skeleton shimmer), empty (teaching empty
   states), error (banners + toasts), disabled, focus-visible rings,
   hover/active transitions, `prefers-reduced-motion` respected.

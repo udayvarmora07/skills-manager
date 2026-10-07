@@ -4,7 +4,48 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- **The web UI was redesigned.** The visual system is now specified in
+  `DESIGN.md` at the repository root — tokens, their measured contrast ratios,
+  and the reasoning — and enforced by `check_design_tokens.py`, which
+  re-derives every ratio from the shipped stylesheet on each run. The palette
+  moved off a warm canvas-and-copper scheme onto a cool bone ground with one
+  reserved ink, because the previous one sat in a named AI-tell cluster;
+  the composition, density and type were kept. A new **context-budget meter**
+  leads the Overview: on a machine where three scope roots each hold more
+  skill text than an entire 1M-token context window, that is the most
+  consequential thing this tool observes, and burying it under a skill count
+  is the wrong priority. Library rows now **group their observed identities by
+  state with problems first**, so the scopes that disagree are the first thing
+  the eye lands on, and a value shared by every visible row is stated once in
+  the pane header instead of badged hundreds of times. The typeface (IBM Plex)
+  is **vendored** rather than fetched, so the app works offline and no third
+  party is in the page.
+
 ### Fixed
+
+- **The UI said "Malformed" for skills that are not malformed.** The backend
+  reports a precise reason and the interface collapsed every reason into one
+  word. On a machine where skills are symlinked into a shared store, that
+  mislabelled 301 of 1,962 instances and pointed readers at repairing
+  frontmatter when the actual remedy is to stop linking or copy the tree in.
+  A refused symlink is now reported as **"Linked outside root"**, its own
+  state, with its own count in Quality and on the Overview. The behaviour is
+  unchanged — the tool still declines to follow a symlink out of its managed
+  root, which is what keeps a write from landing outside it — only the name
+  is now accurate.
+- **The vendored typeface covered no ASCII.** Faces shipped, the files were in
+  the package, and every check for them passed, while every page silently
+  rendered in the fallback: all six rules carried only a `latin-ext`
+  character range. A vendored face that covers none of the glyphs a page uses
+  is the same failure as one that was never shipped. Coverage and `src`
+  resolution are now asserted.
+- **The typeface did not ship at all.** The package manifest listed the
+  vendored runtime assets but not the font directory, so an installed copy
+  would have declared the family and rendered the fallback. Both the wheel and
+  the sdist now carry it, verified by a clean install.
+
 
 - **CI is green again.** `main` had been failing on every push since
   2026-09-16. `unit (py3.10)` and `unit (py3.11)` failed on a test that asserted

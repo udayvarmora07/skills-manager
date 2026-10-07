@@ -4,6 +4,54 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## UI redesign — Warm Instrument (2026-10-08)
+
+The maintainer selected **Prototype A — Warm Instrument** from
+`.specs/prototypes/` (B and C kept as the alternates it was chosen over).
+
+- [x] **Design contract.** `DESIGN.md` at the repository root: tokens, measured
+  contrast ratios, rationale, and the refused defaults a later pass must not
+  slide back into. Passes `npx @google/design.md lint` with **0 errors**.
+- [x] **Palette re-derived and measured.** The prototype's parchment
+  `#faf7f1` + copper `#9e4415` and near-black + vermilion dark theme were
+  replaced; both are named AI-tell clusters and the scanner flagged the
+  second. Every replacement value measured before it was written — the first
+  pass had five failures, two of them thresholds I had invented for the check.
+- [x] **`check_design_tokens.py`**, re-deriving every ratio from the shipped
+  `styles.css` on each run. Proved by **mutation**: a lightened text token, a
+  lightened control border, and a font-CDN reference were each injected and
+  each caught.
+- [x] **Typeface vendored**, not fetched: 12 woff2 faces (latin + latin-ext,
+  6 weights across both families) under `webui/static/fonts/`.
+- [x] **Context-budget meter** leads the Overview, on a 125% axis so 111% and
+  121% render as different bars, and it works at 320px.
+- [x] **Observed state `linked`** added, distinct from `malformed`. On this
+  machine 301 of 1,962 instances were being labelled "Malformed" when they are
+  symlinks the tool deliberately refuses to follow. No security change.
+- [x] **Rows group identities by state, problems first**, so the scopes that
+  disagree are the thing the eye lands on.
+- [x] **A uniform row state is stated once**, in the pane header, instead of
+  badged on every row; the per-row chip stays in the a11y tree.
+- [x] **19 tests** in `tests/test_redesign_contracts.py`, red-first: 11 fail
+  against the pre-change source at `570179b`.
+- [x] **Full ladder green**: 1,232 tests on 3.11/3.12/3.13/3.14, both smokes,
+  `check_docs`, `check_complexity`, Bandit (0 issues), Ruff (clean),
+  six-viewport browser harness, wheel + sdist built and clean-installed.
+
+- [ ] **Human perceptual review of the redesign. Not an agent's to do.**
+  The harness renders and measures; it does not sign off. Still unexercised:
+  a non-Chromium engine, forced-colors mode, 200%/400% zoom, and a screen
+  reader. This is the same open gate G8 carried, carried forward honestly.
+
+- [ ] **Decide whether a skill directory symlinked into a shared store should
+  be refused at all.** The containment rule (SCOPE-2) makes 15% of this
+  machine's library unreadable and every description empty, because the
+  skills in `~/.claude/skills` are symlinks into `~/.agents/skills`. The
+  refusal is deliberate and documented, and it is a product decision about the
+  security model rather than a UI one, so it was **deliberately not changed**.
+  The UI now names it accurately instead of calling it corruption. Options
+  and their trade-offs are in @docs/06-progress-log.md.
+
 ## docs/24 audit remediation — day 1 and week 1, 2026-10-04
 
 `main` is green for the first time since 2026-09-16; all four previously-skipped

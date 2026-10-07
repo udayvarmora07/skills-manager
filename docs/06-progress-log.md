@@ -53,15 +53,19 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
-## Current state (measured 2026-10-06 on the search-record pass)
+## Current state (measured 2026-10-08 on the UI redesign pass)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.
 
-- `python3 -m unittest discover -s tests` — **1,211 tests, OK** (108.5 s).
+- `python3 -m unittest discover -s tests` — **1,232 tests, OK** (~99 s), and
+  re-verified on **Python 3.11, 3.12, 3.13 and 3.14** — every interpreter CI runs.
 - `python3 check_complexity.py` — **689 functions across 16 files**, new-function
   budget ≤ 15, no ratchet increase.
 - `python3 check_docs.py` — **PASSED**. `python3 smoke_store.py` and
-  `python3 smoke_web.py` — both green on this base commit.
+  `python3 smoke_web.py` — both green. `python3 check_design_tokens.py` — **PASSED**
+  (new: re-derives every contrast ratio in `styles.css` from the WCAG formula).
+  `browser_harness.py` — green at 320/400/640/900/1280/1440, zero console
+  errors, zero failed requests, no overflow. Bandit 0 issues; Ruff clean.
 - **1.0.2 is tagged at `ef9bfd6`; TestPyPI has shipped it and PyPI is waiting on
   the maintainer.** The external TestPyPI outage that blocked this has cleared
   (its `/_/oidc/audience` endpoint answers 200 again), the failed job was
@@ -127,12 +131,13 @@ entries that introduced them:
 - **The 1.0.2 artifact hashes of record are those built from `522b81f`.** The
   `6733da9` hashes remain only inside the superseded 2026-09-23 entry.
 
-## Resident entry index (2026-09-23 … 2026-10-06)
+## Resident entry index (2026-09-23 … 2026-10-08)
 
-**[NOTE]** 25 dated entries; full text follows.
+**[NOTE]** 26 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-10-08 | The UI was redesigned against a contract, and the redesign found a product defect |
 | 2026-10-06 | TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong |
 | 2026-10-06 | A search body cost one document read per row, to compute nothing |
 | 2026-10-06 | G8 shipped inside the tagged 1.0.2, and five records still said it had not |
@@ -161,6 +166,97 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-10-08 — The UI was redesigned against a contract, and the redesign found a product defect
+
+**Where the design came from.** Three rendered prototypes were produced and
+the maintainer selected **A — Warm Instrument** (`.specs/prototypes/`), whose
+composition, density and honesty spine were kept. Its **palette was replaced**:
+it used parchment `#faf7f1` with copper `#9e4415` and a near-black +
+vermilion dark theme, which are the first two entries in every published
+AI-tell catalogue, and the mechanical scanner independently flagged the second.
+Ground and accent were re-derived from the subject — a cool bone proof sheet
+with one reserved ink — and **every replacement value was measured before it
+was written**. The first pass had five failures, two of which were thresholds
+I had invented for the check itself; those were corrected rather than argued
+away.
+
+**The mechanism, not the styling.** `DESIGN.md` at the repository root is the
+contract: tokens, their measured ratios, the reasoning, and the refused
+defaults a later pass must not slide back into. `check_design_tokens.py`
+re-derives every ratio from the shipped stylesheet on each run. It was proved
+by mutation, not by inspection: a lightened text token, a lightened control
+border, and a font-CDN reference were each injected, and each was caught.
+
+**Two defects the gates could not see, both found by measuring.**
+
+1. **The vendored typeface covered no ASCII.** Six `@font-face` rules
+   shipped, 176 KB of woff2 sat in the package, and every "is the font
+   vendored" check passed — while every page rendered in the fallback, because
+   all six rules carried only the `latin-ext` unicode-range. A probe element
+   set in "IBM Plex Sans" measured *the same width* as one set in a face that
+   does not exist (310px vs 310px). A correct build measures 339px. This is the
+   "declared but never shipped" failure the anti-slop scanner names, one level
+   down: the file exists, the declaration exists, and the page still renders
+   in the wrong typeface. The test now asserts glyph coverage and that every
+   `src` resolves.
+2. **The typeface did not ship at all.** `package-data` listed
+   `webui/static/vendor/*` but not `webui/static/fonts/*`. Every other gate
+   was green; an installed copy would have declared IBM Plex and rendered in
+   the fallback, permanently. Found because the build tool was installed and
+   the artifacts were built — the gate would have caught it, but nothing was
+   running it.
+
+**The product defect the redesign surfaced.** The backend carries a precise
+reason in `decode_error`; the UI collapsed every reason into the word
+**"Malformed"**. On this machine that mislabelled **301 of 1,962 instances**
+and pointed the reader at the wrong remedy. The skill's `SKILL.md` is not
+corrupt — it is a symlink whose target sits outside the scope's root, and the
+fix is to stop linking or to copy the tree in. That refusal is deliberate and
+documented (SCOPE-2 in `loader.py`): a followed link would let a write land
+outside the managed root. **Nothing about the security model changed here; only
+the name did.** `linked` joined the observed-state vocabulary,
+`malformedDocument` stayed true so every existing count and predicate kept
+working, Quality gained a bucket rather than letting those rows fall out of
+the summary, and the Overview now says *"292 instances are a symlink the tool
+refuses to follow because its target sits outside that scope's root"* instead
+of counting them as corrupt.
+
+**[SPEC] Three checks in this repository were pinning copy rather than
+behaviour, and all three broke when the copy improved.** The G8 template test
+asserted the literal `{ 'sr-only': uniformStateLabel }`; the webui contract
+asserted `identity.label` and `identity.stateLabel`; and the browser harness
+matched an attention-queue item by the exact title "malformed or unaddressable"
+— which failed on all six viewports the moment the wording was corrected, with
+the product right. Each now asserts the invariant: suppression is a class and
+never a removal, the row names what it saw and keeps the full identity
+reachable, and the queue item is selected by a stable `data-attention` key.
+This repository has now shipped that exact class three times; the fix is the
+same each time.
+
+**[NOTE] Rows group their observed identities by state, problems first.**
+A logical skill can exist in seven scopes; one chip per scope made every row
+three or four lines tall and a 638-row list unscannable. Now the scopes that
+agree are one line and the ones that do not are their own line above them,
+which is the question this tool exists to answer. Presentation only — it groups
+values the seam already returned and asserts nothing the backend did not
+report.
+
+**[SPEC] Verified, not asserted.** 1,232 tests pass on **Python 3.11, 3.12,
+3.13 and 3.14** (all four interpreters CI runs). `check_complexity` (689
+functions), `check_docs`, both smokes, Bandit (**0 issues**) and Ruff
+F821/F822/F823 (clean) all pass. The browser harness is green across
+320/400/640/900/1280/1440 with zero console errors, zero failed requests and no
+overflow. A wheel and an sdist were built with the pinned, hash-verified
+toolchain: **19 web UI files** each, fonts present in both, Vue sha256
+matching, and a **clean install passes** including the font assertions.
+
+**[?] What is still open.** The **human perceptual review** remains
+outstanding, exactly as it did for G8: no non-Chromium engine, no forced-colors
+mode, no 200%/400% zoom, no screen reader. The harness renders and measures; it
+does not sign off. Separately, whether a skill directory symlinked into a
+shared store *should* be refused is a product decision about the containment
+model, not a UI one, and it was deliberately not taken here.
 
 ## 2026-10-06 — TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong
 

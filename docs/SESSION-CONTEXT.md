@@ -2,6 +2,22 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Version 1.16.0** (2026-10-08: the Warm Instrument redesign landed.
+**1,232 tests, 689 complexity-tracked functions**, both measured on `8017cb5`.
+**The design contract is now `DESIGN.md` at the repository root**, and
+`check_design_tokens.py` re-derives every contrast ratio in `styles.css` on
+every run; `.ui-craft/*` is the superseded system. Verified on **3.11, 3.12,
+3.13 and 3.14**, plus both smokes, `check_docs`, Bandit (0 issues), Ruff
+(clean), and a six-viewport browser harness with zero console errors and no
+overflow. Three things a session must not undo, each learned the hard way:
+(1) the typeface is **vendored**, and a vendored face that covers no basic
+Latin renders the fallback *silently* — assert glyph coverage and that every
+`src` resolves; (2) the observed state **`linked`** ("Linked outside root") is
+distinct from `malformed`, because a symlink the tool refuses to follow is not
+a corrupt document; (3) three checks in this repo once pinned copy rather than
+behaviour — assert identity, not sentence. The 1.15.0 block below records its
+own dated measurement and is left as history.)
+
 **Version 1.15.0** (2026-10-06: record-closure pass after the G8 merge.
 **1,207 tests, 688 complexity-tracked functions**, measured on `8669742`. This
 block exists because a whole feature was missing from five records at once: §G8's
