@@ -246,7 +246,11 @@
                  @click.stop @change="toggleSelection(s, $event.target.checked)">
           <span class="dot" :class="s.divergent || identityItems(s).some(identity => identity.stateKeys.includes('malformed')) ? 'dot-warn' : 'dot-ok'" :title="libraryMode === 'library' && s.divergent ? 'Divergent copies' : 'Skill instance'"></span>
           <div class="row-main">
-            <div class="row-name">{{ s.name }} <span v-if="libraryMode === 'instances'" class="row-tokens">{{ formatTokens(s.tokens) }}</span></div>
+            <!-- The copy count sits on the name line, not on a line of its own.
+                 It was a separate row under every skill, which cost ~24px on a
+                 list where the identity groups beside it already say how many
+                 copies there are and what state each is in. -->
+            <div class="row-name">{{ s.name }} <span v-if="libraryMode === 'instances'" class="row-tokens">{{ formatTokens(s.tokens) }}</span><span v-else-if="libraryMode === 'library'" class="row-copies">{{ formatNumber((s.identities || []).length || (s.instances || []).length) }} cop{{ ((s.identities || []).length || (s.instances || []).length) === 1 ? 'y' : 'ies' }}</span></div>
             <div class="row-desc">{{ s.description }}</div>
           </div>
           <div v-if="browseMode === 'grid'" class="card-meta" aria-label="Observed identity and state">
@@ -260,14 +264,17 @@
                an `sr-only` span, so the state is still announced and the row never
                loses its accessible name. Grid cards keep the full stack because
                there each card is one physical unit with its own observations. -->
+          <!-- Identities are grouped by observed state, problems first, so the
+               scopes that disagree are their own line instead of one chip per
+               scope. The full per-scope identity is the tooltip. -->
           <div v-else class="identity-summary" aria-label="Observed identity and state">
-            <span v-for="identity in identityItems(s)" :key="identity.key" class="identity-observation">
-              <span class="identity-label" :class="{ 'sr-only': uniformIdentityLabel }" :title="identity.label">{{ identity.label }}</span>
-              <span class="identity-state" :class="[identity.problem ? 'identity-state-warn' : 'identity-state-ok', { 'sr-only': uniformStateLabel || uniformProblemLabel }]" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
+            <span v-for="group in groupedIdentities(s)" :key="group.key" class="identity-observation">
+              <span class="identity-label" :title="group.full.join(' | ')">{{ group.names.join(' · ') }}</span>
+              <span class="identity-state" :class="[group.problem ? 'identity-state-warn' : 'identity-state-ok', { 'sr-only': uniformStateLabel || uniformProblemLabel }]">{{ group.stateLabel }}</span>
             </span>
           </div>
           <div v-if="rowBadgeItems(s).length" class="row-badges">
-            <span v-for="badge in rowBadgeItems(s)" :key="badge.key" class="tag" :class="{ 'tag-scope': badge.scope }">{{ badge.text }}</span>
+            <span v-for="badge in rowBadgeItems(s).filter(b => !/^\d+ cop/.test(b.text))" :key="badge.key" class="tag" :class="{ 'tag-scope': badge.scope }">{{ badge.text }}</span>
           </div>
         </li>
         <li v-if="loadingList" class="skeleton" aria-hidden="true">

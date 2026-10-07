@@ -678,8 +678,16 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertIn("deriveLogicalSkillIdentity", _read(DOMAIN_JS))
         self.assertIn("identityItems(item)", source)
         self.assertIn("Observed identity and state", html)
-        self.assertIn("identity.label", html)
-        self.assertIn("identity.stateLabel", html)
+        # The row prints observed identity and observed state as text, and the
+        # full per-scope identity stays reachable. This used to pin the exact
+        # expressions `identity.label` / `identity.stateLabel`; the row now
+        # groups identities by state, so the expressions changed while the
+        # property they protect — the row names what it saw and how to see all
+        # of it — did not.
+        self.assertIn("groupedIdentities(s)", html)
+        self.assertIn("group.stateLabel", html)
+        self.assertIn("group.names.join", html)
+        self.assertIn('aria-label="Observed identity and state"', html)
         self.assertIn("Unknown consumer", _read(DOMAIN_JS))
         self.assertIn("overflow-wrap: anywhere", css)
         self.assertIn("identity-state-warn", css)

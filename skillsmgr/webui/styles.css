@@ -863,19 +863,37 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .row-main { flex: 1; min-width: 0; }
 .row-name { font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; line-height: 1.3; }
 .row-desc { color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-height: 1.35; }
+.row-copies {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  vertical-align: 1px;
+}
 .row-badges { grid-column: 3; grid-row: 3; display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; padding-top: 3px; }
 .row-badges .tag { max-width: 150px; }
 
-.identity-summary { display: grid; gap: 3px; min-width: 0; }
+/* The observed identities flow inline and wrap, instead of stacking one per
+   row. A logical skill can exist in seven scopes; stacked, each row became
+   five or six lines tall and a 638-row list stopped being scannable at all.
+   This is the difference between a list you can scan and a list you can only
+   scroll. */
+.identity-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; min-width: 0; }
 /* 11px floor. The state badge was 10px, below every legibility floor,
    and appeared on every row. */
-.identity-observation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: 0.6875rem; line-height: 1.3; }
-.identity-label { min-width: 0; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.identity-observation { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: 0.6875rem; line-height: 1.3; }
+/* Capped so a long consumer name truncates instead of pushing the state
+   badges off the end of the row. The full text stays in the title attribute. */
+.identity-label { min-width: 0; max-width: 12ch; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
 /* `width: fit-content` matters: when the identity label is suppressed the state
    chip is the only child, so it lands in the 1fr column and otherwise stretches
    the full width of the row — a badge becomes a bar. */
-.identity-state { width: fit-content; justify-self: end; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 0.6875rem; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.identity-observation > .identity-state:only-child { justify-self: start; }
+.identity-state { flex: none; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 0.6875rem; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 
 /* A state shared by every visible row, stated once above the list. */
 .uniform-state-note {
@@ -943,7 +961,19 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .card-meta { grid-column: 3; grid-row: 2; }
 .skill-grid .card-meta .identity-observation { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 2px; }
 .skill-grid .card-meta .identity-state { justify-self: start; }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-badges { grid-column: 3; grid-row: 3; align-self: end; padding-top: 7px; }
+.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-copies {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+.row-badges { grid-column: 3; grid-row: 3; align-self: end; padding-top: 7px; }
 .skill-grid > .batchbar, .skill-grid > .selection-hint { grid-column: 1 / -1; }
 
 .tag {

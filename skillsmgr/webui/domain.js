@@ -213,6 +213,13 @@ function observedIdentity(record, scopes, options = {}) {
     consumerLabel,
     identityLabel,
     label: `${identityLabel} · consumer: ${consumerLabel}`,
+    /* The long form above is the accessible identity and the tooltip. It is
+     * too wide to print on a row: "Claude Code agent · consumer: claude-code"
+     * is ~44 characters, and a logical skill can have seven of them, so the
+     * list pane wrapped to five or six lines per skill and stopped being
+     * scannable. The visible form is the scope name; the full identity stays
+     * in the title attribute and in the accessibility tree. */
+    shortLabel: scopeLabel,
     stateKeys: baseStates,
     stateLabels,
     stateLabel: stateLabels.join(" · "),

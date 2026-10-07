@@ -214,31 +214,37 @@ class UniformSuppressionTests(unittest.TestCase):
         # As methods they are truthy function objects in a template, so the
         # `sr-only` binding fires unconditionally and hides every real state.
         computed = _slice(self.source, "computed: {", "\n  methods: {")
-        for name in ("visibleIdentityItems()", "uniformIdentityLabel()", "uniformStateLabel()"):
+        for name in ("visibleIdentityItems()", "uniformStateLabel()", "uniformProblemLabel()"):
             self.assertIn(name, computed, f"{name} is not a computed property")
+        # groupedIdentities takes the row as an argument, so it belongs in
+        # methods. The value-less helpers must NOT be methods: as methods they
+        # are truthy function objects in a template and the `sr-only` binding
+        # fires unconditionally, hiding every real state.
+        self.assertIn("groupedIdentities(item)", _slice(self.source, "\n  methods: {", '}).mount("#app");'))
         methods = _slice(self.source, "\n  methods: {", '}).mount("#app");')
-        for name in ("visibleIdentityItems()", "uniformIdentityLabel()", "uniformStateLabel()"):
+        for name in ("visibleIdentityItems()", "uniformStateLabel()"):
             self.assertNotIn(name, methods, f"{name} is duplicated as a method")
 
     def test_template_binds_suppression_to_sr_only_not_removal(self):
+        # The row groups identities by observed state, so the bindings read
+        # `group.*` rather than `identity.*`. What is worth protecting has not
+        # changed: suppression must be a class that leaves the text in the
+        # accessibility tree, never a `v-if` that removes it, and it must cover
+        # every uniform case rather than one of them. (Asserting the exact
+        # expression is the "assert the mechanism, not the property" defect this
+        # repository has now shipped twice.)
         summary = _slice(self.html, 'v-else class="identity-summary"', "</div>")
-        self.assertIn("identityItems(s)", summary)
-        self.assertIn("{ 'sr-only': uniformIdentityLabel }", summary)
-        # This used to assert the literal "{ 'sr-only': uniformStateLabel }".
-        # It now asserts the invariant instead, because the literal stopped
-        # being the thing worth protecting: suppression must be a class that
-        # leaves the text in the accessibility tree, never a `v-if` that removes
-        # it, and it must cover every uniform case rather than one of them.
-        # (Asserting the exact expression is the "assert the mechanism, not the
-        # property" defect this repository has now shipped twice.)
+        self.assertIn("groupedIdentities(s)", summary)
         self.assertIn("'sr-only'", summary)
         self.assertIn("uniformStateLabel", summary)
         self.assertIn("uniformProblemLabel", summary)
-        state_binding = _slice(summary, 'class="identity-state"', "</span>")
-        self.assertIn("{ 'sr-only':", state_binding)
-        self.assertNotIn('v-if="identity.stateLabel"', summary)
+        # The state chip itself must carry the suppression class, not merely
+        # be somewhere in the block.
+        self.assertIn('class="identity-state" :class="[group.problem', summary)
+        self.assertIn("{ 'sr-only': uniformStateLabel || uniformProblemLabel }", summary)
+        self.assertNotIn('v-if="group.stateLabel"', summary)
         # The seam still supplies the values; nothing is re-derived here.
-        for expression in ("identity.label", "identity.stateLabel", "identity.problem"):
+        for expression in ("group.names", "group.stateLabel", "group.problem"):
             self.assertIn(expression, summary)
 
     def test_a_uniform_problem_state_is_stated_once_not_on_every_row(self):
@@ -274,6 +280,13 @@ class UniformSuppressionTests(unittest.TestCase):
         self.assertIn("identity.stateLabel", card)
 
     def test_uniform_state_is_suppressed_only_when_every_row_is_active(self):
+        """A value shared by every visible row is repetition, not information.
+
+        Exercised against the real `data()` and the real computeds rather than
+        read as source text: as methods these would be truthy function objects
+        in a template, so the `sr-only` binding would fire unconditionally and
+        hide every real state.
+        """
         script = r"""
 const fs = require('fs'), vm = require('vm');
 const domainSandbox = { window: {}, document: {} };
@@ -288,47 +301,112 @@ const sandbox = {
 vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
 const definition = sandbox.app;
 const data = definition.data();
-const identity = (label, state, problem) => ({ key: label + state, label, stateLabel: state, problem, count: 1 });
+const identity = (label, state, problem) => ({
+  key: label + state, label, scopeLabel: label, stateLabel: state,
+  stateKeys: [state.toLowerCase()], problem, count: 1,
+});
+// A visible row is a list of identities. Built from explicit arguments rather
+// than packed triples: spreading a triple into a call silently turns "Global"
+// into the characters "G", "l", "o", which is a silent fixture bug.
+const rowOf = (...ids) => ({ identities: ids });
+const two = (l1, s1, p1, l2, s2, p2) => [rowOf(identity(l1, s1, p1)), rowOf(identity(l2, s2, p2))];
 const run = (visibleSkills) => {
-  // `identityItems` is a method, so the computed has to be exercised with it bound.
-  const context = Object.assign(data, { libraryMode: 'library', visibleSkills,
-    identityItems: definition.methods.identityItems });
-  for (const key of ['visibleIdentityItems', 'uniformIdentityLabel', 'uniformStateLabel']) {
-    Object.defineProperty(context, key, { get() { return definition.computed[key].call(context); }, configurable: true });
+  const context = Object.assign({}, data, {
+    libraryMode: 'library', visibleSkills,
+    identityItems: definition.methods.identityItems,
+  });
+  for (const key of ['visibleIdentityItems', 'uniformStateLabel', 'uniformProblemLabel', 'uniformProblemCount']) {
+    Object.defineProperty(context, key, {
+      get() { return definition.computed[key].call(context); }, configurable: true,
+    });
   }
-  return { label: context.uniformIdentityLabel, state: context.uniformStateLabel };
+  return {
+    state: context.uniformStateLabel,
+    problem: context.uniformProblemLabel,
+    problemCount: context.uniformProblemCount,
+  };
 };
 console.log(JSON.stringify({
-  allActive: run([
-    { identities: [identity('Global', 'Active', false)] },
-    { identities: [identity('Global', 'Active', false)] },
-  ]),
-  mixedStates: run([
-    { identities: [identity('Global', 'Active', false)] },
-    { identities: [identity('Agents', 'Disabled', true)] },
-  ]),
-  allProblemStates: run([
-    { identities: [identity('Global', 'Active', false)] },
-    { identities: [identity('Agents', 'Malformed', true)] },
-  ]),
+  allActive: run(two('Global', 'Active', false, 'Global', 'Active', false)),
+  mixedStates: run(two('Global', 'Active', false, 'Agents', 'Disabled', true)),
+  allOneProblemState: run(two('Global', 'Linked', true, 'Agents', 'Linked', true)),
+  twoDifferentProblemStates: run(two('Global', 'Linked', true, 'Agents', 'Malformed', true)),
   empty: run([]),
   // One visible row is not "uniform": every value is trivially shared, and
   // hiding its only badge would remove evidence instead of repetition.
-  singleRow: run([{ identities: [identity('Global', 'Active', false)] }]),
+  singleRow: run([rowOf(identity('Global', 'Active', false))]),
 }));
 """
         result = subprocess.run(
             ["node", "-e", script], capture_output=True, text=True, check=True, cwd=str(ROOT)
         )
         values = json.loads(result.stdout)
-        # Every row Active -> the state is uniform and suppressible.
-        self.assertEqual(values["allActive"], {"label": "Global", "state": "Active"})
-        # One disabled row and the scope is no longer uniform: nothing is suppressed.
-        self.assertEqual(values["mixedStates"], {"label": None, "state": None})
-        self.assertEqual(values["allProblemStates"], {"label": None, "state": None})
-        # An empty list suppresses nothing (there is no uniform value to name).
-        self.assertEqual(values["empty"], {"label": None, "state": None})
-        self.assertEqual(values["singleRow"], {"label": None, "state": None})
+        # Every row Active -> uniform and suppressible.
+        self.assertEqual(values["allActive"]["state"], "Active")
+        self.assertIsNone(values["allActive"]["problem"])
+        # One problem row among active rows: nothing is uniform, so nothing is
+        # suppressed. The badges are exactly what discriminate here.
+        self.assertIsNone(values["mixedStates"]["state"])
+        self.assertIsNone(values["mixedStates"]["problem"])
+        # Every row carrying the *same* problem state -> suppress per row, and
+        # promote to the pane header instead.
+        self.assertEqual(values["allOneProblemState"]["problem"], "Linked")
+        self.assertIsNone(values["allOneProblemState"]["state"])
+        self.assertEqual(values["allOneProblemState"]["problemCount"], 2)
+        # Two *different* problem states are not uniform: suppress nothing.
+        self.assertIsNone(values["twoDifferentProblemStates"]["problem"])
+        # An empty list suppresses nothing.
+        self.assertIsNone(values["empty"]["state"])
+        self.assertIsNone(values["empty"]["problem"])
+        self.assertEqual(values["empty"]["problemCount"], 0)
+        self.assertIsNone(values["singleRow"]["state"])
+        self.assertIsNone(values["singleRow"]["problem"])
+
+
+    def test_identities_are_grouped_by_state_with_problems_first(self):
+        """The disagreement is the visual subject, not the scope list.
+
+        A logical skill can exist in seven scopes. One chip per scope made each
+        row three or four lines tall and a 638-row list unscannable. Grouping
+        keeps it short and puts the scopes that differ on their own line.
+        """
+        script = r"""
+const fs = require('fs'), vm = require('vm');
+const domainSandbox = { window: {}, document: {} };
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), domainSandbox);
+const sandbox = {
+  window: { SkillManagerDomain: domainSandbox.window.SkillManagerDomain },
+  Vue: { createApp(app) { sandbox.app = app; return { mount() {} }; }, nextTick() {} },
+  localStorage: { getItem() { return null; }, setItem() {} },
+  document: { addEventListener() {}, removeEventListener() {}, documentElement: { dataset: {} }, querySelectorAll() { return []; }, querySelector() { return null; } },
+  setTimeout, clearTimeout
+};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+const d = sandbox.app.data();
+const m = sandbox.app.methods;
+const id = (scope, state, problem) => ({
+  key: scope + state, label: scope + ' · consumer: ' + scope, scopeLabel: scope,
+  stateLabel: state, stateKeys: [state.toLowerCase()], problem, count: 1,
+});
+const groups = m.groupedIdentities.call({ identityItems: () => [
+  id('global', 'Active', false), id('codex', 'Active', false),
+  id('gemini', 'Active', false), id('claude-code', 'Linked', true),
+]});
+console.log(JSON.stringify(groups));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True, cwd=str(ROOT)
+        )
+        groups = json.loads(result.stdout)
+        self.assertEqual(len(groups), 2, groups)
+        # The problem group sorts first: the eye lands on the disagreement.
+        self.assertTrue(groups[0]["problem"])
+        self.assertEqual(groups[0]["names"], ["claude-code"])
+        self.assertFalse(groups[1]["problem"])
+        self.assertEqual(groups[1]["names"], ["global", "codex", "gemini"])
+        # The full identity survives on the group for the tooltip, so grouping
+        # does not discard evidence.
+        self.assertTrue(groups[1]["full"][0].startswith("global · consumer:"))
 
 
 class PathDemotionTests(unittest.TestCase):

@@ -171,11 +171,6 @@ createApp({
         : [];
     },
 
-    uniformIdentityLabel() {
-      const labels = [...new Set(this.visibleIdentityItems.map((item) => item.label))];
-      return labels.length === 1 ? labels[0] : null;
-    },
-
     uniformStateLabel() {
       const items = this.visibleIdentityItems;
       if (!items.length) return null;
@@ -786,6 +781,46 @@ createApp({
       return this.libraryMode === "library"
         ? (item.identities || [])
         : [observedIdentity(item, this.scopes)];
+    },
+
+    /* Identities grouped by observed state, problems first.
+     *
+     * A logical skill can exist in seven scopes. Printing one chip per scope
+     * made each row three or four lines tall, so a 638-row list showed about
+     * eleven entries per screen and could not be scanned. Grouping keeps the
+     * list to at most a couple of lines and — more to the point — puts the
+     * disagreement first. This tool exists to answer "which of my agents are
+     * reading different instructions?", and this is the row that answers it:
+     * the scopes that agree are one line, the ones that do not are their own
+     * line above them.
+     *
+     * This is presentation only. It groups values the seam already returned
+     * and asserts nothing the backend did not report.
+     */
+    groupedIdentities(item) {
+      const items = this.identityItems(item);
+      if (!items.length) return [];
+      const groups = new Map();
+      const order = [];
+      for (const it of items) {
+        const key = (it.stateKeys || []).join(",");
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            stateLabel: it.stateLabel,
+            problem: !!it.problem,
+            names: [],
+            full: [],
+          });
+          order.push(key);
+        }
+        const group = groups.get(key);
+        group.names.push(it.scopeLabel || it.label);
+        group.full.push(it.label);
+      }
+      return order
+        .map((key) => groups.get(key))
+        .sort((a, b) => Number(b.problem) - Number(a.problem) || a.stateLabel.localeCompare(b.stateLabel));
     },
 
     setLibraryMode(mode) {
