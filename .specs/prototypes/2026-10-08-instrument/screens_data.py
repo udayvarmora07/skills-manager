@@ -246,7 +246,7 @@ DOCUMENT = """
 <span style="color:var(--signal)">allowed-tools</span>: Read, Write, Bash
 <span style="color:var(--ink-4)">---</span></pre>
               </div>
-              <div class="prose" style="padding:var(--s6) var(--s7);max-width:none">
+              <div class="prose" style="padding:var(--s6) var(--s7)">
                 <h2 class="h-head" style="margin-bottom:10px">When to use this</h2>
                 <p>Reach for this skill the moment a task mentions a <code class="mono">.pdf</code>,
                   a scanned document, or a form that has to be filled and returned. Do not
@@ -259,8 +259,8 @@ DOCUMENT = """
                   It preserves reading order, which matters for multi-column academic PDFs
                   where <code class="mono">pypdf</code> silently interleaves columns.</p>
 
-                <div class="sheet" style="margin:16px 0">
-                  <pre style="margin:0;font-family:var(--ff-mono);font-size:12px;line-height:1.7;overflow-x:auto"><code>import pdfplumber
+                <div class="codeblock">
+                  <pre><code><span class="kw">import</span> pdfplumber
 
 with pdfplumber.open(<span style="color:var(--signal)">"report.pdf"</span>) as pdf:
     for i, page in enumerate(pdf.pages):
@@ -1066,7 +1066,7 @@ REVIEW_OVERLAY = """
       <span class="small faint">A snapshot is kept for rollback — it is never a blind restore</span>
       <span class="spacer"></span>
       <button class="btn btn-secondary">Cancel</button>
-      <button class="btn btn-primary" disabled style="opacity:.5">Apply reviewed update</button>
+      <button class="btn btn-primary">Apply reviewed update</button>
     </div>
   </div>
 </div>

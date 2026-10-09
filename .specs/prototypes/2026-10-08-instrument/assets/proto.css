@@ -615,6 +615,19 @@ a { color: var(--signal); text-decoration: none; }
   background: var(--sunken); border: 1px solid var(--rule-soft);
   border-radius: var(--r-lg);
 }
+/* The measure is capped INSIDE the sheet too. A document pane is exactly the
+   place a full-width paragraph goes unreadable, and a reader that ignores
+   the rule when the container happens to be 1,255px wide is not a rule. */
+.sheet > .prose { max-width: 68ch; }
+.sheet > pre, .sheet > .sheet { max-width: 100%; }
+.codeblock {
+  background: var(--surface); border: 1px solid var(--rule-soft);
+  border-radius: var(--r-md); padding: var(--s4) var(--s5);
+  overflow-x: auto; margin: var(--s5) 0;
+}
+.codeblock pre { margin: 0; font-family: var(--ff-mono); font-size: 12px; line-height: 1.7; }
+.codeblock code { color: var(--ink-2); }
+.codeblock .kw { color: var(--signal); }
 
 /* ─── Callout ─────────────────────────────────────────────────────────────────
    Explains the concept next to the number, not the number. One per screen. */
