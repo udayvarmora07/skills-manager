@@ -1,0 +1,200 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INSTRUMENT — design tokens for the Skills Manager redesign
+   Prototype build. The contract this is derived from is DESIGN.md; the values
+   here are new because the depth and scale model is new.
+
+   Structure: ground stack → ink stack → one signal → four status → rules →
+   elevation → type → space → radius → motion. Each layer is defined once and
+   every component below consumes only these.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Typeface ───────────────────────────────────────────────────────────────
+   IBM Plex Sans / Mono — the faces the app already ships, referenced rather
+   than duplicated, so this prototype is also a test of whether the vendored
+   files are good enough for this design. Not a new face and not an aesthetic
+   preference: this tool compares one file on macOS with the same file on
+   Linux, so identical glyphs on two platforms is a correctness property.
+
+   `font-variant-numeric: tabular-nums` is set explicitly on every numeric
+   context. Plex Mono's figures are tabular by default, but the `--ff-mono`
+   stack falls back to a system mono that is not, and a hash column that
+   stops aligning is a correctness bug, not a cosmetic one.                  */
+
+@font-face {
+  font-family: "Plex Sans";
+  src: url("../../../skillsmgr/webui/static/fonts/IBMPlexSans-400-latin.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: "Plex Sans";
+  src: url("../../../skillsmgr/webui/static/fonts/IBMPlexSans-500-latin.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: "Plex Sans";
+  src: url("../../../skillsmgr/webui/static/fonts/IBMPlexSans-600-latin.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: "Plex Mono";
+  src: url("../../../skillsmgr/webui/static/fonts/IBMPlexMono-400-latin.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: "Plex Mono";
+  src: url("../../../skillsmgr/webui/static/fonts/IBMPlexMono-500-latin.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: block;
+}
+
+/* ─── Ground ────────────────────────────────────────────────────────────────
+   Four levels, and the order matters: the *navigation* recedes and the
+   *content* is elevated. The current build inverted this, which is one
+   reason it reads as an admin panel — the chrome is louder than the work.  */
+
+:root {
+  /* light */
+  --canvas:      #e4e6e3;  /* the recessed plane everything sits on */
+  --surface:     #f8f9f7;  /* main working surface — content lives here */
+  --raised:      #ffffff;  /* cards, rows, anything that must lift */
+  --sunken:      #eef0ec;  /* wells: code, meter tracks, inset regions */
+  --float:       #ffffff;  /* dialogs, palette, popovers — highest */
+
+  /* ink — five steps, every one clears 4.5:1 on --surface and --raised */
+  --ink:         #101316;  /* 17.5:1 */
+  --ink-2:       #2b3137;  /* 12.4:1 */
+  --ink-3:       #3f464c;  /*  9.0:1 */
+  --ink-4:       #4f565b;  /*  7.0:1 — the floor. paths live here, and a */
+                              /* path you cannot read is a path you cannot   */
+                              /* debug, so nothing de-emphasised goes below. */
+
+  /* one reserved ink: selection, focus, the single primary action */
+  --signal:        #0a6257;
+  --signal-hover:  #084f47;
+  --signal-press:  #063d37;
+  --signal-ink:    #ffffff;
+  --signal-wash:   #dff0ec;
+  --signal-line:   #8dc4ba;
+
+  /* four status colours. Red is *malformed*, never *divergent*: divergent is
+     attention-worthy but not an error, and colouring it red would train the
+     reader to ignore red. */
+  --ok:       #2f6b39;  --ok-wash:   #e4f0e5;  --ok-line:   #9cc9a3;
+  --warn:     #8a5a05;  --warn-wash: #f8eeda;  --warn-line: #dcbd7d;
+  --bad:      #a52f1d;  --bad-wash:  #fbe8e4;  --bad-line:  #e0a396;
+  --mute:     #4d545b;  --mute-wash: #e9ebe8;  --mute-line: #b4b9b5;
+
+  /* rules — hairlines, never boxes */
+  --rule:        rgba(20, 23, 26, 0.09);
+  --rule-soft:   rgba(20, 23, 26, 0.055);
+  --rule-strong: #868d94;  /* 3.16:1 — the ONLY edge on a checkbox and a
+                               secondary button. WCAG 1.4.11 wants 3:1. */
+
+  /* elevation — tinted with the ink hue so shadows never read as grey dirt.
+     Every raised surface also gets a 1px inset top highlight, which is what
+     makes a light surface read as a material rather than a colour.        */
+  --lift-0: none;
+  --lift-1: 0 1px 2px rgba(20,23,26,.055), 0 1px 1px rgba(20,23,26,.03);
+  --lift-2: 0 2px 4px rgba(20,23,26,.05),  0 7px 18px rgba(20,23,26,.06);
+  --lift-3: 0 4px 10px rgba(20,23,26,.06), 0 16px 38px rgba(20,23,26,.09);
+  --lift-4: 0 12px 26px rgba(20,23,26,.10), 0 40px 80px rgba(20,23,26,.15);
+  --edge:      inset 0 1px 0 rgba(255,255,255,0.9);
+  --edge-soft: inset 0 1px 0 rgba(255,255,255,0.55);
+
+  /* type scale. hero→micro is 5.3:1. The shipped build ran 26px→11px, a
+     2.4:1 ratio, which is why it read flat however good the palette was. */
+  --t-hero:    clamp(42px, 5vw, 60px);
+  --t-display: 30px;
+  --t-title:   21px;
+  --t-lead:    16.5px;
+  --t-head:    14.5px;
+  --t-body:    14px;
+  --t-prose:   15.5px;
+  --t-small:   12.5px;
+  --t-micro:   11px;
+  --t-num:     13px;
+
+  /* Apple tracks display type POSITIVE and body type NEGATIVE; the table
+     crosses zero at 12pt and returns to zero at 80pt. These are Apple's
+     values at each step's size, divided by 1000. */
+  --track-hero:     0.006em;   /* ref 52px → Apple +6       */
+  --track-display:  0.013em;   /* 31px     → Apple +13      */
+  --track-title:   -0.018em;   /* 21px     → Apple −18      */
+  --track-lead:    -0.020em;   /* 16px     → Apple −20      */
+  --track-head:    -0.011em;   /* 14px     → Apple −11      */
+  --track-body:    -0.011em;   /* 14px     → Apple −11      */
+  --track-small:   -0.006em;   /* 13px     → Apple −6       */
+  --track-micro:    0.006em;   /* 11px     → Apple +6       */
+  --track-num:    -0.011em;
+
+  /* space — 4/6/8/12/16/20/24/32/40/56/72 */
+  --s1: 4px;  --s2: 6px;  --s3: 8px;  --s4: 12px;
+  --s5: 16px; --s6: 20px; --s7: 24px; --s8: 32px;
+  --s9: 40px; --s10: 56px; --s11: 72px;
+
+  /* radius. Concentric: an inner corner is the outer minus the padding. */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 9px;
+  --r-lg: 13px; --r-xl: 18px; --r-2xl: 24px;
+
+  /* motion. Apple's spring approximation, no overshoot. 200ms is the base;
+     nothing in a data tool should take longer than 320ms except a panel
+     that is actually arriving somewhere. */
+  --dur-fast:   120ms;
+  --dur-base:   200ms;
+  --dur-slow:   320ms;
+  --dur-slower: 460ms;
+  --ease:       cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out:   cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in:    cubic-bezier(0.40, 0, 1, 1);
+  --ease-quiet: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* layout */
+  --sidebar-w:  268px;
+  --list-w:     400px;
+  --topbar-h:   60px;
+  --statusbar-h: 30px;
+
+  --ff-sans: "Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ff-mono: "Plex Mono", ui-monospace, monospace;
+}
+
+/* ─── Dark ───────────────────────────────────────────────────────────────────
+   A full palette, not one neon on near-black. The ground keeps a cool
+   green-black cast rather than #000 so it reads as a material.            */
+
+[data-theme="dark"] {
+  --canvas:      #0c0f10;
+  --surface:     #131719;
+  --raised:      #1a1f21;
+  --sunken:      #0f1214;
+  --float:       #1c2124;
+
+  --ink:    #eef2f1;  /* 16.0:1 */
+  --ink-2:  #b8c1c0;  /*  9.8:1 */
+  --ink-3:  #a3abab;  /*  7.7:1 */
+  --ink-4:  #9ea6a6;  /*  7.3:1 */
+
+  --signal:       #63d6c4;
+  --signal-hover: #7fe2d1;
+  --signal-press: #4cbfad;
+  --signal-ink:   #05201c;
+  --signal-wash:  #16302c;
+  --signal-line:  #2f655c;
+
+  --ok:      #7dc48a;  --ok-wash:   #16261a;  --ok-line:   #2f5437;
+  --warn:    #d8ab5c;  --warn-wash: #2a2114;  --warn-line: #5b4726;
+  --bad:     #eb9585;  --bad-wash:  #2e1a16;  --bad-line:  #6a3830;
+  --mute:    #98a09f;  --mute-wash: #1b1f21;  --mute-line: #383e41;
+
+  --rule:        rgba(238, 242, 241, 0.10);
+  --rule-soft:   rgba(238, 242, 241, 0.062);
+  --rule-strong: #626a6a;  /* 3.33:1 */
+
+  --lift-1: 0 1px 2px rgba(0,0,0,.44), 0 1px 1px rgba(0,0,0,.30);
+  --lift-2: 0 2px 5px rgba(0,0,0,.46), 0 8px 20px rgba(0,0,0,.36);
+  --lift-3: 0 5px 12px rgba(0,0,0,.50), 0 18px 42px rgba(0,0,0,.44);
+  --lift-4: 0 14px 30px rgba(0,0,0,.56), 0 44px 90px rgba(0,0,0,.56);
+  /* in dark the highlight goes on the *bottom* edge, because the light in
+     the room is above the glass — the same physics, inverted. */
+  --edge:      inset 0 1px 0 rgba(255,255,255,.045);
+  --edge-soft: inset 0 1px 0 rgba(255,255,255,.025);
+}

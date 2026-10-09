@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>pdf-processing — Instrument</title>
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/proto.css">
+</head>
+<body>
+<div class="app">
+
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Skills Manager</div>
+        <div class="brand-sub">this machine only</div>
+      </div>
+    </div>
+
+    <div class="side-search">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span class="ph">Search skills and paths…</span>
+        <span class="kbd">/</span>
+      </div>
+    </div>
+
+    <div class="side-scroll">
+      <div class="nav-group">
+        <div class="nav-label">Workspace</div>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg>
+          <span class="label">Overview</span>
+        </a>
+        <a class="nav-item" href="#" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 5v14h16V5M4 10h16M9 5v14"/></svg>
+          <span class="label">Library</span><span class="nav-pip ok">638</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3.5v5c0 4.4-3 7.6-7 8.5-4-0.9-7-4.1-7-8.5v-5zM9 12l2 2 4-4"/></svg>
+          <span class="label">Quality</span>
+        </a>
+        <div class="nav-label">Operations</div>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10m0 0l4-4m-4 4l-4-4M4 19h16"/></svg>
+          <span class="label">Install</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+          <span class="label">Recovery</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM4 10h16M9 5v14"/></svg>
+          <span class="label">Profiles</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4zM3 12l9 4 9-4M3 17l9 4 9-4"/></svg>
+          <span class="label">Workspaces</span>
+        </a>
+      </div>
+
+      <div class="nav-group scope-ledger">
+        <div class="nav-label">Scope roots <span class="nav-count">7 detected</span></div>
+        <button class="scope-row" aria-current="true">
+          <span class="scope-name">Opencode <span class="meta">515</span></span>
+          <span class="scope-pct over">121%</span>
+          <span class="scope-bar over"><i style="width:96.8%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Codex <span class="meta">480</span></span>
+          <span class="scope-pct over">119%</span>
+          <span class="scope-bar over"><i style="width:95.2%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Gemini <span class="meta">450</span></span>
+          <span class="scope-pct over">111%</span>
+          <span class="scope-bar over"><i style="width:88.8%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Claude Code <span class="meta">329</span></span>
+          <span class="scope-pct">5%</span>
+          <span class="scope-bar"><i style="width:4%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Agents <span class="meta">123</span></span>
+          <span class="scope-pct">41%</span>
+          <span class="scope-bar"><i style="width:32.8%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Command Code <span class="meta">60</span></span>
+          <span class="scope-pct">5%</span>
+          <span class="scope-bar"><i style="width:4%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Global <span class="meta">5</span></span>
+          <span class="scope-pct">1%</span>
+          <span class="scope-bar"><i style="width:0.8%"></i></span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Preferences</div>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8V9a1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+          <span class="label">Settings</span>
+        </a>
+      </div>
+    </div>
+
+    <div style="padding:0 var(--s4) var(--s4)">
+      <div class="budget-picker">
+        <div class="budget-head"><span>Context window</span><span class="mono">1,000,000</span></div>
+        <select class="select" style="height:28px;font-size:12px">
+          <option>Claude 1M</option><option>Claude Haiku 200k</option><option>Gemini 2M</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb"><span class="crumb-title">pdf-processing</span><span class="crumb-meta">Gemini · 4,208 tokens</span></div>
+      <div class="topbar-actions"><button class="btn btn-secondary">Edit</button><button class="btn btn-secondary">Sync</button><button class="btn btn-danger">Remove</button></div>
+    </header>
+
+    <div class="view">
+      <div class="view-pad">
+        <div class="stack stack-6" style="max-width:900px">
+
+          <div class="row-flex gap-2" style="margin-bottom:var(--s2)">
+            <button class="btn btn-ghost btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              Back to Library
+            </button>
+            <span class="micro ml-auto">Gemini · ~/.gemini/skills/pdf-processing/SKILL.md</span>
+          </div>
+
+          <div>
+            <h1 class="h-display" style="font-family:var(--ff-mono);font-size:32px">pdf-processing</h1>
+            <p class="lead" style="margin-top:10px;max-width:64ch">Extract, split and merge PDFs,
+              fill forms, OCR scanned pages and redact.</p>
+            <div class="row-flex gap-3" style="margin-top:16px">
+              <span class="mark ok"><i></i>valid · no errors</span>
+              <span class="mark info"><i></i>registry · vercel-labs/agent-skills</span>
+              <span class="mark mute"><i></i>4,208 tokens</span>
+            </div>
+          </div>
+
+          <div class="rule-top" style="margin-top:var(--s6)">
+            <div class="row-flex" style="margin-bottom:var(--s5)">
+              <div class="seg">
+                <button aria-pressed="true">Document</button>
+                <button aria-pressed="false">Frontmatter</button>
+                <button aria-pressed="false">Files 4</button>
+                <button aria-pressed="false">History</button>
+              </div>
+              <span class="ml-auto"></span>
+              <button class="btn btn-secondary btn-sm">Open in editor</button>
+              <button class="btn btn-secondary btn-sm">Copy raw</button>
+            </div>
+
+            <div class="sheet" style="padding:0;overflow:hidden">
+              <div style="padding:var(--s6) var(--s7);border-bottom:1px solid var(--rule-soft)">
+                <pre style="margin:0;font-family:var(--ff-mono);font-size:12px;line-height:1.75;color:var(--ink-2)"><span style="color:var(--ink-4)">---</span>
+<span style="color:var(--signal)">name</span>: pdf-processing
+<span style="color:var(--signal)">description</span>: Extract, split and merge PDFs, fill forms, OCR scanned pages and redact.
+<span style="color:var(--signal)">license</span>: MIT
+<span style="color:var(--signal)">version</span>: 1.4.0
+<span style="color:var(--signal)">allowed-tools</span>: Read, Write, Bash
+<span style="color:var(--ink-4)">---</span></pre>
+              </div>
+              <div class="prose" style="padding:var(--s6) var(--s7);max-width:none">
+                <h2 class="h-head" style="margin-bottom:10px">When to use this</h2>
+                <p>Reach for this skill the moment a task mentions a <code class="mono">.pdf</code>,
+                  a scanned document, or a form that has to be filled and returned. Do not
+                  hand-roll a parser: <code class="mono">pdfplumber</code> and
+                  <code class="mono">tesseract</code> cover the cases below and fail loudly
+                  where a naive parser fails silently.</p>
+
+                <h2 class="h-head" style="margin:26px 0 10px">Extract text</h2>
+                <p>Prefer <code class="mono">pdfplumber</code> for anything with a text layer.
+                  It preserves reading order, which matters for multi-column academic PDFs
+                  where <code class="mono">pypdf</code> silently interleaves columns.</p>
+
+                <div class="sheet" style="margin:16px 0">
+                  <pre style="margin:0;font-family:var(--ff-mono);font-size:12px;line-height:1.7;overflow-x:auto"><code>import pdfplumber
+
+with pdfplumber.open(<span style="color:var(--signal)">"report.pdf"</span>) as pdf:
+    for i, page in enumerate(pdf.pages):
+        text = page.extract_text() or <span style="color:var(--signal)">""</span>
+        print(<span style="color:var(--signal)">f"--- page {i + 1} ---"</span>)
+        print(text)</code></pre>
+                </div>
+
+                <h2 class="h-head" style="margin:26px 0 10px">OCR a scanned page</h2>
+                <p>Only reach for OCR when there is no text layer at all. If a page returns
+                  fewer than 40 characters it is almost certainly scanned, and a fast check
+                  is cheaper than a bad extraction you have to notice later.</p>
+
+                <h2 class="h-head" style="margin:26px 0 10px">Redaction</h2>
+                <p>Redaction must remove content, not cover it. Drawing a filled rectangle
+                  leaves the text in the file; the only reliable redaction is removing the
+                  glyph run from the content stream. Verify afterwards by extracting the
+                  text again and searching for the string you removed.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout">
+            <i></i>
+            <div class="in">
+              <h4>Rendered, never injected</h4>
+              <p>A <code class="mono">SKILL.md</code> body is attacker-authored text from an
+                 archive or another tool. Every character above is escaped before it reaches
+                 the DOM; the renderer emits no raw HTML at all, so a body containing
+                 <code>&lt;script&gt;</code> is shown as text and never executed.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="statusbar">
+    <span>638 logical skills · 1,163 physical copies · 4 attention items</span>
+    <span class="spacer"></span>
+    <span class="mark warn"><i></i>index in sync</span>
+    <span>data stays on this machine · loopback only</span>
+  </footer>
+</div>
+
+</body>
+</html>

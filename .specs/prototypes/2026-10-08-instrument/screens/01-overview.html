@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Overview — Instrument</title>
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/proto.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════════════════════ -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Skills Manager</div>
+        <div class="brand-sub">this machine only</div>
+      </div>
+    </div>
+
+    <div class="side-search">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span class="ph">Search skills and paths…</span>
+        <span class="kbd">/</span>
+      </div>
+    </div>
+
+    <div class="side-scroll">
+      <div class="nav-group">
+        <div class="nav-label">Workspace</div>
+        <a class="nav-item" href="#" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7h5"/></svg>
+          <span class="label">Overview</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 5v14h16V5M4 10h16M9 5v14"/></svg>
+          <span class="label">Library</span>
+          <span class="nav-pip ok">638</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3.5v5c0 4.4-3 7.6-7 8.5-4-0.9-7-4.1-7-8.5v-5z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span class="label">Quality</span>
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Operations</div>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10m0 0l4-4m-4 4l-4-4M4 19h16"/></svg>
+          <span class="label">Install</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          <span class="label">Recovery</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg>
+          <span class="label">Profiles</span>
+        </a>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>
+          <span class="label">Workspaces</span>
+        </a>
+      </div>
+
+      <!-- The scope ledger: the thing that decides whether the reader's agents
+           get truncated, visible from every screen. -->
+      <div class="nav-group scope-ledger">
+        <div class="nav-label">Scope roots <span class="nav-count">7 detected</span></div>
+
+        <button class="scope-row" aria-current="true">
+          <span class="scope-name">Opencode <span class="meta">515</span></span>
+          <span class="scope-pct over">121%</span>
+          <span class="scope-bar over"><i style="width:96.8%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Codex <span class="meta">480</span></span>
+          <span class="scope-pct over">119%</span>
+          <span class="scope-bar over"><i style="width:95.2%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Gemini <span class="meta">450</span></span>
+          <span class="scope-pct over">111%</span>
+          <span class="scope-bar over"><i style="width:88.8%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Claude Code <span class="meta">329</span></span>
+          <span class="scope-pct">5%</span>
+          <span class="scope-bar"><i style="width:4%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Agents <span class="meta">123</span></span>
+          <span class="scope-pct">41%</span>
+          <span class="scope-bar"><i style="width:32.8%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Command Code <span class="meta">60</span></span>
+          <span class="scope-pct">5%</span>
+          <span class="scope-bar"><i style="width:4%"></i></span>
+        </button>
+        <button class="scope-row">
+          <span class="scope-name">Global <span class="meta">5</span></span>
+          <span class="scope-pct">1%</span>
+          <span class="scope-bar"><i style="width:0.8%"></i></span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Preferences</div>
+        <a class="nav-item" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+          <span class="label">Settings</span>
+        </a>
+      </div>
+    </div>
+
+    <div style="padding:0 var(--s4) var(--s4)">
+      <div class="budget-picker">
+        <div class="budget-head"><span>Context window</span><span class="mono">1,000,000</span></div>
+        <select class="select" style="height:28px;font-size:12px">
+          <option>Claude 1M</option><option>Claude Haiku 200k</option><option>Gemini 2M</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN ════════════════════════════════════════════════════════════ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb">
+        <span class="crumb-title">Overview</span>
+        <span class="crumb-meta">638 skills · 1,163 copies · 4 need attention</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></svg>Doctor</button>
+        <button class="btn btn-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V9m5 10V5m5 14v-7m5 7V7"/></svg>Stats</button>
+        <button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New skill</button>
+      </div>
+    </header>
+
+    <div class="view">
+      <div class="view-pad view-pad-narrow stack stack-7">
+
+        <!-- ═══ THE INSTRUMENT ═════════════════════════════════════════════ -->
+        <section class="card">
+          <div class="instrument">
+            <div class="instrument-lead">
+              <div class="dial">
+                <svg viewBox="0 0 152 152" aria-hidden="true">
+                  <!-- sweep is 0..125%. r=59 → circumference 370.7.
+                       121% of 125% = 96.8% → 358.8 long, 11.9 of gap. -->
+                  <circle class="track" cx="76" cy="76" r="59"/>
+                  <circle class="fill"  cx="76" cy="76" r="59"
+                          stroke-dasharray="358.8 370.7" stroke-dashoffset="11.9"/>
+                  <!-- 100% of one window = 80% of the sweep = 288° clockwise
+                       from 12 o'clock = 198° in un-rotated SVG coords. A notch,
+                       so it reads against the fill. -->
+                  <line class="tick" x1="19.9" y1="57.8" x2="10.2" y2="55.8"/>
+                </svg>
+                <div class="dial-read">
+                  <div class="big">121%</div>
+                  <div class="who">Opencode</div>
+                  <div class="amt">1.21M · 515 skills</div>
+                  <div class="cap">worst single root</div>
+                </div>
+              </div>
+
+              <p class="instrument-stance">
+                <b>Three of your seven roots</b> load more than a single context
+                window can hold. An agent that reads every skill under one of
+                them begins with a truncated, silently lossy instruction set.
+              </p>
+
+              <div class="instrument-total">
+                <div>
+                  <div class="n">4.03M</div>
+                  <div class="l">tokens loaded in total</div>
+                </div>
+                <div>
+                  <div class="n over">3.03M</div>
+                  <div class="l">over budget</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="budget-ledger">
+              <div class="budget-head">
+                <h3>Every root, one axis</h3>
+                <span class="axis">0 — 125% of one window</span>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Opencode<small>515 skills</small></div>
+                <div class="budget-track"><div class="budget-fill over" style="width:96.8%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">1.21M</div>
+                <div class="budget-state over">121%</div>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Codex<small>480 skills</small></div>
+                <div class="budget-track"><div class="budget-fill over" style="width:95.2%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">1.19M</div>
+                <div class="budget-state over">119%</div>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Gemini<small>450 skills</small></div>
+                <div class="budget-track"><div class="budget-fill over" style="width:88.8%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">1.11M</div>
+                <div class="budget-state over">111%</div>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Agents<small>123 skills</small></div>
+                <div class="budget-track"><div class="budget-fill" style="width:32.8%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">407k</div>
+                <div class="budget-state fits">41%</div>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Claude Code<small>329 skills</small></div>
+                <div class="budget-track"><div class="budget-fill" style="width:4%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">45.2k</div>
+                <div class="budget-state fits">5%</div>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Command Code<small>60 skills</small></div>
+                <div class="budget-track"><div class="budget-fill" style="width:4%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">53.3k</div>
+                <div class="budget-state fits">5%</div>
+              </div>
+              <div class="budget-row">
+                <div class="budget-name">Global<small>5 · this tool</small></div>
+                <div class="budget-track"><div class="budget-fill" style="width:0.8%"></div><div class="budget-thresh"></div></div>
+                <div class="budget-amt">13.4k</div>
+                <div class="budget-state fits">1%</div>
+              </div>
+
+              <div class="callout" style="margin:var(--s6) var(--s3) 0">
+                <i></i>
+                <div class="in">
+                  <h4>Two numbers, two scales, on purpose</h4>
+                  <p>The ring is the <b>worst single root</b> and it fits on a 0–125%
+                     dial. The 4.03M total is <em>not</em> drawn as an arc, because it
+                     cannot be — and a saturated dial is the same lie as a bar clamped
+                     at 100%. On a shared axis, 111% and 121% stay two different facts.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ ATTENTION QUEUE ═══════════════════════════════════════════ -->
+        <section class="stack stack-4">
+          <div class="row-flex">
+            <div>
+              <h2 class="h-title">Attention queue</h2>
+              <p class="small muted" style="margin-top:2px">Derived from observed instance state. No validity, provenance or precedence is inferred here.</p>
+            </div>
+            <span class="mark warn ml-auto"><i></i>4 items</span>
+          </div>
+
+          <div class="card">
+            <div class="queue">
+              <div class="queue-item">
+                <div class="queue-glyph warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></div>
+                <div class="queue-body">
+                  <h3>Links the tool refuses to follow</h3>
+                  <p>292 instances are a <code class="mono">SKILL.md</code> symlink whose target sits outside that scope's root.
+                     Nothing is corrupt — the fix is to copy the tree in rather than link it.</p>
+                  <span class="fig">292 <b>linked</b> · 9 <b>unaddressable</b></span>
+                </div>
+                <div class="queue-act"><button class="btn btn-secondary">Review in Library</button></div>
+              </div>
+
+              <div class="queue-item">
+                <div class="queue-glyph warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h7M18 10v10m-3-3h6"/></svg></div>
+                <div class="queue-body">
+                  <h3>Copies disagree</h3>
+                  <p>286 logical skills have unequal observed instances. Which copy an agent loads is a per-consumer question this tool refuses to guess.</p>
+                  <span class="fig">286 <b>divergent</b> · up to <b>7</b> copies each</span>
+                </div>
+                <div class="queue-act"><button class="btn btn-secondary">Inspect copies</button></div>
+              </div>
+
+              <div class="queue-item">
+                <div class="queue-glyph mute"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M6 12h12"/></svg></div>
+                <div class="queue-body">
+                  <h3>Disabled copies are still installed</h3>
+                  <p>498 observed instances are <code class="mono">SKILL.md.disabled</code>. They are skipped by their consumer, so they cost disk and never context — but they hide skills you think are available.</p>
+                  <span class="fig">498 <b>disabled</b></span>
+                </div>
+                <div class="queue-act"><button class="btn btn-secondary">Show disabled</button></div>
+              </div>
+
+              <div class="queue-item">
+                <div class="queue-glyph bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+                <div class="queue-body">
+                  <h3>Four documents cannot be decoded</h3>
+                  <p>Read as undecodable bytes or malformed frontmatter. These are <em>not</em> repaired automatically — the original bytes are left exactly as found.</p>
+                  <span class="fig">4 <b>malformed</b> · 0 <b>undecodable</b></span>
+                </div>
+                <div class="queue-act"><button class="btn btn-secondary">Open Quality</button></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ METRICS ══════════════════════════════════════════════════ -->
+        <section>
+          <div class="row-flex" style="margin-bottom:var(--s4)">
+            <h2 class="h-title">Observed, not scored</h2>
+            <span class="micro ml-auto">One definition per term · no composite quality number</span>
+          </div>
+          <dl class="metrics">
+            <div class="metric"><dt>Logical skills</dt><dd>638</dd></div>
+            <div class="metric"><dt>Physical copies</dt><dd>1,163</dd></div>
+            <div class="metric"><dt>In trash</dt><dd>12</dd></div>
+            <div class="metric"><dt>Registry-sourced</dt><dd>184</dd></div>
+            <div class="metric"><dt>Median tokens</dt><dd>2,140 <small>tok</small></dd></div>
+            <div class="metric"><dt>Largest skill</dt><dd>61.8k <small>tok</small></dd></div>
+          </dl>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <span>638 logical skills · 1,163 physical copies · 4 attention items</span>
+    <span class="spacer"></span>
+    <span class="mark warn"><i></i>index in sync</span>
+    <span>data stays on this machine · loopback only</span>
+  </footer>
+</div>
+</body>
+</html>
