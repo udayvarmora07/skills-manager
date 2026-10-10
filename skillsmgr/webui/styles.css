@@ -1036,15 +1036,31 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* Opened upward because the trigger is near the rail's bottom edge and the
    list is taller than the room left below it (see positionScopeMenu). */
 .scope-menu.is-up { top: auto; bottom: calc(100% + 6px); }
-.scope-option {
+/* Scoped to `.scope-menu` on purpose, and that scoping is load-bearing rather
+   than cosmetic. `.menu button` (0,1,1) sets `display: flex`, which beats a bare
+   `.scope-option` (0,1,0), so the two-row grid below was never the thing that
+   rendered: every option shipped as a single-line flex row in which the label
+   and a 379px filesystem path competed for the same 150px, and flex shrink
+   proportional to base size gave the path the lion's share. A screenshot showed
+   "G… ~/.ger/skills/ 43" — the scope's name reduced to its initial.
+
+   Two rules, then, and the second is the one that actually protects the label:
+   the specificity has to win, and the path must not be allowed to reach into the
+   `auto` count column. A spanning grid item contributes its max-content to
+   every track it spans, so `"path path"` inflated the count column and left the
+   `1fr` label track with nothing. Confining the path to the label's own track
+   makes the flexible track take all remaining width and both ellipsise against
+   a width that cannot depend on what the path happens to be. */
+.scope-menu .scope-option {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: "dot label count" ". path path";
+  grid-template-areas: "dot label count" ". path .";
   align-items: center;
-  gap: 0 var(--s2);
+  align-content: center;
+  gap: 2px var(--s2);
   width: 100%;
   min-height: 32px;
-  padding: 4px var(--s2);
+  padding: 6px var(--s2);
   border: 0;
   border-radius: var(--r-ctl);
   background: transparent;
@@ -1052,23 +1068,36 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   text-align: left;
   cursor: pointer;
 }
-.scope-option:hover { background: var(--hover); }
-.scope-option.active { background: var(--accent-soft); color: var(--accent-text); }
-.scope-option.over .scope-option-count { color: var(--warn); }
-.scope-option .scope-dot { grid-area: dot; }
-.scope-option-label { grid-area: label; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scope-option-count { grid-area: count; font-variant-numeric: tabular-nums; }
-.scope-option-path {
-  grid-area: path;
-  color: var(--text-muted);
-  font-family: var(--mono);
-  font-size: var(--t-meta);
+.scope-menu .scope-option:hover { background: var(--hover); }
+.scope-menu .scope-option.active { background: var(--accent-soft); color: var(--accent-text); }
+.scope-menu .scope-option.over .scope-option-count { color: var(--warn); }
+.scope-menu .scope-option .scope-dot { grid-area: dot; align-self: center; }
+.scope-menu .scope-option-label {
+  grid-area: label;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.3;
+}
+.scope-menu .scope-option-count { grid-area: count; font-variant-numeric: tabular-nums; }
+.scope-menu .scope-option-path {
+  grid-area: path;
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: var(--t-meta);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* RTL so the *end* of a long path is what survives: "…/skills" identifies a
+     root, the leading home directory never does. The ellipsis therefore lands on
+     the left, which is correct for an RTL text run. */
   direction: rtl;
   text-align: left;
 }
+.scope-menu .scope-option.active .scope-option-path { color: inherit; opacity: 0.75; }
 /* A root the server did not discover is a different fact from a discovered but
    empty one, and DESIGN-V2 section B forbids collapsing states: the dot is
    muted rather than absent, and the option still offers the scope to select. */
