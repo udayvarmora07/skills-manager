@@ -2,7 +2,30 @@
    The rail orients, the list lets people choose, and the document pane is the
    work surface. All visual decisions live in this single cascade, and every
    colour token below is re-measured by `check_design_tokens.py` in CI.
-   The contract and its rationale are in DESIGN.md at the repository root. */
+   The contract and its rationale are in DESIGN.md at the repository root.
+
+   The file is read in seven layers, and the order is itself a contract
+   rather than a convenience: later layers may only build on earlier ones.
+
+     0 PRELUDE     vendored assets (@import, the inline icon sprite)
+     1 TOKENS      :root, the two theme palettes, color-scheme
+     2 RESET       box-sizing, inheritance, the document box
+     3 TYPOGRAPHY  the document's own type and the text-size hook
+     4 UTILITIES   primitives used by every view (skip link, focus, sr-only)
+     5 COMPONENTS  topbar, list, detail, forms, modals, toasts, ...
+     6 RESPONSIVE  breakpoints and the reduced-motion hook
+
+   Layers 0-5 build up; layer 6 conditions all of them, so it stays last.
+   `tests/test_redesign_stylesheet_layers.py` asserts the seven banners exist,
+   once each and in this order, so the structure cannot quietly dissolve back
+   into one 2,000-line list; it is the same kind of gate as the scale check in
+   `check_design_tokens.py`, for the same reason.
+*/
+
+/* ================================================================ LAYER 0
+   PRELUDE - vendored assets. Loaded first because the sprite and the faces are
+   inputs to everything below, not opinions about it.
+   ======================================================================== */
 
 /* --- Vendored typefaces. Never a CDN: this app must work offline, and a
    font request to a third party is a third party in the page. ------------- */
@@ -26,6 +49,12 @@
   outline: 1px solid var(--err);
   background: color-mix(in srgb, var(--err) 18%, transparent);
 }
+
+/* ================================================================ LAYER 1
+   TOKENS - the only place a raw colour, size, radius or duration is allowed to
+   appear. Both themes below must declare the same names; a token that exists
+   in one and not the other is not a theme, it is a typo with a colour.
+   ======================================================================== */
 
 :root {
   /* type — one family for the interface, one mono for every identifier and
@@ -52,15 +81,17 @@
   --t-num:    500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
   --t-id:     500 13px/1.35 var(--mono); letter-spacing: -0.01em;
 
-  /* Roles the cascade already used, now named for what they are. Keeping the
-     old role names as aliases is deliberate: task 1.4 restructures the
-     cascade to consume --t-* directly, and until then one source of truth for
-     every size is worth more than one clean name. */
-  --t-display: var(--t-empty);
-  --t-title:   var(--t-page);
-  --t-head:    600 13px/1.35 var(--sans); letter-spacing: -0.006em;
-  --t-body:    var(--t-ui);
-  --t-sm:      var(--t-meta);
+  /* The five role aliases that used to sit here (--t-display, --t-title,
+     --t-head, --t-body, --t-sm) are gone. Measured before deletion: zero
+     declarations in this file referenced them, and no test, gate or document
+     outside .specs/ referenced them either - they were a migration seam that
+     outlived its migration. A name nothing resolves is worse than no name:
+     the next reader assumes it means something.
+
+     The steps above are `font:` shorthands in px, used where a whole face is
+     set at once. The cascade below declares sizes in rem so the text-size
+     preference scales. That split is deliberate - both halves are pinned by
+     tests/test_webui_contracts.py, not left to a reader's judgement. */
 
   /* space — 4px base, the eight steps of DESIGN.md §"Space". The v1 scale
      shipped --s7 and --s9 both as 32px, so "the ninth step" was a name for
@@ -191,6 +222,9 @@
   --on-err: #2a0f0b;
 }
 
+/* --- Exactly two palettes, and only these two. The absence of a
+   prefers-color-scheme palette is load-bearing and is checked; see the note
+   below this block. --------------------------------------------------- */
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="system"] { color-scheme: light dark; }
@@ -213,23 +247,13 @@
    no third palette exists, so the block cannot come back with a new hue in it.
  */
 
+/* ================================================================ LAYER 2
+   RESET - the document, before it is this product. Everything here is a
+   statement about the web platform's defaults, not about a screen.
+   ======================================================================== */
+
 * { box-sizing: border-box; }
 [v-cloak] { display: none; }
-
-.skip-link {
-  position: fixed;
-  top: 8px;
-  left: 12px;
-  z-index: 100;
-  padding: 8px 12px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--accent-text);
-  transform: translateY(-180%);
-  transition: transform var(--tr-fast);
-}
-.skip-link:focus { transform: translateY(0); }
 
 html, body {
   margin: 0;
@@ -237,6 +261,12 @@ html, body {
   height: 100%;
 }
 html { scroll-padding-top: 16px; }
+
+/* ================================================================ LAYER 3
+   TYPOGRAPHY - the document's own voice. rem throughout, because the
+   text-size preference changes `html`'s font-size and a px-based cascade would
+   make that setting do nothing for most of the interface.
+   ======================================================================== */
 
 body {
   font-family: var(--font);
@@ -259,6 +289,28 @@ input, select, textarea { font-family: inherit; font-size: 0.875rem; color: var(
 
 html[data-text-size="large"] { font-size: 1.125rem; }
 
+/* ================================================================ LAYER 4
+   UTILITIES - primitives every view may use and no view owns. The skip link
+   and the screen-reader-only helper used to sit in the reset block and in the
+   modals section respectively; both are utilities, and a reader hunting for
+   the focus ring should not have to know that.
+   ======================================================================== */
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  z-index: 100;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent-text);
+  transform: translateY(-180%);
+  transition: transform var(--tr-fast);
+}
+.skip-link:focus { transform: translateY(0); }
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -266,6 +318,22 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   border-radius: var(--radius-sm);
   scroll-margin-top: 16px;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ================================================================ LAYER 5
+   COMPONENTS - everything below this line describes a part of the product.
+   ======================================================================== */
 
 /* ---------------------------------------------------------------- topbar */
 
@@ -1628,18 +1696,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 /* ---------------------------------------------------------------- modals */
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .overlay {
   position: fixed;
   inset: 0;
@@ -1917,6 +1973,12 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .statusbar .path { font-family: var(--mono); font-size: 0.71875rem; overflow: hidden; text-overflow: ellipsis; }
 .statusbar .spacer { flex: 1; }
+
+/* ================================================================ LAYER 6
+   RESPONSIVE - conditions on the whole cascade, not on any one component, so
+   they stay at the end where they can override it. The reduced-motion hook
+   closes the file for the same reason.
+   ======================================================================== */
 
 /* ------------------------------------------------------------- responsive */
 
