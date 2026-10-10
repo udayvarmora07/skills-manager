@@ -276,5 +276,95 @@ class ScopeSwitcherFitsTheViewportTests(unittest.TestCase):
         self.assertEqual(rect["errors"], [])
 
 
+class ScopeOptionRowLayoutTests(unittest.TestCase):
+    """An option row must show the scope's NAME, not the tail of its path.
+
+    The stdlib suite (``tests/test_redesign_scope_option_cascade.py``) proves
+    the *stylesheet* resolves; this proves the *pixels*. The two are different
+    claims and only one of them was ever going to catch a regression that is
+    purely visual -- a path that grows longer than its column does not break the
+    cascade, it just makes the label unreadable again.
+
+    The defect this exists for: ``.menu button`` (0,1,1) outranked
+    ``.scope-option`` (0,1,0), so ``display: grid`` never applied and the
+    options rendered as one-line flex rows. Flex shrink is proportional to base
+    size, so a 379px filesystem path beat an 80px label and every scope read
+    "G… ~/.ger/skills/ 43".
+    """
+
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:  # pragma: no cover - environment dependent
+            raise unittest.SkipTest(f"Playwright is not importable ({exc}).")
+        cls._pw = sync_playwright()
+        cls._pw_cm = cls._pw.start()
+        cls._browser = cls._pw_cm.chromium.launch(args=["--no-sandbox"])
+        cls._base = _base_url()
+        cls._page = cls._browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            cls._page.goto(cls._base, wait_until="networkidle", timeout=20000)
+            cls._page.wait_for_selector(".navigation-rail", timeout=15000)
+            cls._page.click(".scope-trigger")
+            cls._page.wait_for_selector(".scope-option", timeout=5000)
+            # Settle before measuring. An element mid-fade reports a smaller box,
+            # and 2.1's own evidence caught a screenshot at opacity 0.386 that
+            # read as a translucent popover.
+            cls._page.wait_for_timeout(600)
+        except Exception as exc:  # pragma: no cover - environment dependent
+            cls._browser.close()
+            cls._pw_cm.stop()
+            raise unittest.SkipTest(
+                f"the dev server at {cls._base} did not mount ({exc}). "
+                f"Start it with `.redesign/dev.sh start` -- NOT silently passed."
+            )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._browser.close()
+        cls._pw_cm.stop()
+
+    def test_every_option_label_renders_in_full(self):
+        truncated = self._page.evaluate(
+            """() => [...document.querySelectorAll('.scope-option-label')]
+                 .map(e => ({t: e.textContent.trim(),
+                             w: Math.round(e.getBoundingClientRect().width),
+                             sw: e.scrollWidth}))
+                 .filter(x => x.sw > x.w + 1)"""
+        )
+        self.assertEqual(
+            truncated, [],
+            f"these scope names are cut off: {truncated}. The path must truncate, "
+            f"not the label.",
+        )
+
+    def test_the_option_row_is_the_grid_it_declares(self):
+        # The single assertion that would have caught the defect on its own: the
+        # browser, not a grep, says what the cascade resolved to.
+        display = self._page.eval_on_selector(
+            ".scope-option", "e => getComputedStyle(e).display"
+        )
+        self.assertEqual(display, "grid")
+
+    def test_the_label_and_the_path_are_on_different_lines(self):
+        # One line means the path is a sibling competing for the label's width,
+        # which is the defect; two lines means the path has its own row.
+        rows = self._page.evaluate(
+            """() => [...document.querySelectorAll('.scope-option')].map(r => {
+                 const l = r.querySelector('.scope-option-label').getBoundingClientRect();
+                 const p = r.querySelector('.scope-option-path').getBoundingClientRect();
+                 return Math.round(p.top - l.top);
+               })"""
+        )
+        self.assertTrue(rows, "no options rendered")
+        for offset in rows:
+            self.assertGreater(
+                offset, 0, f"the path sits on the label's line ({offset}px offset)"
+            )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
