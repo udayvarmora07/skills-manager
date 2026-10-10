@@ -25,6 +25,106 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+CSS = ROOT / "skillsmgr" / "webui" / "styles.css"
+
+
+class LibraryFilterBarReachabilityTests(unittest.TestCase):
+    """Task 2.1f: the Library's own filters are never behind navigation.
+
+    Measured before anything changed, at 390x844 on the seeded tree:
+    ``.library-bar`` computed ``display: none``, all five chips measured a 0x0
+    box, and the only thing in the application that revealed them was opening
+    the **navigation drawer** -- because 2.1e2 forces ``compactControlsOpen``
+    on while the drawer is open.  A state filter and a list/instance mode
+    toggle are not navigation, so putting them there removed a capability from
+    the phone and cost 61px of an 844px viewport to give back.
+
+    These are source-level contracts on purpose: they are collected by
+    ``unittest discover -s tests`` (``tests/e2e/`` is not), so the invariant
+    still has a gate when nobody is driving a browser.
+    """
+
+    def setUp(self):
+        self.css = _read(CSS)
+
+    def _narrow_band(self) -> str:
+        """The <=760px media block, sliced out on its own boundaries."""
+        match = re.search(
+            r"@media \(max-width: 760px\)\s*\{(.*?)\n\}\n", self.css, re.S
+        )
+        self.assertIsNotNone(match, "the <=760px band must exist")
+        return match.group(1)
+
+    def test_the_narrow_band_does_not_hide_the_filter_bar(self):
+        band = self._narrow_band()
+        hiding = [
+            line.strip()
+            for line in band.splitlines()
+            if "library-bar" in line and "display: none" in line
+        ]
+        self.assertEqual(
+            hiding,
+            [],
+            "the narrow band hides the Library filter bar: " + "; ".join(hiding),
+        )
+
+    def test_no_rule_anywhere_gates_the_filter_bar_on_the_scope_disclosure(self):
+        # The whole defect was one boolean doing two unrelated jobs.  Any single
+        # CSS rule -- at any width, in either direction -- that mentions both
+        # `.library-bar` and `.compact-controls.open` is that boolean's other
+        # job resurfacing.
+        #
+        # Scanned rule by rule (selector + body), NOT by a regex looking for one
+        # token inside the braces: the real rule put both names in the
+        # *selector*, so the naive form passed against the defect it was written
+        # for.  A gate that cannot fail is not a gate.
+        coupled = [
+            selector.strip()
+            for selector in re.findall(r"([^{}]+)\{[^{}]*\}", self.css)
+            if "library-bar" in selector and "compact-controls" in selector
+        ]
+        self.assertEqual(
+            coupled,
+            [],
+            "a CSS rule couples the Library filter bar to the scope disclosure: "
+            + "; ".join(coupled),
+        )
+
+    def test_the_filter_bar_is_still_exactly_one_control_at_every_width(self):
+        # G8's density intent survives: ONE filter control bar, never the four
+        # stacked rows the pre-G8 layout had.  Ungating the bar must not smuggle
+        # the old stack back in.
+        band = self._narrow_band()
+        html = _read(INDEX_HTML)
+        self.assertIn('.sidebar.list-pane .library-bar {', band)
+        bar = html[html.index('class="library-bar"'):]
+        bar = bar[:bar.index("<!-- The tag disclosure")]
+        self.assertEqual(bar.count('class="filters"'), 1)
+        self.assertEqual(bar.count('class="library-switch"'), 1)
+
+    def test_the_library_bar_keeps_its_two_named_groups(self):
+        # Unreachable controls are still reachable to a screen reader and to a
+        # keyboard.  Removing the visual gate must not remove the names.
+        html = _read(INDEX_HTML)
+        self.assertIn('class="filters" role="group" aria-label="Filter by state"', html)
+        self.assertIn(
+            'class="library-switch" role="group" aria-label="Skill list mode"', html
+        )
+
+    def test_the_scope_disclosure_is_named_for_what_it_holds(self):
+        # Audit G2 #5 was reverted here once already because the trigger was
+        # renamed for a panel it did not contain.  Above 761px it holds the
+        # scope switcher and the context meter, so "scope controls" is true
+        # there; this pins the label to the panel it actually controls.
+        html = _read(INDEX_HTML)
+        trigger = html[html.index('class="mobile-controls-toggle"'):]
+        trigger = trigger[: trigger.index("</button>")]
+        self.assertIn("aria-controls=\"compact-controls\"", trigger)
+        self.assertIn("Show scope controls", trigger)
+        panel = html[html.index('id="compact-controls"'):]
+        self.assertIn("Library scope", panel[: panel.index("budgetbar")])
+
+
 class FrontendSourceContractTests(unittest.TestCase):
     def test_overview_is_default_and_keeps_library_navigation(self):
         source = _read(APP_JS)

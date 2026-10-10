@@ -2699,15 +2699,27 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .layout.mobile-aux-view .sidebar.list-pane.aux-context-pane { display: none; }
   .layout.overview-view .sidebar.list-pane { display: none; }
   .sidebar.list-pane .listpane-head { order: 0; padding: 12px; }
-  .sidebar.list-pane .library-bar { order: 1; flex-wrap: wrap; padding: 6px 12px; }
   .sidebar.list-pane .filters, .sidebar.list-pane .library-switch { justify-content: flex-start; padding-left: 0; border-left: 0; }
     .sidebar.list-pane .tag-filter-details { padding: 0 12px; }
   .sidebar.list-pane .tag-filter { left: 12px; max-width: min(280px, calc(100vw - 48px)); }
   .sidebar.list-pane .banner { order: 5; margin: 8px 12px; }
   .sidebar.list-pane .skilllist, .sidebar.list-pane .sidepanel { order: 6; max-height: none; }
   .skill-grid { grid-template-columns: 1fr; padding: var(--s2) 12px 12px; }
-  /* Scope, context, status, mode, and tags all follow the one filter toggle. */
-  .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .library-bar { display: none; }
+  /* The Library's own filters are NOT behind the navigation drawer (2.1f).
+     Measured before this was removed, at 390x844: `.library-bar` computed
+     `display: none`, all five chips measured a 0x0 box, and the only thing in
+     the application that revealed them was opening the drawer -- because 2.1e2
+     forces `compactControlsOpen` on while it is open.  A state filter and a
+     Library/Instances toggle are not navigation, so a phone could not filter
+     the list or switch mode without first navigating somewhere else.
+
+     The cost of ungating it is 61px of an 844px viewport (measured: the bar
+     wraps to two rows of 44px chips at 390, the same two-row shape it already
+     had at 768).  The gate bought that space by removing a capability.
+
+     G8's density intent is untouched: this is still ONE filter control bar,
+     not the four stacked rows the pre-G8 layout had. */
+  .sidebar.list-pane .library-bar { order: 1; flex-wrap: wrap; padding: 6px 12px; }
   .layout.mobile-detail-open .sidebar.list-pane { display: none; }
   .layout:not(.mobile-detail-open):not(.mobile-aux-view) .detail { display: none; }
   .layout.mobile-aux-view:not(.mobile-detail-open) .detail { display: block; flex: 1; overflow-y: auto; }

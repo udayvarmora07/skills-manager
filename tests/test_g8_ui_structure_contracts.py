@@ -161,10 +161,32 @@ class LibraryDensityTests(unittest.TestCase):
         self.assertIn(".library-bar {", self.css)
         self.assertIn("min-height: 40px;", self.css)
 
-    def test_narrow_panes_hide_the_whole_bar_as_one_control(self):
+    def test_narrow_panes_keep_the_whole_bar_as_one_reachable_control(self):
+        """G8's intent was ONE filter control, never the four stacked rows.
+
+        It previously asserted the *mechanism* by which the narrow band got
+        there -- `display: none`, gated on `.compact-controls.open` -- which
+        task 2.1f removed because it put the Library's own filters behind the
+        navigation drawer on a phone (measured: every chip a 0x0 box at
+        390px, reachable only by opening the drawer). Keeping the old
+        assertion would have pinned the defect; keeping the old *intent* means
+        asserting that the narrow band still presents exactly one control and
+        that nothing gates it. Logged in TEST-CHANGES.md.
+        """
         narrow = _slice(self.css, "@media (max-width: 760px)", "@media (max-width: 420px)")
-        self.assertIn(".sidebar.list-pane .library-bar { display: none; }", narrow)
-        # The old rule hid four separate rows; one rule now hides the bar.
+        # The bar is laid out at every width: present, wrapped, never hidden.
+        self.assertIn(".sidebar.list-pane .library-bar {", narrow)
+        self.assertNotIn("library-bar { display: none; }", narrow)
+        # Scoped to the filter bar, not the whole band: 2.1e2's drawer rules
+        # legitimately mention `.compact-controls.open`, and 2.1f must not
+        # delete those.  What must not exist is a rule coupling the two.
+        coupled = [
+            sel.strip()
+            for sel in re.findall(r"([^{}]+)\{[^{}]*\}", narrow)
+            if "library-bar" in sel and "compact-controls" in sel
+        ]
+        self.assertEqual(coupled, [], coupled)
+        # The old rule hid four separate rows; there is still no stack to grow back.
         self.assertNotIn(".sidebar.list-pane .filters,\n  .layout:not", narrow)
 
     def test_empty_tag_disclosure_is_not_rendered(self):
