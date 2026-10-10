@@ -1297,9 +1297,21 @@ console.log(JSON.stringify(received));
         source = _read(APP_JS)
         html = _read(INDEX_HTML)
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
-        self.assertIn('class="command-palette-option" role="option"', html)
+        # Task 2.2 grouped the results, so the row is no longer a direct child
+        # of the listbox and its attributes now sit on separate lines. The
+        # INVARIANT this test exists for is unchanged and is what is asserted:
+        # a result is a role="option" element, never a <button> — a button in
+        # the tab order would take focus off the combobox input, which is what
+        # aria-activedescendant exists to avoid — and pressing it updates the
+        # selection without blurring first, so the caret never jumps.
+        self.assertRegex(html, r'class="command-palette-option"\s+role="option"')
         self.assertNotIn('<button class="command-palette-option"', html)
-        self.assertIn('@mousedown.prevent="commandPaletteActiveIndex = index"', html)
+        # The selection is now resolved through the grouped view, so the index
+        # expression is a lookup rather than the loop variable. Both spellings
+        # that would break the contract are still refused: no bare `index`, and
+        # no mousedown that lets focus leave the input.
+        self.assertNotRegex(html, r'@mousedown\.prevent="commandPaletteActiveIndex = index"')
+        self.assertRegex(html, r'@mousedown\.prevent="commandPaletteActiveIndex = [^"]+"')
         self.assertIn("scrollIntoView({ block: \"nearest\" })", source)
         self.assertIn("if (!(this.commandPaletteTransfer && this.modalRestoreFocus))", source)
         self.assertIn('id: "import-archive"', source)
@@ -1333,7 +1345,21 @@ console.log(JSON.stringify({overview, selected}));
 '''
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
         value = json.loads(result.stdout)
-        self.assertEqual(value["overview"], ["nav-install", "install-workflow"])
+        # Task 2.2 changed this ORDER deliberately and the reason is in the
+        # assertion, not only in a comment: `nav-install` is Navigation and
+        # `install-workflow` is Transfer, and 2.2's group order puts Transfer
+        # FIRST — what applies to what you are looking at, then the things you
+        # bring in and take out, then Navigation last because it is the one
+        # group you can always reach by clicking the rail. The old expectation
+        # was declaration order, which is what the flat list used to render.
+        #
+        # This test's real subject is FILTERING (both commands match "install",
+        # and both must survive), so it asserts the set and the grouping rather
+        # than a sequence that a design decision is allowed to move.
+        self.assertEqual(sorted(value["overview"]), ["install-workflow", "nav-install"],
+                         "both install commands must match the query 'install'")
+        self.assertEqual(value["overview"], ["install-workflow", "nav-install"],
+                         "Transfer ranks before Navigation (see COMMAND_GROUP_ORDER)")
         self.assertEqual(value["selected"], ["selected-toggle"])
 
     def test_safe_local_update_has_exact_target_review_and_explicit_apply(self):

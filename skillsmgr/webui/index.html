@@ -232,7 +232,7 @@
              :aria-label="view === 'recovery' ? 'Search recovery' : (view === 'install' ? 'Search registry sources' : (view === 'quality' ? 'Search quality evidence' : (view === 'trash' ? 'Search trash' : 'Search skills')))" autocomplete="off" spellcheck="false"
              @keydown="onSearchKeydown">
       <button v-if="query" class="search-clear" type="button" aria-label="Clear search" @click="clearSearch">×</button>
-      <kbd>/</kbd>
+      <span class="kbd" aria-hidden="true">/</span>
     </div>
 
     <div class="topbar-actions">
@@ -241,7 +241,7 @@
         <app-icon name="list-checks" class="command-trigger-icon" aria-hidden="true"></app-icon>
         <span class="command-trigger-label">Commands</span>
         <span class="sr-only">Open command palette</span>
-        <kbd aria-hidden="true">Ctrl/Cmd K</kbd>
+        <span class="kbd" aria-hidden="true">Ctrl K</span>
       </button>
       <button class="btn btn-primary topbar-new" type="button" @click="openCreate" aria-label="Create a new skill" title="New skill">
         <app-icon name="plus" aria-hidden="true"></app-icon>
@@ -1975,7 +1975,7 @@
       <h2 id="help-modal-title" class="sr-only">Keyboard shortcuts</h2>
       <div class="modal-head"><h2>Keyboard shortcuts</h2><button class="modal-close" aria-label="Close keyboard shortcuts" @click="closeModal('help')">×</button></div>
       <div class="modal-body shortcuts-reference">
-        <p class="shortcuts-note"><span class="kbd">Ctrl</span> is <span class="kbd">⌘ Command</span> on macOS. Shortcuts are ignored while you are typing in a field.</p>
+        <p class="shortcuts-note"><span class="kbd">Ctrl</span> is <span class="kbd">⌘</span> on macOS. Shortcuts are ignored while you are typing in a field.</p>
         <section class="shortcuts-section">
           <h3 class="shortcuts-section-title">Anywhere</h3>
           <dl class="shortcuts-list">

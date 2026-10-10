@@ -766,16 +766,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 .searchwrap input:focus { border-color: var(--accent); background: var(--surface); }
 
-.searchwrap kbd {
+/* Only the POSITION is this rule's job; the cap itself is the `.kbd`
+   primitive (task 2.2). It used to redeclare the type, colour, background,
+   border, radius and padding — a second definition of one component, which
+   resolves to whichever comes later and leaves the other dead. */
+.searchwrap .kbd {
   position: absolute;
   right: 8px;
-  font-family: var(--font);
-  font-size: var(--t-meta);
-  color: var(--text-muted);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
   pointer-events: none;
 }
 
@@ -858,16 +856,12 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 .command-trigger { gap: 6px; min-height: 44px; }
 .command-trigger-icon { display: none; width: 17px; height: 17px; flex: none; }
-.command-trigger kbd {
-  /* avoid-ai-design-ignore: SD4m — a key glyph belongs in the mono face */
-  padding: 1px 5px;
-  font-family: var(--mono);
-  font-size: var(--t-meta);
-  color: var(--ink-3);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-ctl);
-}
+/* The Commands trigger used to carry its own six-line `<kbd>` rule while 2.2
+   adopted the `.kbd` primitive everywhere else in the same surface. Two
+   definitions of one key cap: whichever comes last wins and the other is dead
+   CSS that still reads as coverage. Both topbar caps are the primitive now, so
+   this block is deleted rather than reconciled — and the search field's `/`
+   cap, which was a bare `<kbd>` with no rule at all, is no longer unstyled. */
 .actions-glyph { display: none; }
 
 /* A status flag, not a pill: the radius stays on the scale so it reads as a
@@ -2689,7 +2683,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    wherever the measurement was not taken. */
 @media (max-width: 899px) {
   .stat-pill { display: none; }
-  .command-trigger kbd { display: none; }
+  .command-trigger .kbd { display: none; }
 }
 
 @media (max-width: 760px) {
@@ -2702,7 +2696,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .topbar-new svg { width: 18px; height: 18px; }
   .command-trigger { min-width: 44px; min-height: 44px; width: 44px; padding: 0; font-size: 0; gap: 0; }
   .command-trigger-icon { display: block; }
-  .command-trigger kbd { display: none; }
+  .command-trigger .kbd { display: none; }
   .stat-pill, .brand-sub { display: none; }
   .layout { display: flex; flex-direction: column; }
 
