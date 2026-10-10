@@ -44,9 +44,9 @@ const { createApp, nextTick, h } = Vue;
    "declared but never rendered" failure this repository has hit before with a
    vendored font.  */
 const ICON_NAMES = Object.freeze(
-  Array.from(document.querySelectorAll(".icon-sprite symbol")).map((s) =>
-    s.id.replace(/^i-/, "")
-  )
+  Array.from(
+    (document.querySelectorAll && document.querySelectorAll(".icon-sprite symbol")) || []
+  ).map((s) => s.id.replace(/^i-/, ""))
 );
 const ICON_SET = new Set(ICON_NAMES);
 
@@ -73,11 +73,12 @@ const AppIcon = {
   },
 };
 
-/* Registered on the definition rather than through a `app.component(...)`
-   chain. Vue supports both, but the chain reads better and costs every
-   consumer that stubs `createApp` — the Node harnesses in tests/ return a
-   bare `{ mount() {} }`, so the component would be silently unregistered the
-   moment the method chain outgrows the stub. */
+/* Registered on the *definition*, never through an `app.component(...)` chain.
+   The Node harnesses in tests/ stub `createApp` as `{ mount() {} }` with no
+   other methods, so a chained `.component(...)` call would throw a TypeError
+   in every one of them the moment the file loads — a regression in five test
+   modules to register one component. `components:` is read off the object the
+   harness already keeps, so it costs those harnesses nothing. */
 createApp({
   components: { AppIcon },
   data() {
@@ -2760,4 +2761,4 @@ createApp({
       }
     },
   },
-}).component("app-icon", AppIcon).mount("#app");
+}).mount("#app");

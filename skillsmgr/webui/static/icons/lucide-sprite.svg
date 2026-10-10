@@ -1,5 +1,11 @@
-<!-- Icons: Lucide 1.54.0, ISC licence (Lucide-ISC-LICENSE.txt). Generated subset;
-     edit the generator, not this file. -->
+<!-- Icons: Lucide 1.54.0, ISC licence (Lucide-ISC-LICENSE.txt). A curated subset
+     of only the 36 names this interface actually renders.
+
+     This file is the source of truth; `index.html` inlines the same subset so
+     the page renders with the machine offline, and
+     `tests/test_redesign_contracts.py` + `tests/e2e/test_icon_render.py` fail
+     if the two ever disagree or a name stops resolving. Edit this file and the
+     inlined copy together. -->
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true">
 
     <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -318,7 +318,11 @@ class IconSpriteTests(unittest.TestCase):
         # A misspelled name must be loud. Rendering nothing is the failure this
         # seam exists to prevent, so the component reads the sprite's own id
         # list and marks anything it cannot resolve.
-        self.assertIn('.component("app-icon", AppIcon)', self.app)
+        self.assertIn("components: { AppIcon }", self.app)
+        # Not `.component("app-icon", AppIcon)` on the `createApp` return value:
+        # every Node harness in tests/ stubs that as `{ mount() {} }`, so a
+        # chained call throws before a single one of them can run.
+        self.assertNotIn('.component("app-icon"', self.app)
         self.assertIn('querySelectorAll(".icon-sprite symbol")', self.app)
         self.assertIn("data-missing-icon", self.app)
 
