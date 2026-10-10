@@ -362,6 +362,112 @@ PRIMITIVE_PENDING_ADOPTION = {
 }
 
 
+def strip_css_comments(css: str) -> str:
+    """CSS with `/* … */` removed, keeping byte offsets stable.
+
+    Needed because this stylesheet explains itself in 7KB+ of block comments, and
+    one of them contains the sentence "No transition: the file has exactly ONE
+    reduced-motion hook". A scanner that reads prose reports a rule the author
+    explicitly wrote the *absence* of. Every regex in this module that scans the
+    cascade for a declaration must run on the stripped text, or it will keep
+    finding English. Newlines are preserved so line-based offsets still line up.
+    """
+    def _blank(m: re.Match) -> str:
+        return re.sub(r"[^\n]", " ", m.group(0))
+    return re.sub(r"/\*.*?\*/", _blank, css, flags=re.S)
+
+
+def check_motion(css: str, root_map: dict, note) -> None:
+    """Motion the file claims to constrain, and actually constrains.
+
+    The band check that shipped with 1.3 read `--dur`, and nothing in the
+    cascade read `--dur`: the three entrance animations carried raw
+    `0.15s` / `0.18s` / `0.18s`. So the gate reported PASS about a path it could
+    not see — this repository's fourth recorded instance of its own failure
+    mode — while `.modal` ran 20ms **outside** the 100-160ms band the gate was
+    written to enforce. Same class as the type scale in `check_type_scale`.
+
+    Three properties, each of which the previous check could not observe:
+
+    1. every FINITE animation duration is a `var(--…)`, so the band is checked
+       against something the stylesheet actually uses;
+    2. every `transition:` takes its timing from a token as well;
+    3. a surface that owns a background and a border never fades in. An opaque
+       menu or dialog fading from `opacity: 0` shows the page through itself for
+       its whole entrance — this repo captured one screenshot at `opacity:
+       0.386` and read it as a rendering fault. A scrim may fade: it is a wash
+       over the page, not a surface.
+
+    The `infinite` loops (spinner, skeleton shimmer) are progress indicators,
+    not entrances, so a duration band does not apply to them; they are the only
+    shapes allowed to keep a raw literal, and (1) is what keeps that honest.
+    """
+    ms = re.fullmatch(r"([0-9]+)ms", (root_map.get("--dur") or "").strip())
+    note(bool(ms) and MOTION_MIN_MS <= int(ms.group(1)) <= MOTION_MAX_MS,
+         f"--dur is within {MOTION_MIN_MS}-{MOTION_MAX_MS}ms",
+         (root_map.get("--dur") or "absent"))
+
+    finite_raw = []
+    scan = strip_css_comments(css)
+    for shorthand in re.findall(r"(?<![\w-])animation\s*:\s*([^;}]+)", scan):
+        body = shorthand.strip()
+        if re.search(r"\binfinite\b", body):
+            continue  # a loop, not an entrance
+        # `animation: none` and var()-only values carry no raw duration.
+        for literal in re.findall(r"(?<![\w.-])(\d*\.?\d+)m?s\b", body):
+            finite_raw.append(f"animation: {body.strip()[:56]}")
+            break
+    note(not finite_raw,
+         "every finite animation duration reads a motion token",
+         "; ".join(sorted(set(finite_raw))[:3]))
+
+    raw_tr = []
+    for shorthand in re.findall(r"(?<![\w-])transition\s*:\s*([^;}]+)", scan):
+        body = shorthand.strip()
+        if body in ("none", "all 0s", ""):
+            continue
+        if not re.search(r"var\(--", body):
+            raw_tr.append(body[:56])
+    note(not raw_tr, "every transition takes its timing from a token",
+         "; ".join(sorted(set(raw_tr))[:3]))
+
+    # -- opaque surfaces rise, they do not fade --------------------------
+    rises = _keyframes_bodies(css)
+    fadey = [name for name, body in rises.items()
+             if re.search(r"(^|[;{\s])opacity\s*:", body)]
+    # A toast is new content arriving, so it may fade; a scrim is a wash, so it
+    # may fade. Everything else is a pre-existing surface.
+    allowed = {"fade", "toast-in", "rise"}
+    note(set(fadey) <= allowed,
+         "only the scrim and the toast animate opacity",
+         f"unexpected: {sorted(set(fadey) - allowed)}")
+
+    rise_body = rises.get("rise", "")
+    note("opacity" not in rise_body and "translateY(4px)" in rise_body,
+         "the shared surface curve is a 4px rise with no opacity",
+         rise_body[:60] or "rise is absent")
+
+    overshoot = [c for c in re.findall(r"cubic-bezier\(([^)]*)\)", css)
+                 if len(c.split(",")) == 4
+                 and any(float(p.strip()) > 1.0 for p in (c.split(",")[1], c.split(",")[3]))]
+    note(not overshoot, "no easing curve overshoots", "; ".join(overshoot[:2]))
+
+
+def _keyframes_bodies(css: str) -> dict[str, str]:
+    """`{name: declarations}` for every `@keyframes` block in the stylesheet."""
+    out: dict[str, str] = {}
+    for m in re.finditer(r"@keyframes\s+([A-Za-z_][\w-]*)\s*\{", css):
+        depth, i = 1, m.end()
+        while i < len(css) and depth:
+            if css[i] == "{":
+                depth += 1
+            elif css[i] == "}":
+                depth -= 1
+            i += 1
+        out[m.group(1)] = css[m.end():i - 1]
+    return out
+
+
 def _simple_selector(part: str) -> list[str]:
     """The forms one compound selector may legitimately be compared as.
 
@@ -770,14 +876,7 @@ def check_scale(css: str, failures: list[str]) -> None:
     check_primitives(css, note)
 
     # -- motion ------------------------------------------------------------
-    dur = root_map.get("--dur", "")
-    m = re.match(r"(\d+)ms$", dur)
-    ok_dur = bool(m) and MOTION_MIN_MS <= int(m.group(1)) <= MOTION_MAX_MS
-    note(ok_dur, f"--dur is within {MOTION_MIN_MS}-{MOTION_MAX_MS}ms", dur or "absent")
-    overshoot = [c for c in re.findall(r"cubic-bezier\(([^)]*)\)", css)
-                 if len(c.split(",")) == 4
-                 and any(float(p.strip()) > 1.0 for p in (c.split(",")[1], c.split(",")[3]))]
-    note(not overshoot, "no easing curve overshoots", "; ".join(overshoot))
+    check_motion(css, root_map, note)
 
     # -- one palette, not three -------------------------------------------
     # `index.html` starts at data-theme="system" and preferences.js resolves it

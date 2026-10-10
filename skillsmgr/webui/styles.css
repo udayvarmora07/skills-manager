@@ -131,6 +131,15 @@
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
   --dur: 120ms;
   --tr-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+  /* The SAME 120ms for entrances, as its own token. It was worth naming: the
+     three entrance animations carried raw `0.15s`/`0.18s`/`0.18s` while this
+     token existed for exactly that job, so the gate's 100–160ms bound was
+     enforced against a value nothing read — and `.modal`'s 180ms was outside
+     the band the file claimed to hold. Named, because a raw literal is a
+     decision nobody re-checks. `check_motion()` fails on any finite animation
+     duration that is not `var(--…)`. */
+  --dur-pop: 120ms;
+  --dur-scrim: 120ms;
 
   --rail-w: 56px;
   --pane-w: 392px;
@@ -899,7 +908,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   box-shadow: var(--shadow-lg);
   padding: var(--s2);
   z-index: 40;
-  animation: pop 0.15s cubic-bezier(0.2, 0, 0.2, 1);
+  /* Rise, not fade. A menu is an OPAQUE surface: it has a background, a
+     hairline border and a shadow, so fading it from `opacity: 0` shows the page
+     through the reader's own menu for 150ms and takes the border and the shadow
+     down with it — the "ghost popover" read. One screenshot in this repo's own
+     evidence directory was captured at `opacity: 0.386` and looked like a
+     rendering bug. The 4px rise is what DESIGN-V2 §H actually permits on a
+     popover, and it leaves the surface fully opaque from its first frame. */
+  animation: rise var(--dur-pop) var(--ease);
 }
 
 .menu button {
@@ -2258,7 +2274,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   place-items: center;
   z-index: 60;
   padding: var(--s4);
-  animation: fade 0.15s ease-out;
+  /* The scrim is the one thing here a fade is FOR: it is a wash over the page,
+     not a surface, so there is no border or shadow to take down with it. */
+  animation: fade var(--dur-scrim) var(--ease);
 }
 @keyframes fade { from { opacity: 0; } }
 
@@ -2271,11 +2289,17 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
-  animation: pop 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  /* Same rule as `.menu`, same reason: the dialog is an opaque surface, so it
+     rises rather than fades. It was also 180ms — 20ms OUTSIDE the 100–160ms
+     band DESIGN-V2 §H states and `check_design_tokens.py` claims to enforce,
+     in a file where nothing read the token that band was checked against. */
+  animation: rise var(--dur-pop) var(--ease);
 }
 .modal-wide { width: min(760px, 100%); }
 .command-palette { width: min(680px, 100%); }
-@keyframes pop { from { opacity: 0; transform: translateY(4px); } }
+/* The only entrance curve a surface uses. Translate only: 4px, inside §H's
+   ceiling, and no opacity so the surface is never see-through. */
+@keyframes rise { from { transform: translateY(4px); } }
 
 .modal-head {
   display: flex;
@@ -2491,7 +2515,12 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   box-shadow: var(--shadow-lg);
   padding: 10px var(--s4);
   font-size: var(--t-table);
-  animation: toast-in 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  /* Duration moved onto the token, not re-designed: 2.3 owns the toast. What it
+     owned was a raw 180ms — 20ms outside the band — that no gate could see
+     because the gate read `--dur`, which nothing in the file used. The fade
+     STAYS here: a toast is new content arriving, which is the one entrance §H
+     actually describes as a mistake when it is pre-existing. */
+  animation: toast-in var(--dur-pop) var(--ease);
 }
 @keyframes toast-in { from { opacity: 0; transform: translateX(12px); } }
 .toast svg { width: 16px; height: 16px; flex: none; }
