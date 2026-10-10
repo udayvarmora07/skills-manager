@@ -201,6 +201,18 @@
       <path d="M18 6 6 18"/>
       <path d="m6 6 12 12"/>
     </symbol>
+    <!-- Added 2.3 for the offline banner. Lucide `wifi-off`, ISC, same licence
+         as the rest of the subset (1.2). Status is never colour-only, so this
+         glyph carries the meaning when the amber tint cannot. -->
+    <symbol id="i-wifi-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h.01"/>
+      <path d="M8.5 16.429a5 5 0 0 1 7 0"/>
+      <path d="M5 12.859a10 10 0 0 1 5.17-2.69"/>
+      <path d="M19 12.859a10 10 0 0 0-2.007-1.523"/>
+      <path d="M2 8.82a15 15 0 0 1 4.177-2.643"/>
+      <path d="M22 8.82a15 15 0 0 0-11.288-3.764"/>
+      <path d="m2 2 20 20"/>
+    </symbol>
 </svg>
 <div id="app" v-cloak>
   <a class="skip-link" href="#main-workspace" :inert="!!activeModal">Skip to main content</a>
@@ -436,7 +448,10 @@
           <span>All {{ formatNumber(uniformProblemCount) }} visible instances are <strong>{{ uniformProblemLabel }}</strong>. The per-row badge is hidden so any row that differs stays visible.</span>
         </p>
       </div>
-      <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
+      <div v-if="banner" :class="'banner banner-' + banner.type" role="alert">
+        <app-icon :name="banner.type === 'error' ? 'circle-alert' : (banner.type === 'warn' ? 'circle-alert' : (banner.type === 'ok' ? 'circle-check' : 'circle'))" :class="'banner-icon-' + banner.type"></app-icon>
+        <div class="banner-body"><p>{{ banner.text }}</p></div>
+      </div>
 
       <ul v-if="view === 'skills'" :class="['skilllist', { 'skill-grid': browseMode === 'grid' }]" aria-label="Skills">
         <li v-if="selectedCount" class="batchbar">
@@ -604,7 +619,10 @@
     <section class="detail" :inert="drawerOpen">
       <button v-if="view !== 'skills' && mobileDetailOpen" class="mobile-back" type="button" @click="closeMobileView">← {{ view === 'quality' ? 'Back to Quality' : 'Back to Library' }}</button>
       <div v-if="view === 'overview'" class="overview-shell" :data-overview-ready="!loadingList && !loadingHistory ? 'true' : null" aria-labelledby="overview-title">
-        <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
+        <div v-if="banner" :class="'banner banner-' + banner.type" role="alert">
+        <app-icon :name="banner.type === 'error' ? 'circle-alert' : (banner.type === 'warn' ? 'circle-alert' : (banner.type === 'ok' ? 'circle-check' : 'circle'))" :class="'banner-icon-' + banner.type"></app-icon>
+        <div class="banner-body"><p>{{ banner.text }}</p></div>
+      </div>
         <header class="overview-status">
           <h1 id="overview-title" tabindex="-1">Overview</h1>
           <!-- One status line. The counts are shown only once the inventory has
@@ -979,7 +997,10 @@
       </div>
 
       <div v-else-if="view === 'quality'" class="detail-inner quality-center">
-        <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
+        <div v-if="banner" :class="'banner banner-' + banner.type" role="alert">
+        <app-icon :name="banner.type === 'error' ? 'circle-alert' : (banner.type === 'warn' ? 'circle-alert' : (banner.type === 'ok' ? 'circle-check' : 'circle'))" :class="'banner-icon-' + banner.type"></app-icon>
+        <div class="banner-body"><p>{{ banner.text }}</p></div>
+      </div>
         <template v-if="loadingList || loadingDetail">
           <div class="skeleton"><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
         </template>
@@ -1408,16 +1429,16 @@
             <label for="v-name">Skill name</label>
             <input id="v-name" name="validate-skill-name" v-model.trim="modals.validate.name" placeholder="my-skill-name" spellcheck="false">
           </div>
-          <div v-if="modals.validate.error" class="banner banner-error" style="margin:0 0 12px;" role="alert">
+          <div v-if="modals.validate.error" class="banner banner-error flush" role="alert">
             <app-icon name="circle-alert"></app-icon>
             {{ modals.validate.error }}
           </div>
           <div v-if="modals.validate.result">
-            <div v-if="modals.validate.result.valid" class="banner banner-ok" style="margin:0 0 12px;">
+            <div v-if="modals.validate.result.valid" class="banner banner-ok flush">
               <app-icon name="check"></app-icon>
               Skill is valid.
             </div>
-            <div v-else class="banner banner-error" style="margin:0 0 12px;">
+            <div v-else class="banner banner-error flush">
               <app-icon name="circle-alert"></app-icon>
               {{ formatNumber(modals.validate.result.issues.length) }} issue(s) found.
             </div>
@@ -1443,11 +1464,11 @@
       <div class="modal-body">
         <div v-if="modals.doctor.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else-if="modals.doctor.report">
-          <div v-if="modals.doctor.report.ok" class="banner banner-ok" style="margin:0 0 16px;">
+          <div v-if="modals.doctor.report.ok" class="banner banner-ok flush tight">
             <app-icon name="check"></app-icon>
             Filesystem and database are consistent.
           </div>
-          <div v-else class="banner banner-error" style="margin:0 0 16px;">
+          <div v-else class="banner banner-error flush tight">
             <app-icon name="circle-alert"></app-icon>
             Issues found.
           </div>
@@ -1616,9 +1637,12 @@
         </section>
 
         <div v-if="modals.update.confirmingClose" class="banner banner-warn update-close-confirm" role="alert">
-          <strong>Cancel this pending review?</strong>
-          <span>The private review will be cancelled. No installed bytes have changed.</span>
-          <div class="detail-actions"><button class="btn btn-secondary" type="button" @click="modals.update.confirmingClose = false">Keep review</button><button class="btn btn-danger-ghost" type="button" @click="cancelUpdateReview">Cancel review</button></div>
+          <app-icon name="circle-alert" class="banner-icon-warn"></app-icon>
+          <div class="banner-body">
+            <p class="banner-title">Cancel this pending review?</p>
+            <p>The private review will be cancelled. No installed bytes have changed.</p>
+            <div class="banner-actions"><button class="btn btn-secondary" type="button" @click="modals.update.confirmingClose = false">Keep review</button><button class="btn btn-danger-ghost" type="button" @click="cancelUpdateReview">Cancel review</button></div>
+          </div>
         </div>
       </div>
       <div class="modal-foot">
@@ -2006,15 +2030,55 @@
     </div>
   </div>
 
+  <!-- ===================================================== offline banner -->
+  <!-- The one banner that is not about a skill. A loopback server can go away
+       (the user closed the terminal, the process was killed) and `fetch`
+       rejects with "Failed to fetch", which is indistinguishable from any other
+       network error in the message alone. This states the observed condition
+       and gives the one action that can resolve it.
+
+       `role="status"` + polite, not `role="alert"`: going offline is not an
+       emergency, and an assertive region interrupts whatever a screen-reader
+       user is currently reading. The 2.3 tests pin that distinction. -->
+  <div v-if="offline" class="banner banner-warn offline-banner" role="status">
+    <app-icon name="wifi-off" class="banner-icon-warn"></app-icon>
+    <div class="banner-body">
+      <p class="banner-title">The local server is not responding.</p>
+      <p>Requests are failing before they reach the skill library, so what is on screen is the last observed state, not the current one. Retry once the server is running again.</p>
+    </div>
+    <div class="banner-actions"><button class="btn btn-secondary" type="button" @click="retryFromOffline">Retry</button></div>
+  </div>
+
   <!-- ============================================================ toasts -->
-  <div class="toasts" aria-live="polite" aria-atomic="false">
-    <span class="sr-only" aria-live="assertive">{{ liveAnnouncement }}</span>
-    <div v-for="t in toasts.filter(Boolean)" :key="t.id" :class="'toast toast-' + t.type" role="status">
+  <!-- 2.3. Three defects, all found by looking at the rendered surface:
+
+       * `toasts.filter(Boolean)` in the template was hiding a real possibility
+         rather than handling it. `toast()` pushes `{id, text, type, undo}` and
+         nothing ever pushes a falsy entry, so the filter was dead code that
+         read as defensive handling of a case the model cannot produce.
+       * The whole stack was the live region. Every toast added or removed was
+         therefore announced -- including a toast being REMOVED, which
+         announced the message a second time. The region is now static and
+         each toast carries its own `role`, so one message is announced once.
+       * There was no dismiss control at all: a 4s (or 8s) timer was the only
+         way to clear anything, so a reader who wanted to read a long error
+         could not stop the clock. -->
+  <div class="toasts">
+    <span class="sr-only" role="status" aria-live="polite">{{ liveAnnouncement }}</span>
+    <div v-for="t in toasts" :key="t.id" :class="'toast toast-' + t.type" :role="t.type === 'err' ? 'alert' : 'status'">
+      <!-- Static, not a `:name` ternary. `test_every_declared_symbol_is_used`
+           and `test_every_icon_used_resolves_to_a_symbol` read the literal
+           name attribute, so a dynamic binding hides every typo in it — which
+           is what the ternary I wrote first did: it removed the only static
+           use of `circle` and the gate caught the orphaned symbol. -->
       <app-icon name="circle-check" v-if="t.type === 'ok'"></app-icon>
       <app-icon name="circle-alert" v-else-if="t.type === 'err'"></app-icon>
-      <app-icon name="circle" v-else=></app-icon>
-      <span>{{ t.text }}</span>
-      <button v-if="t.undo" @click="undoToast(t)">Undo</button>
+      <app-icon name="circle" v-else></app-icon>
+      <span class="toast-text">{{ t.text }}</span>
+      <button v-if="t.undo" class="toast-undo" type="button" @click="undoToast(t)">Undo</button>
+      <button v-if="!t.undo" class="toast-dismiss" type="button" :aria-label="'Dismiss: ' + t.text" @click="dismissToast(t)">
+        <app-icon name="x"></app-icon>
+      </button>
     </div>
   </div>
 

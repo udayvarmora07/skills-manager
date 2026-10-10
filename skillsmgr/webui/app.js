@@ -50,6 +50,18 @@ const ICON_NAMES = Object.freeze(
 );
 const ICON_SET = new Set(ICON_NAMES);
 
+/* Toast lifetimes. DESIGN-V2 §F says 4s / 8s and these are those numbers, read
+ * once so the timer and the markup cannot drift apart.
+ *
+ * A shrinking countdown hairline was tried here and removed: its 8s duration
+ * is not a motion token, and `check_motion()` correctly refuses a finite
+ * animation duration that is not one. The control that actually matters for
+ * "I could not read that in time" is the dismiss button, which the toast did
+ * not have at all. */
+const TOAST_MS = 4000;
+const TOAST_UNDO_MS = 8000;
+const TOAST_MAX = 3;
+
 if (!ICON_NAMES.length) {
   console.error("app-icon: the icon sprite is missing or empty");
 }
@@ -207,6 +219,14 @@ createApp({
       toasts: [],
       liveAnnouncement: "",
       toastSeq: 0,
+      /* Observed, not inferred: the last transport attempt actually failed to
+       * reach the server. Set from a real `fetch` rejection and cleared by a
+       * successful one -- never from a timer or a route change. */
+      offline: false,
+      /* id -> timeout handle, so a dismissed toast's pending timer is cleared
+       * instead of firing against a list it is no longer in. A leaked timer
+       * over a long session is a slow leak with no symptom until the tab dies. */
+      toastTimers: {},
       searchTimer: null,
       searchRestore: [],
       listSeq: 0,
@@ -865,6 +885,10 @@ createApp({
   },
 
   beforeUnmount() {
+    /* Every pending toast timer is cleared, or each one fires after teardown
+     * against a component instance that no longer exists. */
+    Object.values(this.toastTimers || {}).forEach((handle) => clearTimeout(handle));
+    this.toastTimers = {};
     this.removeThemeListener();
     document.removeEventListener("keydown", this.onKeydown);
     document.removeEventListener("mousedown", this.onDocMousedown);
@@ -1693,6 +1717,10 @@ createApp({
         const s = scopeAtCall;
         const rows = await api("/api/skills?scope=" + encodeURIComponent(s));
         if (mySeq !== this.listSeq || (this.activeScope || "all") !== scopeAtCall) return;
+        /* A response is proof the server answered. Clear the global banner on
+         * the success path only -- never on a timer, so a flapping connection
+         * still shows the reader the last moment it worked. */
+        this.offline = false;
         this.skills = rows;
         this.allSkills = rows.slice();
         if (this.query.trim() && this.view === "skills") this.applySearch();
@@ -1709,7 +1737,19 @@ createApp({
         }
       } catch (e) {
         if (mySeq !== this.listSeq) return;
-        this.banner = { type: "error", text: "Could not load skills: " + e.message };
+        /* A `fetch` that rejects before a response is a transport failure: the
+         * server did not answer at all. That is a different condition from a
+         * 4xx/5xx (which arrive as a real response and become a normal banner
+         * message), so it is the one case that raises the global offline
+         * banner. Anything else stays a scoped message. */
+        const unreachable = e instanceof TypeError;
+        if (unreachable) this.offline = true;
+        this.banner = {
+          type: unreachable ? "warn" : "error",
+          text: unreachable
+            ? "The local server did not answer. Start it, then retry — what is shown below is the last observed state."
+            : "Could not load skills: " + e.message,
+        };
       } finally {
         if (mySeq === this.listSeq) this.loadingList = false;
       }
@@ -2344,18 +2384,42 @@ createApp({
 
     /* ---------------------------------------------------------- helpers */
 
+    /* One place decides whether a message is announced, and it announces it
+     * ONCE. `liveAnnouncement` is cleared on the next tick after the toast is
+     * added, because a live region only speaks when its text CHANGES -- two
+     * identical consecutive failures ("Could not load skills: ...") would
+     * otherwise be silent the second time, which is precisely when a
+     * repeating failure matters most. */
     toast(text, type = "ok", undo = null) {
       const id = ++this.toastSeq;
-      this.toasts.push({ id, text, type, undo });
+      const life = undo ? TOAST_UNDO_MS : TOAST_MS;
+      /* Cap the stack. A burst is exactly when a reader needs the surface:
+       * capping drops the OLDEST, because the newest describes the condition
+       * that produced the rest. */
+      this.toasts = [...this.toasts, { id, text, type, undo, life }].slice(-TOAST_MAX);
       this.liveAnnouncement = text;
-      setTimeout(() => {
-        this.toasts = this.toasts.filter((t) => t.id !== id);
-      }, undo ? 8000 : 4000);
+      this.$nextTick(() => { if (this.liveAnnouncement === text) this.liveAnnouncement = ""; });
+      this.toastTimers[id] = setTimeout(() => this.dismissToast({ id }), life);
+    },
+
+    dismissToast(t) {
+      const timer = this.toastTimers[t.id];
+      if (timer) { clearTimeout(timer); delete this.toastTimers[t.id]; }
+      this.toasts = this.toasts.filter((x) => x.id !== t.id);
     },
 
     async undoToast(t) {
-      this.toasts = this.toasts.filter((x) => x.id !== t.id);
+      this.dismissToast(t);
       try { await t.undo(); } catch (e) { this.toast("Undo failed: " + e.message, "err"); }
+    },
+
+    /* Retry is a real request, not a re-render: it re-reads the inventory, the
+     * trash and the history, and the banner clears itself only when one of
+     * them succeeds. If they all fail, `offline` stays true and the reader is
+     * not told a lie. */
+    async retryFromOffline() {
+      await this.loadSkills();
+      await Promise.all([this.loadTrash(), this.loadHistory()]);
     },
 
     async copy(text) {

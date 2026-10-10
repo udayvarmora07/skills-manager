@@ -2245,32 +2245,93 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .onboarding-skip:hover { color: var(--text); }
 
+/* A skeleton stands in for content that has NOT been observed yet. It is
+   therefore decoration by definition: it must never encode a count, a shape or
+   a value, because every one of those would be a claim the API has not made.
+   That is why the rows below are a repeating rhythm rather than a mirrored
+   layout -- and why the shimmer animates `background-position` on a flat fill
+   instead of a gradient sweep, which read as a gradient (a refused default in
+   DESIGN-V2 §B) and cost a repaint per frame.
+
+   2.3 finding: under `prefers-reduced-motion` the global block sets
+   `animation-duration: 0.01ms` and `animation-iteration-count: 1`, so the old
+   `background-position` sweep RAN ONCE AND HELD at its final keyframe -- every
+   skeleton row rested permanently offset by -200% of its own width instead of
+   settling back to a flat fill. The defect was not "the animation kept
+   running"; it was that stopping left the row visibly wrong. This rule states
+   its own reduced-motion intent so it cannot depend on the global block's
+   keyframe behaviour again. */
 .skeleton { padding: var(--s2) var(--s4); }
 .skel-row {
   height: 46px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface) 50%, var(--surface-2) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
+  background: var(--surface-2);
+  overflow: hidden;
+  position: relative;
   margin-bottom: var(--s2);
 }
-@keyframes shimmer { to { background-position: -200% 0; } }
+/* The sweep is a 1px-wide highlight travelling across a flat fill. 1.4s, no
+   easing -- a skeleton should read as "waiting", not as an entrance. */
+.skel-row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--surface), transparent);
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
 
 /* ----------------------------------------------------------------- banner */
 
+/* A banner states one observed condition and the next step. Four levels, all
+   tinted rather than outlined, because a banner is not a control -- nothing in
+   it is clickable unless it carries a button.
+
+   2.3 finding: `banner-warn` had NO rule at all. It was used once, in the
+   update review's "Cancel this pending review?" confirmation -- the one banner
+   in the application whose whole job is to make a reader hesitate -- and it
+   rendered as the unstyled base class: no tint, `border: 1px solid` with no
+   colour. A `.banner-info` gap sat next to it. The vocabulary was three names
+   wide in the stylesheet and two in the markup, and nothing noticed because
+   nothing rendered the warn case during review. */
 .banner {
   margin: var(--s4);
-  padding: var(--s2) var(--s4);
+  padding: var(--s2) var(--s3);
   border-radius: var(--radius-sm);
-  border: 1px solid;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
   font-size: var(--t-table);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--s2);
 }
-.banner svg { width: 16px; height: 16px; flex: none; }
+.banner svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
 .banner-error { background: var(--err-soft); border-color: var(--err); color: var(--err); }
 .banner-ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.banner-warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+.banner-info { background: var(--accent-soft); border-color: var(--accent-text); color: var(--accent-text); }
+
+/* Status is never colour-only. The glyph is the label, so a level survives
+   greyscale, forced-colors and every form of colour-vision deficiency. */
+.banner-icon-ok { color: var(--ok); }
+.banner-icon-err { color: var(--err); }
+.banner-icon-warn { color: var(--warn); }
+.banner-icon-info { color: var(--accent-text); }
+
+/* A banner may carry a sentence AND an action; a two-line block reads better
+   with the copy stacked than with the button floating on the text baseline. */
+.banner-body { min-width: 0; flex: 1; }
+.banner-body > p { margin: 0; }
+.banner-title { font-weight: 600; }
+.banner-actions { margin-top: var(--s2); display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+/* Inside a dialog the banner is a block in the body flow, not a page region
+   with its own outer margin. 2.3: five sites carried `style="margin:0 0 12px"`
+   inline instead, which is a layout decision made per call site. */
+.banner.flush { margin: 0 0 var(--s3); }
+.banner.flush.tight { margin-bottom: var(--s4); }
 
 /* ---------------------------------------------------------------- modals */
 
@@ -2436,7 +2497,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .update-confirmation { align-items: flex-start; margin: 16px 0; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .update-confirmation input { margin-top: 3px; }
 .update-success { display: grid; gap: 5px; }
-.update-close-confirm { display: grid; gap: 8px; }
 .recovery-snapshot-list { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); }
 .recovery-snapshot-items li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
 .recovery-snapshot-items li > div { display: grid; gap: 3px; min-width: 0; }
@@ -2554,51 +2614,121 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 /* ---------------------------------------------------------------- toasts */
 
+/* DESIGN-V2 §F: "Toast (bottom-centre, Undo action, 4s/8s)". The container was
+   pinned to `right: var(--s4)` — bottom-RIGHT — which put a destructive Undo
+   next to the window edge on the same side as the scrollbar and the pointer
+   the reader was already travelling along. Centred, it sits on the axis the
+   eye returns to, and it clears both edges at 320px.
+
+   2.3 findings, all measured rather than assumed:
+   * `max-width: 380px` with NO `width` clamp meant a long error message set
+     the box and the viewport clipped it; at 390px there was no margin left.
+   * `align-items` defaults to stretch on the flex column, so a one-line toast
+     beside a two-line toast rendered its icon centred against the taller one
+     instead of against its own text.
+   * Nothing stopped a burst. Ten simultaneous toasts stacked past the top of
+     the viewport with the newest -- the one describing the failure that caused
+     the other nine -- pushed off-screen. */
 .toasts {
   position: fixed;
-  right: var(--s4);
-  bottom: var(--s4);
+  left: 50%;
+  /* Clear of the 24px status bar, which is fixed chrome at the same edge.
+     Its height is a `min-height` on `.statusbar` (2.1c), so there is no
+     token to read here; the offset is the declared number, not a guess. */
+  bottom: calc(var(--s6) + 24px);
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
-  z-index: 80;
-  max-width: 380px;
-}
-
-.toast {
-  display: flex;
   align-items: center;
   gap: var(--s2);
-  background: var(--surface);
+  z-index: 80;
+  width: min(440px, calc(100vw - 2 * var(--s4)));
+  pointer-events: none;
+}
+.toasts > * { pointer-events: auto; }
+
+/* A toast is the only surface permitted a shadow: it floats over content that
+   must stay readable behind it, so a 1px border alone would not separate it.
+   Popovers and dialogs keep the same token -- one shadow, three users. */
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  width: 100%;
+  background: var(--raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
-  padding: 10px var(--s4);
+  padding: var(--s2) var(--s3);
   font-size: var(--t-table);
-  /* Duration moved onto the token, not re-designed: 2.3 owns the toast. What it
-     owned was a raw 180ms — 20ms outside the band — that no gate could see
-     because the gate read `--dur`, which nothing in the file used. The fade
-     STAYS here: a toast is new content arriving, which is the one entrance §H
-     actually describes as a mistake when it is pre-existing. */
+  /* A toast IS new content arriving, so an entrance is what DESIGN-V2 §H
+     permits -- but it may not fade an opaque surface in from nothing, which is
+     exactly what 2.1d removed from `.menu` and `.modal` for making a screenshot
+     read as transparent. This rises 4px and is opaque on its first painted
+     frame. The previous rule did fade: `from { opacity: 0 }`. */
   animation: toast-in var(--dur-pop) var(--ease);
 }
-@keyframes toast-in { from { opacity: 0; transform: translateX(12px); } }
-.toast svg { width: 16px; height: 16px; flex: none; }
+@keyframes toast-in {
+  from { transform: translateY(4px); }
+}
+
+/* The status glyph leads, at the text's own optical baseline (not the box's
+   centre) so a 1px dot beside 13px type is not a floating speck. */
+.toast svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 .toast-ok svg { color: var(--ok); }
 .toast-err svg { color: var(--err); }
 .toast-info svg { color: var(--accent-text); }
+
+/* The message can be long (an HTTP body, a path, a server sentence). It wraps
+   rather than widening the box, and a long unbroken token — a URL, a hash — is
+   allowed to break instead of forcing a scrollbar on a floating surface. */
+.toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* Undo is a real button, so it gets the real target: 32px tall in the default
+   state and 44px on a coarse pointer, matching every other control. It used to
+   be a bare `padding: 2px 6px` text node -- a ~20px target. */
 .toast button {
-  border: none;
-  background: none;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
   color: var(--accent-text);
   font-weight: 600;
-  font-size: var(--t-table);
+  font-size: var(--t-meta);
+  min-height: 28px;
+  padding: 0 var(--s2);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: var(--s1);
 }
-.toast button:hover { background: var(--accent-soft); }
+.toast button:hover { background: var(--accent-soft); border-color: var(--accent-text); }
+.toast button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Dismiss is quieter than Undo: it loses the action, so it must not read as the
+   primary affordance. Icon-only would need an aria-label AND a tooltip per
+   RULES.md §13, so it carries a visible word instead. */
+.toast-dismiss {
+  flex: none;
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--t-meta);
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 var(--s1);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.toast-dismiss svg { width: 14px; height: 14px; margin: 0; }
+.toast-dismiss:hover { color: var(--text); background: var(--hover); }
+.toast-dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (pointer: coarse) {
+  .toast button, .toast-dismiss { min-height: 44px; }
+}
 
 /* -------------------------------------------------------------- statusbar */
 
@@ -2890,7 +3020,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* A skeleton is decoration, so with motion off it is a static fill and
+     nothing more. 2.3 finding: the sweep's `to` keyframe is what used to be
+     left behind. The block above sets `animation-duration: 0.01ms` and
+     `animation-iteration-count: 1`, which STOPS the animation -- and stopping
+     it at the `to` frame left every row permanently offset by one full width
+     instead of settling back. The overlay has to be removed, not paused.
+     This lives in the single global hook on purpose: the stylesheet has
+     exactly one reduced-motion block, and it is this one. */
   .skel-row { background: var(--surface-2); }
+  .skel-row::after { animation: none; content: none; }
 }
 
 /* ---------------------------------------------------------- rail tooltip */
