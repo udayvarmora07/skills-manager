@@ -22,6 +22,7 @@ from email.parser import BytesParser
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
+import re
 import subprocess
 import sys
 import tarfile
@@ -172,7 +173,55 @@ def expected_webui_members(project_root: Path = ROOT) -> tuple[str, ...]:
     )
     if VUE_MEMBER not in files:
         raise AssertionError(f"missing vendored Vue source file: {VUE_MEMBER}")
+    verify_icon_sprite(project_root)
     return tuple(files)
+
+
+#: The icon sprite and its licence, relative to the repository root.  These are
+#: the two artifacts a Lucide subset consists of, and both are needed: the
+#: sprite renders the interface, the licence is a distribution obligation.
+ICON_SPRITE_MEMBER = "skillsmgr/webui/static/icons/lucide-sprite.svg"
+ICON_LICENCE_MEMBER = "skillsmgr/webui/static/icons/Lucide-ISC-LICENSE.txt"
+
+
+def verify_icon_sprite(project_root: Path = ROOT) -> int:
+    """Verify the vendored icon sprite and return its symbol count.
+
+    The same reasoning as the font faces applies, one level down: the sprite is
+    inlined into ``index.html`` at start-up, so an install that dropped it
+    would run and render *every icon as an empty box* while reporting nothing.
+    The sprite must therefore reach ``site-packages``, carry its ISC licence,
+    and declare at least one symbol — and ``index.html`` must reference only
+    names the sprite actually defines.
+    """
+
+    sprite = project_root / ICON_SPRITE_MEMBER
+    licence = project_root / ICON_LICENCE_MEMBER
+    if not sprite.is_file():
+        raise AssertionError(f"missing vendored icon sprite: {ICON_SPRITE_MEMBER}")
+    if not licence.is_file():
+        raise AssertionError(f"missing icon licence: {ICON_LICENCE_MEMBER}")
+    if "ISC" not in licence.read_text(encoding="utf-8"):
+        raise AssertionError(f"{ICON_LICENCE_MEMBER} is not the Lucide ISC licence")
+    text = sprite.read_text(encoding="utf-8")
+    # Only *loadable* references count. The SVG namespace is spelled
+    # `http://www.w3.org/2000/svg` by definition and is not a fetch, so a bare
+    # substring search would reject every valid sprite; what must never appear is
+    # a reference the browser would resolve over the network.
+    remote = re.findall(r'(?:href|src)\s*=\s*"([^"]*)"', text)
+    remote = [r for r in remote if not r.startswith("#")]
+    remote += re.findall(r"url\(\s*['\"]?(https?://[^'\")]*)", text)
+    if remote:
+        raise AssertionError(f"{ICON_SPRITE_MEMBER} loads a remote resource: {remote}")
+    declared = set(re.findall(r'<symbol\s+id="i-([a-z0-9-]+)"', text))
+    if not declared:
+        raise AssertionError(f"{ICON_SPRITE_MEMBER} declares no symbols")
+    html = (project_root / WEBUI_ROOT / "index.html").read_text(encoding="utf-8")
+    used = set(re.findall(r'<app-icon\s+name="([a-z0-9-]+)"', html))
+    unknown = sorted(used - declared)
+    if unknown:
+        raise AssertionError(f"index.html uses icons the sprite does not define: {unknown}")
+    return len(declared)
 
 
 def expected_example_members(project_root: Path = ROOT) -> tuple[str, ...]:

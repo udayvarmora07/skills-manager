@@ -218,6 +218,130 @@ console.log(JSON.stringify({{
         self.assertNotRegex(css, r"^\.pct-bad\s*\{[^}]*background", re.M)
 
 
+class IconSpriteTests(unittest.TestCase):
+    """The vendored Lucide subset: declaration, licence, and resolution.
+
+    Every other check in this repository reads a *declaration*. The one time a
+    real defect lived here, every declaration read green while the page rendered
+    something else — the vendored typeface that shipped six ``latin-ext`` faces
+    and no ASCII glyphs. So this class deliberately pins three different things
+    a declaration alone would miss:
+
+    1. every ``<app-icon name=…>`` in the template resolves to a symbol;
+    2. every symbol is reachable and used, so the subset stays a subset;
+    3. the sprite carries its ISC licence and loads nothing remote.
+
+    Whether the strokes actually *paint* needs a font-and-paint engine, so it
+    lives in ``tests/e2e/``; the stdlib half here runs on every ordinary test
+    run and must never be the only thing that could have caught it.
+    """
+
+    ICONS = WEBUI / "static" / "icons"
+    SPRITE = ICONS / "lucide-sprite.svg"
+    LICENCE = ICONS / "Lucide-ISC-LICENSE.txt"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.html = _read(INDEX_HTML)
+        cls.sprite = _read(cls.SPRITE)
+        cls.app = _read(APP_JS)
+        cls.css = _read(CSS)
+        cls.declared = set(re.findall(r'<symbol\s+id="i-([a-z0-9-]+)"', cls.sprite))
+        cls.used = set(re.findall(r'<app-icon\s+name="([a-z0-9-]+)"', cls.html))
+
+    def test_sprite_and_licence_ship(self):
+        self.assertTrue(self.SPRITE.is_file(), f"missing {self.SPRITE}")
+        self.assertTrue(self.LICENCE.is_file(), f"missing {self.LICENCE}")
+        self.assertIn("ISC License", _read(self.LICENCE))
+
+    def test_the_sprite_declares_at_least_one_symbol(self):
+        # An empty sprite renders every icon as an empty box and reports nothing.
+        self.assertGreaterEqual(len(self.declared), 20)
+
+    def test_every_icon_used_resolves_to_a_symbol(self):
+        # The "declared but never shipped" failure, one level down: an
+        # <app-icon> naming a symbol the sprite does not define renders blank.
+        missing = sorted(self.used - self.declared)
+        self.assertEqual(missing, [], f"icons used but not in the sprite: {missing}")
+
+    def test_every_declared_symbol_is_used(self):
+        # The sprite is a *subset*. An unused symbol means the subset stopped
+        # being curated, which is how a 2 000-icon sprite becomes a 200 KB page.
+        unused = sorted(self.declared - self.used)
+        self.assertEqual(unused, [], f"symbols declared but never used: {unused}")
+
+    def test_the_sprite_loads_nothing_remote(self):
+        # The SVG namespace is spelled http://… by definition and is not a
+        # fetch; only a reference the browser would resolve over the network
+        # is a defect, because this app must work offline.
+        remote = [r for r in re.findall(r'(?:href|src)\s*=\s*"([^"]*)"', self.sprite)
+                  if not r.startswith("#")]
+        remote += re.findall(r"url\(\s*['\"]?(https?://[^'\")]*)", self.sprite)
+        self.assertEqual(remote, [], f"sprite loads a remote resource: {remote}")
+
+    def test_the_sprite_is_inlined_so_icons_work_offline(self):
+        # A sprite fetched over the network is a second round trip and a second
+        # failure mode; the whole reason for inlining it is offline operation.
+        self.assertIn('class="icon-sprite"', self.html)
+        self.assertLess(
+            self.html.index('class="icon-sprite"'),
+            self.html.index('<app-icon'),
+            "the sprite must precede its first use so it renders on first paint",
+        )
+
+    def test_no_icon_is_self_closed_in_the_markup(self):
+        # HTML has no self-closing syntax for an unknown element. `<app-icon/>`
+        # opens an element and swallows the rest of its parent — which silently
+        # ate the `v-else` sibling of the theme toggle and left Vue failing to
+        # compile the whole template. Nothing in a DOM dump shows this; the
+        # template simply renders nothing. Every icon pairs its tags explicitly.
+        self.assertNotRegex(
+            self.html, r"<app-icon\b[^>]*?/>",
+            "self-closed <app-icon/> in HTML markup; write </app-icon>",
+        )
+        opened = len(re.findall(r"<app-icon\b", self.html))
+        closed = len(re.findall(r"</app-icon>", self.html))
+        self.assertEqual(opened, closed, f"{opened} <app-icon> opened, {closed} closed")
+
+    def test_no_inline_icon_geometry_remains_in_the_template(self):
+        # One icon, one source. A stray hand-drawn <path> beside the sprite is
+        # how the set drifts back to 40 unrelated shapes.
+        body = _slice(self.html, "<body>", "</body>")
+        leftovers = [m for m in re.finditer(r"<svg\b[^>]*>(.*?)</svg>", body, re.S)
+                     if "<symbol" not in m.group(1) and "<use" not in m.group(1)]
+        self.assertEqual(
+            [m.group(0)[:80] for m in leftovers], [],
+            "inline SVG geometry outside the sprite; use <app-icon name=…>",
+        )
+
+    def test_the_component_is_registered_and_validates_its_names(self):
+        # A misspelled name must be loud. Rendering nothing is the failure this
+        # seam exists to prevent, so the component reads the sprite's own id
+        # list and marks anything it cannot resolve.
+        self.assertIn('.component("app-icon", AppIcon)', self.app)
+        self.assertIn('querySelectorAll(".icon-sprite symbol")', self.app)
+        self.assertIn("data-missing-icon", self.app)
+
+    def test_icons_are_hidden_from_assistive_tech_by_default(self):
+        # Decorative by default: the sprite is aria-hidden, and the component
+        # stamps aria-hidden on every rendered instance.
+        self.assertIn('class="icon-sprite" aria-hidden="true"', self.html)
+        self.assertIn('"aria-hidden": "true"', self.app)
+
+    def test_the_sprite_is_hidden_and_a_missing_icon_is_visible(self):
+        self.assertRegex(self.css, r"\.icon-sprite\s*\{\s*display:\s*none")
+        self.assertRegex(self.css, r"\.app-icon\[data-missing-icon\]")
+
+    def test_packaging_ships_the_icon_directory(self):
+        pyproject = _read(ROOT / "pyproject.toml")
+        self.assertIn('"webui/static/icons/*"', pyproject,
+                      "a build that drops the sprite ships a UI with blank icons")
+
+    def test_the_package_data_gate_verifies_the_sprite(self):
+        source = _read(ROOT / "check_package_data.py")
+        self.assertIn("verify_icon_sprite", source)
+
+
 class DesignContractTests(unittest.TestCase):
     """DESIGN.md is the contract; the stylesheet and the package are its proof."""
 

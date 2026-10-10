@@ -28,9 +28,58 @@ const {
 
 /* ------------------------------------------------------------------ app */
 
-const { createApp, nextTick } = Vue;
+const { createApp, nextTick, h } = Vue;
 
+/* -------------------------------------------------------------- icons
+
+   Icons are a vendored Lucide subset rendered from one inline <symbol>
+   sprite (see index.html and static/icons/lucide-sprite.svg).  A symbol
+   reference needs an <svg> wrapper, so this renders exactly one: every
+   stylesheet rule the old inline icons relied on (`.btn svg`, `.toast svg`,
+   `.modal-close svg`, …) keeps matching, and `currentColor` keeps working
+   because the sprite has no `stroke` colour of its own.
+
+   `name` is validated against the sprite's own `id` list at registration, so
+   a typo renders a visible marker instead of a silently blank box — the
+   "declared but never rendered" failure this repository has hit before with a
+   vendored font.  */
+const ICON_NAMES = Object.freeze(
+  Array.from(document.querySelectorAll(".icon-sprite symbol")).map((s) =>
+    s.id.replace(/^i-/, "")
+  )
+);
+const ICON_SET = new Set(ICON_NAMES);
+
+if (!ICON_NAMES.length) {
+  console.error("app-icon: the icon sprite is missing or empty");
+}
+
+/* Unknown names get a `data-missing-icon` marker instead of a silent blank
+   box — an icon that renders as nothing is the failure mode this whole seam
+   exists to prevent, so it has to be visible in the DOM and loud in CI. */
+const AppIcon = {
+  name: "app-icon",
+  props: {
+    name: { type: String, required: true },
+  },
+  render() {
+    return h("svg", {
+      "class": "app-icon",
+      viewBox: "0 0 24 24",
+      "aria-hidden": "true",
+      focusable: "false",
+      ...(ICON_SET.has(this.name) ? {} : { "data-missing-icon": this.name }),
+    }, this.name ? [h("use", { href: "#i-" + this.name })] : []);
+  },
+};
+
+/* Registered on the definition rather than through a `app.component(...)`
+   chain. Vue supports both, but the chain reads better and costs every
+   consumer that stubs `createApp` — the Node harnesses in tests/ return a
+   bare `{ mount() {} }`, so the component would be silently unregistered the
+   moment the method chain outgrows the stub. */
 createApp({
+  components: { AppIcon },
   data() {
     const savedTheme = localStorage.getItem("skillsmgr-theme");
     const savedLocale = localStorage.getItem("skillsmgr-locale");
@@ -2711,4 +2760,4 @@ createApp({
       }
     },
   },
-}).mount("#app");
+}).component("app-icon", AppIcon).mount("#app");

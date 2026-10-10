@@ -59,4 +59,4 @@ include = ["skillsmgr*"]
 # cannot shadow a real package on the consumer's import path.  The exact shipped
 # member set is asserted by `check_package_data.py`; adding a file *deeper* than
 # these two levels makes that gate fail loudly rather than shipping silently.
-skillsmgr = ["webui/*", "webui/static/vendor/*", "webui/static/fonts/*", "examples/*/*"]
+skillsmgr = ["webui/*", "webui/static/vendor/*", "webui/static/fonts/*", "webui/static/icons/*", "examples/*/*"]

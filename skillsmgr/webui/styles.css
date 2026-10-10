@@ -8,6 +8,25 @@
    font request to a third party is a third party in the page. ------------- */
 @import url("static/fonts/geist.css");
 
+/* --- Icons. One vendored Lucide subset (ISC) rendered from a single inline
+   <symbol> sprite; see index.html and static/icons/lucide-sprite.svg.
+
+   The sprite is `display:none` rather than an external file: a sprite fetched
+   over the network is a second round trip and a second failure mode, and this
+   app must render correctly with the machine offline. Contextual icons below
+   keep the old sizing, because an icon that silently changes size when its
+   container is restyled is the sort of thing nobody notices until it is
+   everywhere. ---------------------------------------------------------- */
+.icon-sprite { display: none; }
+
+.app-icon { width: 1em; height: 1em; flex: none; }
+
+/* A name with no symbol behind it must be visible, not blank. */
+.app-icon[data-missing-icon] {
+  outline: 1px solid var(--err);
+  background: color-mix(in srgb, var(--err) 18%, transparent);
+}
+
 :root {
   /* type — one family for the interface, one mono for every identifier and
      figure. Geist rather than system-ui because this tool compares a file on
