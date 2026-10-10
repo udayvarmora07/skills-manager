@@ -674,7 +674,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   display: flex;
   align-items: center;
   gap: var(--s4);
-  padding: var(--s2) var(--s4);
+  /* 48px is a DECLARED contract height, not an emergent one. It used to be
+     61px — 8px block padding either side of a 44px control plus the border —
+     which is a third taller than the shell's own rhythm and never chosen by
+     anyone. Declaring it makes the intent greppable and the measurement below
+     (`getBoundingClientRect().height === 48`) the thing that has to stay true. */
+  min-height: 48px;
+  padding: 0 var(--s4);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   position: relative;
@@ -2025,6 +2031,62 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .detail-empty { max-width: 560px; padding: 12vh 24px; margin: 0; text-align: left; }
 .detail-empty .empty-icon { margin-left: 0; }
 .detail-empty .empty-actions { justify-content: flex-start; }
+
+/* The blank selection pane. It replaces a centred 22px wrench floating at
+   12vh inside a 1060px column: an icon that said nothing, in the middle of a
+   surface whose whole job is to hold a document. Left-aligned at the top, the
+   way an editor places an empty buffer, with the evidence that resolves the
+   ambiguity (scope / filter / counts) stated instead of illustrated. */
+.pane-blank {
+  max-width: 62ch;
+  padding: 56px 40px 40px;
+  margin: 0;
+  text-align: left;
+}
+.pane-blank-eyebrow {
+  margin: 0 0 var(--s2);
+  color: var(--ink-3);
+  font-size: var(--t-meta);
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.pane-blank-title { margin: 0 0 var(--s2); color: var(--text); font-size: var(--t-page); font-weight: 600; letter-spacing: -0.01em; }
+.pane-blank-title:focus { outline: none; }
+.pane-blank-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+.pane-blank-lede { margin: 0 0 var(--s5); color: var(--text-muted); font-size: var(--t-table); max-width: 54ch; }
+/* A definition list, because these are labelled values and the Overview already
+   established dt/dd as this codebase's pattern for them (Lighthouse's
+   definition-list audit applies to every view). */
+.pane-blank-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0;
+  margin: 0 0 var(--s5);
+  padding: 0;
+  border-top: 1px solid var(--border);
+  max-width: 46ch;
+}
+.pane-blank-facts > div {
+  display: contents;
+}
+.pane-blank-facts dt {
+  padding: 7px 16px 7px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-3);
+  font-size: var(--t-meta);
+  font-weight: 500;
+}
+.pane-blank-facts dd {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--t-table);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-blank .empty-actions { justify-content: flex-start; }
 .onboarding-empty { max-width: 640px; }
 
 .onboarding-empty { max-width: 680px; margin: 0 auto; }
@@ -2378,7 +2440,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   display: flex;
   align-items: center;
   gap: var(--s4);
-  padding: 4px var(--s4);
+  /* 24px, like the topbar's 48: a stated shell rhythm rather than whatever
+     the content worked out to. Both were emergent before (27px / 61px), and an
+     emergent chrome height is one nobody re-checks. */
+  min-height: 24px;
+  padding: 0 var(--s4);
   font-size: var(--t-meta);
   color: var(--text-muted);
   background: var(--surface);
@@ -2388,6 +2454,12 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .statusbar .path { font-family: var(--mono); font-size: var(--t-meta); overflow: hidden; text-overflow: ellipsis; }
 .statusbar .spacer { flex: 1; }
+/* Observed facts about this session's context: which loopback authority served
+   the page, which scope is loaded, which regional format is in effect. Each is
+   what it says — `served` is the real location.host, not a configured value. */
+.statusbar-fact { color: var(--text-muted); }
+.statusbar-fact + .statusbar-fact { border-left: 1px solid var(--border); padding-left: var(--s4); }
+.statusbar-host { font-family: var(--mono); color: var(--text); }
 
 /* ================================================================ LAYER 6
    RESPONSIVE - conditions on the whole cascade, not on any one component, so

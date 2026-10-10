@@ -105,6 +105,11 @@ createApp({
       selected: null,
       selectedTrash: null,
       dataDir: "",
+      // Observed, not configured: the authority the page was actually served
+      // from. The server binds loopback by default and refuses a non-loopback
+      // host, so this is also the address a reader can trust is local. Shown in
+      // the status bar so "which server am I talking to" is never a guess.
+      serverHost: (typeof location !== "undefined" && location.host) || "unknown",
       scopes: [],
       activeScope: localStorage.getItem("skillsmgr-scope") || "all",
       libraryMode: localStorage.getItem("skillsmgr-library-mode") || "library",
@@ -205,6 +210,21 @@ createApp({
     },
     logicalSkills() { return groupLogicalSkills(this.filteredSkills, this.scopes); },
     visibleSkills() { return this.libraryMode === "instances" ? this.filteredSkills : this.logicalSkills; },
+
+    /* The "nothing selected" pane is the widest surface in the app, so it says
+     * the thing a reader is actually stuck on: is this an empty library, or a
+     * filtered one? Both were previously rendered as the same two sentences,
+     * which made a filter that hid every skill indistinguishable from a library
+     * that had none. Both branches stay derived from observed state only. */
+    paneBlankLede() {
+      if (!this.skills.length && !this.query) {
+        return "No skill documents are observed on this machine yet. A skill is a folder holding a SKILL.md file.";
+      }
+      if (this.skills.length && !this.visibleSkills.length) {
+        return "Every observed skill in this scope is hidden by the filters below the list. Nothing has been removed.";
+      }
+      return "Choose a skill in the list to read its document, observed copies and history.";
+    },
 
     /* Every observation the Library rows render, read through the same seam the
      * badges use. The uniform checks below only decide whether a value is
@@ -1945,6 +1965,16 @@ createApp({
     clearSearch() {
       this.query = "";
       this.$nextTick(() => this.$refs.searchInput && this.$refs.searchInput.focus());
+    },
+
+    /* The empty pane's "Clear filters" only clears FILTERS. It deliberately
+     * leaves `activeScope` alone: scope is the reader's location, not a filter
+     * they applied to a list they were just reading, and silently widening a
+     * scope is how a destructive-looking "clear" becomes one. */
+    clearLibraryFilters() {
+      this.filter = "";
+      this.tagFilter = "";
+      this.query = "";
     },
 
     toggleCommandPalette(event) {

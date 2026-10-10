@@ -945,12 +945,23 @@
           </div>
           <button class="onboarding-skip" type="button" @click="skipOnboarding">Skip getting started</button>
         </div>
-        <div v-else class="empty detail-empty">
-          <div class="empty-icon">
-            <app-icon name="wrench"></app-icon>
-          </div>
-          <h3>{{ skills.length === 0 && !query ? 'No skills installed' : 'Select a skill' }}</h3>
-          <p>{{ skills.length === 0 && !query ? 'Skills are folders with a SKILL.md file. Create your first one to get started.' : 'Pick a skill from the list to see its documentation.' }}</p>
+        <div v-else class="empty detail-empty pane-blank">
+          <!-- Nothing selected is a STATE, not an error, and this pane is the
+               widest surface in the app. It used to float a 22px wrench and two
+               sentences at 12vh down a 1060px column. What belongs here instead
+               is the evidence the reader already has to hand — what is in scope,
+               what the filter did to it — and the one action that resolves the
+               state. No invented counts, no claim about any skill not observed. -->
+          <p class="pane-blank-eyebrow">{{ skills.length === 0 && !query ? 'First run' : 'Nothing selected' }}</p>
+          <h2 id="pane-blank-title" class="pane-blank-title" tabindex="-1">{{ skills.length === 0 && !query ? 'No skills installed' : 'No skill selected' }}</h2>
+          <p class="pane-blank-lede">{{ paneBlankLede }}</p>
+          <dl class="pane-blank-facts">
+            <div><dt>Scope</dt><dd>{{ activeScopeLabel }}</dd></div>
+            <div><dt>Showing</dt><dd>{{ formatNumber(visibleSkills.length) }} of {{ formatNumber(skills.length) }} observed</dd></div>
+            <div v-if="filter"><dt>State filter</dt><dd>{{ filter }}</dd></div>
+            <div v-if="tagFilter"><dt>Tag</dt><dd>{{ tagFilter }}</dd></div>
+            <div v-if="query"><dt>Search</dt><dd class="num">&ldquo;{{ query }}&rdquo;</dd></div>
+          </dl>
           <div class="empty-actions">
             <button class="btn btn-primary" @click="openCreate">
               <app-icon name="plus"></app-icon>
@@ -958,6 +969,7 @@
             </button>
             <button class="btn btn-secondary" @click="openAdd">Add from folder</button>
             <button v-if="skills.length === 0 && !query" class="btn btn-secondary" @click="restartOnboarding">Show getting started</button>
+            <button v-else-if="filter || tagFilter || query" class="btn btn-secondary" @click="clearLibraryFilters">Clear filters</button>
           </div>
         </div>
       </div>
@@ -1249,6 +1261,10 @@
     <span v-else-if="view === 'quality'">Quality · {{ formatNumber(qualitySummary.observed) }} observed copies · no combined score</span>
     <span v-else-if="view === 'settings'">Settings · {{ themeModeLabel }} theme · {{ textSize }} text · {{ resolvedLocale }} formats</span>
     <span v-else>{{ formatNumber(workspaces && workspaces.adapters.length || 0) }} adapters</span>
+    <span class="spacer"></span>
+    <span class="statusbar-fact" title="The loopback address this page was served from">served <span class="statusbar-host">{{ serverHost }}</span></span>
+    <span class="statusbar-fact">{{ activeScopeLabel }}</span>
+    <span class="statusbar-fact" title="Numbers and dates in this interface are formatted for this region. It is not a translated interface.">{{ resolvedLocale }} formats</span>
     <span class="spacer"></span>
     <span class="path">{{ dataDir }}</span>
     <span class="spacer"></span>
