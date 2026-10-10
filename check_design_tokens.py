@@ -335,6 +335,204 @@ def check_type_scale(css: str, root_map: dict, note) -> None:
          "" if not unused else f"declared and unread: {unused}")
 
 
+# Primitives declared ahead of the screen that adopts them. This is the same
+# shape as FONT_SIZE_EXCEPTIONS: a named list in the gate is what makes the
+# assertion checkable at all, and an entry is only honest while the primitive
+# really is unwired. The gate fails if an entry becomes wired without being
+# removed, so this cannot quietly become a permanent exemption.
+PRIMITIVE_PENDING_ADOPTION = {
+    ".field-input": "4.5 create/edit editor and 5.3 profile dialog",
+    ".choice-box": "4.1 segmented state filter, 5.7 settings",
+    ".tooltip": "2.1 icon-only buttons",
+    ".table th": "5.5 hygiene findings, 5.6 recovery",
+    ".panel": "2.1 status strip, 3.1 overview sections",
+    ".stepper": "5.2 registry Fetch -> Review -> Commit",
+    ".diff-line": "4.8 update-from-folder review",
+    ".kbd": "2.2 command palette and shortcut help",
+    ".badge": "3.1 overview summary strip (row badges are a later rename)",
+    ".tab": "4.4 detail tabs",
+    ".step": "5.2 registry stepper",
+    # The three below predate this block and were declared and never read
+    # before the gate existed to notice. Recorded here rather than quietly
+    # deleted: each is a real part the design calls for, and the screen tasks
+    # that adopt them are the only honest way to retire the rules.
+    ".chip": "4.2 agent/scope chips (pre-existing, unwired before 1.5)",
+    ".empty": "3.4 first-run empty state (pre-existing, unwired before 1.5)",
+    ".skeleton": "2.3 loading skeletons (pre-existing, unwired before 1.5)",
+}
+
+
+def _simple_selector(part: str) -> list[str]:
+    """The forms one compound selector may legitimately be compared as.
+
+    ``.choice input:focus-visible + .choice-box`` must resolve to
+    ``.choice-box`` (a state painted by a sibling, which a check reading only
+    ``.choice-box {`` would call missing) and ``.choice[data-kind="radio"]
+    .choice-box`` must resolve to both its descendant form and its bare
+    element. Order matters when stripping: the sibling combinator is split off
+    FIRST, because splitting the pseudo-class first cuts the selector in half
+    at the colon and loses the target entirely.
+    """
+    tail = part.split("+")[-1]
+    whole = " ".join(re.split(r"[:\[]", tail)[0].split())
+    words = [w for w in whole.split() if "[" not in w]
+    return [whole, words[-1]] if words else [whole]
+
+
+def _rule_bodies(body: str, selector: str) -> str:
+    """Every declaration block whose selector list names ``selector``.
+
+    Scans brace by brace and keeps the selector text in front of each ``{``:
+    the state name lives in it (``.btn:focus-visible {``), so keeping only
+    the braces would make every state check fail by construction. Reading only
+    the first rule would pass a button whose *later* definition is the one
+    that dropped its disabled state, which is the state this exists to catch.
+    """
+    wanted = selector
+    forms = _simple_selector(wanted)
+    out, pos = [], 0
+    while True:
+        brace = body.find("{", pos)
+        if brace == -1:
+            return "\n".join(out)
+        selector_list = body[pos:brace]
+        depth, end = 1, brace + 1
+        while depth and end < len(body):
+            if body[end] == "{":
+                depth += 1
+            elif body[end] == "}":
+                depth -= 1
+            end += 1
+        parts = [f for part in selector_list.split(",") if part.strip()
+                 for f in _simple_selector(part)]
+        if wanted in parts or any(f in parts for f in forms):
+            out.append(selector_list + body[brace:end])
+        pos = end
+
+
+def _primitives_block(body: str) -> str:
+    """The 5.0 PRIMITIVES section, or an empty string if it is gone.
+
+    Keyed on the banner text, not on a bare "5.0" - a token value or a
+    comment anywhere above the block can contain those three characters, and a
+    gate that found the wrong section would report PASS about nothing.
+    """
+    # The banner lives INSIDE a comment, so the search runs on the raw file:
+    # locating it in comment-stripped text always fails, returns "", and makes
+    # every assertion over the block vacuous — which is exactly what it did
+    # for the first three attempts at this check.
+    start = body.find("5.0\n   PRIMITIVES")
+    if start == -1:
+        return ""
+    end = body.index("LAYER 6", start) if "LAYER 6" in body[start:] else len(body)
+    # Strip the comments from the slice AFTER locating it: the banner that
+    # marks the block is itself inside a comment.
+    return re.sub(r"/\*.*?\*/", "", body[start:end], flags=re.S)
+
+
+def check_primitives(css: str, note) -> None:
+    """A primitive that is declared and never read is a name, not a part.
+
+    The fifth instance of the same failure. `--border-strong` existed at a
+    compliant contrast while the element that needed the boundary referenced
+    `--border`, so a token passed every check and governed nothing; before
+    that a `doctor()["repair"]` field with no reader, six `@font-face` rules
+    covering no basic Latin so every page rendered in the fallback, and the
+    11px floor check whose regex stopped matching the moment sizes became
+    tokens. Checking that a selector *exists* cannot see any of them. So each
+    primitive declares its required selectors and states, and one that is
+    never read by markup or by another rule fails — which is what makes the
+    declaration mean something.
+
+    The list is written out here rather than derived from the stylesheet
+    because the point is to know what is *missing*; a list derived from the
+    file can only ever agree with the file.
+    """
+    body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+    # (selector, states) - the states are substrings that must appear inside a
+    # block naming that selector. A button with no :disabled looks operable
+    # and is not; that is the whole reason this table exists.
+    required: dict[str, tuple[str, ...]] = {
+        # focus-visible is deliberately absent: the cascade has ONE global
+        # `:focus-visible` rule (LAYER 3) and every control inherits it.
+        # Demanding a per-selector copy would be a rule about duplication
+        # rather than about operability.
+        ".btn": ("hover", "disabled"),
+        ".field-input": ("focus-visible", "disabled"),
+        # painted by `.choice input:focus-visible + .choice-box`
+        ".choice-box": ("focus-visible", "disabled"),
+        ".tab": ("hover", "focus-visible", "disabled"),
+        ".table th": ("sticky",),
+        ".panel": (),
+        ".skeleton": (),
+        ".empty": (),
+        ".banner": (),
+        ".stepper": (),
+        ".step": (),
+        ".diff-line": ("grid",),
+        ".badge": (),
+        ".chip": (),
+        ".kbd": (),
+        ".tooltip": (),
+    }
+
+    undeclared, stateless = [], []
+    for selector, states in required.items():
+        blocks = _rule_bodies(body, selector)
+        if not blocks:
+            undeclared.append(selector)
+            continue
+        absent = [st for st in states if st not in blocks]
+        if absent:
+            stateless.append(f"{selector} lacks {','.join(absent)}")
+
+    note(not undeclared, f"all {len(required)} primitives are declared",
+         "" if not undeclared else f"undeclared: {undeclared}")
+    note(not stateless, "every primitive carries its required states",
+         "" if not stateless else "; ".join(stateless))
+
+    # NOTE: a "no selector declared twice in the block" check was written here
+    # and removed rather than shipped vacuous. Detecting a duplicate selector
+    # needs a CSS-selector tokenizer, not a regex; four attempts each failed
+    # silently in a different direction (counting a token inside a selector,
+    # losing the target at a colon, searching comment-stripped text for a
+    # banner that lives inside a comment) and a check that reports PASS about
+    # a path it cannot see is worse than no check. It is backlog 1.7.
+
+    markup = (ROOT / "skillsmgr" / "webui" / "index.html").read_text(encoding="utf-8")
+    js = "\n".join((ROOT / "skillsmgr" / "webui" / f).read_text(encoding="utf-8")
+                   for f in ("app.js", "domain.js"))
+    # Only markup and behaviour count as "wired". Including the stylesheet
+    # here would make the test vacuous in the exact direction that matters -
+    # a declared primitive is trivially present in the CSS that declares it,
+    # so every "never read" assertion would pass no matter what.
+    haystack = markup + js
+
+    unwired = sorted(s for s in required
+                     if s not in haystack and s not in PRIMITIVE_PENDING_ADOPTION)
+    note(not unwired,
+         f"every primitive is read by markup or a rule "
+         f"({len(PRIMITIVE_PENDING_ADOPTION)} declared, adoption pending)",
+         "" if not unwired else f"declared and never read: {unwired}")
+
+    # An exception that has been adopted is not an exception. Without this the
+    # pending list becomes a permanent exemption the first time a task forgets
+    # to remove its own entry.
+    stale = sorted(k for k in PRIMITIVE_PENDING_ADOPTION if k in haystack)
+    note(not stale, "no wired primitive is left on the pending-adoption list",
+         "" if not stale else f"adopted since the exception was written: {stale}")
+
+    # A surface primitive must not cast a shadow: surfaces separate with a 1px
+    # border, and DESIGN.md gives --shadow to popovers and dialogs alone.
+    # .tooltip is deliberately absent - it floats above content and has no
+    # border to read against.
+    shadowed = [s for s in (".panel", ".btn", ".chip", ".badge", ".empty", ".table")
+                if "box-shadow" in _rule_bodies(body, s)]
+    note(not shadowed, "no surface primitive casts a shadow",
+         "" if not shadowed else f"shadowed: {shadowed}")
+
+
 def check_scale(css: str, failures: list[str]) -> None:
     """The scale is as much a contract as the palette, and it decays the same way.
 
@@ -383,6 +581,7 @@ def check_scale(css: str, failures: list[str]) -> None:
     note(not missing_type, f"{len(TYPE_STEPS)} type steps declared",
          "" if not missing_type else f"missing {missing_type}")
     check_type_scale(css, root_map, note)
+    check_primitives(css, note)
 
     # -- motion ------------------------------------------------------------
     dur = root_map.get("--dur", "")

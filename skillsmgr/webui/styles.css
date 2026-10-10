@@ -355,6 +355,311 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    COMPONENTS - everything below this line describes a part of the product.
    ======================================================================== */
 
+/* ================================================================ 5.0
+   PRIMITIVES - the vocabulary the screens are built from.
+
+   A primitive here is not "a component I happened to need": it is a named
+   part with one anatomy, one set of states, and a declared list of the
+   selectors that make it. `check_design_tokens.py` PRIMITIVES asserts that
+   list, so a primitive cannot silently lose a state (a button with no
+   :disabled stops being operable and nothing notices), and its usage
+   assertion means a primitive cannot be declared and left unwired - the
+   "present but never read" failure this repository has now shipped three
+   times (a `repaired` field with no reader, a `--border-strong` token nothing
+   referenced, six @font-face rules covering no basic Latin).
+
+   Rules that hold for the whole block:
+
+   * Every value is a token. No primitive below names a size, colour, radius
+     or duration literally. A literal would be a seventh type step or a
+     second palette wearing a primitive's clothes, which is exactly what 1.6
+     spent a night removing.
+   * Every interactive primitive carries :hover, :focus-visible and
+     :disabled. Not "where it makes sense" - all three, or it is not a
+     primitive.
+   * No primitive introduces a shadow. Surfaces separate with a 1px border;
+     --shadow belongs to popovers and dialogs only (DESIGN.md §C).
+   * Nothing here is declared twice. A primitive whose selector already has a
+     definition further down this layer is not repeated here - a second
+     definition is dead CSS that reads as coverage, which is the same failure
+     in a different costume. The ones still defined in the older ad-hoc
+     blocks (button, badge/pill, chip, banner, empty, skeleton, kbd) are
+     listed by the gate, and their adoption is owned by the screen tasks
+     (2.x-5.x): a screen that still renders the old rules is not broken by
+     this block, and a screen that adopts a primitive is one fewer bespoke
+     rule.
+   * Primitives describe a part, not a layout. The screens own the grid.
+   ======================================================================== */
+
+
+/* ------------------------------------------------------------------- field
+
+   Anatomy: <label class="field"><span class="field-label">Name</span>
+             <input class="field-input" ...></label>
+   Validation is a sibling, not a placeholder: a placeholder vanishes the
+   moment the field has a value, which is when the reader needs it.
+   --------------------------------------------------------------------- */
+
+.field { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+.field-label { color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; }
+.field-input,
+.field-select,
+.field-textarea {
+  width: 100%;
+  min-height: 32px;
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--t-ui)/1.4 var(--font);
+}
+.field-textarea {
+  min-height: 96px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: var(--t-table);
+}
+.field-input:focus-visible,
+.field-select:focus-visible,
+.field-textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.field-input:disabled,
+.field-select:disabled,
+.field-textarea:disabled {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.field-error { display: flex; align-items: flex-start; gap: var(--s1); color: var(--err); font-size: var(--t-meta); }
+.field-hint { color: var(--text-muted); font-size: var(--t-meta); }
+
+/* ------------------------------------------------- checkbox / radio / switch
+
+   Native-backed: the real input stays in the accessibility tree and keeps its
+   keyboard behaviour; only the box is painted. Never replace the input with a
+   div - that is how a checkbox quietly stops being operable by keyboard.
+   --------------------------------------------------------------------- */
+
+.choice { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; }
+.choice input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.choice-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  color: transparent;
+  font-size: var(--t-meta);
+  line-height: 1;
+}
+.choice input:checked + .choice-box { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.choice input:focus-visible + .choice-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.choice input:disabled + .choice-box { opacity: .5; cursor: not-allowed; }
+.choice[data-kind="radio"] .choice-box { border-radius: 999px; }
+
+.switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background var(--tr-fast);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  transition: transform var(--tr-fast);
+}
+.choice input:checked + .switch { background: var(--accent); border-color: var(--accent); }
+.choice input:checked + .switch::after { transform: translateX(14px); }
+.choice input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --------------------------------------------------------------------- kbd
+
+   Mono, bordered cap, at the --t-meta floor. Keyboard hints belong next to the
+   control they describe, never collected in a legend somewhere else.
+   --------------------------------------------------------------------- */
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--s1);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: 500 var(--t-meta)/1 var(--mono);
+}
+
+/* ------------------------------------------------------------------- tabs
+
+   Anatomy: <div class="tabs" role="tablist">
+             <button class="tab" role="tab" aria-selected="true">Overview</button>
+   Underline style. The selected marker is a 2px accent border-bottom, so the
+   active tab is also the tallest thing on the strip rather than only the
+   coloured one.
+   --------------------------------------------------------------------- */
+
+.tabs { display: flex; gap: var(--s1); border-bottom: 1px solid var(--border); }
+.tab {
+  position: relative;
+  height: 36px;
+  padding: 0 var(--s3);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: 500 var(--t-ui)/1 var(--font);
+  cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab[aria-selected="true"] { color: var(--text); }
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 2px;
+  background: var(--accent);
+}
+.tab:disabled { opacity: .5; cursor: not-allowed; }
+.tab-count { margin-left: var(--s1); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- tooltip
+
+   400ms delay, Escape dismisses, and it is aria-hidden because the accessible
+   name always comes from aria-label - a tooltip that is the *only* label is a
+   label no screen reader ever reads.
+   --------------------------------------------------------------------- */
+
+[data-tip] { position: relative; }
+.tooltip {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + var(--s2));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: var(--t-meta);
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--tr-fast);
+}
+[data-tip]:hover > .tooltip,
+[data-tip]:focus-visible > .tooltip { opacity: 1; visibility: visible; }
+
+/* ------------------------------------------------------------ table / panel
+
+   Table: sticky header, 36px rows (compact 32), hover + selected + keyboard
+   focus. Panel: a bordered surface with a header strip and an optional body.
+   Panels separate with 1px borders, never a shadow.
+   --------------------------------------------------------------------- */
+
+.table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--r-panel); }
+.table { width: 100%; border-collapse: collapse; font-size: var(--t-table); }
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  white-space: nowrap;
+}
+.table td { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); }
+.table tbody tr { height: 36px; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover { background: var(--surface-2); }
+.table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+.table-compact tbody tr { height: 32px; }
+.table .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.panel { border: 1px solid var(--border); border-radius: var(--r-panel); background: var(--surface); }
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+.panel-title { font-size: var(--t-ui); font-weight: 600; }
+.panel-body { padding: var(--s4); }
+
+/* ------------------------------------------------------------------ stepper
+
+   The stepped flows (registry Fetch -> Review -> Commit, backup -> import).
+   Position is carried by aria-current and a data-done flag, never by colour
+   alone, so the strip still reads in forced-colors.
+   --------------------------------------------------------------------- */
+
+.stepper { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+.step { display: inline-flex; align-items: center; gap: var(--s2); color: var(--text-muted); font-size: var(--t-meta); }
+.step::before {
+  content: attr(data-step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font: 500 var(--t-meta)/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.step[aria-current="step"] { color: var(--text); font-weight: 600; }
+.step[aria-current="step"]::before { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.step[data-done="true"]::before { border-color: var(--ok); color: var(--ok); }
+.step-sep { width: var(--s4); height: 1px; background: var(--border); }
+
+/* -------------------------------------------------------------- diff view
+
+   Unified, mono, line numbers, and a +/- sign glyph on every changed line, so
+   add and remove stay distinguishable with no colour at all (RULES.md §12).
+   --------------------------------------------------------------------- */
+
+.diff {
+  font: 400 var(--t-table)/1.5 var(--mono);
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  overflow: auto;
+}
+.diff-line { display: grid; grid-template-columns: 4ch 1ch 1fr; white-space: pre; }
+.diff-num { padding: 0 var(--s2); color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; user-select: none; }
+.diff-sign { text-align: center; user-select: none; }
+.diff-text { padding-right: var(--s3); overflow-wrap: anywhere; }
+.diff-add { background: var(--ok-soft); }
+.diff-add .diff-sign { color: var(--ok); }
+.diff-del { background: var(--err-soft); }
+.diff-del .diff-sign { color: var(--err); }
+.diff-hunk { background: var(--surface-2); color: var(--text-muted); padding: var(--s1) var(--s3); }
+
 /* ---------------------------------------------------------------- topbar */
 
 .topbar {
@@ -503,6 +808,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   transition: background-color var(--tr-fast), border-color var(--tr-fast), color var(--tr-fast);
 }
 
+.btn:hover { background: var(--surface-2); }
 .btn:active { background: var(--surface-2); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn svg { width: 15px; height: 15px; flex: none; }
