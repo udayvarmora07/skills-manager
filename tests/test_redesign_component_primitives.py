@@ -28,6 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CSS_PATH = ROOT / "skillsmgr" / "webui" / "styles.css"
 GATE_PATH = ROOT / "check_design_tokens.py"
+HTML_PATH = ROOT / "skillsmgr" / "webui" / "index.html"
 
 
 def run_gate() -> subprocess.CompletedProcess:
@@ -56,11 +57,45 @@ class PrimitivesGateIsRedFirst(unittest.TestCase):
     def setUp(self) -> None:
         self.css_original = CSS_PATH.read_text(encoding="utf-8")
         self.gate_original = GATE_PATH.read_text(encoding="utf-8")
+        self.html_original = HTML_PATH.read_text(encoding="utf-8")
         self.addCleanup(self._restore)
 
     def _restore(self) -> None:
         CSS_PATH.write_text(self.css_original, encoding="utf-8")
         GATE_PATH.write_text(self.gate_original, encoding="utf-8")
+        HTML_PATH.write_text(self.html_original, encoding="utf-8")
+
+    def _mutate_html(self, old: str, new: str) -> None:
+        text = HTML_PATH.read_text(encoding="utf-8")
+        self.assertIn(old, text, f"mutation anchor not found: {old!r}")
+        HTML_PATH.write_text(text.replace(old, new), encoding="utf-8")
+
+    def _rename_class_token(self, token: str, replacement: str) -> int:
+        """Rename a class TOKEN everywhere it appears in a ``class`` attribute.
+
+        A plain string replace is not enough, and finding that out is why this
+        helper exists. ``class="badge badge-warn"`` does not contain the text
+        ``class="badge"``, so the first version of the prefix test removed the
+        10 standalone sites, left the 3 compound ones untouched, and the gate
+        correctly reported `.badge` as still adopted — a test failure caused
+        by an incomplete mutation, which reads exactly like a product defect
+        and is worth a helper rather than a lesson.
+        """
+        import re as _re
+        text = HTML_PATH.read_text(encoding="utf-8")
+        pattern = _re.compile(r"""(class\s*=\s*["'])([^"']*)(["'])""")
+        seen = [0]
+
+        def _sub(match: "_re.Match[str]") -> str:
+            names = match.group(2).split()
+            if token not in names:
+                return match.group(0)
+            seen[0] += 1
+            return match.group(1) + " ".join(
+                replacement if n == token else n for n in names) + match.group(3)
+
+        HTML_PATH.write_text(pattern.sub(_sub, text), encoding="utf-8")
+        return seen[0]
 
     def _mutate_css(self, old: str, new: str) -> None:
         text = CSS_PATH.read_text(encoding="utf-8")
@@ -129,6 +164,42 @@ class PrimitivesGateIsRedFirst(unittest.TestCase):
         out = run_gate()
         self.assertNotEqual(out.returncode, 0, out.stdout)
         self.assertIn("declared and never read: ['.tooltip']", out.stdout)
+
+    def test_deleting_every_use_of_an_adopted_class_only_primitive_is_caught(self) -> None:
+        """The exact mutation the substring-based adoption check could not see.
+
+        Adoption was tested as `selector in markup + js` - the literal text
+        ".kbd" in a file that spells it `class="kbd"`. Deleting all 19 `.kbd`
+        sites left the gate **green**, which is this repository's sixth
+        recorded instance of its own "a gate that reports PASS about a path it
+        cannot see is not a gate", and the sixth after the type scale, the
+        system-theme palette, the doc/stylesheet comparison, the duplicate
+        selector scan and the motion band.
+
+        `.kbd` is the subject because 2.2 adopted it (command palette key caps
+        and the shortcut reference), so it is wired *today* - which is what
+        made the exemption written during that task look necessary when it was
+        only ever a hole in the check.
+        """
+        self.assertIn('class="kbd"', self.html_original,
+                      "the .kbd primitive must be in use for this mutation to mean anything")
+        self._mutate_html('class="kbd"', 'class="kbd-unused-probe"')
+        assert_gate_catches("declared and never read")
+
+    def test_a_prefix_match_does_not_count_as_adoption(self) -> None:
+        """`.badge` is adopted; `class="badge-row"` alone must never say so.
+
+        This is why adoption compares class-attribute TOKENS rather than
+        substrings. The markup carries `class="badge"` (10 sites),
+        `class="badge badge-warn"` (3) and `class="badge-row"` (1). Removing
+        only the standalone sites leaves the compound ones, and a token-blind
+        check would then find `badge-row` and still call the primitive wired.
+        """
+        self.assertGreaterEqual(self._rename_class_token("badge", "badge-probe"), 13,
+                                "expected every .badge site to be rewritten")
+        out = run_gate()
+        self.assertNotEqual(out.returncode, 0, out.stdout)
+        self.assertIn("declared and never read: ['.badge']", out.stdout)
 
 
 class PrimitivesAreRealParts(unittest.TestCase):
@@ -205,12 +276,29 @@ class PendingAdoptionListIsHonest(unittest.TestCase):
         self.gate = GATE_PATH.read_text(encoding="utf-8")
 
     def test_every_pending_entry_names_the_task_that_will_adopt_it(self) -> None:
+        """Every entry must name the backlog task that retires it.
+
+        The test also asserted ``len(entries) >= 9``, which was a proxy for
+        "the list has not been quietly emptied". Task 2.2 removed five entries
+        — `.badge`, `.chip`, `.empty`, `.skeleton`, `.kbd` — after the
+        adoption check was fixed to compare class tokens, and the floor went
+        red on work that was correct. A size floor cannot tell an honest
+        shrink from a deletion, so the anti-decay property is now asserted
+        directly: **every** remaining entry must name a real task id, and the
+        gate independently fails if a wired primitive is still listed, so an
+        entry cannot outlive the reason it was written.
+        """
         import re
         start = self.gate.index("PRIMITIVE_PENDING_ADOPTION")
         end = self.gate.index("\n}", start)
         entries = re.findall(r'^\s+"(\.[\w-]+)":\s*"([^"]+)"',
                              self.gate[start:end], flags=re.M)
-        self.assertGreaterEqual(len(entries), 9)
+        self.assertTrue(entries, "the pending-adoption list is empty; is that honest?")
+        self.assertEqual(
+            len(set(sel for sel, _ in entries)), len(entries),
+            "a duplicate key in a dict literal silently keeps the LAST value, so "
+            "an entry can be described by a comment that belongs to a different "
+            "one — which is exactly what 2.2 found on `.kbd`.")
         for selector, reason in entries:
             self.assertTrue(re.search(r"\d+\.\d+", reason),
                             f"{selector} pending adoption without a backlog task id: "

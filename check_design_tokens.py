@@ -347,27 +347,21 @@ PRIMITIVE_PENDING_ADOPTION = {
     ".table th": "5.5 hygiene findings, 5.6 recovery",
     ".panel": "2.1 status strip, 3.1 overview sections",
     ".stepper": "5.2 registry Fetch -> Review -> Commit",
-    # ADOPTED by 2.2 (command palette + shortcut reference). The entry stays
-    # ONLY because the adoption check matches a CSS selector against markup
-    # and can therefore never fire for a class-only primitive: 2.2 proved it
-    # by deleting all 19 `class="kbd"` occurrences and the gate stayed green.
-    # The fix (collect class-attribute TOKENS and compare for equality - a
-    # substring test is worse, "tab" is inside "tabindex") is recorded in
-    # STATE.md and still owed. Do not read this line as "not yet adopted".
-    ".kbd": "ADOPTED 2.2 - exemption is vestigial, see STATE.md",
     ".diff-line": "4.8 update-from-folder review",
-    ".kbd": "2.2 command palette and shortcut help",
-    ".badge": "3.1 overview summary strip (row badges are a later rename)",
     ".tab": "4.4 detail tabs",
     ".step": "5.2 registry stepper",
-    # The three below predate this block and were declared and never read
-    # before the gate existed to notice. Recorded here rather than quietly
-    # deleted: each is a real part the design calls for, and the screen tasks
-    # that adopt them are the only honest way to retire the rules.
-    ".chip": "4.2 agent/scope chips (pre-existing, unwired before 1.5)",
-    ".empty": "3.4 first-run empty state (pre-existing, unwired before 1.5)",
-    ".skeleton": "2.3 loading skeletons (pre-existing, unwired before 1.5)",
 }
+# Removed by 2.2, and the removal is the interesting part: `.badge`, `.chip`,
+# `.empty`, `.skeleton` and `.kbd` were all on this list, and all five are
+# genuinely adopted in the markup (10 / 10 / 4 / 13 / 19 `class="…"` sites).
+# They stayed because the adoption check searched for the *selector* — the
+# literal text ".kbd" — in markup that spells it `class="kbd"`, so it could
+# not fire for any class-only primitive. Deleting all 19 `.kbd` sites left the
+# gate green. The check now compares class-attribute TOKENS for equality, and
+# it immediately reported these five as adopted-since; a reader auditing this
+# list could not have told which entries were real exemptions, because `.btn`
+# — which IS wired — only passed by matching `.btn-secondary` inside a
+# selector string in app.js.
 
 
 def strip_css_comments(css: str) -> str:
@@ -809,8 +803,54 @@ def check_primitives(css: str, note) -> None:
     # so every "never read" assertion would pass no matter what.
     haystack = markup + js
 
+    # Adoption is tested on class-attribute TOKENS, compared for equality.
+    #
+    # The previous test was `selector in haystack` — a substring search for
+    # ".kbd" in markup that spells it `class="kbd"`. It could not fire for
+    # ANY class-only primitive, so deleting all 19 `class="kbd"` occurrences
+    # left the gate green: the sixth recorded instance of this repository's
+    # own "a gate that reports PASS about a path it cannot see is not a gate".
+    # A substring test is worse than useless here rather than merely weak,
+    # because it is right by accident: `.btn` matched `.btn-secondary` in
+    # app.js, so the one primitive that genuinely IS wired was wired *for the
+    # wrong reason*, and a reader auditing the list could not tell which was
+    # which. Hence token equality, and hence `.table th` below.
+    def _class_tokens(text: str) -> set[str]:
+        found: set[str] = set()
+        for attr in re.finditer(r"""class\s*=\s*["']([^"']*)["']""", text):
+            found.update(attr.group(1).split())
+        for call in re.finditer(
+                r"""classList\.(?:add|remove|toggle|contains)\(\s*["']([^"']+)["']""",
+                text):
+            found.add(call.group(1))
+        for literal in re.finditer(r"""["'`]class["'`]\s*:\s*["'`]([^"'`]*)["'`]""",
+                                   text):
+            found.update(literal.group(1).split())
+        return found
+
+    used_classes = _class_tokens(markup) | _class_tokens(js)
+
+    def _wired(selector: str) -> bool:
+        """True when every class named by ``selector`` appears in the markup.
+
+        ``.table th`` is the case that shapes this: the primitive is the
+        styled *header*, not the bare `.table` container, and the container is
+        a real class in the markup. Treating the compound as "wired" the moment
+        `.table` appears would retire an exception 5.5 has not earned — so the
+        element part is required too, matched against the tag a `table`
+        element actually carries.
+        """
+        parts = selector.split()
+        for part in parts:
+            if part.startswith("."):
+                if part[1:] not in used_classes:
+                    return False
+            elif part not in ("th",):
+                return False
+        return True
+
     unwired = sorted(s for s in required
-                     if s not in haystack and s not in PRIMITIVE_PENDING_ADOPTION)
+                     if not _wired(s) and s not in PRIMITIVE_PENDING_ADOPTION)
     note(not unwired,
          f"every primitive is read by markup or a rule "
          f"({len(PRIMITIVE_PENDING_ADOPTION)} declared, adoption pending)",
@@ -819,7 +859,7 @@ def check_primitives(css: str, note) -> None:
     # An exception that has been adopted is not an exception. Without this the
     # pending list becomes a permanent exemption the first time a task forgets
     # to remove its own entry.
-    stale = sorted(k for k in PRIMITIVE_PENDING_ADOPTION if k in haystack)
+    stale = sorted(k for k in PRIMITIVE_PENDING_ADOPTION if _wired(k))
     note(not stale, "no wired primitive is left on the pending-adoption list",
          "" if not stale else f"adopted since the exception was written: {stale}")
 
