@@ -496,5 +496,97 @@ class DesignContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class DesignScaleContractTests(unittest.TestCase):
+    """The v2 scale contract (DESIGN.md, task 1.3).
+
+    Every assertion here corresponds to a defect that shipped: the space scale
+    declared two names for one step, the doc/stylesheet comparison compared
+    nothing, and a third palette existed that no gate could reach. Each is
+    asserted against the shipped stylesheet rather than against this file.
+    """
+
+    def _root(self) -> dict:
+        css = _read(CSS)
+        body = css[css.index(":root {"):]
+        depth, out, i = 0, "", 0
+        while i < len(body):
+            ch = body[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return dict(re.findall(r"(--[a-z0-9-]+)\s*:\s*([^;]+);", out))
+            if depth >= 1:
+                out += ch
+            i += 1
+        self.fail("unterminated :root block")
+
+    def test_the_space_scale_is_a_real_sequence(self):
+        """`--s7` and `--s9` were both 32px, so "the ninth step" was a lie.
+
+        Nothing noticed, because no check read the scale. Assert the whole
+        step set, not just that the tokens exist.
+        """
+        root = self._root()
+        want = {"--s1": "4px", "--s2": "8px", "--s3": "12px", "--s4": "16px",
+                "--s5": "20px", "--s6": "24px", "--s7": "32px", "--s9": "48px"}
+        got = {k: v.strip() for k, v in root.items() if k in want}
+        self.assertEqual(got, want, f"space scale drifted: {got}")
+        self.assertNotEqual(root["--s9"].strip(), root["--s7"].strip(),
+                            "--s9 and --s7 are the same step again")
+
+    def test_the_radius_steps_ascend_and_the_relationship_is_the_contract(self):
+        root = self._root()
+        ctl = float(root["--r-ctl"].removesuffix("px"))
+        panel = float(root["--r-panel"].removesuffix("px"))
+        dialog = float(root["--radius"].removesuffix("px"))
+        self.assertLess(ctl, panel, "a panel must be squarer than a control")
+        self.assertLess(panel, dialog, "a dialog must be squarer than a panel")
+
+    def test_the_type_scale_is_six_declared_steps(self):
+        root = self._root()
+        for step in ("--t-meta", "--t-table", "--t-ui", "--t-prose",
+                     "--t-page", "--t-empty"):
+            self.assertIn(step, root, f"{step} is missing from the token layer")
+
+    def test_motion_is_inside_the_band_and_does_not_overshoot(self):
+        root = self._root()
+        ms = int(re.match(r"(\d+)ms", root["--dur"].strip()).group(1))
+        self.assertGreaterEqual(ms, 100)
+        self.assertLessEqual(ms, 160, "motion outside 100-160ms reads dated")
+        for curve in re.findall(r"cubic-bezier\(([^)]*)\)", _read(CSS)):
+            parts = [p.strip() for p in curve.split(",")]
+            if len(parts) == 4:
+                self.assertLessEqual(float(parts[1]), 1.0, f"y1 overshoots: {curve}")
+                self.assertLessEqual(float(parts[3]), 1.0, f"y2 overshoots: {curve}")
+
+    def test_there_is_no_third_palette_behind_the_two_themes(self):
+        """`preferences.js` resolves `system` to an explicit theme *before*
+        styles.css loads, so a prefers-color-scheme palette can only fire in a
+        window that does not exist. One did, with an orange accent and surfaces
+        from before the palette was ever measured — and every test measured the
+        two explicit blocks, so every test passed.
+        """
+        css = _read(CSS)
+        self.assertNotRegex(
+            css, r"@media\s*\(prefers-color-scheme:\s*dark\)\s*\{[^@]*?\[data-theme",
+            "a media-query palette shadows the two measured themes")
+        self.assertNotIn("#e7a06f", css,
+                         "the stale system-dark accent is back")
+
+    def test_the_document_and_the_stylesheet_are_actually_compared(self):
+        """The v1 check looked tokens up without the `--` prefix, got None for
+        every one, and skipped all nine comparisons behind an `if css_hex`
+        guard: a drift check that had never compared anything. Assert the
+        lookup itself, which is where that bug lived.
+        """
+        source = _read(ROOT / "check_design_tokens.py")
+        self.assertIn('tokens.get(f"--{css_name}")', source,
+                      "the doc/stylesheet comparison is looking up an unprefixed name again")
+        self.assertNotIn("if css_hex and doc_hex != css_hex", source,
+                         "the vacuous comparison guard is back")
+
+
 if __name__ == "__main__":
     unittest.main()

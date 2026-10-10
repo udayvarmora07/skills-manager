@@ -38,33 +38,56 @@
   --font: "Geist Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --t-display: 600 26px/1.18 var(--sans); letter-spacing: -0.021em;
-  --t-title:   600 17px/1.30 var(--sans); letter-spacing: -0.014em;
-  --t-head:    600 13.5px/1.35 var(--sans); letter-spacing: -0.006em;
-  --t-body:    400 13px/1.55 var(--sans);
-  --t-sm:      400 12px/1.45 var(--sans);
-  --t-num:     500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
-  --t-id:      500 12.5px/1.35 var(--mono); letter-spacing: -0.01em;
+  /* --- The v2 scale (DESIGN.md §"Type"). Six steps and no more. A scale with
+     nine near-identical sizes is not a scale, it is a queue of one-off
+     decisions; 12px is the floor for anything a user must read, because the
+     de-emphasised text in this tool is usually a file path and a path you
+     cannot read is a path you cannot debug. ------------------------------- */
+  --t-meta:   400 12px/1.45 var(--sans);
+  --t-table:  400 13px/1.45 var(--sans);
+  --t-ui:     400 14px/1.45 var(--sans);
+  --t-prose:  400 16px/1.55 var(--sans);
+  --t-page:   600 20px/1.30 var(--sans); letter-spacing: -0.012em;
+  --t-empty:  600 28px/1.20 var(--sans); letter-spacing: -0.018em;
+  --t-num:    500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
+  --t-id:     500 13px/1.35 var(--mono); letter-spacing: -0.01em;
 
-  /* space — 4px base, only the steps actually used */
+  /* Roles the cascade already used, now named for what they are. Keeping the
+     old role names as aliases is deliberate: task 1.4 restructures the
+     cascade to consume --t-* directly, and until then one source of truth for
+     every size is worth more than one clean name. */
+  --t-display: var(--t-empty);
+  --t-title:   var(--t-page);
+  --t-head:    600 13px/1.35 var(--sans); letter-spacing: -0.006em;
+  --t-body:    var(--t-ui);
+  --t-sm:      var(--t-meta);
+
+  /* space — 4px base, the eight steps of DESIGN.md §"Space". The v1 scale
+     shipped --s7 and --s9 both as 32px, so "the ninth step" was a name for
+     the seventh; the sequence is now the real one and the eighth step (48px)
+     exists because a dialog's body padding needs it. */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
-  --s5: 20px; --s6: 24px; --s7: 32px; --s9: 32px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s9: 48px;
 
-  /* radius — small and deliberate. A large radius applied to everything reads
+  /* radius — three steps, and the relationship between them is the point:
+     a control is rounder than nothing, a panel is squarer than a control, and
+     a dialog is squarer still. One large radius applied to everything reads
      as "template" before a single word of copy is read. */
-  --r-ctl: 4px;
-  --r-panel: 6px;
-  --radius: 10px;
+  --r-ctl: 6px;
+  --r-panel: 8px;
+  --radius: 12px;
   --radius-sm: 6px;
   --radius-xs: 4px;
 
-  /* motion — 120ms on paint properties only. Overshooting curves read dated
-     and make a dense tool feel unsteady, so this one does not overshoot. */
+  /* motion — 120ms, inside the 100–160ms band, on paint properties only.
+     Overshooting curves read dated and make a dense tool feel unsteady, so
+     this one does not overshoot; `check_design_tokens.py` asserts both the
+     bound and the absence of an overshoot rather than trusting this note. */
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
   --dur: 120ms;
   --tr-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
 
-  --rail-w: 210px;
+  --rail-w: 240px;
   --pane-w: 392px;
   --measure: 68ch;
 }
@@ -172,38 +195,23 @@
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="system"] { color-scheme: light dark; }
 
-/* Keep the first paint honest while Vue resolves the persisted preference.
-   The HTML starts in `system`; once mounted, app.js resolves it to an explicit
-   light/dark data-theme. */
-@media (prefers-color-scheme: dark) {
-  [data-theme="system"] {
-    --bg: #15181e;
-    --surface: #20252e;
-    --surface-2: #282f3a;
-    --border: #37404c;
-    --border-strong: #6e7884;
-    --text: #edf0f5;
-    --text-muted: #a5afbd;
-    --accent: #e7a06f;
-    --accent-hover: #f0b187;
-    --accent-active: #d38958;
-    --accent-soft: #3b2c25;
-    --accent-text: #f1b287;
-    --on-accent: #24140d;
-    --ok: #74d3a0;
-    --ok-soft: #1c382a;
-    --warn: #e6bd67;
-    --warn-soft: #3b311b;
-    --err: #f08b84;
-    --err-soft: #402522;
-    --on-err: #241212;
-    --code-bg: #2a251e;
-    --overlay: rgba(0, 0, 0, .68);
-    --shadow: 0 1px 2px rgba(0, 0, 0, .36), 0 8px 24px -12px rgba(0, 0, 0, .52);
-    --shadow-lg: 0 12px 32px -12px rgba(0, 0, 0, .65), 0 28px 64px -22px rgba(0, 0, 0, .72);
-    --focus-ring: 0 0 0 3px rgba(231, 160, 111, .42);
-  }
-}
+/* There is deliberately no `@media (prefers-color-scheme: dark)` palette.
+
+   `index.html` hardcodes `data-theme="system"` and then loads
+   `preferences.js` *before* this stylesheet; that script always resolves
+   `system` to an explicit `light`/`dark` on the document element, using light
+   as its deterministic fallback when `matchMedia` is unavailable or throws.
+   So the media block could only ever fire in the window before that script
+   runs, or if it never runs at all.
+
+   It used to carry a 29-line palette of its own — orange accent, blue-grey
+   surfaces, pre-dates-the-current-values everywhere — and it is how a dark-OS
+   user on the default theme would have seen a different product from the one
+   every test measured. `check_design_tokens.py` read only the two explicit
+   theme blocks and reported PASS: a gate about a path it could not see, which
+   is this repository's most repeated failure mode. The gate now asserts that
+   no third palette exists, so the block cannot come back with a new hue in it.
+ */
 
 * { box-sizing: border-box; }
 [v-cloak] { display: none; }

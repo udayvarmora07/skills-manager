@@ -55,14 +55,18 @@ def contrast(a: str, b: str) -> float:
 # --------------------------------------------------------------------------
 
 _TOKEN = re.compile(r"(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;")
+# The scale lives in the same :root block but is mostly not a hex colour, so
+# the colour-only matcher above cannot see it. This one captures any value up
+# to the statement terminator, which is enough for `4px`, `120ms`,
+# `cubic-bezier(0.2, 0, 0.2, 1)` and the font shorthand.
+_ANY_VALUE = re.compile(r"(--[a-z0-9-]+)\s*:\s*([^;]+);")
 
 
-def read_block(css: str, opener: str) -> dict[str, str]:
-    """Return the custom properties declared inside the first ``opener`` block."""
+def _block_body(css: str, opener: str) -> str:
+    """Return the source between the braces of the first ``opener`` block."""
     start = css.find(opener)
     if start == -1:
         raise SystemExit(f"FAIL: could not find {opener!r} in {CSS.name}")
-    # Walk braces so a nested rule cannot end the block early.
     depth = 0
     for idx in range(start + len(opener) - 1, len(css)):
         ch = css[idx]
@@ -71,9 +75,13 @@ def read_block(css: str, opener: str) -> dict[str, str]:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                body = css[start + len(opener):idx]
-                return {m.group(1): m.group(2).lower() for m in _TOKEN.finditer(body)}
+                return css[start + len(opener):idx]
     raise SystemExit(f"FAIL: unterminated block after {opener!r} in {CSS.name}")
+
+
+def read_block(css: str, opener: str) -> dict[str, str]:
+    """Return the custom properties declared inside the first ``opener`` block."""
+    return {m.group(1): m.group(2).lower() for m in _TOKEN.finditer(_block_body(css, opener))}
 
 
 # --------------------------------------------------------------------------
@@ -128,7 +136,11 @@ NONTEXT_CONTRACTS = (
     # Non-text only. There is no room for a fourth *text* step in this ramp: it
     # bottoms out at 4.60:1 on --surface-3, so nothing de-emphasised enough to
     # be useful also clears 4.5:1 there. De-emphasised text uses --ink-3.
+    # ink-4 is checked against the surface it is *worst* on, not against
+    # --surface, because "non-text" is a claim about every surface it can land
+    # on and the light theme's --surface-3 is where that claim is thinnest.
     ("ink-4", "surface", 3.0, "non-text mark (not used for text)"),
+    ("ink-4", "surface-3", 3.0, "non-text mark on the deepest surface"),
     ("ok", "ok-bg", 3.0, "state dot"),
     ("warn", "warn-bg", 3.0, "state dot"),
     ("err", "err-bg", 3.0, "state dot"),
@@ -181,42 +193,152 @@ def check_doc_matches(tokens: dict[str, str]) -> list[str]:
     """DESIGN.md is the contract; the stylesheet is its implementation.
 
     The document declares the light palette, so a token that drifts in one and
-    not the other is a real inconsistency, not a formatting difference.
+    not the other is a real inconsistency, not a formatting difference. The
+    v1 version of this check compared nine aliased names out of twenty-five, so
+    most of the palette was documented but unverified; every colour token the
+    document declares is compared now.
     """
     if not DESIGN_MD.exists():
         return ["DESIGN.md is missing — the design contract must be checked in"]
     doc = DESIGN_MD.read_text(encoding="utf-8")
     failures = []
-    # The document uses different names for a few tokens on purpose
-    # (signal/primary, err/error); map them so the check is about colour.
+    # Documented name -> stylesheet name. They are the same names in v2; the
+    # mapping is kept explicit so a rename on either side fails loudly instead
+    # of silently comparing a different token.
     alias = {
-        "primary": "accent",
-        "primary-deep": "accent-2",
-        "primary-ink": "accent-ink",
-        "primary-bg": "accent-bg",
-        "error": "err",
-        "error-bg": "err-bg",
-        "surface-2": "surface-2",
-        "surface": "surface",
-        "ground": "bg",
-        "muted": "ink-3",
-        "ink-2": "ink-2",
-        "ink": "ink",
+        "bg": "bg", "surface": "surface", "surface-2": "surface-2",
+        "surface-3": "surface-3",
+        "ink": "ink", "ink-2": "ink-2", "ink-3": "ink-3", "ink-4": "ink-4",
+        "accent": "accent", "accent-2": "accent-2", "accent-3": "accent-3",
+        "accent-ink": "accent-ink", "accent-bg": "accent-bg",
+        "accent-line": "accent-line",
+        "ok": "ok", "ok-bg": "ok-bg", "warn": "warn", "warn-bg": "warn-bg",
+        "err": "err", "err-bg": "err-bg", "mute": "mute", "mute-bg": "mute-bg",
+        "line": "line", "line-2": "line-2", "line-3": "line-3",
         "line-strong": "line-strong",
     }
+    checked = 0
+    missing_css = 0
     for doc_name, css_name in alias.items():
-        m = re.search(rf"^\s*{re.escape(doc_name)}:\s*\"?(#[0-9a-fA-F]{{6}})\"?\s*$",
+        m = re.search(rf"^  {re.escape(doc_name)}:\s*\"?(#[0-9a-fA-F]{{6}})\"?\s*$",
                       doc, re.M)
         if not m:
+            failures.append(f"DESIGN.md declares no palette value for {doc_name}")
             continue
         doc_hex = m.group(1).lower()
-        css_hex = tokens.get(css_name)
-        if css_hex and doc_hex != css_hex:
+        # The parsed stylesheet keys carry the CSS prefix. The v1 version of
+        # this loop looked the bare name up, got None for every token, and its
+        # `if css_hex and …` guard then skipped all nine comparisons — a
+        # DESIGN.md/styles.css drift check that had never once compared
+        # anything, and reported nothing. Prefix at lookup instead, and count
+        # real comparisons so a future rename is visible.
+        css_hex = tokens.get(f"--{css_name}")
+        if css_hex is None:
+            missing_css += 1
+            failures.append(f"styles.css declares no --{css_name} for DESIGN.md {doc_name}")
+            continue
+        checked += 1
+        if doc_hex != css_hex:
             failures.append(
                 f"DESIGN.md {doc_name} ({doc_hex}) != styles.css --{css_name} ({css_hex})"
             )
             print(f"  FAIL DESIGN.md {doc_name} {doc_hex} != css --{css_name} {css_hex}")
+    print(f"\n=== DESIGN.md ===\n  {'OK  ' if not failures else 'FAIL'} "
+          f"{checked}/{len(alias)} palette value(s) compared against the stylesheet"
+          + (f", {missing_css} missing in css" if missing_css else ""))
     return failures
+
+
+# --------------------------------------------------------------------------
+# The v2 scale: space, radius, type, motion
+# --------------------------------------------------------------------------
+
+SPACE_STEPS = (4, 8, 12, 16, 20, 24, 32, 48)
+TYPE_STEPS = ("--t-meta", "--t-table", "--t-ui", "--t-prose", "--t-page", "--t-empty")
+# Non-text mark only. ink-4 is the one ink step the palette does NOT promise as
+# text: on --surface-3 in light it measures 3.85:1. Recording that floor here
+# means a future edit that darkens or lightens ink-4 cannot quietly turn a
+# non-text mark into failing text.
+INK4_FLOOR = 3.0
+MOTION_MIN_MS, MOTION_MAX_MS = 100, 160
+
+
+def check_scale(css: str, failures: list[str]) -> None:
+    """The scale is as much a contract as the palette, and it decays the same way.
+
+    The v1 spacing scale shipped ``--s7: 32px; --s9: 32px`` — two names for the
+    same step — so "the ninth step" was a fiction and nothing noticed. These
+    checks are the answer to that: the step set is asserted exactly, not merely
+    spot-checked.
+    """
+    root = _block_body(css, ":root {")
+    root_map = {m.group(1): m.group(2) for m in _ANY_VALUE.finditer(root)}
+
+    def note(ok: bool, label: str, detail: str = "") -> None:
+        if not ok:
+            failures.append(label + (f" — {detail}" if detail else ""))
+        print(f"  {'OK  ' if ok else 'FAIL'} {label}" + (f" ({detail})" if detail else ""))
+
+    # -- space -------------------------------------------------------------
+    # `step` is the token's own name (…--s7, --s9), not a list index. Writing
+    # this with enumerate() and using the index probed --s0…--s7, so the
+    # missing eighth step was invisible — the failure this check exists for,
+    # reproduced by the check itself on its first run.
+    found = {}
+    for step in (1, 2, 3, 4, 5, 6, 7, 9):
+        raw = root_map.get(f"--s{step}")
+        if raw is not None:
+            found[f"--s{step}"] = raw
+    expected = {f"--s{step}": f"{value}px" for step, value in zip(
+        (1, 2, 3, 4, 5, 6, 7, 9), SPACE_STEPS)}
+    note(found == expected, "space scale is 4/8/12/16/20/24/32/48",
+         "" if found == expected else f"got {sorted(found.items())}")
+
+    # -- radius ------------------------------------------------------------
+    radii = {}
+    for name in ("--r-ctl", "--r-panel", "--radius"):
+        raw = root_map.get(name)
+        if raw and raw.endswith("px"):
+            radii[name] = float(raw[:-2])
+    ordered = (len(radii) == 3
+               and radii.get("--r-ctl", 0) < radii.get("--r-panel", 0)
+               < radii.get("--radius", 0))
+    note(ordered, "radius steps ascend control < panel < dialog",
+         "" if ordered else f"got {radii}")
+
+    # -- type --------------------------------------------------------------
+    missing_type = [t for t in TYPE_STEPS if t not in root_map]
+    note(not missing_type, f"{len(TYPE_STEPS)} type steps declared",
+         "" if not missing_type else f"missing {missing_type}")
+
+    # -- motion ------------------------------------------------------------
+    dur = root_map.get("--dur", "")
+    m = re.match(r"(\d+)ms$", dur)
+    ok_dur = bool(m) and MOTION_MIN_MS <= int(m.group(1)) <= MOTION_MAX_MS
+    note(ok_dur, f"--dur is within {MOTION_MIN_MS}-{MOTION_MAX_MS}ms", dur or "absent")
+    overshoot = [c for c in re.findall(r"cubic-bezier\(([^)]*)\)", css)
+                 if len(c.split(",")) == 4
+                 and any(float(p.strip()) > 1.0 for p in (c.split(",")[1], c.split(",")[3]))]
+    note(not overshoot, "no easing curve overshoots", "; ".join(overshoot))
+
+    # -- one palette, not three -------------------------------------------
+    # `index.html` starts at data-theme="system" and preferences.js resolves it
+    # to an explicit light/dark *before* styles.css loads, so a
+    # prefers-color-scheme palette can only fire before that script runs or not
+    # at all. One did, carrying an orange accent and pre-dates-the-values
+    # surfaces, and this gate read only the two explicit blocks: PASS about a
+    # path it could not see.
+    third = re.findall(r"@media\s*\(prefers-color-scheme:\s*dark\)\s*\{[^@]*?\[data-theme",
+                       css, re.S)
+    note(not third, "no third (media-query) palette shadows the two themes",
+         f"{len(third)} found")
+
+    # -- refused defaults, in the token layer ------------------------------
+    for pattern, why in ((r"--[a-z0-9-]*grad[a-z0-9-]*\s*:", "a gradient token"),
+                         (r"\bfilter:\s*blur\(", "a blur/glass panel"),
+                         (r"backdrop-filter", "a backdrop-filter panel")):
+        hit = re.search(pattern, css, re.I)
+        note(hit is None, f"no {why} in the stylesheet", hit.group(0) if hit else "")
 
 
 def check_fonts() -> list[str]:
@@ -308,6 +430,8 @@ def main() -> int:
     failures: list[str] = []
     check_theme("LIGHT", light, failures)
     check_theme("DARK", dark, failures)
+    print("\n=== scale (space, radius, type, motion, one palette) ===")
+    check_scale(css, failures)
     failures.extend(check_doc_matches(light))
     failures.extend(check_fonts())
 
