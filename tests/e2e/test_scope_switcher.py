@@ -50,6 +50,34 @@ def _base_url() -> str:
     return os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
 
 
+def _reveal_scope_controls(page) -> None:
+    """Open the rail panel the scope switcher now lives in, the way a user does.
+
+    Task 2.1e moved the switcher into the rail's collapsible ``#compact-controls``
+    panel, so ``.scope-trigger`` is present in the DOM but not visible until that
+    panel is open. This suite predates the move and waited straight for the
+    trigger, so all three of its classes failed on a 30s Playwright timeout
+    against a button the DOM could see and the screen could not -- a break
+    introduced by 2.1e and missed because that task re-ran five other e2e files.
+
+    Below 761px the whole rail is a drawer, so the drawer trigger is the one to
+    press. Desktop and phone are therefore the same two-step intent with
+    different affordances, and both are asserted on visibility rather than
+    assumed from the viewport width.
+    """
+    drawer = page.query_selector(".nav-drawer-trigger")
+    if drawer and drawer.is_visible():
+        drawer.click()
+        page.wait_for_selector("#nav-drawer.open", timeout=5000)
+        page.wait_for_timeout(150)
+    toggle = page.query_selector(".mobile-controls-toggle")
+    if toggle and toggle.is_visible():
+        toggle.click()
+        page.wait_for_selector(".compact-controls.open", timeout=5000)
+        page.wait_for_timeout(150)
+    page.wait_for_selector(".scope-trigger", timeout=15000)
+
+
 class ScopeSwitcherResolvesTests(unittest.TestCase):
     """The trigger renders the selected scope, from the running app."""
 
@@ -75,8 +103,9 @@ class ScopeSwitcherResolvesTests(unittest.TestCase):
         try:
             cls._page.goto(cls._base, wait_until="networkidle", timeout=20000)
             # Mount, not load: an empty #app satisfies none of the assertions
-            # below, so every one of them has to be guarded by this wait.
-            cls._page.wait_for_selector(".scope-trigger", timeout=15000)
+            # below, so every one of them has to be guarded by this wait --
+            # which now includes opening the panel the trigger lives in.
+            _reveal_scope_controls(cls._page)
         except Exception as exc:
             cls._browser.close()
             cls._pw_cm.stop()
@@ -240,25 +269,64 @@ class ScopeSwitcherFitsTheViewportTests(unittest.TestCase):
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(_base_url(), wait_until="networkidle", timeout=20000)
-        page.wait_for_selector(".scope-trigger", state="attached", timeout=15000)
+        _reveal_scope_controls(page)
         page.click(".scope-trigger")
         page.wait_for_selector(".scope-option", timeout=5000)
+        # Settle before measuring. The menu enters with a 4px rise (2.1d), so a
+        # rect taken mid-travel is up to 4px lower than where it comes to rest --
+        # enough to read as a 4px overflow that is not one. The third class in
+        # this file already measures after a settle for exactly this reason.
+        page.wait_for_timeout(400)
         rect = page.eval_on_selector(
             "#scope-menu",
             "e => { const r = e.getBoundingClientRect();"
             " return {top: r.top, bottom: r.bottom,"
-            "         flipped: e.classList.contains('is-up')}; }",
+            "         flipped: e.classList.contains('is-up'),"
+            "         scrolls: e.scrollHeight > e.clientHeight + 1}; }",
         )
         rect["errors"] = errors
         self.addCleanup(page.close)
         return rect
 
-    def test_it_fits_a_short_viewport_by_opening_upward(self):
-        rect = self._open_at(700)
-        self.assertTrue(rect["flipped"], f"it did not flip with only 700px of room: {rect}")
-        self.assertGreaterEqual(rect["top"], 0, rect)
-        self.assertLessEqual(rect["bottom"], 700, rect)
-        self.assertEqual(rect["errors"], [])
+    def test_every_row_stays_reachable_on_a_short_viewport(self):
+        """The property, not the direction.
+
+        This asserted `is-up` at 700px, which pinned the *mechanism* from a
+        measurement taken when the list held fewer rows. Driving it instead of
+        reasoning about it showed two things, and the direction was the smaller
+        one:
+
+        * With the seeded project-local scope the list is 435px tall, so at 700px
+          it fits below the trigger and must NOT flip. Flipping would put its top
+          at about -300, which is the unreachable list this class exists to
+          prevent -- mirrored.
+        * On a window short enough that the list fits neither way, the old code
+          flipped and clipped: measured at 480px and 560px, 316px and 342px of the
+          list sat above the top of the screen. Direction alone never guaranteed
+          reachability. The list is now bounded to the room on the side it chose
+          and scrolls from there.
+
+        So the invariant is "every pixel of the list is on screen", asserted at
+        the heights where it previously failed, with the scroll affordance
+        checked rather than assumed.
+        """
+        for height in (480, 560, 700):
+            with self.subTest(height=height):
+                rect = self._open_at(height)
+                self.assertGreaterEqual(rect["top"], 0, f"clipped off the top: {rect}")
+                self.assertLessEqual(
+                    rect["bottom"], height + 1, f"clipped off the bottom: {rect}"
+                )
+                self.assertEqual(rect["errors"], [])
+
+    def test_a_bounded_list_scrolls_instead_of_hiding_rows(self):
+        """Bounding the height only helps if the content can still be reached."""
+        rect = self._open_at(480)
+        self.assertTrue(
+            rect["scrolls"],
+            "the list was shortened to fit a short window but cannot scroll, so "
+            "the rows below the fold are hidden rather than reachable: " + str(rect),
+        )
 
     def test_it_fits_a_typical_viewport(self):
         rect = self._open_at(800)
@@ -308,6 +376,7 @@ class ScopeOptionRowLayoutTests(unittest.TestCase):
         try:
             cls._page.goto(cls._base, wait_until="networkidle", timeout=20000)
             cls._page.wait_for_selector(".navigation-rail", timeout=15000)
+            _reveal_scope_controls(cls._page)
             cls._page.click(".scope-trigger")
             cls._page.wait_for_selector(".scope-option", timeout=5000)
             # Settle before measuring. An element mid-fade reports a smaller box,

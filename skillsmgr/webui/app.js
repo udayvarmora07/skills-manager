@@ -951,19 +951,44 @@ const appOptions = {
      * at 800px the list is 307px tall and starts at y=676: 183px of it is below
      * the fold, unreachable and un-clickable. Flip above when there is more
      * room above than below, and reset on close so the next open re-measures
-     * against the *current* viewport rather than a remembered one. */
+     * against the *current* viewport rather than a remembered one.
+
+     * Two things this measured wrong until now, both found by driving it:
+
+     * 1. Room was read off the MENU's own box, which is already clamped by the
+     *    stylesheet's `max-height` and therefore already overflowing. The
+     *    overflow was fed straight back into the direction decision, so the
+     *    "room above" figure was inflated by exactly the amount the list had
+     *    failed to fit. Room is a property of the TRIGGER and the window; it
+     *    is measured there.
+     * 2. Direction is not a guarantee of reachability. A ten-row list needs
+     *    435px; a 480px-tall window leaves ~92px above the trigger, so flipping
+     *    put 316px of it off the top of the screen -- the same unreachable
+     *    rows the flip was added to prevent, mirrored. The list is now bounded
+     *    to the room on the side it actually chose and scrolls from there, so
+     *    every row is reachable at any window height. */
     positionScopeMenu() {
       const menu = this.$refs.scopeMenuWrap && this.$refs.scopeMenuWrap.querySelector("#scope-menu");
-      if (!menu) return;
+      const trigger = this.$refs.scopeMenuTrigger;
+      if (!menu || !trigger) return;
       const gap = 6;
-      const roomBelow = window.innerHeight - menu.getBoundingClientRect().top + gap;
-      const roomAbove = menu.getBoundingClientRect().bottom + gap;
-      this.scopeMenuFlip = roomBelow < menu.offsetHeight && roomAbove > roomBelow;
+      const box = trigger.getBoundingClientRect();
+      const roomBelow = window.innerHeight - box.bottom - gap;
+      const roomAbove = box.top - gap;
+      /* Clear last run's bound before asking how tall the list really is, or
+       * the second open of a short-window list measures its own clamp. */
+      menu.style.maxHeight = "";
+      const wanted = menu.scrollHeight;
+      this.scopeMenuFlip = wanted > roomBelow && roomAbove > roomBelow;
+      const room = Math.max(0, this.scopeMenuFlip ? roomAbove : roomBelow);
+      menu.style.maxHeight = Math.floor(room) + "px";
     },
 
     closeScopeMenu(restoreFocus = false) {
       this.scopeMenuOpen = false;
       this.scopeMenuFlip = false;
+      const menu = this.$refs.scopeMenuWrap && this.$refs.scopeMenuWrap.querySelector("#scope-menu");
+      if (menu) menu.style.maxHeight = "";
       if (restoreFocus) {
         const trigger = this.$refs.scopeMenuTrigger;
         this.$nextTick(() => trigger && trigger.focus());
@@ -1795,10 +1820,10 @@ const appOptions = {
         if ((this.activeScope || "all") !== scopeAtCall) return;
         this.qualityHygiene = report.hygiene || null;
         if (!this.qualityHygiene) this.qualityHygieneError = "The server returned no hygiene report.";
-        this.liveAnnouncement = "Skill hygiene evidence refreshed.";
+        this.announce("Skill hygiene evidence refreshed.");
       } catch (e) {
         this.qualityHygieneError = e.message;
-        this.liveAnnouncement = "Skill hygiene evidence could not be loaded.";
+        this.announce("Skill hygiene evidence could not be loaded.");
       } finally {
         this.qualityHygieneLoading = false;
       }
@@ -2384,12 +2409,24 @@ const appOptions = {
 
     /* ---------------------------------------------------------- helpers */
 
-    /* One place decides whether a message is announced, and it announces it
-     * ONCE. `liveAnnouncement` is cleared on the next tick after the toast is
-     * added, because a live region only speaks when its text CHANGES -- two
-     * identical consecutive failures ("Could not load skills: ...") would
-     * otherwise be silent the second time, which is precisely when a
-     * repeating failure matters most. */
+    /* The ONE place that publishes to the live region, and it announces a
+     * message ONCE. A live region only speaks when its text *changes*, so an
+     * announcement that is never cleared is announced exactly once ever: two
+     * identical consecutive failures ("Could not load skills: ...") would be
+     * silent the second time, which is precisely when a repeating failure
+     * matters most. Publish, then clear on the next tick, so the next
+     * identical write is a change again.
+
+     * This was `toast()` alone, and two hygiene sites wrote
+     * `liveAnnouncement` directly with no clear -- so a second hygiene
+     * refresh, and a refresh that succeeded and then failed, said nothing.
+     * Fixing the toast and leaving two bypasses in place is the "declared but
+     * unwired" class this repository keeps finding. */
+    announce(text) {
+      this.liveAnnouncement = text;
+      this.$nextTick(() => { if (this.liveAnnouncement === text) this.liveAnnouncement = ""; });
+    },
+
     toast(text, type = "ok", undo = null) {
       const id = ++this.toastSeq;
       const life = undo ? TOAST_UNDO_MS : TOAST_MS;
@@ -2397,8 +2434,7 @@ const appOptions = {
        * capping drops the OLDEST, because the newest describes the condition
        * that produced the rest. */
       this.toasts = [...this.toasts, { id, text, type, undo, life }].slice(-TOAST_MAX);
-      this.liveAnnouncement = text;
-      this.$nextTick(() => { if (this.liveAnnouncement === text) this.liveAnnouncement = ""; });
+      this.announce(text);
       this.toastTimers[id] = setTimeout(() => this.dismissToast({ id }), life);
     },
 

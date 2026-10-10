@@ -47,6 +47,7 @@ from __future__ import annotations
 import os
 import re
 import unittest
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
@@ -58,6 +59,7 @@ TOAST_MS = 4000
 TOAST_UNDO_MS = 8000
 #: WCAG 2.2 target floor on coarse pointers; this repo targets 44.
 TARGET = 44
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _base_url() -> str:
@@ -330,9 +332,19 @@ class FeedbackSurfaceTest(unittest.TestCase):
         like a product defect -- see the comment in the body.
 
         The observable, and the thing a screen reader actually gets, is the
-        VALUE the component clears: it must return to empty after a toast, so
-        that the next identical write is a change again. That is what is
-        asserted, and it fails when the clear is deleted.
+        VALUE the component publishes and then clears: it must be the message
+        while it is current, and empty again afterwards, so that the next
+        identical write is a change. Both are asserted, and both fail when the
+        clear is deleted.
+
+        WHY THE FIRST SAMPLE IS SYNCHRONOUS (this sampler was wrong once).
+        `toast()` publishes synchronously and queues the clear on `$nextTick`.
+        The first version of this test registered its own `$nextTick` *after*
+        calling `toast()`, and Vue runs that queue in order -- so its observer
+        ran after the clear had already fired and it read "". It looked like a
+        missing announcement and it was a mis-timed observer. The publication
+        is therefore sampled in the same synchronous block as the call, which
+        is the only moment it is observable from the component's own value.
         """
         self.clear_toasts()
         self.page.evaluate(
@@ -341,8 +353,9 @@ class FeedbackSurfaceTest(unittest.TestCase):
               vm.banner = null;
               window.__trace = [];
               vm.toast('Could not load skills: boom', 'err');
+              // Synchronous: this is the moment the region holds the message.
+              window.__trace.push(['held', vm.liveAnnouncement]);
               vm.$nextTick(() => {
-                window.__trace.push(['held', vm.liveAnnouncement]);
                 requestAnimationFrame(() => {
                   window.__trace.push(['cleared', vm.liveAnnouncement]);
                   window.__done = true;
@@ -363,6 +376,36 @@ class FeedbackSurfaceTest(unittest.TestCase):
             "the exact defect this guards",
         )
         self.clear_toasts()
+
+    def test_the_live_region_has_exactly_one_publisher(self):
+        """The defect the toast fix alone left behind.
+
+        `toast()` published and cleared, and two hygiene sites assigned
+        `liveAnnouncement` directly with no clear -- so a second hygiene
+        refresh assigned the same string and a live region, which only speaks
+        on change, said nothing. Fixing the call site that has a test and
+        leaving two without one is the "declared but unwired" class.
+
+        Asserted on the SOURCE, because the symptom is an absence: a property
+        write is not something a rendered surface can be asked about. Every
+        assignment to `liveAnnouncement` must live inside `announce()`.
+        """
+        source = (ROOT / "skillsmgr" / "webui" / "app.js").read_text(encoding="utf-8")
+        body = source.split("    announce(text) {", 1)[1].split("\n    },", 1)[0]
+        writers = [
+            (i + 1, ln.strip())
+            for i, ln in enumerate(source.splitlines())
+            if re.search(r"this\.liveAnnouncement\s*=", ln)
+        ]
+        outside = [
+            (n, ln) for n, ln in writers if ln not in [l.strip() for l in body.splitlines()]
+        ]
+        self.assertEqual(
+            outside, [],
+            "liveAnnouncement is written outside announce(), so an identical "
+            "repeat is silent: " + "; ".join(f"{ln} (line {n})" for n, ln in outside),
+        )
+        self.assertGreaterEqual(len(writers), 1, "the assertion is vacuous if nothing writes it")
 
     def test_an_undo_toast_keeps_its_action_and_its_longer_life(self):
         self.clear_toasts()
