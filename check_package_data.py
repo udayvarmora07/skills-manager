@@ -58,8 +58,22 @@ INSTALL_PROBE = (
     "faces=sorted(fonts.glob('*.woff2')); "
     "assert len(faces) >= 4, faces; "
     "assert all(f.stat().st_size > 1000 for f in faces), faces; "
-    "assert (fonts/'plex.css').is_file(), fonts; "
-    "assert 'IBMPlexSans' in {f.name.split('-')[0] for f in faces}, faces"
+    # Derive the contract from the shipped face stylesheet rather than naming
+    # a family: every @font-face must resolve to a file this install actually
+    # has, and none may be restricted away from basic Latin. A stylesheet that
+    # names a face it does not ship is the 'declared but never shipped' failure
+    # — the app runs, every visitor sees the fallback, and nothing reports it.
+    "import re; "
+    "sheets=sorted(fonts.glob('*.css')); "
+    "assert sheets, fonts; "
+    "srcs=[s.strip().strip(chr(39)).strip(chr(34)) for sh in sheets "
+    "     for s in re.findall(r'url\\(([^)]+)\\)', sh.read_text(encoding='utf-8'))]; "
+    "assert srcs, 'no face stylesheet declares a src'; "
+    "assert not [s for s in srcs if 'http' in s], srcs; "
+    "missing=[s for s in srcs if not (fonts/s).is_file()]; "
+    "assert not missing, ('faces declared but not shipped', missing); "
+    "assert [p.name for p in fonts.iterdir() if 'LICEN' in p.name.upper()], "
+    "       'woff2 shipped with no licence file'"
 )
 
 #: SEC-9: the vendored bundle executes same-origin with access to every local

@@ -1,0 +1,63 @@
+/* Vendored typefaces. Never a CDN: this app must work offline, and a font
+   request to a third party is a third party in the page.
+
+   Geist Sans + Geist Mono, weights 400/500/600 only.
+   SIL Open Font License 1.1 — © 2023 Vercel, in collaboration with
+   basement.studio. The full licence text is beside this file as
+   Geist-OFL-LICENSE.txt; see docs/STATIC-ANALYSIS-style attribution notes in
+   DESIGN.md §Typography.
+
+   NO `unicode-range` ON PURPOSE.
+   The previous vendoring pass shipped six faces whose every rule carried only
+   a `latin-ext` range. The bytes were present, the declarations were present,
+   every "is the font vendored" check passed — and not one English character in
+   the interface matched any face, so the browser fetched nothing, reported no
+   error, and every visitor silently got the fallback. A subset range is only
+   an optimisation; omitting it costs a few KB on a loopback server and cannot
+   reproduce that failure. The browser still falls back per-glyph for
+   characters the face does not carry, which is the behaviour we want anyway:
+   a skill body may contain anything. */
+
+@font-face {
+  font-family: 'Geist Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(Geist-Regular.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Geist Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(Geist-Medium.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Geist Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(Geist-SemiBold.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(GeistMono-Regular.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(GeistMono-Medium.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(GeistMono-SemiBold.woff2) format('woff2');
+}

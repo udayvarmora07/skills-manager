@@ -220,18 +220,74 @@ def check_doc_matches(tokens: dict[str, str]) -> list[str]:
 
 
 def check_fonts() -> list[str]:
-    """Fonts must be vendored. A runtime CDN is a third party in the page."""
+    """Fonts must be vendored, declared, and actually present.
+
+    Three separate failures live here and all three are silent at runtime:
+
+    * a CDN reference (checked in ``main``) puts a third party in the page;
+    * a ``@font-face`` naming a file that is not in the package 404s quietly,
+      because a relative URL in a stylesheet resolves against the *stylesheet's*
+      own URL and nothing reports the miss;
+    * a face whose ``unicode-range`` excludes basic Latin is fetched for
+      nothing. That one shipped here once: six rules, 176 KB of woff2, and not
+      one English character in the interface matched any of them.
+
+    Nothing here names a family. The contract is "every declared face resolves
+    to bytes this package ships, and none of them is restricted away from
+    ASCII", so a future typeface change is a data edit rather than a code edit.
+    """
     failures = []
     if not FONTS_DIR.is_dir():
         return ["static/fonts/ is missing — the interface has no vendored typeface"]
+
+    sheets = sorted(FONTS_DIR.glob("*.css"))
+    if not sheets:
+        return [f"static/fonts/ has no face stylesheet to derive the contract from"]
+
+    faces = 0
+    for sheet in sheets:
+        css = sheet.read_text(encoding="utf-8")
+        blocks = re.findall(r"@font-face\s*\{(.*?)\}", css, re.S)
+        for block in blocks:
+            faces += 1
+            family = re.search(r"font-family:\s*([^;]+);", block)
+            label = family.group(1).strip().strip("'\"") if family else "?"
+            for src in re.findall(r"url\(([^)]+)\)", block):
+                src = src.strip().strip("'\"")
+                if "http" in src:
+                    failures.append(f"{sheet.name}: {label} is a remote reference ({src})")
+                elif not (FONTS_DIR / src).is_file():
+                    failures.append(f"{sheet.name}: {label} names {src}, which is not shipped")
+            unicode_range = re.search(r"unicode-range:\s*([^;]+);", block)
+            if unicode_range and "U+0000-00FF" not in unicode_range.group(1):
+                failures.append(
+                    f"{sheet.name}: {label} is restricted by unicode-range to "
+                    f"{unicode_range.group(1).strip()} — basic Latin would fall back"
+                )
+    if faces < 4:
+        failures.append(f"expected at least 4 declared faces, found {faces}")
+
     woffs = sorted(FONTS_DIR.glob("*.woff2"))
-    if len(woffs) < 4:
-        failures.append(f"expected vendored woff2 faces, found {len(woffs)}")
-    for family in ("IBMPlexSans", "IBMPlexMono"):
-        if not any(f.name.startswith(family) for f in woffs):
-            failures.append(f"{family} is not vendored")
+    for face in woffs:
+        if face.stat().st_size <= 1000:
+            failures.append(f"{face.name} looks empty ({face.stat().st_size} bytes)")
+            continue
+        # A `.woff2` extension is a claim; `wOF2` is the proof.  Size alone is
+        # not a check on the bytes — a truncated download, an HTML error page
+        # saved under the name, or 27 KB of noise all clear 1000 bytes and were
+        # reported PASS here.  Mutation-proved: replacing a face with random
+        # bytes of the correct length left this gate green.
+        if face.read_bytes()[:4] != b"wOF2":
+            failures.append(f"{face.name} is not a WOFF2 container — the file is "
+                            f"not the font it claims to be")
+
+    licences = [p.name for p in FONTS_DIR.iterdir() if "LICEN" in p.name.upper()]
+    if not licences:
+        failures.append("static/fonts/ ships woff2 with no licence file beside it")
+
     print(f"\n=== fonts ===\n  {'OK  ' if not failures else 'FAIL'} "
-          f"{len(woffs)} vendored woff2 face(s)")
+          f"{faces} declared face(s), {len(woffs)} vendored woff2, "
+          f"licence: {', '.join(licences) or 'NONE'}")
     return failures
 
 

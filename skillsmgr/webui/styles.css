@@ -6,16 +6,18 @@
 
 /* --- Vendored typefaces. Never a CDN: this app must work offline, and a
    font request to a third party is a third party in the page. ------------- */
-@import url("static/fonts/plex.css");
+@import url("static/fonts/geist.css");
 
 :root {
   /* type — one family for the interface, one mono for every identifier and
-     figure. IBM Plex rather than system-ui because this tool compares a file
-     on one machine with the same file on another; identical glyphs are a
-     correctness property here, not only a taste one. */
-  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+     figure. Geist rather than system-ui because this tool compares a file on
+     one machine with the same file on another; identical glyphs are a
+     correctness property here, not only a taste one. Both are vendored woff2
+     (SIL OFL 1.1, © 2023 Vercel + basement.studio) beside this stylesheet —
+     see static/fonts/geist.css for why they carry no unicode-range. */
+  --sans: "Geist Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font: "Geist Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --t-display: 600 26px/1.18 var(--sans); letter-spacing: -0.021em;
   --t-title:   600 17px/1.30 var(--sans); letter-spacing: -0.014em;
@@ -290,6 +292,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   position: relative;
   flex: 1;
   max-width: 420px;
+  /* Base rule, not a breakpoint band: the field is the topbar's flexible
+     element, so it is the one that should absorb a deficit. Without this the
+     flex item is held at the 48px intrinsic floor of the <input> inside it and
+     the *page* overflows instead — which is what Geist's wider metrics caused
+     across 761–819px. Declared here so the behaviour is continuous at every
+     width: search yields first, and only what is left becomes the field. */
+  min-width: 0;
   display: flex;
   align-items: center;
 }
@@ -1092,10 +1101,32 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .budget-axis-label {
   position: absolute;
   top: 0;
-  transform: translateX(6px);
   color: var(--text-muted);
   font-size: 0.6875rem;
   white-space: nowrap;
+  /* Anchored to the LEFT of the 100% rule, not the right.
+
+     The rule sits at 80% of the axis (the axis runs to 125%), so a caption
+     hung to its right has only the last fifth of the track to live in, and
+     `white-space: nowrap` means it does not give that back — it rendered
+     straight past the axis and off the viewport. To the left there is 80% of
+     the axis at every width measured (320–1680px), so the caption always fits
+     whole and the words stay readable.
+
+     This was a real defect before this task, not one the typeface introduced:
+     it overflowed 13px with the previous face and 36px with Geist, because
+     Geist is the wider of the two. What made it awkward to fix by the obvious
+     means is that the overflow was NOT monotonic in viewport width — 768 and
+     820px failed while 700, 900 and 1000px passed, because the axis narrows
+     and the rail widens across that band. Any media query would have been
+     right at two widths and wrong at the one beside it. Measured, then fixed
+     by construction rather than by breakpoint.
+
+     Previously this flip was applied only under 620px, which is why the range
+     in between was unguarded. It is now the base rule; the 620px block's copy
+     is redundant and removed. */
+  transform: translateX(-100%);
+  padding-right: 6px;
 }
 
 .scope-meter {
@@ -1174,7 +1205,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .scope-meter-pct { grid-area: pct; }
   .scope-meter-num { grid-area: tok; text-align: left; color: var(--ink-3); }
   .budget-axis { order: -1; margin-bottom: var(--s2); }
-  .budget-axis-label { transform: translateX(-100%); padding-right: 6px; }
+  /* No .budget-axis-label override here any more: anchoring the caption to the
+     left of the rule is the base rule (see the note there), which is why this
+     range no longer overflows. */
 }
 
 /* One status line, not a hero. The h1 stays the programmatic focus target and
@@ -1867,6 +1900,48 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .navigation-rail .viewtabs button { padding-inline: 8px; font-size: 0.8125rem; }
   .detail { padding: 24px; }
   .rail-quick-actions { margin-inline: 8px; }
+}
+
+/* The topbar's one-row layout needs 804px before it gives up anything, and the
+   breakpoint that folded it into the two-row compact form sat at 760 — so the
+   band just above it had nowhere to go. Measured across 320–1680: overflow was
+   pinned at exactly 804px of scrollWidth for every width from 761 to 819
+   (43px at 761, 4px at 800, zero at 820), and the new typeface is what moved
+   that floor: Geist is wider than the face it replaced, and 804 − 761 is the
+   difference.
+
+   The skill-count pill is what goes first: the same count is in the Library
+   pane header, which is where a reader is already looking for it. The
+   `Ctrl/Cmd K` hint inside the Commands button goes with it, and that was a
+   measured reversal — the obvious reading is that a hint advertising a
+   capability is the last thing to lose. Measuring the search field instead of
+   arguing about it said the opposite: with only the pill hidden, the field had
+   **−13px** of usable text width at 761, because the `/` hint is absolutely
+   positioned over its right edge and was wider than the box containing it. The
+   placeholder rendered as `Se /`. Dropping the Commands hint as well turns
+   −13px into +74px, and that is what a search field has to be worth.
+
+   The band ends at 899, not at the 819 where the overflow stops, and the
+   difference is the whole point. Overflow was the *first* symptom; stopping it
+   at 819 left the search field with 48px — narrower than the icon it contains,
+   and the field got smaller as the window got wider, which is never a correct
+   responsive behaviour. Brand plus controls plus padding plus gaps occupy 772px,
+   so below 900 there is nothing left for the field to be useful *in*.
+
+   `[?]` The longest placeholders still truncate below ~1000px — "Search
+   registry sources…" needs 168px of text width and only gets 113px at 800. That
+   is **pre-existing**, not introduced here: at 900 with the full treatment
+   restored it needs 166px and gets 126px, on the same layout the previous
+   typeface shipped. It belongs to the responsive pass (backlog 6.2), which
+   owns exactly this question, and it is recorded rather than half-fixed here.
+
+   `.searchwrap`'s `min-width: 0` is declared in the base rule above, not here:
+   the field yields before anything else at *every* width, so this band only has
+   to decide what the decorative pieces do, and the behaviour stays continuous
+   wherever the measurement was not taken. */
+@media (max-width: 899px) {
+  .stat-pill { display: none; }
+  .command-trigger kbd { display: none; }
 }
 
 @media (max-width: 760px) {

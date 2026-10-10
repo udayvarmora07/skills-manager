@@ -19,9 +19,17 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   is the wrong priority. Library rows now **group their observed identities by
   state with problems first**, so the scopes that disagree are the first thing
   the eye lands on, and a value shared by every visible row is stated once in
-  the pane header instead of badged hundreds of times. The typeface (IBM Plex)
-  is **vendored** rather than fetched, so the app works offline and no third
-  party is in the page.
+  the pane header instead of badged hundreds of times. The typeface is
+  **vendored** rather than fetched — Geist Sans and Geist Mono, SIL OFL 1.1,
+  400/500/600 — so the app works offline and no third party is in the page.
+  The faces deliberately carry no `unicode-range`: an earlier pass restricted
+  every face to `latin-ext`, which shipped 176 KB of woff2 that matched no
+  English character in the interface while every "is the font vendored" check
+  passed. That failure is now caught three ways — declared faces must resolve
+  to shipped files, must not be restricted away from ASCII, and must be real
+  `wOF2` containers — and `tests/e2e/test_font_render.py` measures a rendered
+  probe against a phantom family in a real browser, because reading a
+  stylesheet cannot tell you whether a face actually loaded.
 
 ### Fixed
 

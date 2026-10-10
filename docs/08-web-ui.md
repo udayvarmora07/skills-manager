@@ -567,17 +567,24 @@ claim, and a claim nobody re-checks decays.
   Composition, density, type and the honesty spine were kept as approved; the
   ground and accent were re-derived from the subject. Every value was measured
   before it was written.
-- **Type.** IBM Plex Sans for the interface and prose, IBM Plex Mono for every
+- **Type.** Geist Sans for the interface and prose, Geist Mono for every
   identifier, path, content hash and figure, with `tabular-nums` so columns of
-  numbers align. Plex rather than `system-ui` for a functional reason as much
+  numbers align. Geist rather than `system-ui` for a functional reason as much
   as an aesthetic one: this tool compares a file on one machine with the same
   file on another, so identical glyphs are a correctness property.
-  **Vendored as static woff2** under `webui/static/fonts/` — never fetched
-  from a CDN at runtime, because the app must work offline and a font request
-  to a third party is a third party in the page. The contract test asserts the
-  faces cover basic Latin *and* that every `src` resolves to a file that
-  exists: a face that is declared and shipped but covers none of the glyphs
-  the page uses renders the fallback silently, which is what happened once.
+  Weights 400/500/600 only. **Vendored as static woff2** under
+  `webui/static/fonts/` — never fetched from a CDN at runtime, because the app
+  must work offline and a font request to a third party is a third party in the
+  page. The faces are SIL OFL 1.1 (© 2023 Vercel + basement.studio) and the
+  licence text ships beside them as `Geist-OFL-LICENSE.txt`.
+  The contract tests assert every declared face resolves to a shipped file, no
+  face is restricted by `unicode-range` away from basic Latin, and the woff2 are
+  real `wOF2` containers: a face that is declared and shipped but covers none of
+  the glyphs the page uses renders the fallback silently, which is what happened
+  once here. A face that *cannot be decoded at all* is the same failure one step
+  earlier, so `tests/e2e/test_font_render.py` measures the rendered width of a
+  probe against a phantom family in a real browser — equality with the phantom is
+  the bug.
 - **Spacing rhythm:** 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48px. **Radius:** 4px
   controls, 6px panels, 10px dialogs — a large radius applied to everything
   reads as a template before a word of copy is read.

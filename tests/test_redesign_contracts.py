@@ -238,14 +238,29 @@ class DesignContractTests(unittest.TestCase):
         # "Declared but never shipped" is a scanner finding for good reason:
         # the CSS names a face the page never loads, so everyone sees the
         # fallback. Assert the bytes exist, not just the @font-face.
+        #
+        # This no longer names a family. It derives the contract from the
+        # shipped face stylesheet, so swapping the typeface is a data edit and
+        # a future change cannot quietly stop shipping the faces the page uses.
         self.assertTrue(FONTS.is_dir(), "static/fonts/ is missing")
-        faces = sorted(p.name for p in FONTS.glob("*.woff2"))
-        self.assertTrue(any(f.startswith("IBMPlexSans") for f in faces), faces)
-        self.assertTrue(any(f.startswith("IBMPlexMono") for f in faces), faces)
-        for face in faces:
-            self.assertGreater((FONTS / face).stat().st_size, 1000, f"{face} looks empty")
+        sheets = sorted(FONTS.glob("*.css"))
+        self.assertTrue(sheets, "static/fonts/ has no face stylesheet to derive from")
+        declared = [s for sh in sheets
+                    for s in re.findall(r"url\(([^)]+)\)", sh.read_text(encoding="utf-8"))]
+        self.assertGreaterEqual(len(declared), 4, declared)
+        for src in declared:
+            src = src.strip().strip("'\"")
+            self.assertNotIn("http", src, f"{src} is a remote reference")
+            self.assertTrue((FONTS / src).is_file(), f"{src} does not exist beside {sheets[0].name}")
+            self.assertGreater((FONTS / src).stat().st_size, 1000, f"{src} looks empty")
+        # Every shipped face is declared. An orphan woff2 is dead weight that
+        # still reads as "the font is vendored" to whoever greps for it.
+        declared_names = {p.strip().strip("'\"") for p in declared}
+        for face in FONTS.glob("*.woff2"):
+            self.assertIn(face.name, declared_names,
+                          f"{face.name} is vendored but nothing loads it")
 
-    def test_the_vendored_faces_cover_basic_latin(self):
+    def test_the_vendored_faces_are_not_restricted_away_from_ascii(self):
         """The first vendoring pass shipped faces that covered no ASCII.
 
         Six @font-face rules were declared and 176 KB of woff2 sat in the
@@ -258,21 +273,54 @@ class DesignContractTests(unittest.TestCase):
         This is the same failure as "declared but never shipped", one level
         down: the bytes are present, the declaration is present, and the page
         still renders in the wrong typeface. Assert the glyph coverage.
+
+        Checked *per face* rather than once per file: the original bug lived
+        in six rules and one stray `latin-ext` on any one of them is the same
+        defect. A face with no unicode-range at all is accepted and is the
+        safer default here — the browser still falls back per-glyph for
+        characters the face lacks, which is what a skill body needs.
         """
-        css = (FONTS / "plex.css").read_text(encoding="utf-8")
-        self.assertIn("U+0000-00FF", css,
-                      "no vendored face covers basic latin — the page will "
-                      "silently render in the fallback")
-        # Every src must resolve to a file that exists. A relative URL in a
-        # stylesheet is resolved against the *stylesheet's* own URL, so a
-        # wrong prefix 404s quietly rather than failing loudly.
-        for src in re.findall(r"url\(([^)]+)\)", css):
-            self.assertNotIn("http", src, f"{src} is a remote reference")
-            self.assertTrue((FONTS / src).is_file(), f"{src} does not exist beside plex.css")
-        self.assertGreaterEqual(len(re.findall(r"@font-face", css)), 4)
+        for sheet in sorted(FONTS.glob("*.css")):
+            css = sheet.read_text(encoding="utf-8")
+            for block in re.findall(r"@font-face\s*\{(.*?)\}", css, re.S):
+                face = re.search(r"font-family:\s*([^;]+);", block)
+                label = face.group(1).strip() if face else "?"
+                unicode_range = re.search(r"unicode-range:\s*([^;]+);", block)
+                if unicode_range:
+                    self.assertIn(
+                        "U+0000-00FF", unicode_range.group(1),
+                        f"{sheet.name}: {label} is restricted by unicode-range to "
+                        f"{unicode_range.group(1).strip()} — basic Latin would "
+                        f"silently render in the fallback")
+
+    def test_the_woff2_files_are_real_woff2_containers(self):
+        """A `.woff2` extension is a claim; `wOF2` is the proof.
+
+        Cheap, stdlib, and it catches the whole class of "the bytes are not a
+        font" (a truncated download, an HTML error page saved under the name,
+        a placeholder). The heavier question — does the face actually carry the
+        glyphs — is answered in a real browser by
+        ``tests/e2e/test_font_render.py``.
+        """
+        for face in sorted(FONTS.glob("*.woff2")):
+            head = face.read_bytes()[:4]
+            self.assertEqual(head, b"wOF2", f"{face.name} is not a WOFF2 container")
+
+    def test_a_licence_file_ships_beside_the_faces(self):
+        # Vendored type is still someone's licensed work. The file records
+        # which licence and who holds it; nothing here interprets the licence,
+        # it just refuses to ship third-party bytes without one.
+        licences = [p.name for p in FONTS.iterdir() if "LICEN" in p.name.upper()]
+        self.assertTrue(licences, "static/fonts/ ships woff2 with no licence file")
 
     def test_the_stylesheet_imports_the_vendored_faces(self):
-        self.assertIn('static/fonts/plex.css', _read(CSS))
+        imports = re.findall(r'@import\s+url\("([^"]+)"\)', _read(CSS))
+        sheets = {p.name for p in FONTS.glob("*.css")}
+        font_imports = [i for i in imports if i.startswith("static/fonts/")]
+        self.assertTrue(font_imports, "styles.css imports no vendored face stylesheet")
+        for imp in font_imports:
+            self.assertIn(imp.rsplit("/", 1)[-1], sheets,
+                          f"styles.css imports {imp}, which is not in static/fonts/")
 
     def test_the_palette_is_not_a_named_default(self):
         # Two clusters this tool's own reference list names explicitly: cream

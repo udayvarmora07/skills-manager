@@ -28,12 +28,12 @@ colors:
   line-strong: "#868d95"
 typography:
   display:
-    fontFamily: "IBM Plex Sans"
+    fontFamily: "Geist Sans"
     fontSize: 26px
     fontWeight: 600
     letterSpacing: "-0.021em"
   body:
-    fontFamily: "IBM Plex Sans"
+    fontFamily: "Geist Sans"
     fontSize: 13px
     lineHeight: 1.55
 rounded:
@@ -193,14 +193,32 @@ Never fetched from a CDN at runtime: this app must work offline and inside a
 locked-down network, and a font request to a third party is a third party in
 the page.
 
-- **IBM Plex Sans** — interface and prose. Chosen over `system-ui` for a
+- **Geist Sans** — interface and prose. Chosen over `system-ui` for a
   functional reason as much as an aesthetic one: `system-ui` renders
   differently on every platform, and this tool's job is comparing a file on
   macOS with a file on Linux. Identical glyphs on both machines is a correctness
   property here.
-- **IBM Plex Mono** — every identifier: skill names, file paths, content
+- **Geist Mono** — every identifier: skill names, file paths, content
   hashes, and every number. With `font-variant-numeric: tabular-nums` so columns
   of figures align without a layout hack.
+- Weights **400 / 500 / 600 only**. The full 100–900 axis is shipped as a
+  variable font we deliberately did not take: three statics cost ~25 KB more and
+  remove every question about how a fractional weight renders.
+
+Licensed under the **SIL Open Font License 1.1** (© 2023 Vercel, in
+collaboration with basement.studio). The full text ships beside the faces as
+`webui/static/fonts/Geist-OFL-LICENSE.txt`; `check_design_tokens.py` fails if a
+build ships woff2 without one.
+
+**These faces carry no `unicode-range`.** That is deliberate and load-bearing,
+not an omission. An earlier vendoring pass declared six faces whose every rule
+restricted them to `latin-ext`: 176 KB of woff2 in the package, every
+"is the font vendored" check green, and not one English character in the
+interface matched any of them — the browser fetched nothing, reported no
+error, and every visitor silently got the fallback. A subset range is only an
+optimisation; omitting it costs a few KB on a loopback server and cannot
+reproduce that failure. The browser still falls back per-glyph for characters a
+face does not carry, which is what a `SKILL.md` body needs anyway.
 
 Scale: `display 26/1.18`, `title 17/1.30`, `head 13.5/1.35`, `body 13/1.55`,
 `small 12/1.45`, `micro 10.5/1.3` at 0.075em tracking, `num 12/1`,
@@ -280,6 +298,12 @@ These are refused defaults, recorded so a later pass cannot slide back into them
 - **Emoji as iconography.** Zero emoji anywhere in this interface.
 - **A runtime CDN.** No Google Fonts link, no icon CDN, no webfont fetch. See
   the CSP: `font-src 'self'`.
+- **A `unicode-range` on the vendored faces.** No subset restriction. It is an
+  optimisation, and it is the exact mechanism of the one silent font failure
+  this interface has had: every face restricted away from basic Latin means the
+  browser fetches nothing, reports nothing, and renders the fallback.
+- **Vendored bytes without their licence.** Any third-party artefact added under
+  `webui/static/` ships its licence beside it, named so the gate can find it.
 
 ## Verification
 
