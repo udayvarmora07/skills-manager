@@ -1946,7 +1946,7 @@
         <div id="command-palette-status" class="command-palette-status" role="status" aria-live="polite">{{ commandPaletteStatus }}</div>
         <ul id="command-palette-results" class="command-palette-results" role="listbox" aria-label="Available commands">
           <li v-for="group in commandPaletteGroups" :key="group.id" class="command-palette-group" role="group" :aria-labelledby="group.id + '-label'">
-            <div :id="group.id + '-label'" class="command-palette-group-label">{{ group.category }}</div>
+            <div :id="group.id + '-label'" class="command-palette-group-label" aria-hidden="true">{{ group.category }}</div>
             <div v-for="command in group.commands" :key="command.id" :id="'command-option-' + command.id" class="command-palette-option"
                  role="option" :aria-selected="filteredCommandPaletteCommands.indexOf(command) === commandPaletteActiveIndex"
                  @mouseenter="commandPaletteActiveIndex = filteredCommandPaletteCommands.indexOf(command)"
