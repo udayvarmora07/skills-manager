@@ -590,3 +590,50 @@ class DesignScaleContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TypeScaleIsConsumedTests(unittest.TestCase):
+    """The scale must be the thing the UI reads, not a table beside it.
+
+    `check_design_tokens.py` owns the exhaustive form of this (every declared
+    size in the stylesheet, every step, the exceptions). It runs in the `docs`
+    CI job. This is the same contract in the `unit` job, so a regression is
+    caught by the suite a contributor actually runs — and, unlike the previous
+    floor check, it resolves the tokens rather than scanning for literals that
+    may no longer be there.
+    """
+
+    STEPS = ("--t-meta", "--t-table", "--t-ui", "--t-prose", "--t-page", "--t-empty")
+
+    def _css(self) -> str:
+        return _read(CSS)
+
+    def test_the_six_steps_are_rem_sizes_in_ascending_order(self):
+        root = re.search(r":root \{(.*?)\n\}", self._css(), re.S).group(1)
+        sizes = []
+        for step in self.STEPS:
+            m = re.search(re.escape(step) + r":\s*([0-9.]+)rem", root)
+            self.assertIsNotNone(m, f"{step} is not a rem size; `font-size:` cannot consume it")
+            sizes.append(float(m.group(1)))
+        self.assertEqual(sizes, sorted(sizes))
+        self.assertEqual(len(set(sizes)), len(sizes), "two steps share one size")
+
+    def test_no_rule_declares_an_off_scale_font_size(self):
+        """The cascade may only name a step, or one of the named exceptions."""
+        css = re.sub(r"/\*.*?\*/", "", self._css(), flags=re.S)
+        allowed = {
+            "1.125rem": 'html[data-text-size="large"]',  # rescales html itself
+            "0": "the two narrow-breakpoint glyph rules",
+        }
+        for value in re.findall(r"font-size:\s*([^;{}]+)", css):
+            value = value.strip()
+            if value.startswith("var("):
+                self.assertIn(value, {f"var({s})" for s in self.STEPS},
+                              f"{value} is not one of the six steps")
+            elif value not in allowed:
+                self.fail(f"off-scale font-size {value!r}; use a step or add a reason")
+
+    def test_every_declared_step_is_read_by_at_least_one_rule(self):
+        css = self._css()
+        used = set(re.findall(r"font-size:\s*var\((--t-[a-z]+)\)", css))
+        for step in self.STEPS:
+            self.assertIn(step, used, f"{step} is declared and read by nothing")

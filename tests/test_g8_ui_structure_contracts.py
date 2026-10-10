@@ -179,9 +179,38 @@ class LibraryDensityTests(unittest.TestCase):
         self.assertIsNotNone(rule)
         self.assertIn("min-height: 56px;", rule.group(1))
 
-        # Every font-size the Library row rules declare, at or above 0.6875rem.
+        # Every font-size the Library row rules declare, at or above the floor.
+        #
+        # The selectors are read as `var(--t-step)` since the row rules consume
+        # the type scale rather than declaring a size. The previous form of this
+        # check matched `font-size:\s*([0-9.]+)rem`, so after the conversion it
+        # matched **nothing** and passed vacuously — a check that stops applying
+        # is worse than no check, because it reads as coverage. It now resolves
+        # each step to its rem value through the token layer, so a row that
+        # drops to an unreadable size still fails, and `self.assertTrue` on the
+        # match list keeps an unparseable block from silently skipping.
         rem_per_px = 16
         floor = 11 / rem_per_px
+        steps = dict(re.findall(r"(--t-[a-z]+):\s*([0-9.]+)rem", self.css))
+
+        def sizes_in(source: str):
+            """The rem sizes a rule block declares, resolving `var(--t-step)`."""
+            out = []
+            for step, literal in re.findall(
+                    r"font-size:\s*var\((--t-[a-z]+)\)|font-size:\s*([0-9.]+)rem", source):
+                if step:
+                    self.assertIn(step, steps, f"unreadable type step {step}")
+                    out.append((step, float(steps[step].removesuffix("rem"))))
+                else:
+                    out.append((literal, float(literal)))
+            return out
+
+        def base_sizes():
+            """The document base every inheriting row rule ends up at."""
+            base = re.search(r"(?:^|\n)body \{([^}]*)\}", self.css)
+            self.assertIsNotNone(base, "no standalone `body {` rule; cannot resolve inheritance")
+            return sizes_in(base.group(1))
+
         row_selectors = (
             ".row-name", ".row-desc", ".identity-observation", ".identity-state",
             ".identity-label", ".row-badges .tag",
@@ -189,10 +218,19 @@ class LibraryDensityTests(unittest.TestCase):
         for selector in row_selectors:
             block = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", self.css)
             self.assertIsNotNone(block, f"{selector} not found")
-            for size in re.findall(r"font-size:\s*([0-9.]+)rem", block.group(1)):
+            # A rule that declares no size inherits one, so the floor still
+            # applies — it just applies to whatever it inherits from. `.row-desc`
+            # is exactly that case, and the previous form of this check examined
+            # it zero times: the regex matched nothing and the loop body never
+            # ran, so a `.row-desc` rendered at 9px would have passed. The
+            # inheritance chain ends at the document base, so resolve there.
+            sizes = sizes_in(block.group(1)) or sizes_in(rule.group(1)) or base_sizes()
+            self.assertTrue(sizes, f"{selector} resolves to no font-size at all")
+            for step, size in sizes:
                 self.assertGreaterEqual(
-                    float(size), floor - 1e-9,
-                    f"{selector} renders at {float(size) * 16:g}px, below the 11px floor",
+                    size, floor - 1e-9,
+                    f"{selector} renders at {size * rem_per_px:g}px ({step}), "
+                    "below the 11px floor",
                 )
 
     def test_row_badge_track_is_omitted_when_empty(self):

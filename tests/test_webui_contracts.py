@@ -712,10 +712,16 @@ console.log(JSON.stringify([run('dark','large',false,false), run('system','bad',
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
         self.assertIn('html[data-text-size="large"] { font-size: 1.125rem; }', css)
         self.assertNotIn('html[data-text-size="large"] body', css)
-        self.assertRegex(css, r"\.row-name \{[^}]*font-size: 0\.875rem")
-        self.assertRegex(css, r"\.meta dd \{[^}]*font-size: 0\.875rem")
-        self.assertRegex(css, r"\.form-field \.hint \{ font-size: 0\.75rem")
-        self.assertRegex(css, r"\.modal-head h2 \{ margin: 0; font-size: 1\.1875rem")
+        # These five pinned raw literals (0.875/0.875/0.75/1.1875/1rem). The
+        # intent was "representative UI text sits in rem so the text-size
+        # preference reaches it", which a step token satisfies more strongly
+        # than a literal did: a literal can drift to a value off the scale
+        # without any of these assertions noticing. Each now names the step, and
+        # check_design_tokens.py asserts no off-scale literal can reappear.
+        self.assertRegex(css, r"\.row-name \{[^}]*font-size: var\(--t-ui\)")
+        self.assertRegex(css, r"\.meta dd \{[^}]*font-size: var\(--t-ui\)")
+        self.assertRegex(css, r"\.form-field \.hint \{ font-size: var\(--t-meta\)")
+        self.assertRegex(css, r"\.modal-head h2 \{ margin: 0; font-size: var\(--t-page\)")
         self.assertNotRegex(css, r"font-size:\s*[^;]*px")
 
     def test_logical_library_groups_aliases_but_keeps_divergence(self):
@@ -1127,7 +1133,7 @@ console.log(JSON.stringify(received));
         for field_id in ("install-source", "install-runner", "install-scope", "install-agents", "install-filter"):
             self.assertIn(f'id="{field_id}"', html)
             self.assertIn(f'for="{field_id}"', html)
-        self.assertIn('.searchwrap input, .form-field input, .form-field textarea, .form-field select, .workspace-project-form input, .command-palette-input { font-size: 1rem; }', css)
+        self.assertIn('.searchwrap input, .form-field input, .form-field textarea, .form-field select, .workspace-project-form input, .command-palette-input { font-size: var(--t-prose); }', css)
         self.assertIn('.layout.mobile-aux-view .sidebar.list-pane.aux-context-pane { display: none; }', css)
 
     def test_brand_returns_to_overview_and_grid_rendering_is_deferred(self):

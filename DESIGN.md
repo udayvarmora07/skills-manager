@@ -237,19 +237,50 @@ few KB on loopback and cannot reproduce that failure.
 **The scale is six steps** (CSS: `--t-meta` `--t-table` `--t-ui` `--t-prose`
 `--t-page` `--t-empty`):
 
-| token | size / line-height | role |
-|---|---|---|
-| `--t-meta` | 12px / 1.45 | de-emphasised metadata, captions |
-| `--t-table` | 13px / 1.45 | table rows, dense UI |
-| `--t-ui` | 14px / 1.45 | body UI, inputs, row primary line |
-| `--t-prose` | 16px / 1.55 | rendered `SKILL.md` bodies |
-| `--t-page` | 600 20px / 1.30 | page title, -0.012em tracking |
-| `--t-empty` | 600 28px / 1.20 | empty-state and first-run titles only |
+| token | size | reference leading | role |
+|---|---|---|---|
+| `--t-meta` | 0.75rem / 12px | 1.45 | de-emphasised metadata, captions |
+| `--t-table` | 0.8125rem / 13px | 1.45 | table rows, dense UI |
+| `--t-ui` | 0.875rem / 14px | 1.45 | body UI, inputs, row primary line |
+| `--t-prose` | 1rem / 16px | 1.55 | rendered `SKILL.md` bodies |
+| `--t-page` | 1.25rem / 20px | 1.30 | page and dialog titles |
+| `--t-empty` | 1.75rem / 28px | 1.20 | empty-state and first-run titles only |
+
+A step is a **size and nothing else**. Weight, leading and tracking belong to
+the rule that uses the step, and the leading column above is the reference
+value rather than something a token imposes — a size token that also carried
+`font-weight` would make "make this a page title" silently restyle four
+properties, and most rules legitimately want a leading of their own.
+
+**[SPEC] The steps are rem, and the cascade reads them.** They shipped as
+`font:` shorthands in px for one release while **none** of the 163
+`font-size` declarations in the stylesheet referenced one, so the scale
+governed nothing and the interface was actually set in 25 distinct ad-hoc rem
+literals — three of them below the floor below. They are now plain rem sizes,
+which is the only shape a `font-size` declaration can consume, and rem is what
+the text-size preference needs because it rescales `html`. `check_design_tokens.py`
+asserts all three properties that matter: the steps are rem and ascend, the
+cascade contains no size literal outside three named exceptions, and every
+declared step is read by at least one rule. The third is the one that catches
+the failure this section describes — a step nothing reads is a table of intent.
+
+**The three exceptions are named in the gate, not in prose.** The Large
+text-size root is the one `font-size` that cannot be a step, because it
+rescales `html` and pointing it at a step would make the preference equal the
+standard size; two rules at the narrow breakpoint hide a text glyph behind an
+icon. Zero is not a step.
 
 12px is the absolute floor for text a user must read. The v1 scale carried
 seven steps (`26/17/13.5/13/12/12/12.5`) that were near-indistinguishable at
 1x, which is not a scale but a queue of one-off decisions; v2 removes the
-steps nobody could see and adds the one the document pane was missing.
+steps nobody could see and adds the one the document pane was missing. The 27
+declarations that sat at an 11px floor are now `--t-meta`.
+
+A rendered `SKILL.md` needs four heading levels where the interface scale has
+three between prose and empty, so the document ladder is `--t-empty` (h1),
+`--t-page` (h2), `--t-prose` (h3) and `--t-table` (h4–h6) — a small bold label
+heading below 16px body, which is the conventional treatment and keeps every
+value on the scale rather than inventing a seventh step.
 
 Sentence case everywhere, including labels. **No ALL-CAPS eyebrow above a
 heading** — a tracked-out caps label is chrome that appears whatever the

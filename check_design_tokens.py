@@ -263,6 +263,78 @@ INK4_FLOOR = 3.0
 MOTION_MIN_MS, MOTION_MAX_MS = 100, 160
 
 
+# The complete set of `font-size` declarations allowed to be a literal rather
+# than a step, each with the reason it cannot be one. Keeping the list here,
+# in the gate, is what makes "no off-scale size" checkable at all — a rule
+# that says "no raw sizes, except the ones I thought of" is not a gate.
+FONT_SIZE_EXCEPTIONS = {
+    # Rescales `html`, so every step is multiplied by it. Pointing it at a step
+    # would make the Large preference equal the standard size: a silent no-op.
+    'html[data-text-size="large"] { font-size: 1.125rem; }',
+    # Two rules hide a text glyph behind an icon at the narrow breakpoint. Zero
+    # is not a step and pretending otherwise would put a 0 on the scale.
+    ".topbar-new { min-width: 40px; width: 40px; padding: 0; font-size: 0; }",
+    ".command-trigger { min-width: 44px; min-height: 44px; width: 44px; padding: 0; font-size: 0; gap: 0; }",
+}
+
+
+def check_type_scale(css: str, root_map: dict, note) -> None:
+    """A declared scale that nothing reads is a table of intent.
+
+    This is the fourth recorded instance of the repository's own failure mode —
+    a gate that reports PASS about a path it cannot see. The six `--t-*` steps
+    were declared and documented for a whole release while **zero** of the 163
+    `font-size` declarations in the cascade referenced one, so the scale
+    governed nothing and the real sizes were 25 distinct ad-hoc rem literals
+    (three of them below the 12px floor DESIGN.md calls absolute). So this
+    checks two things the earlier presence-only check could not:
+
+    1. the steps are rem and ascend (a `font:` shorthand cannot be consumed by
+       `font-size:`, so a shorthand step is a step the cascade cannot use), and
+    2. the cascade contains no size literal outside the named exceptions —
+       which is the property that makes 1. observable in the first place.
+    """
+    rems = {}
+    for step in TYPE_STEPS:
+        raw = (root_map.get(step) or "").strip()
+        m = re.fullmatch(r"([0-9.]+)rem", raw)
+        note(bool(m), f"{step} is a rem size a rule can consume", raw or "absent")
+        if m:
+            rems[step] = float(m.group(1))
+
+    ascending = len(rems) == len(TYPE_STEPS) and all(
+        rems[a] < rems[b] for a, b in zip(TYPE_STEPS, TYPE_STEPS[1:]))
+    note(ascending, "type steps ascend meta < table < ui < prose < page < empty",
+         "" if ascending else f"got {rems}")
+
+    # Every `font-size:` value in the file, minus the declared exceptions, must
+    # be a step. Comment text is stripped first so the prose in this very
+    # function cannot fail its own check.
+    body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    allowed = "\n".join(FONT_SIZE_EXCEPTIONS)
+    literals = [
+        m.group(1).strip() for m in re.finditer(r"font-size:\s*([^;{}]+)", body)
+    ]
+    offenders = []
+    for value in literals:
+        if value.startswith("var(--t-"):
+            if value not in {f"var({s})" for s in TYPE_STEPS}:
+                offenders.append(value)
+            continue
+        if value and f"font-size: {value}" not in allowed:
+            offenders.append(value)
+    note(not offenders,
+         f"every font-size is one of the {len(TYPE_STEPS)} steps "
+         f"({len(literals) - len(offenders)} declarations, "
+         f"{len(FONT_SIZE_EXCEPTIONS)} declared exceptions)",
+         "" if not offenders else f"off-scale: {sorted(set(offenders))}")
+
+    used = {m.group(1) for m in re.finditer(r"font-size:\s*var\((--t-[a-z]+)\)", body)}
+    unused = [t for t in TYPE_STEPS if t not in used]
+    note(not unused, "every declared step is read by at least one rule",
+         "" if not unused else f"declared and unread: {unused}")
+
+
 def check_scale(css: str, failures: list[str]) -> None:
     """The scale is as much a contract as the palette, and it decays the same way.
 
@@ -310,6 +382,7 @@ def check_scale(css: str, failures: list[str]) -> None:
     missing_type = [t for t in TYPE_STEPS if t not in root_map]
     note(not missing_type, f"{len(TYPE_STEPS)} type steps declared",
          "" if not missing_type else f"missing {missing_type}")
+    check_type_scale(css, root_map, note)
 
     # -- motion ------------------------------------------------------------
     dur = root_map.get("--dur", "")
