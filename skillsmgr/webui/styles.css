@@ -403,8 +403,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .field { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
 .field-label { color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; }
 .field-input,
-.field-select,
-.field-textarea {
+.field-select {
   width: 100%;
   min-height: 32px;
   padding: var(--s1) var(--s2);
@@ -414,11 +413,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   color: var(--text);
   font: 400 var(--t-ui)/1.4 var(--font);
 }
+/* Its own complete rule rather than a shared list plus an override: a second
+   .field-textarea declaration is the "declared twice" case the gate asserts
+   against, and one block a reader can hold in their head is worth five
+   repeated declaration lines. */
 .field-textarea {
+  width: 100%;
   min-height: 96px;
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 var(--t-table)/1.4 var(--mono);
   resize: vertical;
-  font-family: var(--mono);
-  font-size: var(--t-table);
 }
 .field-input:focus-visible,
 .field-select:focus-visible,

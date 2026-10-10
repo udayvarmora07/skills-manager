@@ -222,5 +222,142 @@ class PendingAdoptionListIsHonest(unittest.TestCase):
         self.assertRegex(out.stdout, r"read by markup or a rule \(\d+ declared, adoption pending\)")
 
 
+class TheSelectorTokenizerIsAParser(unittest.TestCase):
+    """Task 1.7: four regex attempts failed silently, in four directions.
+
+    Each test below pins one of the four failures. They run against the gate's
+    real functions, not a copy, so a refactor that reintroduces a regex breaks
+    them rather than leaving them green over a broken parser.
+    """
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("redesign_gate", str(GATE_PATH))
+        self.gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.gate)
+
+    def test_a_comma_inside_parens_is_not_a_selector_boundary(self):
+        """:is(a, b) is one selector. Failure #1 was counting tokens."""
+        self.assertEqual(
+            self.gate.split_selector_list(".panel:is(.a, .b)"),
+            [".panel:is(.a, .b)"])
+
+    def test_a_comma_inside_a_quoted_attribute_value_is_not_a_boundary(self):
+        self.assertEqual(
+            self.gate.split_selector_list('.chip[data-tags="a,b,c"]'),
+            ['.chip[data-tags="a,b,c"]'])
+
+    def test_an_escaped_quote_does_not_end_the_string(self):
+        self.assertEqual(
+            self.gate.split_selector_list('.x[data-t="a\\",b"] , .y'),
+            ['.x[data-t="a\\",b"]', ".y"])
+
+    def test_whitespace_is_normalised_so_formatting_cannot_hide_a_repeat(self):
+        """.a  .b and .a .b are one selector written two ways."""
+        self.assertEqual(self.gate.split_selector_list(".a  .b"), [".a .b"])
+
+    def test_a_repeat_inside_one_media_query_is_a_repeat(self):
+        block = "@media (max-width: 640px) {\n.a { x: 1 }\n.a { y: 2 }\n}\n"
+        self.assertEqual(len(self.gate.duplicate_selectors(block)), 1)
+
+    def test_the_same_selector_across_two_media_queries_is_an_override(self):
+        """Conditional overrides are how responsive CSS is written.
+
+        A flat scan that ignored the at-rule context reported every one of
+        these as dead CSS, which would have made the check unadoptable rather
+        than merely noisy.
+        """
+        block = ("@media (max-width: 640px) {\n.a { x: 1 }\n}\n"
+                 "@media (min-width: 900px) {\n.a { y: 2 }\n}\n")
+        self.assertEqual(self.gate.duplicate_selectors(block), [])
+
+    def test_a_repeat_at_the_top_level_and_inside_a_media_query_is_an_override(self):
+        block = ".a { x: 1 }\n@media (max-width: 640px) {\n.a { y: 2 }\n}\n"
+        self.assertEqual(self.gate.duplicate_selectors(block), [])
+
+    def test_different_subjects_that_share_a_compound_are_not_a_repeat(self):
+        """.a .b and .b .c both contain .b and describe different things."""
+        self.assertEqual(
+            self.gate.duplicate_selectors(".a .b { x: 1 }\n.b .c { y: 2 }\n"), [])
+
+    def test_a_selector_in_a_list_is_compared_per_item(self):
+        """.a, .b { } then .b, .c { } is a real repeat of .b."""
+        self.assertEqual(
+            len(self.gate.duplicate_selectors(".a, .b { x: 1 }\n.b, .c { y: 2 }\n")), 1)
+
+
+class TheBlockSliceDoesNotIncludeCommentProse(unittest.TestCase):
+    """Failure #3, and the one that made the other three pointless.
+
+    `_primitives_block` searched for the banner and sliced from there, which
+    cuts the block's own opening comment in half. `re.sub` cannot pair a
+    fragment with no closing `*/`, so 7,262 bytes of banner prose came back as
+    if it were stylesheet - including an unbalanced quote that swallowed every
+    rule after it, which is why a parser built on it silently found nothing.
+    """
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("redesign_gate", str(GATE_PATH))
+        self.gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.gate)
+        self.css = CSS_PATH.read_text(encoding="utf-8")
+        self.block = self.gate._primitives_block(self.css)
+
+    def test_the_slice_carries_only_complete_comments(self):
+        self.assertEqual(self.block.count("/*"), self.block.count("*/"))
+
+    def test_no_banner_prose_survives_into_the_block(self):
+        for phrase in ("A primitive here is not",
+                       "Nothing here is declared twice"):
+            self.assertNotIn(phrase, self.block,
+                             f"comment prose leaked into the parsed block: {phrase!r}")
+
+    def test_the_block_still_parses_into_rules(self):
+        self.assertGreater(len(self.block), 1000)
+        self.assertGreater(len(list(self.gate.css_rules(self.block))), 40)
+
+
+class TheDuplicateAssertionIsScopedAndRedFirst(unittest.TestCase):
+    def setUp(self) -> None:
+        self.css_original = CSS_PATH.read_text(encoding="utf-8")
+        self.addCleanup(lambda: CSS_PATH.write_text(self.css_original, encoding="utf-8"))
+
+    def _append_to_primitives(self, text: str) -> None:
+        """Inject rules at the end of 5.0, before the first screen marker."""
+        anchor = "/* ---------------------------------------------------------------- topbar */"
+        source = CSS_PATH.read_text(encoding="utf-8")
+        self.assertIn(anchor, source, "the primitives/screen boundary moved")
+        CSS_PATH.write_text(source.replace(anchor, text + anchor, 1), encoding="utf-8")
+
+    def test_a_duplicated_primitive_selector_is_caught(self):
+        self._append_to_primitives(".panel { color: red; }\n")
+        assert_gate_catches("declared twice")
+
+    def test_a_duplicate_inside_a_selector_list_is_caught(self):
+        self._append_to_primitives(".panel, .kbd { color: red; }\n")
+        assert_gate_catches("declared twice")
+
+    def test_a_repeat_in_the_older_screen_css_is_out_of_scope(self):
+        """27 such repeats exist in LAYER 5's pre-v1 ad-hoc rules.
+
+        The block header promises "nothing here is declared twice" about the
+        primitives it introduces. Flagging the legacy screen rules would make
+        the gate unadoptable, and those rules belong to the 2.x-5.x screen
+        tasks that migrate them. This asserts that boundary still holds.
+        """
+        out = run_gate()
+        self.assertEqual(out.returncode, 0, out.stdout)
+        self.assertNotIn("attention-queue", out.stdout)
+
+    def test_a_conditional_override_of_a_primitive_is_not_a_repeat(self):
+        self._append_to_primitives(
+            "@media (max-width: 640px) {\n  .panel { padding: 8px; }\n}\n")
+        out = run_gate()
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

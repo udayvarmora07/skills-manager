@@ -410,6 +410,166 @@ def _rule_bodies(body: str, selector: str) -> str:
         pos = end
 
 
+def _skip_string(text: str, i: int) -> int:
+    """Index just past the string literal starting at ``text[i]``."""
+    quote, i, n = text[i], i + 1, len(text)
+    while i < n:
+        if text[i] == "\\":
+            i += 2
+            continue
+        if text[i] == quote:
+            return i + 1
+        i += 1
+    return n
+
+
+def _match_brace(text: str, i: int) -> int:
+    """Index of the ``}`` closing the ``{`` at ``text[i]``."""
+    depth, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch in "\"'":
+            i = _skip_string(text, i)
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
+
+
+def split_selector_list(prelude: str) -> list[str]:
+    """The selectors of one rule, split on top-level commas only.
+
+    A plain ``prelude.split(",")`` is wrong in three ways this block can
+    actually produce: ``:is(a, b)`` and ``:not(a, b)`` carry commas inside
+    parentheses, ``[data-x="a,b"]`` carries one inside brackets, and either
+    can carry a comma inside a quoted string. Depth counting plus
+    string-skipping keeps those intact; whitespace is then collapsed so
+    ``.a  .b`` and ``.a .b`` compare equal.
+
+    Exposed at module scope and unit-tested directly: it is the piece the
+    four earlier regex attempts were really reaching for.
+    """
+    out: list[str] = []
+    buf: list[str] = []
+    depth = i = 0
+    n = len(prelude)
+    while i < n:
+        ch = prelude[i]
+        if ch in "\"'":
+            end = _skip_string(prelude, i)
+            buf.append(prelude[i:end])
+            i = end
+            continue
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            out.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    out.append("".join(buf))
+    return [re.sub(r"\s+", " ", part).strip() for part in out if part.strip()]
+
+
+def css_rules(text: str, context: tuple[str, ...] = ()):
+    """Yield ``(at_context, normalised_selector, line)`` for every style rule.
+
+    Recursive rather than a flat brace scan, because the at-rule context is
+    what makes a duplicate meaningful: ``.btn`` in the top level and ``.btn``
+    inside ``@media (min-width: 900px)`` is a conditional override, not dead
+    CSS, and a flat scan reports it as a repeat. Each context is the chain of
+    enclosing at-rule preludes, so two rules only collide when the cascade
+    would actually resolve them against each other.
+    """
+    i, n, line, start = 0, len(text), 1, 0
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            line += 1
+        elif ch in "\"'":
+            i = _skip_string(text, i)
+            continue
+        elif ch == "{":
+            prelude = text[start:i]
+            end = _match_brace(text, i)
+            if prelude.lstrip().startswith("@"):
+                yield from css_rules(
+                    text[i + 1:end],
+                    context + (re.sub(r"\s+", " ", prelude.strip()),),
+                )
+            else:
+                for selector in split_selector_list(prelude):
+                    yield context, selector, line
+            line += text[i:end].count("\n")
+            i = end
+            # The next prelude begins after the rule just consumed. Leaving
+            # `start` behind makes every later prelude the whole prefix so
+            # far, which is how 23,601 phantom rules appear in a block that
+            # holds a few hundred.
+            start = end + 1
+        i += 1
+
+
+def duplicate_selectors(block: str) -> list[str]:
+    """Selectors that two rules in ``block`` both declare, with their lines.
+
+    Keyed on the at-rule context *and* the whole normalised selector, never on
+    a compound alone: ``.a .b`` and ``.b .c`` both contain ``.b`` but describe
+    different subjects, and a compound-keyed scan would flag every such pair in
+    the block.
+    """
+    seen: dict[tuple[tuple[str, ...], str], list[int]] = {}
+    for context, selector, line in css_rules(block):
+        seen.setdefault((context, selector), []).append(line)
+    return [
+        f"{selector} ({'/'.join(context) or 'top level'}) on lines "
+        f"{', '.join(str(n) for n in lines)}"
+        for (context, selector), lines in sorted(seen.items())
+        if len(lines) > 1
+    ]
+
+
+def _primitives_subsection(css: str) -> str:
+    """Just the 5.0 rules of LAYER 5, without the prose that frames them.
+
+    LAYER 5 is the whole COMPONENTS layer and the block header only claims
+    "nothing here is declared twice" about the primitives it introduces —
+    the ad-hoc screen rules that follow it are pre-existing v1 CSS and are
+    migrated by the screen tasks that own them, not by this gate. Slicing at
+    the first section rule marker keeps the assertion to what the prose
+    actually promises.
+
+    The marker search runs on the RAW file, before comments are stripped, for
+    the reason ``_primitives_block`` already records: the markers *are*
+    comments, so looking for them in comment-stripped text finds nothing,
+    returns the whole layer, and silently widens the check to code the
+    contract does not cover. I wrote that failure down and then reproduced it
+    on the first run, which is the argument for writing it down at all.
+    """
+    raw = _primitives_block(css)
+    banner = css.find("5.0\n   PRIMITIVES")
+    opening = css.rfind("/*", 0, banner) if banner != -1 else -1
+    if opening != -1:
+        raw = css[opening:css.index("LAYER 6", opening)]
+    markers = ("------- topbar", "------ buttons", "----- dropdown", "---- layout",
+               "----- detail", "----- empty/loading", "------ banner", "---- modals",
+               "----- forms", "--- trash view", "----- stats", "---- toasts",
+               "----- statusbar")
+    ends = [raw.find(m) for m in markers]
+    ends = [e for e in ends if e != -1]
+    sliced = raw[:min(ends)] if ends else raw
+    return re.sub(r"/\*.*?\*/", "", sliced, flags=re.S)
+
+
 def _primitives_block(body: str) -> str:
     """The 5.0 PRIMITIVES section, or an empty string if it is gone.
 
@@ -421,10 +581,28 @@ def _primitives_block(body: str) -> str:
     # locating it in comment-stripped text always fails, returns "", and makes
     # every assertion over the block vacuous — which is exactly what it did
     # for the first three attempts at this check.
-    start = body.find("5.0\n   PRIMITIVES")
-    if start == -1:
+    banner = body.find("5.0\n   PRIMITIVES")
+    if banner == -1:
         return ""
+    # ...and the slice then starts at the `/*` that OPENS that comment. Starting
+    # at the banner text instead cuts the comment in half, so the fragment left
+    # in front has no closing `*/`, `re.sub` cannot pair it, and the banner
+    # prose survives as if it were stylesheet. The block came back 7,262 bytes
+    # too long, ending in an unbalanced quote that swallowed every rule after
+    # it — which is the most likely reason the four earlier attempts at the
+    # duplicate-selector check read prose and found nothing.
+    start = body.rfind("/*", 0, banner)
+    if start == -1:
+        start = banner
     end = body.index("LAYER 6", start) if "LAYER 6" in body[start:] else len(body)
+    # ...and the same at the other end, for the same reason: cutting on the
+    # LAYER 6 banner text leaves its opening `/*` inside the slice, so the
+    # block ends on an unterminated comment. Harmless to a brace-counting
+    # reader, not harmless to a parser that skips strings: the stray comment
+    # can carry an apostrophe and swallow the closing rules.
+    opening = body.rfind("/*", 0, end)
+    if opening > start:
+        end = opening
     # Strip the comments from the slice AFTER locating it: the banner that
     # marks the block is itself inside a comment.
     return re.sub(r"/\*.*?\*/", "", body[start:end], flags=re.S)
@@ -449,6 +627,7 @@ def check_primitives(css: str, note) -> None:
     file can only ever agree with the file.
     """
     body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    block = _primitives_block(css)
 
     # (selector, states) - the states are substrings that must appear inside a
     # block naming that selector. A button with no :disabled looks operable
@@ -492,13 +671,20 @@ def check_primitives(css: str, note) -> None:
     note(not stateless, "every primitive carries its required states",
          "" if not stateless else "; ".join(stateless))
 
-    # NOTE: a "no selector declared twice in the block" check was written here
-    # and removed rather than shipped vacuous. Detecting a duplicate selector
-    # needs a CSS-selector tokenizer, not a regex; four attempts each failed
-    # silently in a different direction (counting a token inside a selector,
-    # losing the target at a colon, searching comment-stripped text for a
-    # banner that lives inside a comment) and a check that reports PASS about
-    # a path it cannot see is worse than no check. It is backlog 1.7.
+    # NOTE: "no selector declared twice in the block" needs a CSS-selector
+    # tokenizer, not a regex. Four attempts each failed silently in a
+    # different direction (counting a token inside a selector, losing the
+    # target at a colon, searching comment-stripped text for a banner that
+    # lives inside a comment) and a check that reports PASS about a path it
+    # cannot see is worse than no check — so it was removed rather than
+    # shipped vacuous. It is implemented below, on a real parser, and the
+    # four failures are the reason each part of that parser is shaped as it
+    # is: strings are skipped before depth counting, commas are split at
+    # depth zero only, and the block is located before comments are stripped.
+    repeats = duplicate_selectors(_primitives_subsection(css))
+    note(not repeats,
+         f"no selector is declared twice in the {len(required)} primitives",
+         "" if not repeats else "; ".join(repeats))
 
     markup = (ROOT / "skillsmgr" / "webui" / "index.html").read_text(encoding="utf-8")
     js = "\n".join((ROOT / "skillsmgr" / "webui" / f).read_text(encoding="utf-8")
