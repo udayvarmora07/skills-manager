@@ -509,7 +509,15 @@
             <span v-for="badge in rowBadgeItems(s).filter(b => !/^\d+ cop/.test(b.text))" :key="badge.key" class="tag" :class="{ 'tag-scope': badge.scope }">{{ badge.text }}</span>
           </div>
         </li>
-        <li v-if="loadingList" class="skeleton" aria-hidden="true">
+        <!-- 2.3. The rows are decorative; the STATE is not, and it was silent.
+             `aria-hidden` on the only thing that appeared meant a screen-reader
+             user got no signal that a load was in progress at all -- the list
+             simply had no content. `role="status"` names the transition and
+             `aria-busy` marks the region while it runs, which is the pair
+             WCAG's status-messages pattern asks for. The message is sr-only, so
+             the visual layout is untouched. -->
+        <li v-if="loadingList" class="skeleton" role="status" aria-busy="true">
+          <span class="sr-only">Loading the observed skill inventory…</span>
           <div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div>
         </li>
         <li v-if="!loadingList && visibleSkills.length === 0" class="empty">

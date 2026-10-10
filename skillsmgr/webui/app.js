@@ -127,7 +127,7 @@ const AppIcon = {
    in every one of them the moment the file loads — a regression in five test
    modules to register one component. `components:` is read off the object the
    harness already keeps, so it costs those harnesses nothing. */
-createApp({
+const appOptions = {
   components: { AppIcon },
   data() {
     const savedTheme = localStorage.getItem("skillsmgr-theme");
@@ -3137,4 +3137,22 @@ createApp({
       }
     },
   },
-}).mount("#app");
+};
+
+/* One handle on the mounted instance, for the browser suite.
+ *
+ * WHY THIS EXISTS. Vue attaches `__vue_app__` to the root element but leaves
+ * `_instance` null after mount, so there is no supported way for a Playwright
+ * test to reach a method. Without a seam, every assertion about toasts,
+ * banners and skeletons would have to click a five-step real flow per message
+ * — which pins the FLOW rather than the SURFACE, and 2.3 changed the surface.
+ *
+ * The alternative considered and rejected: reach through `__vue_app__
+ * ._container._vnode.component.proxy`. It works and it is undocumented
+ * internals that change between Vue minors, so a Vue bump would break the
+ * suite in a way that looks like a product failure.
+ *
+ * This is a handle and nothing more. It exposes no capability a user does not
+ * already have from the console, it adds no behaviour, and it is the same
+ * object the component already is. */
+window.__skillsManagerApp = createApp(appOptions).mount("#app");

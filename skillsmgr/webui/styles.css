@@ -2730,6 +2730,29 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .toast button, .toast-dismiss { min-height: 44px; }
 }
 
+/* The offline strip is the only banner that is not in the flow: it has to be
+ * visible from every view without the reader navigating to find out that the
+ * server is gone, and it must not push the page content down when it appears.
+ * Placed above the status bar and below the toast stack (z-index 70 vs 80), so
+ * a failure message never covers the control that retries it.
+ *
+ * NOTE (2.3, found by the browser suite): this rule was silently deleted by a
+ * careless edit while removing the toast countdown -- the removal sliced from
+ * the countdown comment to the statusbar header and took this block with it,
+ * and nothing noticed for the rest of the task because the element rendered
+ * happily, just unstyled. `test_the_offline_strip_does_not_push_the_page_down`
+ * is the test that now makes the absence loud. */
+.offline-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--s6) + 24px);
+  transform: translateX(-50%);
+  z-index: 70;
+  width: min(560px, calc(100vw - 2 * var(--s4)));
+  margin: 0;
+  box-shadow: var(--shadow-lg);
+}
+
 /* -------------------------------------------------------------- statusbar */
 
 .statusbar {
