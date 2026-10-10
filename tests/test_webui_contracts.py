@@ -184,7 +184,11 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('class="command-trigger-icon" aria-hidden="true"', html)
         self.assertIn('class="actions-label">Actions</span>', html)
         self.assertIn('class="actions-glyph" aria-hidden="true"', html)
-        self.assertIn(".navigation-rail .viewtabs .nav-group { display: contents; }", css)
+        # 2.1e2: the phone drawer is a real column, so its groups stack. The
+        # caption itself was the thing being protected -- it is the only
+        # orientation landmark in a 300px panel -- so both the caption in the
+        # markup and its painted width are asserted in tests/e2e/test_nav_drawer.py.
+        self.assertIn(".navigation-rail .viewtabs .nav-group { display: block; }", css)
         self.assertIn(".command-trigger-icon { display: block; }", css)
         self.assertIn(".actions-trigger .actions-label, .actions-trigger .actions-chevron { display: none; }", css)
 
@@ -986,7 +990,10 @@ context.runGuideExplain().then(() => console.log(JSON.stringify({
         self.assertIn(':focus-visible {\n  outline: 2px solid var(--accent);', css)
         self.assertIn('outline-offset: 2px;', css)
         self.assertIn('scroll-margin-top: 16px;', css)
-        self.assertIn('<section class="detail">', html)
+        # 2.1e2 added :inert to the detail pane, so the literal opening tag
+        # moved.  The intent of this assertion is unchanged and is now stated
+        # without the tag: the detail pane must still not be a live region.
+        self.assertIn('<section class="detail"', html)
         self.assertNotIn('<section class="detail" aria-live=', html)
         self.assertIn('class="command-palette-status" role="status" aria-live="polite"', html)
 
@@ -1125,11 +1132,18 @@ console.log(JSON.stringify(received));
         self.assertIn('grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));', css)
 
     def test_mobile_view_navigation_keeps_active_tab_visible(self):
+        # 2.1e2 replaced the phone's horizontal scrolling strip with a drawer.
+        # The invariant is still "the active destination is visible on a phone";
+        # the mechanism that achieved it is no longer a scroll container, so the
+        # assertion is now that the strip is gone rather than that its snapping
+        # survives.  scrollActiveViewTab() is kept: it is what focuses the
+        # heading after a destination is chosen from the drawer.
         source = _read(APP_JS)
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
         self.assertIn("scrollActiveViewTab();", source)
         self.assertIn('scrollIntoView({ block: "nearest", inline: "center" })', source)
-        self.assertIn('scroll-snap-type: x proximity;', css)
+        self.assertNotIn('scroll-snap-type: x proximity;', css)
+        self.assertIn("position: fixed; inset: 0 auto 0 0;", css)
 
     def test_mobile_forms_keep_text_readable_and_auxiliary_context_does_not_duplicate(self):
         html = _read(INDEX_HTML)

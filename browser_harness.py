@@ -309,7 +309,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     const libraryFocusState = libraryFocus.result && libraryFocus.result.result && libraryFocus.result.result.value;
     if (!libraryFocusState || libraryFocusState.view !== 'skills' || libraryFocusState.focused !== 'library-view-title' || !libraryFocusState.visible) errors.push('Library command did not focus the visible Library destination');
   }
-  const qualityTab = await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Quality'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+  const qualityTab = await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Quality'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
   const qualityTabFound = !!(qualityTab.result && qualityTab.result.result && qualityTab.result.result.value);
   if (!qualityTabFound) errors.push('Quality navigation tab was not found');
   let qualityReady = false;
@@ -320,7 +320,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     await new Promise(r=>setTimeout(r,50));
   }
   if (!qualityReady) errors.push('Quality view did not render bounded evidence without overflow');
-  await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+  await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,100));
   const guideInitial = await send('Runtime.evaluate', {expression:`(() => { const guide=document.querySelector('.first-scan-guide'); const attention=[...document.querySelectorAll('.attention-item h3')].map(node=>node.innerText); return {visible:!!guide,status:(document.querySelector('.first-scan-status') || {}).innerText || '',empty:!!document.querySelector('[data-overview-empty="true"]'),loadError:!!document.querySelector('.overview-load-error'),unavailable:!!(guide && guide.innerText.includes('detected root is missing or unsupported')),// Match the queue item by its stable key, not by its title copy. The old
         // check compared against the exact string 'malformed or unaddressable' and so
@@ -378,7 +378,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     && !!(guideInitialState && guideInitialState.instanceActionDisabled);
   if (scenario === 'populated' && !previewReady) errors.push('First-scan preview link did not land on the exact writable instance surface: ' + JSON.stringify(previewState));
   if (scenario === 'empty' && !previewDisabledForEmpty) errors.push('Empty inventory did not disable exact-instance actions');
-  await send('Runtime.evaluate', {expression:`(() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.innerText || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+  await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,100));
   const guideFinal = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('.first-scan-guide'),overflow:document.documentElement.scrollWidth>window.innerWidth,focusable:!!document.querySelector('[data-first-scan-skip]:not([disabled])'),result:!!document.querySelector('.first-scan-result')}))()`, returnByValue:true});
   const guideFinalState = guideFinal.result && guideFinal.result.result && guideFinal.result.result.value;

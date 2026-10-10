@@ -161,6 +161,12 @@ createApp({
       profilePreview: null,
       mobileDetailOpen: false,
       compactControlsOpen: false,
+      // 2.1e2: below 761px the rail IS this drawer (same element, same DOM).
+      // `drawerRestoreCompact` remembers what the scope/context disclosure was
+      // doing before the drawer opened, so opening the drawer cannot silently
+      // change the state 2.1f still owns (`:has(.compact-controls.open)`).
+      drawerOpen: false,
+      drawerRestoreCompact: false,
       mobileReturnKey: "",
       toasts: [],
       liveAnnouncement: "",
@@ -1173,6 +1179,66 @@ createApp({
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     },
 
+    /* --------------------------------------------------------- drawer (2.1e2)
+
+    Below 761px the navigation rail is a drawer: same element, same buttons,
+    positioned differently.  There is no second copy of the nav to fall out of
+    sync, and every destination keeps the markup, the handler and the
+    accessible name it had as a rail button.
+
+    The scope/context disclosure travels *into* the drawer rather than keeping
+    its own trigger on a 390px screen, so `compactControlsOpen` is forced on
+    while the drawer is open and restored to its previous value on close. That
+    is deliberate: the Library filter bar's `:has(.compact-controls.open)` gate
+    belongs to task 2.1f, and this task must not move it.
+    */
+
+    drawerElement() {
+      return this.$refs.drawerTrigger ? document.getElementById("nav-drawer") : null;
+    },
+
+    focusableInDrawer() {
+      const drawer = document.getElementById("nav-drawer");
+      if (!drawer) return [];
+      return [...drawer.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')]
+        .filter((el) => !el.closest('[hidden], [inert]') && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+    },
+
+    openDrawer() {
+      if (this.drawerOpen) return;
+      this.drawerRestoreCompact = this.compactControlsOpen;
+      this.drawerOpen = true;
+      this.compactControlsOpen = true;
+      this.$nextTick(() => {
+        const target = this.focusableInDrawer().find((el) => el.classList.contains("drawer-close"))
+          || this.focusableInDrawer()[0];
+        if (target) target.focus();
+      });
+    },
+
+    closeDrawer() {
+      if (!this.drawerOpen) return;
+      this.drawerOpen = false;
+      this.compactControlsOpen = this.drawerRestoreCompact;
+      this.drawerRestoreCompact = false;
+      this.$nextTick(() => {
+        const trigger = this.$refs.drawerTrigger;
+        if (trigger) trigger.focus();
+      });
+    },
+
+    trapDrawerFocus(e) {
+      // A dialog is above the drawer and owns its own trap; two traps would
+      // fight over the same Tab press.
+      if (!this.drawerOpen || this.activeModal) return;
+      if (e.key !== "Tab") return;
+      const focusables = this.focusableInDrawer();
+      if (!focusables.length) return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    },
+
     restoreModalFocus() {
       const target = this.modalRestoreFocus;
       this.modalRestoreFocus = null;
@@ -1775,6 +1841,9 @@ createApp({
       // to its detail state and the explicit back action returns to that list.
       this.mobileDetailOpen = false;
       this.compactControlsOpen = false;
+      // A destination picked in the drawer closes it, and restores whatever the
+      // scope/context disclosure was doing before the drawer opened.
+      if (this.drawerOpen) this.closeDrawer();
       if (v === "trash" || v === "recovery") this.loadTrash();
       if (v === "recovery") this.loadRecoverySnapshots();
       else if (v === "install") this.loadSkills();
@@ -2335,6 +2404,7 @@ createApp({
 
     onKeydown(e) {
       this.trapModalFocus(e);
+      this.trapDrawerFocus(e);
       const commandShortcut = (e.ctrlKey || e.metaKey) && String(e.key || "").toLowerCase() === "k";
       if (commandShortcut && (!this.activeModal || this.activeModal === "commands")) {
         e.preventDefault();
@@ -2350,10 +2420,14 @@ createApp({
         e.preventDefault();
         this.openModal("help", {});
       } else if (e.key === "Escape") {
+        // Topmost surface first. The scope menu can be open *inside* the drawer,
+        // and a dialog opened from the drawer sits above it, so the drawer is
+        // last — not because it is unimportant, but because it is the deepest.
         if (this.scopeMenuOpen) this.closeScopeMenu(true);
         else if (this.menuOpen) this.closeActionsMenu(true);
         else if (this.activeModal === "update") this.requestCloseUpdate();
         else if (this.activeModal) this.closeModal(this.activeModal);
+        else if (this.drawerOpen) this.closeDrawer();
       }
     },
 

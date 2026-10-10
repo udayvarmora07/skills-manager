@@ -974,6 +974,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .nav-group-label { padding: 0 12px 5px; color: var(--ink-3); font-size: var(--t-meta); font-weight: 600; letter-spacing: .01em; }
 
 .mobile-controls-toggle { display: none; }
+/* 2.1e2: below 761px the rail becomes the drawer, so its two drawer-only
+   affordances and the scrim exist solely inside that band. */
+.nav-drawer-trigger { display: none; }
+.drawer-close, .drawer-head { display: none; }
+.nav-drawer-scrim { display: none; }
 .compact-controls { display: contents; }
 .mobile-back { display: none; }
 
@@ -2605,18 +2610,66 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .command-trigger kbd { display: none; }
   .stat-pill, .brand-sub { display: none; }
   .layout { display: flex; flex-direction: column; }
-  .navigation-rail { flex: none; width: 100%; max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--border); background: var(--surface); }
-  .navigation-rail .viewtabs { order: 0; flex-direction: row; overflow-x: auto; padding: 8px 8px 0; border-bottom: 1px solid var(--border); scrollbar-width: none; scroll-snap-type: x proximity; }
-  .navigation-rail .viewtabs .nav-group { display: contents; }
-  .navigation-rail .viewtabs .nav-group + .nav-group { margin: 0; padding: 0; border: 0; }
-  .navigation-rail .nav-group-label { display: none; }
-  .navigation-rail .viewtabs::-webkit-scrollbar { display: none; }
-  .navigation-rail .viewtabs button { flex: 1 0 auto; justify-content: center; width: auto; min-height: 44px; gap: 8px; padding-inline: 12px; border-left: 0; border-bottom: 3px solid transparent; }
-  .navigation-rail .viewtabs button svg { width: 20px; height: 20px; }
-  /* The phone strip is a scrolling row, so it can afford the words back. */
+
+  /* --- 2.1e2: the rail becomes the drawer -----------------------------------
+     Same element, same buttons. It leaves the flow entirely (position: fixed),
+     so the phone gets its whole viewport back instead of spending 114px on a
+     scrolling strip that showed 3 of 8 destinations. */
+  .topbar { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .nav-drawer-trigger { display: inline-flex; grid-column: 1; grid-row: 1; align-items: center; justify-content: center; padding: 0; }
+  .nav-drawer-trigger svg { width: 20px; height: 20px; }
+
+  .nav-drawer-scrim {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: var(--overlay); border: 0; padding: 0;
+  }
+  .navigation-rail {
+    position: fixed; inset: 0 auto 0 0; z-index: 55;
+    width: min(300px, 84vw); max-height: none;
+    align-items: stretch; overflow-y: auto; overflow-x: hidden;
+    border-right: 1px solid var(--border); border-bottom: 0;
+    background: var(--surface-2); box-shadow: var(--shadow-lg);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* visibility, not just transform: a translated panel is still focusable and
+       still in the accessibility tree, which is how an off-screen nav becomes a
+       keyboard trap. The delay keeps the slide-out visible on the way out. */
+    visibility: hidden;
+    transition: transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+  }
+  .navigation-rail.open { visibility: visible; transform: none; transition: transform var(--dur) var(--ease), visibility 0s; }
+  @media (prefers-reduced-motion: no-preference) {
+    .navigation-rail:not(.open) { transform: translateX(-100%); }
+  }
+
+  .drawer-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; padding: 8px 8px 0 16px;
+  }
+  .drawer-head-label {
+    font-size: var(--t-meta); font-weight: 600; color: var(--text-muted);
+  }
+  .drawer-close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; padding: 0;
+    border: 0; border-radius: 8px; background: none; color: var(--text-muted); cursor: pointer;
+  }
+  .drawer-close:hover { background: var(--hover); color: var(--text); }
+  .drawer-close svg { width: 20px; height: 20px; }
+
+  /* The drawer is a full-width panel, so the words come back — this is the one
+     surface where a phone shows every label without scrolling. */
+  .navigation-rail .viewtabs { order: 0; flex-direction: column; width: 100%; overflow: visible; padding: 8px; border-bottom: 1px solid var(--border); }
+  .navigation-rail .viewtabs .nav-group { display: block; }
+  .navigation-rail .viewtabs .nav-group + .nav-group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+  .navigation-rail .nav-group-label {
+    display: block; position: static; align-self: stretch; width: 100%; height: auto; margin: 0;
+    padding: 10px 12px 4px; overflow: visible; clip: auto; clip-path: none;
+    white-space: nowrap; text-align: left;
+  }
+  .navigation-rail .viewtabs button { flex: 0 0 auto; justify-content: flex-start; width: 100%; min-height: 44px; gap: 12px; padding-inline: 12px; border-left: 0; border-bottom: 0; }
+  .navigation-rail .viewtabs button svg { width: 20px; height: 20px; flex: none; }
   .navigation-rail .viewtabs .nav-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: nowrap; }
-  .navigation-rail .viewtabs button { scroll-snap-align: center; }
-  .navigation-rail .viewtabs button.active { border-left: 0; border-bottom-color: var(--accent); }
+  .navigation-rail .viewtabs button.active { border-left: 0; border-bottom: 0; background: var(--accent-soft); color: var(--accent); }
   .btn { min-height: 44px; }
   .btn-icon { width: 44px; min-width: 44px; padding: 0; }
   .chip { min-height: 44px; padding-block: 8px; }
@@ -2624,13 +2677,24 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .copybtn { min-width: 44px; min-height: 44px; }
   .form-field input, .form-field textarea, .form-field select { min-height: 44px; }
   .searchwrap input, .form-field input, .form-field textarea, .form-field select, .workspace-project-form input, .command-palette-input { font-size: var(--t-prose); }
-  .navigation-rail .mobile-controls-toggle { display: flex; order: 1; width: calc(100% - 24px); margin: 8px 12px; min-height: 44px; padding: 0 12px; justify-content: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
-  .navigation-rail .mobile-controls-toggle .nav-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: nowrap; }
+  /* The scope switcher and the context meter now live in the drawer, so the
+     phone keeps ONE disclosure (the drawer) instead of two stacked ones. */
+  .navigation-rail .mobile-controls-toggle { display: none; }
   .navigation-rail .compact-controls { order: 2; display: none; }
   .navigation-rail .compact-controls.open { display: block; position: static; width: auto; padding-bottom: 0; background: none; border: 0; border-radius: 0; box-shadow: none; }
   .navigation-rail .compact-controls.open .rail-heading { padding: 12px; }
   .navigation-rail .compact-controls.open .budgetbar { margin: 8px 12px 12px; }
-  .rail-quick-actions { display: none; }
+  /* Both of these are pointer-sized controls, and RULES #13 sets 40px on
+     coarse pointers with 44px as this repo's working figure. In the rail they
+     were never a touch target; inside the phone drawer they are the only way to
+     change scope or window, so the floor applies here and only here. */
+  .navigation-rail .scope-trigger { min-height: 44px; }
+  .navigation-rail .budgetbar select { min-height: 44px; }
+  /* Quick actions were hidden on phones entirely. The drawer is the only place
+     they fit, so this is capability added, not moved. */
+  .rail-quick-actions { display: block; width: 100%; }
+  .navigation-rail .rail-action { justify-content: flex-start; width: 100%; min-height: 44px; gap: 12px; padding: 0 12px; }
+  .navigation-rail .rail-action .nav-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: nowrap; }
   .sidebar.list-pane { display: flex; width: 100%; border-right: 0; }
   .layout.mobile-aux-view .sidebar.list-pane.aux-context-pane { display: none; }
   .layout.overview-view .sidebar.list-pane { display: none; }
@@ -2645,7 +2709,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   /* Scope, context, status, mode, and tags all follow the one filter toggle. */
   .layout:not(:has(.compact-controls.open)) .sidebar.list-pane .library-bar { display: none; }
   .layout.mobile-detail-open .sidebar.list-pane { display: none; }
-  .layout.mobile-detail-open .navigation-rail { display: flex; }
   .layout:not(.mobile-detail-open):not(.mobile-aux-view) .detail { display: none; }
   .layout.mobile-aux-view:not(.mobile-detail-open) .detail { display: block; flex: 1; overflow-y: auto; }
   .layout.mobile-detail-open .detail { display: block; flex: 1; overflow-y: auto; }

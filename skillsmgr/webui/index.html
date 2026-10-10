@@ -206,7 +206,11 @@
   <a class="skip-link" href="#main-workspace" :inert="!!activeModal">Skip to main content</a>
 
   <!-- ============================================================ topbar -->
-  <header class="topbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
+  <header class="topbar" :inert="!!activeModal || drawerOpen" :aria-hidden="activeModal || drawerOpen ? 'true' : 'false'">
+    <button ref="drawerTrigger" class="btn btn-icon nav-drawer-trigger" type="button" @click="openDrawer"
+            aria-label="Open navigation" aria-controls="nav-drawer" :aria-expanded="drawerOpen ? 'true' : 'false'">
+      <app-icon name="menu" aria-hidden="true"></app-icon>
+    </button>
     <button class="brand" type="button" @click="switchView('overview')" title="Go to Overview">
       <svg class="brand-glyph" viewBox="0 0 20 20" fill="none" stroke="currentColor"
            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -289,7 +293,15 @@
 
   <!-- ============================================================ layout -->
     <main id="main-workspace" class="layout" :class="{ 'overview-view': view === 'overview', 'grid-browse': view === 'skills' && browseMode === 'grid', 'mobile-detail-open': mobileDetailOpen, 'mobile-aux-view': view !== 'skills' }" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'" tabindex="-1">
-    <aside class="navigation-rail">
+    <div v-if="drawerOpen" class="nav-drawer-scrim" @click="closeDrawer"></div>
+    <aside id="nav-drawer" class="navigation-rail" :class="{ open: drawerOpen }" :inert="!!activeModal"
+           :data-drawer="drawerOpen ? 'open' : 'closed'">
+      <div class="drawer-head">
+        <span class="drawer-head-label">Navigation</span>
+        <button class="drawer-close" type="button" @click="closeDrawer" aria-label="Close navigation">
+          <app-icon name="x" aria-hidden="true"></app-icon>
+        </button>
+      </div>
       <nav class="viewtabs" aria-label="Views">
         <div class="nav-group">
           <span class="nav-group-label">Workspace</span>
@@ -370,7 +382,7 @@
 
     </aside>
 
-    <aside class="sidebar list-pane" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view) }">
+    <aside class="sidebar list-pane" :inert="drawerOpen" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view) }">
       <h1 v-if="view === 'skills' && !selected" id="library-view-title" class="sr-only" tabindex="-1">Library</h1>
 
       <!-- One control bar replaces three stacked filter rows. Every control
@@ -589,7 +601,7 @@
     </aside>
 
     <!-- ------------------------------------------------------------ detail -->
-    <section class="detail">
+    <section class="detail" :inert="drawerOpen">
       <button v-if="view !== 'skills' && mobileDetailOpen" class="mobile-back" type="button" @click="closeMobileView">← {{ view === 'quality' ? 'Back to Quality' : 'Back to Library' }}</button>
       <div v-if="view === 'overview'" class="overview-shell" :data-overview-ready="!loadingList && !loadingHistory ? 'true' : null" aria-labelledby="overview-title">
         <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
@@ -1243,7 +1255,7 @@
   </main>
 
   <!-- ========================================================= statusbar -->
-  <footer class="statusbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
+  <footer class="statusbar" :inert="!!activeModal || drawerOpen" :aria-hidden="activeModal ? 'true' : 'false'">
     <span v-if="view === 'overview'">Overview · {{ formatNumber(overviewLogicalCount) }} logical skills · {{ formatNumber(overviewAttentionCount) }} attention item{{ overviewAttentionCount === 1 ? '' : 's' }}</span>
     <span v-else-if="view === 'skills'">{{ formatNumber(activeScope === 'all' ? allScopesCount : totalCount) }} total · {{ formatNumber(activeCount) }} active · {{ formatNumber(disabledCount) }} disabled<span v-if="activeScope !== 'all'"> · {{ activeScope }}</span></span>
     <span v-else-if="view === 'trash'">{{ formatNumber(trashCount) }} trashed</span>
