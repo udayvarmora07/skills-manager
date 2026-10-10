@@ -54,6 +54,42 @@ if (!ICON_NAMES.length) {
   console.error("app-icon: the icon sprite is missing or empty");
 }
 
+/* Command-palette group order. DESIGN-V2 §A names Raycast's *grouped* results
+   as the reference, so the palette renders headings rather than repeating the
+   category on every row — twenty-two rows each carrying the same word
+   "Navigation" is a column, not a group.
+
+   The order is declared, not derived, and it is deliberate: what applies to
+   what you are looking at comes first (Selected skill), then the verbs that
+   change it, then the things you bring in and take out, then diagnostics, and
+   Navigation last because it is the one group you can always reach by
+   clicking the rail. A category not listed here sorts after the listed ones
+   alphabetically, so adding a command can never silently drop it off the end
+   of the palette with no heading. */
+const COMMAND_GROUP_ORDER = Object.freeze([
+  "Selected skill",
+  "Skill actions",
+  "Transfer",
+  "Tools",
+  "Navigation",
+]);
+
+/* An unlisted category sorts after every listed one and ALPHABETICALLY among
+   its own kind, so a new command can never fall off the end of the palette
+   without a heading. The first version of this returned a numeric rank derived
+   from a string hash, and its own comment claimed alphabetical while the code
+   produced "Middle, Zebra, Alpha" - a comment describing a behaviour the reader
+   could see was different is worse than no comment. `Array#sort` is stable, so
+   two commands in the same group keep the order they were declared in. */
+function compareCommandGroups(a, b) {
+  const ia = COMMAND_GROUP_ORDER.indexOf(a);
+  const ib = COMMAND_GROUP_ORDER.indexOf(b);
+  if (ia !== -1 && ib !== -1) return ia - ib;
+  if (ia !== -1) return -1;
+  if (ib !== -1) return 1;
+  return String(a || "").localeCompare(String(b || ""));
+}
+
 /* Unknown names get a `data-missing-icon` marker instead of a silent blank
    box — an icon that renders as nothing is the failure mode this whole seam
    exists to prevent, so it has to be visible in the DOM and loud in CI. */
@@ -456,6 +492,8 @@ createApp({
         { id: "refresh", label: "Refresh", title: "Refresh skills and scope data", category: "Tools", keywords: "reload update", action: "refreshCommand" },
         { id: "rebuild", label: "Rebuild", title: "Rebuild the local index", category: "Tools", keywords: "database index", action: "rebuildIndex" },
         { id: "resync", label: "Resync", title: "Resync the local index", category: "Tools", keywords: "database index", action: "resyncIndex" },
+        { id: "shortcuts", label: "Keyboard shortcuts", title: "Show every keyboard shortcut", category: "Tools", keywords: "help keys kbd reference", action: "openShortcutsHelp", focusDestination: true, keys: ["?"] },
+        { id: "focus-search", label: "Focus search", title: "Jump to the skill search field", category: "Navigation", keywords: "filter find library", action: "focusLibrarySearch", focusDestination: true, keys: ["/"] },
       ];
       const selectedAvailable = this.view === "skills" && !!this.selectedName && !!this.selected;
       if (selectedAvailable) {
@@ -472,9 +510,35 @@ createApp({
     },
     filteredCommandPaletteCommands() {
       const needle = this.commandPaletteQuery.trim().toLowerCase();
-      if (!needle) return this.commandPaletteCommands;
-      return this.commandPaletteCommands.filter((command) => [command.label, command.title, command.category, command.keywords]
-        .join(" ").toLowerCase().includes(needle));
+      const matches = !needle
+        ? this.commandPaletteCommands.slice()
+        : this.commandPaletteCommands.filter((command) => [command.label, command.title, command.category, command.keywords]
+          .join(" ").toLowerCase().includes(needle));
+      /* Group order is applied HERE, once, so there is exactly one ordering in
+         the app. Grouping the results afterwards instead would make the drawn
+         order differ from the order ArrowDown walks — a palette that highlights
+         a row the reader cannot see is worse than an ungrouped one, and the
+         bug would only appear for a query that matched rows in two groups. */
+      return matches.sort((a, b) => compareCommandGroups(a.category, b.category));
+    },
+    /* Pure presentation over the ordered list above: consecutive runs of the
+       same category become one heading each. There is no index math here and
+       no second cursor, because there is only one order to present. */
+    commandPaletteGroups() {
+      const groups = [];
+      for (const command of this.filteredCommandPaletteCommands) {
+        let group = groups[groups.length - 1];
+        if (!group || group.category !== command.category) {
+          group = {
+            id: "command-group-" + command.category.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            category: command.category,
+            commands: [],
+          };
+          groups.push(group);
+        }
+        group.commands.push(command);
+      }
+      return groups;
     },
     commandPaletteActiveCommand() {
       return this.filteredCommandPaletteCommands[this.commandPaletteActiveIndex] || null;
@@ -2129,6 +2193,23 @@ createApp({
     invokeCommand(command) {
       const fn = this[command.action];
       if (typeof fn === "function") fn.apply(this, command.args || []);
+    },
+
+    /* The `?` shortcut already opened the reference inline in `onKeydown`.
+       Routing both the key and the palette command through one method is the
+       point: a shortcut that works from the keyboard but is unreachable from
+       the command palette is two code paths, and they drift. */
+    openShortcutsHelp() {
+      this.openModal("help", {});
+    },
+
+    /* `/` focuses the search field only when the Library is the current view —
+       the same guard the key handler applies. Navigating to Library first is
+       the honest thing: the palette must not claim it moved focus somewhere
+       the reader is not looking. */
+    focusLibrarySearch() {
+      if (this.view !== "skills") this.switchView("skills");
+      this.$nextTick(() => this.$refs.searchInput && this.$refs.searchInput.focus());
     },
 
     refreshCommand() {

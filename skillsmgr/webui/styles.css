@@ -897,7 +897,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  min-width: 200px;
+  /* Was `min-width: 200px` with no maximum, which made this the NARROWEST
+     surface in the app while it carries its longest labels: "Add skill from
+     folder", "Install via npx / pnpm / bunx" and "Full migration export" each
+     wrapped onto two lines and read as a rendering fault. A menu that is
+     right-anchored grows leftward, so a wider minimum is safe on every
+     viewport that has room, and the maximum keeps it off the left edge at
+     320px. The buttons below then refuse to wrap rather than silently
+     truncating a label the reader cannot finish. */
+  min-width: 236px;
+  max-width: min(320px, calc(100vw - 32px));
   max-height: min(520px, calc(100vh - 72px));
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -923,6 +932,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   align-items: center;
   gap: var(--s2);
   width: 100%;
+  /* One line per item, always. A two-line menu row is not a denser menu, it is
+     a menu whose rows no longer line up; the label truncates with an ellipsis
+     instead, which is a visible fact rather than a broken layout. */
+  white-space: nowrap;
+  overflow: hidden;
   padding: 8px 10px;
   border: none;
   background: none;
@@ -2332,18 +2346,70 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .command-palette-input:focus { border-color: var(--accent); background: var(--surface); }
 .command-palette-status { min-height: 24px; padding: 10px 2px 6px; color: var(--text-muted); font-size: var(--t-meta); }
 .command-palette-results { list-style: none; max-height: min(430px, 48dvh); overflow-y: auto; margin: 0; padding: 0; }
-.command-palette-results li { margin: 2px 0; }
-.command-palette-results li[aria-selected="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
-.command-palette-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); cursor: pointer; text-align: start; }
+
+/* Groups, not a category column. DESIGN-V2 §A names Raycast's grouped results,
+   and the reason is arithmetic rather than taste: the flat list printed the
+   category on all 22 rows, so the word "Navigation" appeared 8 times and the
+   word "Tools" 7, while the reader still had to scan for where one ended and
+   the next began. A heading says it once. */
+.command-palette-group { margin: 0; padding: 0; }
+.command-palette-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--s2) var(--s2) var(--s1);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--t-meta);
+  font-weight: 600;
+}
+.command-palette-group + .command-palette-group { border-top: 1px solid var(--border); }
+
+.command-palette-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; margin: 2px 0; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); cursor: pointer; text-align: start; }
 .command-palette-option:hover { background: var(--surface-2); }
+.command-palette-option[aria-selected="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
 .command-palette-option-copy { display: grid; gap: 1px; min-width: 0; }
 .command-palette-option-copy strong { font-size: var(--t-ui); font-weight: 650; }
 .command-palette-option-copy span { overflow: hidden; color: var(--text-muted); font-size: var(--t-meta); text-overflow: ellipsis; white-space: nowrap; }
-.command-palette-category { flex: none; color: var(--text-muted); font-size: var(--t-meta); }
+/* The key cap sits on the row, not in a legend somewhere else — which is the
+   reason the `.kbd` primitive exists, and why DESIGN-V2 §F pairs it with the
+   palette rather than shipping it as a settings page. `aria-hidden` is on the
+   markup: a screen reader is told "Focus search" and is not then read the same
+   fact twice as a bare "/" glyph. */
+.command-palette-keys { display: inline-flex; flex: none; gap: 4px; }
 .command-palette-empty { margin: 8px 0 0; color: var(--text-muted); }
-.command-palette-help { justify-content: flex-start; flex-wrap: wrap; color: var(--text-muted); font-size: var(--t-meta); }
-.command-palette-help span { display: inline-flex; align-items: center; gap: 4px; }
-.command-palette-help kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); color: var(--text); }
+.command-palette-help { justify-content: flex-start; flex-wrap: wrap; gap: var(--s3); color: var(--text-muted); font-size: var(--t-meta); }
+.command-palette-help > span { display: inline-flex; align-items: center; gap: 4px; }
+.command-palette-help-spacer { flex: 1 1 auto; }
+.command-palette-help-count { color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------- keyboard shortcut reference
+
+   The palette is the primary verb surface (DESIGN-V2 §A), so the reference for
+   what the keyboard does belongs next to it rather than only behind `?`. Four
+   contexts, because a flat list of twelve rows hides the one fact a reader
+   actually needs: which keys are live right now versus which only apply once
+   they are inside something. */
+.shortcuts-reference { display: grid; gap: var(--s5); }
+.shortcuts-note { margin: 0; color: var(--text-muted); font-size: var(--t-meta); }
+.shortcuts-section { display: grid; gap: var(--s2); }
+.shortcuts-section-title {
+  margin: 0;
+  padding-bottom: var(--s1);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--t-ui);
+  font-weight: 600;
+}
+.shortcuts-list { display: grid; gap: var(--s1); margin: 0; }
+.shortcuts-row { display: grid; grid-template-columns: minmax(96px, 148px) 1fr; gap: var(--s4); align-items: baseline; }
+.shortcuts-row dt { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.shortcuts-row dd { margin: 0; color: var(--text-muted); font-size: var(--t-ui); }
+.shortcuts-foot-note { margin: 0; color: var(--faint); font-size: var(--t-meta); }
+
+@media (max-width: 520px) {
+  .shortcuts-row { grid-template-columns: 1fr; gap: 2px; }
+}
 
 .modal-foot {
   display: flex;

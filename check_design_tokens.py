@@ -347,6 +347,14 @@ PRIMITIVE_PENDING_ADOPTION = {
     ".table th": "5.5 hygiene findings, 5.6 recovery",
     ".panel": "2.1 status strip, 3.1 overview sections",
     ".stepper": "5.2 registry Fetch -> Review -> Commit",
+    # ADOPTED by 2.2 (command palette + shortcut reference). The entry stays
+    # ONLY because the adoption check matches a CSS selector against markup
+    # and can therefore never fire for a class-only primitive: 2.2 proved it
+    # by deleting all 19 `class="kbd"` occurrences and the gate stayed green.
+    # The fix (collect class-attribute TOKENS and compare for equality - a
+    # substring test is worse, "tab" is inside "tabindex") is recorded in
+    # STATE.md and still owed. Do not read this line as "not yet adopted".
+    ".kbd": "ADOPTED 2.2 - exemption is vestigial, see STATE.md",
     ".diff-line": "4.8 update-from-folder review",
     ".kbd": "2.2 command palette and shortcut help",
     ".badge": "3.1 overview summary strip (row badges are a later rename)",

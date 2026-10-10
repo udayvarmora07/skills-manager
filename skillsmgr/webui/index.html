@@ -1945,14 +1945,27 @@
                placeholder="Search commands…" autocomplete="off" spellcheck="false" @keydown="onCommandPaletteKeydown">
         <div id="command-palette-status" class="command-palette-status" role="status" aria-live="polite">{{ commandPaletteStatus }}</div>
         <ul id="command-palette-results" class="command-palette-results" role="listbox" aria-label="Available commands">
-          <li v-for="(command, index) in filteredCommandPaletteCommands" :key="command.id" :id="'command-option-' + command.id" class="command-palette-option" role="option" :aria-selected="index === commandPaletteActiveIndex" @mouseenter="commandPaletteActiveIndex = index" @mousedown.prevent="commandPaletteActiveIndex = index" @click="executeCommand(command)">
+          <li v-for="group in commandPaletteGroups" :key="group.id" class="command-palette-group" role="group" :aria-labelledby="group.id + '-label'">
+            <div :id="group.id + '-label'" class="command-palette-group-label">{{ group.category }}</div>
+            <div v-for="command in group.commands" :key="command.id" :id="'command-option-' + command.id" class="command-palette-option"
+                 role="option" :aria-selected="filteredCommandPaletteCommands.indexOf(command) === commandPaletteActiveIndex"
+                 @mouseenter="commandPaletteActiveIndex = filteredCommandPaletteCommands.indexOf(command)"
+                 @mousedown.prevent="commandPaletteActiveIndex = filteredCommandPaletteCommands.indexOf(command)"
+                 @click="executeCommand(command)">
               <span class="command-palette-option-copy"><strong>{{ command.label }}</strong><span>{{ command.title }}</span></span>
-              <span class="command-palette-category">{{ command.category }}</span>
+              <span v-if="command.keys && command.keys.length" class="command-palette-keys" aria-hidden="true"><span v-for="key in command.keys" :key="key" class="kbd">{{ key }}</span></span>
+            </div>
           </li>
         </ul>
         <p v-if="!filteredCommandPaletteCommands.length" class="command-palette-empty">No commands match. Try a label, category, or keyword such as “install” or “navigation”.</p>
       </div>
-      <div class="modal-foot command-palette-help"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span></div>
+      <div class="modal-foot command-palette-help">
+        <span><span class="kbd" aria-hidden="true">↑</span><span class="kbd" aria-hidden="true">↓</span> move</span>
+        <span><span class="kbd" aria-hidden="true">Enter</span> run</span>
+        <span><span class="kbd" aria-hidden="true">Esc</span> close</span>
+        <span class="command-palette-help-spacer"></span>
+        <span class="command-palette-help-count">{{ filteredCommandPaletteCommands.length }} shown</span>
+      </div>
     </div>
   </div>
 
@@ -1961,7 +1974,34 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" tabindex="-1">
       <h2 id="help-modal-title" class="sr-only">Keyboard shortcuts</h2>
       <div class="modal-head"><h2>Keyboard shortcuts</h2><button class="modal-close" aria-label="Close keyboard shortcuts" @click="closeModal('help')">×</button></div>
-      <div class="modal-body"><dl class="kv"><dt><kbd>/</kbd></dt><dd>Focus skill search</dd><dt><kbd>Ctrl/Cmd+K</kbd></dt><dd>Open or close Commands</dd><dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move through command results</dd><dt><kbd>Enter</kbd></dt><dd>Run the selected command</dd><dt><kbd>Esc</kbd></dt><dd>Close menu or dialog</dd><dt><kbd>Tab</kbd></dt><dd>Move through the active dialog</dd><dt><kbd>?</kbd></dt><dd>Open this help</dd></dl></div>
+      <div class="modal-body shortcuts-reference">
+        <p class="shortcuts-note"><span class="kbd">Ctrl</span> is <span class="kbd">⌘ Command</span> on macOS. Shortcuts are ignored while you are typing in a field.</p>
+        <section class="shortcuts-section">
+          <h3 class="shortcuts-section-title">Anywhere</h3>
+          <dl class="shortcuts-list">
+            <div class="shortcuts-row"><dt><span class="kbd">Ctrl</span><span class="kbd">K</span></dt><dd>Open or close the command palette</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">/</span></dt><dd>Focus skill search</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">?</span></dt><dd>Open this reference</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">Esc</span></dt><dd>Close the open menu or dialog</dd></div>
+          </dl>
+        </section>
+        <section class="shortcuts-section">
+          <h3 class="shortcuts-section-title">Command palette</h3>
+          <dl class="shortcuts-list">
+            <div class="shortcuts-row"><dt><span class="kbd">↑</span><span class="kbd">↓</span></dt><dd>Move through the results</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">Home</span><span class="kbd">End</span></dt><dd>Jump to the first or last result</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">Enter</span></dt><dd>Run the highlighted command</dd></div>
+          </dl>
+        </section>
+        <section class="shortcuts-section">
+          <h3 class="shortcuts-section-title">Inside a dialog</h3>
+          <dl class="shortcuts-list">
+            <div class="shortcuts-row"><dt><span class="kbd">Tab</span></dt><dd>Move within the dialog; focus stays inside it</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">Esc</span></dt><dd>Close the dialog and return focus to what opened it</dd></div>
+          </dl>
+        </section>
+        <p class="shortcuts-foot-note">This page lists only shortcuts that work in this build. Row-by-row navigation in the Library list is not here yet.</p>
+      </div>
       <div class="modal-foot"><button class="btn btn-secondary" @click="closeModal('help')">Close</button></div>
     </div>
   </div>
