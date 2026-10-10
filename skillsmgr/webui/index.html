@@ -340,7 +340,7 @@
           <span class="scope-trigger-count num">{{ formatNumber(activeScope === 'all' ? allScopesCount : totalCount) }}</span>
           <app-icon name="chevron-down" class="scope-trigger-chevron" aria-hidden="true"></app-icon>
         </button>
-        <div v-if="scopeMenuOpen" id="scope-menu" class="menu scope-menu" role="listbox"
+        <div v-if="scopeMenuOpen" id="scope-menu" class="menu scope-menu" :class="{ 'is-up': scopeMenuFlip }" role="listbox"
              aria-label="Library scope" @keydown="onScopeMenuKeydown">
           <button v-for="opt in scopeOptions" :key="opt.id" type="button" role="option"
                   class="scope-option" :class="{ active: opt.id === activeScope, over: opt.over }"

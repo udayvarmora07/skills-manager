@@ -132,6 +132,7 @@ createApp({
       themeMediaHandler: null,
       menuOpen: false,
       scopeMenuOpen: false,
+      scopeMenuFlip: false,
       busy: false,
       banner: null,
       // Keep the Overview readiness marker absent until the first list
@@ -644,8 +645,6 @@ createApp({
     qualityHygieneSummary() {
       return (this.qualityHygiene && this.qualityHygiene.summary) || {};
     },
-  },
-
     /* The scope switcher is a listbox over OBSERVED facts only: a scope the
        server did not discover is reported as "root not detected", never as an
        empty library. `/api/scopes` omits missing roots, so `exists: false` here
@@ -655,7 +654,7 @@ createApp({
         id: "all",
         label: "All scopes",
         path: "every detected root",
-        count: this.allScopesCount(),
+        count: this.allScopesCount,
         exists: true,
         over: false,
       };
@@ -684,6 +683,7 @@ createApp({
     activeScopeAvailable() {
       return this.activeScopeOption.exists;
     },
+  },
 
   watch: {
     theme(v) {
@@ -822,15 +822,34 @@ createApp({
       }
       this.menuOpen = false;
       this.scopeMenuOpen = true;
+      this.scopeMenuFlip = false;
       this.$nextTick(() => {
+        this.positionScopeMenu();
         const items = this.scopeMenuItems();
         const current = items.find((el) => el.getAttribute("aria-selected") === "true");
         this.focusScopeMenuItem(current || items[0]);
       });
     },
 
+    /* The trigger sits at the BOTTOM of the rail -- under the scope heading and
+     * above the context-budget meter -- so a listbox that always opens downward
+     * runs off the bottom of any viewport shorter than trigger + list. Measured
+     * at 800px the list is 307px tall and starts at y=676: 183px of it is below
+     * the fold, unreachable and un-clickable. Flip above when there is more
+     * room above than below, and reset on close so the next open re-measures
+     * against the *current* viewport rather than a remembered one. */
+    positionScopeMenu() {
+      const menu = this.$refs.scopeMenuWrap && this.$refs.scopeMenuWrap.querySelector("#scope-menu");
+      if (!menu) return;
+      const gap = 6;
+      const roomBelow = window.innerHeight - menu.getBoundingClientRect().top + gap;
+      const roomAbove = menu.getBoundingClientRect().bottom + gap;
+      this.scopeMenuFlip = roomBelow < menu.offsetHeight && roomAbove > roomBelow;
+    },
+
     closeScopeMenu(restoreFocus = false) {
       this.scopeMenuOpen = false;
+      this.scopeMenuFlip = false;
       if (restoreFocus) {
         const trigger = this.$refs.scopeMenuTrigger;
         this.$nextTick(() => trigger && trigger.focus());

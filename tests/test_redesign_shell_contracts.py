@@ -12,7 +12,9 @@ both themes -- but they catch the regressions that survive a screenshot review
 because the picture still looks right.
 """
 
+import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -25,6 +27,55 @@ CSS = (ROOT / "skillsmgr" / "webui" / "styles.css").read_text(encoding="utf-8")
 def _between(text, start, end):
     head = text.index(start) + len(start)
     return text[head : text.index(end, head)]
+
+
+# Loads the real app.js in a Node VM with the seams stubbed, and reports which
+# block each option actually landed in. The two blocks are separate namespaces
+# to Vue, so "the name is in the file" is not the question -- "the name is in
+# the block Vue reads" is.
+_OPTIONS_HARNESS = r"""
+const fs = require('fs'), vm = require('vm');
+const sandbox = {
+  window: {},
+  Vue: {createApp(def) { sandbox.def = def; return {mount() {}}; },
+         nextTick(fn) { if (fn) fn(); return Promise.resolve(); }},
+  localStorage: {getItem() { return null; }, setItem() {}},
+  document: {
+    addEventListener() {}, removeEventListener() {},
+    documentElement: {dataset: {}},
+    querySelectorAll() { return []; }, querySelector() { return null; },
+    getElementById() { return null; },
+    createElement() { return {style: {}, setAttribute() {}, appendChild() {},
+                              click() {}, remove() {}}; },
+    contains() { return false; }, activeElement: null, body: {appendChild() {}},
+  },
+  fetch: async () => ({ok: true, status: 200,
+    headers: {get: () => null}, json: async () => ({}),
+    text: async () => '', blob: async () => ({})}),
+  setTimeout, clearTimeout, console,
+  URL: {createObjectURL() { return 'blob:x'; }, revokeObjectURL() {}},
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+const def = sandbox.def;
+console.log(JSON.stringify({
+  computed: Object.keys(def.computed || {}),
+  methods: Object.keys(def.methods || {}),
+  topLevel: Object.keys(def).filter((k) => !['data', 'computed', 'methods',
+                                          'watch', 'components'].includes(k)),
+}));
+"""
+
+
+def _options_blocks():
+    """Return the option names Vue actually reads, plus the top-level leftovers."""
+    result = subprocess.run(
+        ["node", "-e", _OPTIONS_HARNESS],
+        capture_output=True, text=True, check=True, cwd=str(ROOT),
+    )
+    blocks = json.loads(result.stdout)
+    return {k: set(v) for k, v in blocks.items()}
 
 
 class ScopeSwitcherMarkupTests(unittest.TestCase):
@@ -95,29 +146,92 @@ class ScopeSwitcherBehaviourTests(unittest.TestCase):
         self.assertRegex(APP, r"scopeMenuOpen: false,")
 
     def test_the_derived_values_live_in_computed_not_methods(self):
-        # Found by rendering, not by reasoning: appended to `methods`, the four
-        # pure getters were handed to the template as function objects and the
-        # scope trigger rendered `function() { [native code] }` where the label
-        # belongs. It is invisible to a syntax check and to every test that
-        # only greps for a name, so the placement itself is pinned.
-        computed = _between(APP, "  computed: {", "  watch: {")
-        methods = _between(APP, "  methods: {", "}).mount(\"#app\")")
+        """Structural, not a text slice -- and it has to be.
+
+        Two rounds of this defect were invisible to a prose check. First the
+        getters were appended to `methods`, so the template was handed function
+        objects. Then they were moved *past* the closing `},` of `computed: {`,
+        which is still valid JavaScript: an object-literal method shorthand at
+        the top level of the options object becomes an option Vue ignores. The
+        test that "pinned the placement" sliced the text between `computed: {`
+        and `watch: {` -- a region that still contained the four getters, so it
+        passed on the broken tree. This reads the real options object instead.
+        """
+        blocks = _options_blocks()
         for name in ("scopeOptions", "activeScopeOption", "activeScopeLabel",
                      "activeScopeAvailable"):
-            self.assertRegex(computed, rf"(?m)^\s*{name}\(\) \{{")
-            self.assertNotRegex(methods, rf"(?m)^\s*{name}\(\) \{{")
+            self.assertIn(name, blocks["computed"],
+                          f"{name} is not a computed property of the options object")
+            self.assertNotIn(name, blocks["methods"],
+                             f"{name} is reachable as a method, not a computed")
         # The imperative half belongs in methods, so this is not just "not the
         # other block" -- each half is asserted where it has to be.
         for name in ("toggleScopeMenu", "closeScopeMenu", "chooseScope",
                      "onScopeMenuKeydown", "scopeMenuItems"):
-            self.assertRegex(methods, rf"(?m)^\s*{name}\(")
+            self.assertIn(name, blocks["methods"], f"{name} must be a method")
 
-    def test_a_method_is_not_stored_as_a_value(self):
-        # `allScopesCount` is a method; `count: this.allScopesCount` stores the
-        # function object. Both this and the block placement above were the same
-        # class of mistake and are worth a standing check on any new derived row.
-        self.assertNotRegex(APP, r"count: this\.allScopesCount[,}\s]")
-        self.assertRegex(APP, r"count: this\.allScopesCount\(\),")
+    def test_the_scope_trigger_resolves_to_a_computed_not_a_top_level_option(self):
+        """The exact failure: an option Vue does not read, so `this.x` is undefined.
+
+        `computed`, `methods`, `data` and the component options are separate
+        namespaces. A getter in the wrong one is not an error, not a warning, and
+        not a syntax failure -- it is simply never called, so the template binds
+        `undefined` and the label renders empty while every name-grep test is
+        green. Asserting the name is absent from the *top level* is what closes
+        it; asserting it is present in `computed` is only half the statement.
+        """
+        top_level = _options_blocks()["topLevel"]
+        for name in ("scopeOptions", "activeScopeOption", "activeScopeLabel",
+                     "activeScopeAvailable"):
+            self.assertNotIn(name, top_level,
+                             f"{name} is a top-level component option, which Vue "
+                             f"never calls -- the template binds undefined")
+
+    def test_a_computed_is_not_called_as_a_method(self):
+        """`allScopesCount` is a computed, so `this.allScopesCount()` throws.
+
+        The previous version of this test asserted the opposite, having read the
+        getter's line without checking which block it lived in: it pinned a call
+        to a computed, which blows up the first time the scope list is computed
+        and takes the whole mount with it. The structural assertion is stronger
+        than either spelling -- if it is a computed, every read of it in app.js
+        must be a bare reference.
+        """
+        self.assertIn("allScopesCount", _options_blocks()["computed"])
+        self.assertNotIn("allScopesCount", _options_blocks()["methods"])
+        # Only *call sites*: the definition `allScopesCount() {` is correct for
+        # a computed, so the pattern has to require a receiver.
+        self.assertNotRegex(APP, r"\.allScopesCount\(")
+
+
+class ScopeSwitcherPlacementTests(unittest.TestCase):
+    """The listbox must be able to open upward, and must decide to."""
+
+    def test_the_template_binds_the_flip_class(self):
+        # A CSS rule nothing selects is the "declared but never used" class a
+        # gate cannot see; the binding is the half that makes it live.
+        self.assertIn("'is-up': scopeMenuFlip", HTML)
+        self.assertIn(".scope-menu.is-up", CSS)
+
+    def test_placement_is_measured_on_open_not_hard_coded(self):
+        # A CSS-only flip (`:focus-within`, a media query at one height) passes
+        # the check above and still runs off the fold at every other height.
+        self.assertIn("positionScopeMenu()", APP)
+        self.assertRegex(APP, r"positionScopeMenu\(\)\s*\{[^}]*getBoundingClientRect")
+        self.assertRegex(APP, r"positionScopeMenu\(\)\s*\{[^}]*innerHeight")
+
+    def test_the_flip_is_reset_when_the_menu_closes(self):
+        # A remembered flip is a wrong answer to the next question: the window
+        # may have been resized, and a list pinned the wrong way is worse than
+        # one that is merely tall.
+        close = _between(APP, "closeScopeMenu(restoreFocus = false) {", "chooseScope(id) {")
+        self.assertIn("this.scopeMenuFlip = false;", close)
+
+    def test_measurement_failure_leaves_the_default_placement(self):
+        # The menu is rendered by `v-if`, so it may not exist on the first tick
+        # on a slow mount. Returning early keeps the downward default rather
+        # than flipping a menu that was never measured.
+        self.assertIn("if (!menu) return;", APP)
 
 
 class DeadShellCssTests(unittest.TestCase):

@@ -1033,6 +1033,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .scope-trigger-count { color: var(--text-muted); }
 .scope-trigger-chevron { width: 14px; height: 14px; flex: none; color: var(--text-muted); }
 .scope-menu { right: auto; left: 0; width: 100%; min-width: 0; padding: var(--s1); }
+/* Opened upward because the trigger is near the rail's bottom edge and the
+   list is taller than the room left below it (see positionScopeMenu). */
+.scope-menu.is-up { top: auto; bottom: calc(100% + 6px); }
 .scope-option {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
