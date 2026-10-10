@@ -2752,7 +2752,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--tr-fast);
+  /* No transition: the file has exactly ONE reduced-motion hook and it is
+     last, and it already neutralises `transition-duration` globally.  A
+     second, tooltip-scoped hook would be the same concern stated twice. */
 }
 .navigation-rail [data-tip]:hover::after,
 .navigation-rail [data-tip]:focus-visible::after { opacity: 1; }
@@ -2761,7 +2763,4 @@ html[data-text-size="large"] { font-size: 1.125rem; }
      to the document scroll width instead.  The strip is labelled at this
      width anyway (below), so the tooltip has no job here. */
   .navigation-rail [data-tip]::after { content: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .navigation-rail [data-tip]::after { transition: none; }
 }

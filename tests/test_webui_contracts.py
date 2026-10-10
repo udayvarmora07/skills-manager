@@ -31,8 +31,8 @@ class FrontendSourceContractTests(unittest.TestCase):
         html = _read(INDEX_HTML)
         self.assertIn('view: "overview"', source)
         self.assertIn("@click=\"switchView('overview')\"", html)
-        self.assertIn(">Library</button>", html)
-        self.assertIn(">Recovery</button>", html)
+        self.assertIn('<span class="nav-label">Library</span></button>', html)
+        self.assertIn('<span class="nav-label">Recovery</span></button>', html)
         self.assertNotIn("Trash / Recovery", html)
         self.assertIn(':data-overview-ready="!loadingList && !loadingHistory ? \'true\' : null"', html)
         self.assertIn("loadingList: true", source)
@@ -66,8 +66,8 @@ class FrontendSourceContractTests(unittest.TestCase):
         source = _read(APP_JS)
         html = _read(INDEX_HTML)
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
-        self.assertIn(">Quality</button>", html)
-        self.assertLess(html.index(">Quality</button>"), html.index(">Settings</button>"))
+        self.assertIn('<span class="nav-label">Quality</span></button>', html)
+        self.assertLess(html.index('<span class="nav-label">Quality</span></button>'), html.index('<span class="nav-label">Settings</span></button>'))
         self.assertIn("Search quality evidence", html)
         for label in ("Specification and observed validity", "Physical copies and state", "Provenance", "Content and context estimate", "Signals not observed"):
             self.assertIn(label, html)
@@ -940,8 +940,14 @@ context.runGuideExplain().then(() => console.log(JSON.stringify({
         html = _read(INDEX_HTML)
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
         self.assertIn("'grid-browse': view === 'skills' && browseMode === 'grid'", html)
-        self.assertIn('.layout.grid-browse { grid-template-columns: 220px minmax(460px, 42vw) minmax(0, 1fr); }', css)
-        self.assertIn('.layout.grid-browse { grid-template-columns: 136px minmax(360px, 46vw) minmax(0, 1fr); }', css)
+        # 2.1e: the rail width is `--rail-w` in both bands.  The assertion
+        # used to be the two hard-coded literals (220px / 136px) that this task
+        # removed precisely because one width had three values; the intent —
+        # "grid mode widens the browse pane and the phone stays a column" —
+        # is unchanged, so it is asserted against the token instead.
+        self.assertIn('--rail-w: 56px;', css)
+        self.assertIn('.layout.grid-browse { grid-template-columns: var(--rail-w) minmax(460px, 42vw) minmax(0, 1fr); }', css)
+        self.assertIn('.layout.grid-browse { grid-template-columns: var(--rail-w) minmax(360px, 46vw) minmax(0, 1fr); }', css)
         self.assertIn('.layout.grid-browse .skill-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }', css)
         self.assertIn('.layout { display: flex; flex-direction: column; }', css)
         self.assertIn('grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));', css)

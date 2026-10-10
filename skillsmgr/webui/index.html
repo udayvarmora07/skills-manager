@@ -310,7 +310,7 @@
         </div>
       </nav>
 
-      <button class="mobile-controls-toggle" type="button" @click="compactControlsOpen = !compactControlsOpen" :aria-expanded="compactControlsOpen" aria-controls="compact-controls" data-tip="Scope &amp; context">
+      <button class="mobile-controls-toggle" type="button" @click="compactControlsOpen = !compactControlsOpen" :aria-expanded="compactControlsOpen" aria-controls="compact-controls" :data-tip="compactControlsOpen ? 'Hide scope controls' : 'Show scope controls'">
         <app-icon name="sliders-horizontal" aria-hidden="true"></app-icon>
         <span class="nav-label">{{ compactControlsOpen ? 'Hide scope controls' : 'Show scope controls' }}</span>
       </button>
