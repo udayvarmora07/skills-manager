@@ -208,10 +208,13 @@
   <!-- ============================================================ topbar -->
   <header class="topbar" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'">
     <button class="brand" type="button" @click="switchView('overview')" title="Go to Overview">
-      <span class="brand-mark" aria-hidden="true">
-        <app-icon name="wrench" aria-hidden="true"></app-icon>
-      </span>
-      <span class="brand-name">Skills Manager <span class="brand-sub">local</span></span>
+      <svg class="brand-glyph" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+           stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 2.5 2.5 6.25 10 10l7.5-3.75L10 2.5Z"/>
+        <path d="m2.5 10 7.5 3.75L17.5 10"/>
+        <path d="m2.5 13.75 7.5 3.75 7.5-3.75"/>
+      </svg>
+      <span class="brand-name">skills-manager</span>
       <span class="brand-short" aria-hidden="true">SM</span>
       <span class="sr-only">Go to Overview</span>
     </button>
@@ -327,10 +330,29 @@
       </section>
       <div id="compact-controls" class="compact-controls" :class="{ open: compactControlsOpen }">
 
-      <div class="rail-heading"><span>Agent scopes</span><span class="hint">{{ formatNumber(allScopesCount) }} skills</span></div>
-      <div class="scopebar" v-if="scopes && scopes.length">
-        <button class="scope-link" :class="{ active: activeScope === 'all' }" @click="activeScope = 'all'" :aria-pressed="activeScope === 'all'"><span>All scopes</span><strong>{{ formatNumber(allScopesCount) }}</strong></button>
-        <button v-for="s in scopes.filter(Boolean)" :key="s.id" class="scope-link" :class="{ active: activeScope === s.id, 'scope-link-over': scopeBudgetFor(s.id) && scopeBudgetFor(s.id).over }" :title="s.path + ' · ' + formatTokens(s.tokens) + ' tokens' + (scopePctFor(s.id) ? ' · ' + scopePctFor(s.id) + ' of one context window' : '')" @click="activeScope = s.id" :aria-pressed="activeScope === s.id"><span>{{ s.label }}</span><strong>{{ formatNumber(s.count) }}</strong><span v-if="scopePctFor(s.id)" class="scope-pct num" :class="scopePctClass(scopeBudgetFor(s.id).pct)">{{ scopePctFor(s.id) }}</span></button>
+      <div class="rail-heading"><span>Library scope</span><span class="hint">{{ formatNumber(allScopesCount) }} skills</span></div>
+      <div class="dropdown scopepicker" ref="scopeMenuWrap" v-if="scopes && scopes.length">
+        <button ref="scopeMenuTrigger" type="button" class="scope-trigger"
+                aria-haspopup="listbox" :aria-expanded="scopeMenuOpen ? 'true' : 'false'"
+                aria-controls="scope-menu" @click="toggleScopeMenu">
+          <span class="scope-dot" :class="activeScopeAvailable ? 'dot-ok' : 'dot-missing'" aria-hidden="true"></span>
+          <span class="scope-trigger-label">{{ activeScopeLabel }}</span>
+          <span class="scope-trigger-count num">{{ formatNumber(activeScope === 'all' ? allScopesCount : totalCount) }}</span>
+          <app-icon name="chevron-down" class="scope-trigger-chevron" aria-hidden="true"></app-icon>
+        </button>
+        <div v-if="scopeMenuOpen" id="scope-menu" class="menu scope-menu" role="listbox"
+             aria-label="Library scope" @keydown="onScopeMenuKeydown">
+          <button v-for="opt in scopeOptions" :key="opt.id" type="button" role="option"
+                  class="scope-option" :class="{ active: opt.id === activeScope, over: opt.over }"
+                  :aria-selected="opt.id === activeScope ? 'true' : 'false'"
+                  @click="chooseScope(opt.id)">
+            <span class="scope-dot" :class="opt.exists ? 'dot-ok' : 'dot-missing'" aria-hidden="true"></span>
+            <span class="scope-option-label">{{ opt.label }}</span>
+            <span class="scope-option-path" :title="opt.path">{{ opt.path }}</span>
+            <span class="scope-option-count num">{{ formatNumber(opt.count) }}</span>
+            <span class="sr-only">{{ opt.exists ? '' : 'Root not detected on this machine' }}</span>
+          </button>
+        </div>
       </div>
 
       <div v-if="budget" class="budgetbar" :title="'Context: ' + budget.window + ' (' + formatTokens(budget.window_tokens) + ' tok)'">

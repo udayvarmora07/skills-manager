@@ -306,13 +306,34 @@ class IconSpriteTests(unittest.TestCase):
     def test_no_inline_icon_geometry_remains_in_the_template(self):
         # One icon, one source. A stray hand-drawn <path> beside the sprite is
         # how the set drifts back to 40 unrelated shapes.
+        #
+        # Exactly one exception, and it is not an ICON: the product wordmark.
+        # Lucide ships no wordmark, so a stacked-layers mark belongs to this
+        # product; putting it in static/icons/lucide-sprite.svg would file a
+        # project-authored glyph under someone else's ISC licence. The
+        # exception is a class, not a blank cheque — the wordmark must be the
+        # only inline geometry, must appear once, and must be stroked (no
+        # filled path, which is what would let it stand in for an icon).
         body = _slice(self.html, "<body>", "</body>")
         leftovers = [m for m in re.finditer(r"<svg\b[^>]*>(.*?)</svg>", body, re.S)
-                     if "<symbol" not in m.group(1) and "<use" not in m.group(1)]
+                     if "<symbol" not in m.group(1) and "<use" not in m.group(1)
+                     and 'class="brand-glyph"' not in m.group(0)]
         self.assertEqual(
             [m.group(0)[:80] for m in leftovers], [],
             "inline SVG geometry outside the sprite; use <app-icon name=…>",
         )
+
+    def test_the_wordmark_is_the_only_inline_svg_and_it_is_stroked(self):
+        body = _slice(self.html, "<body>", "</body>")
+        marks = re.findall(r'<svg class="brand-glyph".*?</svg>', body, re.S)
+        self.assertEqual(len(marks), 1, f"expected one wordmark, found {len(marks)}")
+        mark = marks[0]
+        self.assertNotIn('fill="currentColor"', mark,
+                         "a filled wordmark can stand in for an icon; keep it stroked")
+        self.assertIn('stroke="currentColor"', mark)
+        # A wordmark with no geometry is an empty box: the shape IS the mark.
+        self.assertGreaterEqual(len(re.findall(r"<path\b", mark)), 2,
+                                "the wordmark needs its stacked layers")
 
     def test_the_component_is_registered_and_validates_its_names(self):
         # A misspelled name must be loud. Rendering nothing is the failure this

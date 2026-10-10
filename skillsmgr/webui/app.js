@@ -131,6 +131,7 @@ createApp({
       themeMediaQuery: null,
       themeMediaHandler: null,
       menuOpen: false,
+      scopeMenuOpen: false,
       busy: false,
       banner: null,
       // Keep the Overview readiness marker absent until the first list
@@ -645,6 +646,45 @@ createApp({
     },
   },
 
+    /* The scope switcher is a listbox over OBSERVED facts only: a scope the
+       server did not discover is reported as "root not detected", never as an
+       empty library. `/api/scopes` omits missing roots, so `exists: false` here
+       means undiscovered, not empty — the copy says exactly that. */
+    scopeOptions() {
+      const all = {
+        id: "all",
+        label: "All scopes",
+        path: "every detected root",
+        count: this.allScopesCount(),
+        exists: true,
+        over: false,
+      };
+      const rows = (this.scopes || []).filter(Boolean).map((s) => {
+        const budget = this.scopeBudgetFor(s.id);
+        return {
+          id: s.id,
+          label: s.label,
+          path: s.path || "",
+          count: s.count || 0,
+          exists: s.exists !== false,
+          over: !!(budget && budget.over),
+        };
+      });
+      return [all].concat(rows);
+    },
+
+    activeScopeOption() {
+      return this.scopeOptions.find((o) => o.id === this.activeScope) || this.scopeOptions[0];
+    },
+
+    activeScopeLabel() {
+      return this.activeScopeOption.label;
+    },
+
+    activeScopeAvailable() {
+      return this.activeScopeOption.exists;
+    },
+
   watch: {
     theme(v) {
       this.applyThemePreference(v);
@@ -764,6 +804,70 @@ createApp({
     scopePctFor(id) {
       const row = this.scopeBudgetFor(id);
       return row ? row.pctRounded + "%" : "";
+    },
+
+    scopeMenuItems() {
+      if (!this.$refs.scopeMenuWrap) return [];
+      return [...this.$refs.scopeMenuWrap.querySelectorAll('[role="option"]:not([disabled])')];
+    },
+
+    focusScopeMenuItem(el) {
+      if (el && el.focus) el.focus();
+    },
+
+    toggleScopeMenu() {
+      if (this.scopeMenuOpen) {
+        this.closeScopeMenu(true);
+        return;
+      }
+      this.menuOpen = false;
+      this.scopeMenuOpen = true;
+      this.$nextTick(() => {
+        const items = this.scopeMenuItems();
+        const current = items.find((el) => el.getAttribute("aria-selected") === "true");
+        this.focusScopeMenuItem(current || items[0]);
+      });
+    },
+
+    closeScopeMenu(restoreFocus = false) {
+      this.scopeMenuOpen = false;
+      if (restoreFocus) {
+        const trigger = this.$refs.scopeMenuTrigger;
+        this.$nextTick(() => trigger && trigger.focus());
+      }
+    },
+
+    chooseScope(id) {
+      this.activeScope = id;
+      this.closeScopeMenu(true);
+    },
+
+    onScopeMenuKeydown(e) {
+      const items = this.scopeMenuItems();
+      if (!items.length) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeScopeMenu(true);
+        return;
+      }
+      if (e.key === "Tab") {
+        // A listbox is a single tab stop; Tab leaves it rather than walking rows.
+        this.closeScopeMenu(false);
+        return;
+      }
+      const index = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const delta = e.key === "ArrowDown" ? 1 : -1;
+        items[(index + delta + items.length) % items.length].focus();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        items[0].focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        items[items.length - 1].focus();
+      }
     },
     renderMarkdown,
     tokenPctClass,
@@ -2197,7 +2301,8 @@ createApp({
         e.preventDefault();
         this.openModal("help", {});
       } else if (e.key === "Escape") {
-        if (this.menuOpen) this.closeActionsMenu(true);
+        if (this.scopeMenuOpen) this.closeScopeMenu(true);
+        else if (this.menuOpen) this.closeActionsMenu(true);
         else if (this.activeModal === "update") this.requestCloseUpdate();
         else if (this.activeModal) this.closeModal(this.activeModal);
       }
@@ -2206,6 +2311,9 @@ createApp({
     onDocMousedown(e) {
       if (this.menuOpen && this.$refs.menuWrap && !this.$refs.menuWrap.contains(e.target)) {
         this.menuOpen = false;
+      }
+      if (this.scopeMenuOpen && this.$refs.scopeMenuWrap && !this.$refs.scopeMenuWrap.contains(e.target)) {
+        this.scopeMenuOpen = false;
       }
     },
 

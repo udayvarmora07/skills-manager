@@ -1002,34 +1002,91 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .navigation-rail .viewtabs button.active svg { color: var(--accent-text); }
 .navigation-rail .compact-controls { display: block; }
 .navigation-rail .rail-heading { display: flex; padding: 20px 16px 8px; border: 0; }
-.navigation-rail .scopebar { display: flex; flex-direction: column; gap: 2px; max-height: none; margin: 0; padding: 0 12px 16px; border: 0; overflow: visible; }
 .navigation-rail .budgetbar { margin: auto 12px 16px; }
 .rail-heading { display: flex; justify-content: space-between; align-items: baseline; color: var(--text); font-size: var(--t-meta); font-weight: 700; }
 .rail-heading .hint { font-size: var(--t-meta); font-weight: 500; }
-.scope-link {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+
+/* --- scope switcher (v2 shell) ----------------------------------------------
+   The rail showed every scope as a stacked button, so a library with eight
+   roots pushed the context-budget meter off the bottom of a 720px viewport.
+   A single trigger plus a listbox is what DESIGN-V2 section E specifies, and
+   it is also the only arrangement that can show the availability dot per scope
+   without hiding the meter. The dot is an observed fact (`exists` on
+   `/api/scopes`), never an inference about whether the library is empty. */
+.scopepicker { margin: 0 12px 4px; }
+.scope-trigger {
+  display: flex;
   align-items: center;
   gap: var(--s2);
+  width: 100%;
   min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid transparent;
+  padding: 0 var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.scope-trigger:hover { background: var(--hover); border-color: var(--border-strong); }
+.scope-trigger-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scope-trigger-count { color: var(--text-muted); }
+.scope-trigger-chevron { width: 14px; height: 14px; flex: none; color: var(--text-muted); }
+.scope-menu { right: auto; left: 0; width: 100%; min-width: 0; padding: var(--s1); }
+.scope-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "dot label count" ". path path";
+  align-items: center;
+  gap: 0 var(--s2);
+  width: 100%;
+  min-height: 32px;
+  padding: 4px var(--s2);
+  border: 0;
   border-radius: var(--r-ctl);
   background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
+  color: var(--text);
   text-align: left;
-  font-size: var(--t-table);
+  cursor: pointer;
 }
-.scope-link > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scope-link:hover { color: var(--text); background: var(--surface); }
-.scope-link.active { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
-.scope-link strong { min-width: 24px; text-align: right; color: var(--text-muted); font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
-.scope-link.active strong { color: var(--accent-text); }
+.scope-option:hover { background: var(--hover); }
+.scope-option.active { background: var(--accent-soft); color: var(--accent-text); }
+.scope-option.over .scope-option-count { color: var(--warn); }
+.scope-option .scope-dot { grid-area: dot; }
+.scope-option-label { grid-area: label; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scope-option-count { grid-area: count; font-variant-numeric: tabular-nums; }
+.scope-option-path {
+  grid-area: path;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: var(--t-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+/* A root the server did not discover is a different fact from a discovered but
+   empty one, and DESIGN-V2 section B forbids collapsing states: the dot is
+   muted rather than absent, and the option still offers the scope to select. */
+.scope-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot-missing { background: var(--text-muted); }
+
+/* --- wordmark ----------------------------------------------------------------
+   Own geometric stacked-layers mark, not a stock tool icon: the product is a
+   control plane over skill directories, and DESIGN-V2 section E asks for a
+   mark rather than a wrench. The name is the package name, in mono at the meta
+   step, so it reads as an identifier next to the paths and counts below it. */
+.brand-glyph { width: 20px; height: 20px; flex: none; color: var(--text-muted); }
+.brand-name {
+  font-family: var(--mono);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  letter-spacing: 0;
+}
 /* The scope's share of one context window. Present so that an agent whose
    instructions are being truncated is visible from every screen, not only from
    the overview that explains it. */
-.scope-pct { min-width: 40px; text-align: right; font-size: var(--t-meta); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rail-quick-actions { display: grid; gap: 4px; margin: 16px 12px 0; padding-top: 12px; border-top: 1px solid var(--border); }
 /* Sentence case, not tracked-out capitals. A rail label groups six views, so
    it earns its place — but uppercase-and-letter-spaced is chrome that appears
@@ -1125,14 +1182,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .chip:hover { border-color: var(--border-strong); color: var(--text); }
 .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
 .chip-count { font-size: var(--t-meta); margin-left: 2px; }
-
-.scopebar {
-  display: flex;
-  gap: var(--s2);
-  padding: var(--s2) var(--s4) 0;
-  flex-wrap: wrap;
-  overflow-x: auto;
-}
 
 .sidebar.list-pane { min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
 /* The list pane and the document pane were both `--surface`, so in dark theme
@@ -2401,7 +2450,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .navigation-rail .compact-controls { order: 2; display: none; }
   .navigation-rail .compact-controls.open { display: block; }
   .navigation-rail .compact-controls.open .rail-heading { padding: 12px; }
-  .navigation-rail .compact-controls.open .scopebar { padding: 0 12px 8px; }
   .navigation-rail .compact-controls.open .budgetbar { margin: 8px 12px 12px; }
   .rail-quick-actions { display: none; }
   .sidebar.list-pane { display: flex; width: 100%; border-right: 0; }
