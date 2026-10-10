@@ -293,40 +293,32 @@
       <nav class="viewtabs" aria-label="Views">
         <div class="nav-group">
           <span class="nav-group-label">Workspace</span>
-          <button :class="{ active: view === 'overview' }" @click="switchView('overview')" :aria-current="view === 'overview' ? 'page' : undefined"><app-icon name="house" aria-hidden="true"></app-icon>Overview</button>
-          <button :class="{ active: view === 'skills' }" @click="switchView('skills')" :aria-current="view === 'skills' ? 'page' : undefined"><app-icon name="book-open" aria-hidden="true"></app-icon>Library</button>
-          <button :class="{ active: view === 'profiles' }" @click="switchView('profiles')" :aria-current="view === 'profiles' ? 'page' : undefined"><app-icon name="users" aria-hidden="true"></app-icon>Profiles</button>
-          <button :class="{ active: view === 'workspaces' }" @click="switchView('workspaces')" :aria-current="view === 'workspaces' ? 'page' : undefined"><app-icon name="layout-grid" aria-hidden="true"></app-icon>Workspaces</button>
+          <button :class="{ active: view === 'overview' }" @click="switchView('overview')" :aria-current="view === 'overview' ? 'page' : undefined" data-tip="Overview"><app-icon name="house" aria-hidden="true"></app-icon><span class="nav-label">Overview</span></button>
+          <button :class="{ active: view === 'skills' }" @click="switchView('skills')" :aria-current="view === 'skills' ? 'page' : undefined" data-tip="Library"><app-icon name="book-open" aria-hidden="true"></app-icon><span class="nav-label">Library</span></button>
+          <button :class="{ active: view === 'profiles' }" @click="switchView('profiles')" :aria-current="view === 'profiles' ? 'page' : undefined" data-tip="Profiles"><app-icon name="users" aria-hidden="true"></app-icon><span class="nav-label">Profiles</span></button>
+          <button :class="{ active: view === 'workspaces' }" @click="switchView('workspaces')" :aria-current="view === 'workspaces' ? 'page' : undefined" data-tip="Workspaces"><app-icon name="layout-grid" aria-hidden="true"></app-icon><span class="nav-label">Workspaces</span></button>
         </div>
         <div class="nav-group">
           <span class="nav-group-label">Operations</span>
-          <button :class="{ active: view === 'install' }" @click="switchView('install')" :aria-current="view === 'install' ? 'page' : undefined"><app-icon name="upload" aria-hidden="true"></app-icon>Install</button>
-          <button :class="{ active: view === 'recovery' }" @click="switchView('recovery')" :aria-current="view === 'recovery' ? 'page' : undefined"><app-icon name="rotate-ccw" aria-hidden="true"></app-icon>Recovery</button>
-          <button :class="{ active: view === 'quality' }" @click="switchView('quality')" :aria-current="view === 'quality' ? 'page' : undefined"><app-icon name="circle-check" aria-hidden="true"></app-icon>Quality</button>
+          <button :class="{ active: view === 'install' }" @click="switchView('install')" :aria-current="view === 'install' ? 'page' : undefined" data-tip="Install"><app-icon name="upload" aria-hidden="true"></app-icon><span class="nav-label">Install</span></button>
+          <button :class="{ active: view === 'recovery' }" @click="switchView('recovery')" :aria-current="view === 'recovery' ? 'page' : undefined" data-tip="Recovery"><app-icon name="rotate-ccw" aria-hidden="true"></app-icon><span class="nav-label">Recovery</span></button>
+          <button :class="{ active: view === 'quality' }" @click="switchView('quality')" :aria-current="view === 'quality' ? 'page' : undefined" data-tip="Quality"><app-icon name="circle-check" aria-hidden="true"></app-icon><span class="nav-label">Quality</span></button>
         </div>
         <div class="nav-group">
           <span class="nav-group-label">Preferences</span>
-          <button :class="{ active: view === 'settings' }" @click="switchView('settings')" :aria-current="view === 'settings' ? 'page' : undefined"><app-icon name="sliders-horizontal" aria-hidden="true"></app-icon>Settings</button>
+          <button :class="{ active: view === 'settings' }" @click="switchView('settings')" :aria-current="view === 'settings' ? 'page' : undefined" data-tip="Settings"><app-icon name="sliders-horizontal" aria-hidden="true"></app-icon><span class="nav-label">Settings</span></button>
         </div>
       </nav>
 
-      <button class="mobile-controls-toggle" type="button" @click="compactControlsOpen = !compactControlsOpen" :aria-expanded="compactControlsOpen" aria-controls="compact-controls">
-        {{ compactControlsOpen ? 'Hide scope controls' : 'Show scope controls' }}
+      <button class="mobile-controls-toggle" type="button" @click="compactControlsOpen = !compactControlsOpen" :aria-expanded="compactControlsOpen" aria-controls="compact-controls" data-tip="Scope &amp; context">
+        <app-icon name="sliders-horizontal" aria-hidden="true"></app-icon>
+        <span class="nav-label">{{ compactControlsOpen ? 'Hide scope controls' : 'Show scope controls' }}</span>
       </button>
       <section v-if="view === 'skills'" class="rail-quick-actions" aria-labelledby="quick-actions-title">
         <p id="quick-actions-title" class="rail-heading-label">Quick actions</p>
-        <button class="rail-action" type="button" @click="openCreate">
-          <app-icon name="plus" aria-hidden="true"></app-icon>
-          New skill
-        </button>
-        <button class="rail-action" type="button" @click="openAdd">
-          <app-icon name="layout-panel-top" aria-hidden="true"></app-icon>
-          Add from folder
-        </button>
-        <button v-if="selectedName" class="rail-action" type="button" @click="openValidate">
-          <app-icon name="circle-check" aria-hidden="true"></app-icon>
-          Validate selected
-        </button>
+        <button class="rail-action" type="button" @click="openCreate" data-tip="New skill"><app-icon name="plus" aria-hidden="true"></app-icon><span class="nav-label">New skill</span></button>
+        <button class="rail-action" type="button" @click="openAdd" data-tip="Add from folder"><app-icon name="layout-panel-top" aria-hidden="true"></app-icon><span class="nav-label">Add from folder</span></button>
+        <button v-if="selectedName" class="rail-action" type="button" @click="openValidate" data-tip="Validate selected"><app-icon name="circle-check" aria-hidden="true"></app-icon><span class="nav-label">Validate selected</span></button>
       </section>
       <div id="compact-controls" class="compact-controls" :class="{ open: compactControlsOpen }">
 

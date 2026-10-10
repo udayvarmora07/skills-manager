@@ -132,7 +132,7 @@
   --dur: 120ms;
   --tr-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
 
-  --rail-w: 240px;
+  --rail-w: 56px;
   --pane-w: 392px;
   --measure: 68ch;
 }
@@ -929,13 +929,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 220px minmax(320px, 380px) minmax(0, 1fr);
+  grid-template-columns: var(--rail-w) minmax(320px, 380px) minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
-.layout.overview-view { grid-template-columns: 220px minmax(0, 1fr); }
+.layout.overview-view { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
 .layout.overview-view .list-pane { display: none; }
-.layout.grid-browse { grid-template-columns: 220px minmax(460px, 42vw) minmax(0, 1fr); }
+.layout.grid-browse { grid-template-columns: var(--rail-w) minmax(460px, 42vw) minmax(0, 1fr); }
 
 .sidebar {
   width: auto;
@@ -978,37 +978,100 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .mobile-back { display: none; }
 
 .navigation-rail {
+  position: relative;              /* anchors the rail panel (2.1e) */
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;             /* one centred 44px icon track */
   background: var(--surface-2);
   border-right: 1px solid var(--border);
-  overflow-y: auto;
+  overflow: visible;
 }
+.navigation-rail .viewtabs { overflow-y: auto; }
 
 [data-theme="dark"] .navigation-rail { background: #1b1f27; }
-.navigation-rail .viewtabs { flex-direction: column; gap: 0; padding: 16px 12px; border: 0; }
-.navigation-rail .nav-group + .nav-group { margin-top: 16px; padding-top: 12px; }
-.navigation-rail .nav-group-label { padding-inline: 12px; }
+.navigation-rail .viewtabs { flex-direction: column; gap: 0; width: 100%; padding: 12px 0; border: 0; }
+.navigation-rail .nav-group { justify-items: center; width: 100%; }
+/* The group word is gone visually, so the grouping moves onto a hairline.
+   An icon rail has no room for a caption; the caption stays in the
+   accessibility tree, and the rule is what a sighted reader reads. */
+.navigation-rail .nav-group + .nav-group { margin-top: 12px; padding-top: 12px; }
+.navigation-rail .nav-group-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .navigation-rail .viewtabs button {
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
+  width: 44px;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0;
   border: 0;
   border-left: 3px solid transparent;
   border-radius: 8px;
-  text-align: left;
+  text-align: center;
+}
+.navigation-rail .viewtabs button svg { width: 18px; height: 18px; }
+/* The label is clipped, never `display:none` — an icon-only button whose
+   only text is display:none has NO accessible name. */
+.navigation-rail .viewtabs .nav-label,
+.navigation-rail .rail-action .nav-label,
+.navigation-rail .mobile-controls-toggle .nav-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .navigation-rail .viewtabs button.active { background: var(--accent-soft); border-left-color: var(--accent); }
 .navigation-rail .viewtabs button svg { width: 16px; height: 16px; flex: none; color: var(--text-muted); }
 .navigation-rail .viewtabs button.active svg { color: var(--accent-text); }
-.navigation-rail .compact-controls { display: block; }
-.navigation-rail .rail-heading { display: flex; padding: 20px 16px 8px; border: 0; }
-.navigation-rail .budgetbar { margin: auto 12px 16px; }
+/* Scope + context live in one rail panel behind one icon disclosure, at every
+   width.  A 56px column cannot hold a labelled scope switcher, a token meter
+   and a window <select> side by side, and truncating any of them is worse
+   than one more click.  The state is the existing `compactControlsOpen`; no
+   new flag, no new Escape branch, no new click-outside handler. */
+.navigation-rail .mobile-controls-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.navigation-rail .mobile-controls-toggle:hover { background: var(--hover); color: var(--text); }
+.navigation-rail .compact-controls { display: none; }
+.navigation-rail .compact-controls.open {
+  display: block;
+  position: absolute;
+  z-index: 40;
+  top: 8px;
+  left: calc(100% + 8px);
+  width: 268px;
+  padding-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+}
+.navigation-rail .rail-heading { display: flex; padding: 12px 12px 8px; border: 0; }
+.navigation-rail .budgetbar { margin: 0 12px; }
 .rail-heading { display: flex; justify-content: space-between; align-items: baseline; color: var(--text); font-size: var(--t-meta); font-weight: 700; }
 .rail-heading .hint { font-size: var(--t-meta); font-weight: 500; }
 
@@ -1125,7 +1188,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* The scope's share of one context window. Present so that an agent whose
    instructions are being truncated is visible from every screen, not only from
    the overview that explains it. */
-.rail-quick-actions { display: grid; gap: 4px; margin: 16px 12px 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.rail-quick-actions { display: grid; gap: 4px; justify-items: center; width: 100%; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.navigation-rail .rail-heading-label {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 /* Sentence case, not tracked-out capitals. A rail label groups six views, so
    it earns its place — but uppercase-and-letter-spaced is chrome that appears
    whatever the subject, and it is the tell this replaces. */
@@ -1136,7 +1208,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   font-weight: 600;
   letter-spacing: .01em;
 }
-.rail-action { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-ctl); background: transparent; color: var(--text-muted); cursor: pointer; text-align: left; font-size: var(--t-table); }
+.rail-action { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 0; border: 1px solid transparent; border-radius: var(--r-ctl); background: transparent; color: var(--text-muted); cursor: pointer; text-align: left; font-size: var(--t-table); }
 .rail-action:hover { background: var(--surface); color: var(--text); }
 .rail-action svg { width: 15px; height: 15px; flex: none; }
 
@@ -2470,8 +2542,8 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 1199px) and (min-width: 761px) {
-  .layout { grid-template-columns: 136px minmax(320px, 360px) minmax(0, 1fr); }
-  .layout.grid-browse { grid-template-columns: 136px minmax(360px, 46vw) minmax(0, 1fr); }
+  .layout { grid-template-columns: var(--rail-w) minmax(320px, 360px) minmax(0, 1fr); }
+  .layout.grid-browse { grid-template-columns: var(--rail-w) minmax(360px, 46vw) minmax(0, 1fr); }
   .layout.grid-browse .skill-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .navigation-rail .viewtabs button { padding-inline: 8px; font-size: var(--t-table); }
   .detail { padding: 24px; }
@@ -2538,9 +2610,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .navigation-rail .viewtabs .nav-group { display: contents; }
   .navigation-rail .viewtabs .nav-group + .nav-group { margin: 0; padding: 0; border: 0; }
   .navigation-rail .nav-group-label { display: none; }
-  .navigation-rail .viewtabs button svg { display: none; }
   .navigation-rail .viewtabs::-webkit-scrollbar { display: none; }
-  .navigation-rail .viewtabs button { flex: 1 0 auto; justify-content: center; min-width: 74px; min-height: 44px; border-left: 0; border-bottom: 3px solid transparent; }
+  .navigation-rail .viewtabs button { flex: 1 0 auto; justify-content: center; width: auto; min-height: 44px; gap: 8px; padding-inline: 12px; border-left: 0; border-bottom: 3px solid transparent; }
+  .navigation-rail .viewtabs button svg { width: 20px; height: 20px; }
+  /* The phone strip is a scrolling row, so it can afford the words back. */
+  .navigation-rail .viewtabs .nav-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: nowrap; }
   .navigation-rail .viewtabs button { scroll-snap-align: center; }
   .navigation-rail .viewtabs button.active { border-left: 0; border-bottom-color: var(--accent); }
   .btn { min-height: 44px; }
@@ -2550,9 +2624,10 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .copybtn { min-width: 44px; min-height: 44px; }
   .form-field input, .form-field textarea, .form-field select { min-height: 44px; }
   .searchwrap input, .form-field input, .form-field textarea, .form-field select, .workspace-project-form input, .command-palette-input { font-size: var(--t-prose); }
-  .mobile-controls-toggle { display: block; order: 1; width: calc(100% - 24px); margin: 8px 12px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
+  .navigation-rail .mobile-controls-toggle { display: flex; order: 1; width: calc(100% - 24px); margin: 8px 12px; min-height: 44px; padding: 0 12px; justify-content: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
+  .navigation-rail .mobile-controls-toggle .nav-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: nowrap; }
   .navigation-rail .compact-controls { order: 2; display: none; }
-  .navigation-rail .compact-controls.open { display: block; }
+  .navigation-rail .compact-controls.open { display: block; position: static; width: auto; padding-bottom: 0; background: none; border: 0; border-radius: 0; box-shadow: none; }
   .navigation-rail .compact-controls.open .rail-heading { padding: 12px; }
   .navigation-rail .compact-controls.open .budgetbar { margin: 8px 12px 12px; }
   .rail-quick-actions { display: none; }
@@ -2652,4 +2727,41 @@ html[data-text-size="large"] { font-size: 1.125rem; }
     transition-duration: 0.01ms !important;
   }
   .skel-row { background: var(--surface-2); }
+}
+
+/* ---------------------------------------------------------- rail tooltip */
+/* A 56px rail trades labels for icons, so the label has to come back on
+   hover and on keyboard focus.  Pure CSS: the content comes from `data-tip`,
+   so there is no timer, no JS, and nothing to keep in sync with the DOM. */
+.navigation-rail [data-tip] { position: relative; }
+.navigation-rail [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 60;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-raised, var(--surface));
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--tr-fast);
+}
+.navigation-rail [data-tip]:hover::after,
+.navigation-rail [data-tip]:focus-visible::after { opacity: 1; }
+@media (max-width: 760px) {
+  /* An overlay painted outside a full-width strip has nowhere to go: it adds
+     to the document scroll width instead.  The strip is labelled at this
+     width anyway (below), so the tooltip has no job here. */
+  .navigation-rail [data-tip]::after { content: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .navigation-rail [data-tip]::after { transition: none; }
 }
