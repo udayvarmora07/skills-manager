@@ -603,7 +603,7 @@
                    the UI owes the reader the sentence the bar was already
                    implying. tagPlan is the honest restatement: the names that
                    will be written, and how many copies each one carries. -->
-              <p class="batchbar-tagplan" role="note">Writes <strong>{{ batchTagPlan.names.length }}</strong> catalog name(s), not {{ formatNumber(selectedCount) }} instance(s):<span v-for="entry in batchTagPlan.entries" :key="entry.name" class="batchbar-tagentry"><code>{{ entry.name }}</code> — {{ formatNumber(entry.copies) }} cop{{ entry.copies === 1 ? 'y' : 'ies' }}</span></p>
+              <p class="batchbar-tagplan" role="note"><span class="batchbar-taglead">Writes <strong>{{ batchTagPlan.names.length }}</strong> catalog name(s), not {{ formatNumber(selectedCount) }} instance(s):</span><span v-for="entry in batchTagPlan.entries" :key="entry.name" class="batchbar-tagentry"><code>{{ entry.name }}</code><span class="batchbar-tagncopies">{{ formatNumber(entry.copies) }} cop{{ entry.copies === 1 ? 'y' : 'ies' }}</span></span></p>
               <input id="batch-tags" v-model.trim="batchTagInput" class="batch-tag-input" name="batch-tags" placeholder="tag, another-tag">
               <div class="batchbar-tagrow">
                 <button class="btn btn-secondary" type="button" @click="updateBatchTags('add')">Add</button>

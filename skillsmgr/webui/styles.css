@@ -1343,9 +1343,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .batchbar-tags > summary::-webkit-details-marker { display: none; }
 .batchbar-tags[open] > summary { background: var(--surface-2); border-color: var(--border); }
 .batchbar-tagpanel {
-  position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 6;
-  translate: -50% 0;
-  display: grid; gap: var(--s2); width: max-content; min-width: 232px;
+  position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 6;
+  translate: 0 0;
+  /* Left-ANCHORED, not centred, and width-bounded. It used to be
+     `left: 50%; translate: -50% 0; width: max-content`, which put half the
+     panel off the left edge of the window at 1280: the summary sits at the far
+     left of the verb row, so centring on it pushed "Tags to apply" to x<0 and
+     the reader saw "o apply". A capture found it; the containment test could
+     not, because it deliberately excludes this popover (a panel DOES overhang
+     its bar vertically) and therefore never checked its horizontal bounds. */
+  display: grid; gap: var(--s2); width: min(272px, calc(100vw - 48px));
   padding: var(--s3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   background: var(--surface); box-shadow: var(--shadow);
 }
@@ -1354,8 +1361,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    told that "3 instances selected" writes 1 catalog name covering 3 copies. It
    reads as a note, in the warning ink, above the field it governs. */
 .batchbar-tagplan { display: grid; gap: 2px; margin: 0; font-size: var(--t-meta); line-height: 1.45; color: var(--warn); }
+/* The lead sentence is ONE grid item. As bare text nodes it was three --
+   "Writes", the <strong>, "catalog name(s)..." each became a grid row of
+   their own, so the sentence stacked over three lines instead of wrapping. */
+.batchbar-taglead { min-width: 0; }
 .batchbar-tagentry { display: flex; gap: 5px; min-width: 0; align-items: baseline; }
-.batchbar-tagentry code { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.batchbar-tagentry code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.batchbar-tagncopies { flex: none; margin-inline-start: auto; }
 .batch-tag-input { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
 .batchbar-tagrow { display: flex; gap: var(--s2); }
 .batchbar-tagrow .btn { flex: 1; }
@@ -3233,7 +3245,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .batchbar-unit { display: none; }
   .batchbar-actions { flex: 1 0 100%; }
   .batchbar-verb, .batchbar-clear { min-height: 44px; padding: 0 12px; }
-  .batchbar-tagpanel { left: 0; translate: 0 0; width: min(272px, calc(100vw - 48px)); }
+  .batchbar-tagpanel { width: min(272px, calc(100vw - 48px)); }
   .batch-tag-input { width: 100%; }
   .profile-members li, .batch-target-list li { grid-template-columns: 1fr auto; }
   .profile-members small, .batch-target-list code { grid-column: 1 / -1; }

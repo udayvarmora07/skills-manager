@@ -480,6 +480,40 @@ class BulkBarTests(unittest.TestCase):
                 )
                 self.assertEqual(escaped, [], f"at {width}px these left the bar: {escaped}")
 
+    def test_the_tag_panel_stays_inside_the_viewport_at_every_width(self):
+        """The panel may OVERHANG the bar vertically -- that is what a popover
+        is -- but it must never leave the window.
+
+        It did. `left: 50%; translate: -50% 0; width: max-content` centred it on
+        a summary that sits at the far left of the verb row, so at 1280 half the
+        panel was at x<0 and the label read "o apply". The geometry test above
+        could not catch it: it scopes containment to the bar, which is correct
+        for the verbs and wrong for the panel. This asserts the other bound.
+        """
+        for width in self.WIDTHS:
+            with self.subTest(width=width):
+                self._open_library_at(width)
+                self._select_three()
+                self._page.click(".batchbar-tags > summary")
+                self._page.wait_for_timeout(150)
+                # Clicking a <summary> TOGGLES, and the loop runs three widths on
+                # one page, so a plain click would close a panel the previous
+                # subTest left open. Set the state; do not infer it from a click.
+                self._page.evaluate(
+                    "() => { document.querySelector('.batchbar-tags').open = true; }")
+                self._page.wait_for_selector(".batchbar-tagplan", timeout=5000)
+                box = self._page.evaluate(
+                    """() => {
+                      const r = document.querySelector('.batchbar-tagpanel').getBoundingClientRect();
+                      return { left: Math.round(r.left), right: Math.round(r.right),
+                               w: Math.round(r.width), vw: document.documentElement.clientWidth };
+                    }"""
+                )
+                self.assertGreaterEqual(
+                    box["left"], 0, f"at {width}px the tag panel starts off-screen: {box}")
+                self.assertLessEqual(
+                    box["right"], box["vw"], f"at {width}px the tag panel runs past the window: {box}")
+
     # -- 6. the tag path tells the truth (4.3b) --------------------------
     #
     # The bar counts EXACT PHYSICAL INSTANCES. `/api/catalog/tags` is keyed by
