@@ -1258,7 +1258,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   border-bottom: 1px solid var(--border);
 }
 .library-bar .chip { white-space: nowrap; padding: 3px 7px; font-size: var(--t-meta); }
-.library-bar .chip-count { font-size: var(--t-meta); margin-left: 2px; }
 .browse-switch svg { width: 12px; height: 12px; }
 .library-bar .tag-filter-details summary { font-size: var(--t-meta); }
 
@@ -1328,7 +1327,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 .chip:hover { border-color: var(--border-strong); color: var(--text); }
 .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
-.chip-count { font-size: var(--t-meta); margin-left: 2px; }
 
 .sidebar.list-pane { min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
 /* The list pane and the document pane were both `--surface`, so in dark theme

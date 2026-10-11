@@ -517,8 +517,13 @@
             <!-- The copy count sits on the name line, not on a line of its own.
                  It was a separate row under every skill, which cost ~24px on a
                  list where the identity groups beside it already say how many
-                 copies there are and what state each is in. -->
-            <div class="row-name">{{ s.name }} <span v-if="libraryMode === 'instances'" class="row-tokens">{{ formatTokens(s.tokens) }}</span><span v-else-if="libraryMode === 'library'" class="row-copies">{{ formatNumber((s.identities || []).length || (s.instances || []).length) }} cop{{ ((s.identities || []).length || (s.instances || []).length) === 1 ? 'y' : 'ies' }}</span></div>
+                 copies there are and what state each is in.
+
+                 It renders only for a CLUSTER (2+ observed copies). Printed on
+                 every row it read "1 copy" on 87 of the 96 seeded rows -- a
+                 constant that restates what the row already is. A row that
+                 backs a cluster says so; a row that does not needs no ink. -->
+            <div class="row-name">{{ s.name }} <span v-if="libraryMode === 'instances'" class="row-tokens">{{ formatTokens(s.tokens) }}</span><span v-else-if="libraryMode === 'library' && clusterSize(s) > 1" class="row-copies">{{ formatNumber(clusterSize(s)) }} copies</span></div>
             <div class="row-desc">{{ s.description }}</div>
           </div>
           <div v-if="browseMode === 'grid'" class="card-meta" aria-label="Observed identity and state">
@@ -542,7 +547,7 @@
             </span>
           </div>
           <div v-if="rowBadgeItems(s).length" class="row-badges">
-            <span v-for="badge in rowBadgeItems(s).filter(b => !/^\d+ cop/.test(b.text))" :key="badge.key" class="tag" :class="{ 'tag-scope': badge.scope }">{{ badge.text }}</span>
+            <span v-for="badge in rowBadgeItems(s)" :key="badge.key" class="tag">{{ badge.text }}</span>
           </div>
         </li>
         <!-- 2.3. The rows are decorative; the STATE is not, and it was silent.

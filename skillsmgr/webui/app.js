@@ -1346,16 +1346,34 @@ const appOptions = {
 
     /* The row badge row is omitted entirely when it would be empty, so a list
      * without tags or multi-copy groups does not reserve a blank grid track. */
+    /* Tags and category for a row. The "N copies" badge that used to be
+     * computed here was removed in the template by a regex matching
+     * /^\d+ cop/ on its own text -- so every multi-copy row with no tags
+     * rendered an EMPTY `.row-badges` cell (measured: 7 of 96), and two files
+     * had to agree on an English word for no visible result. The cluster
+     * count is not a badge; it is the row's shape, and `clusterSize` owns it. */
     rowBadgeItems(s) {
       if (!s) return [];
       if (this.libraryMode === "library") {
-        const tags = this.groupTags(s);
-        return (s.instanceCount > 1 ? [{ key: "copies", text: s.instanceCount + " copies", scope: true }] : [])
-          .concat(tags.map((tag) => ({ key: "tag:" + tag, text: "#" + tag })));
+        return this.groupTags(s).map((tag) => ({ key: "tag:" + tag, text: "#" + tag }));
       }
       const tags = s.tags || [];
       return (s.category ? [{ key: "category", text: s.category }] : [])
         .concat(tags.map((tag) => ({ key: "tag:" + tag, text: "#" + tag })));
+    },
+
+    /* How many exact physical instances one Library row stands for.
+     *
+     * A Library row is one NAME; this is how many on-disk copies back it. It
+     * was printed on every row, so 87 of 96 rows in the seeded library read
+     * "1 copy" -- a constant restating the row's own shape, in a bordered
+     * pill immediately after the name. A cluster is the exception worth
+     * marking; a single copy is what every other row already is, so it needs
+     * no ink. `identities` leads because aliases collapse to one physical
+     * instance and must not be counted twice. */
+    clusterSize(item) {
+      if (!item) return 0;
+      return (item.identities || []).length || (item.instances || []).length || 0;
     },
 
     profileTargets() {
