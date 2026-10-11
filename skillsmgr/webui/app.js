@@ -177,6 +177,7 @@ const appOptions = {
       catalog: { version: 1, tags: {}, profiles: {} },
       tagFilter: "",
       selectedKeys: [],
+      selectedSnapshot: {},
       batchTagInput: "",
       selectedName: null,
       selected: null,
@@ -405,7 +406,25 @@ const appOptions = {
     },
     selectedTargets() {
       const wanted = new Set(this.selectedKeys);
-      return this.skills.filter((record) => wanted.has(this.targetKey(record)));
+      /* The record set is NOT stable. `refreshList()` sends a live query to the
+         server and REPLACES `this.skills` with the matches, so a key the reader
+         had ticked stops resolving — measured: type one character into the
+         search box after selecting 3 rows and the bulk bar vanished, taking the
+         selection with it, silently and with no undo.
+
+         `selectedSnapshot` is the copy taken at the moment of selection: the
+         handful of fields a batch target needs. A selection is a decision the
+         reader made about rows they can SEE; narrowing the list afterwards must
+         not unmake it. Records that are still loaded win, so the snapshot can
+         never serve a staler `disabled` value than the API does. */
+      const found = this.skills.filter((record) => wanted.has(this.targetKey(record)));
+      if (found.length === wanted.size) return found;
+      const seen = new Set(found.map((record) => this.targetKey(record)));
+      const restored = this.selectedKeys
+        .filter((key) => !seen.has(key))
+        .map((key) => this.selectedSnapshot[key])
+        .filter(Boolean);
+      return found.concat(restored);
     },
     selectedCount() { return this.selectedTargets.length; },
     profileObservedCount() {
@@ -975,7 +994,7 @@ const appOptions = {
       localStorage.setItem("skillsmgr-scope", v);
       this.selectedName = null;
       this.selected = null;
-      this.selectedKeys = [];
+      this.clearSelection();
       this.mobileDetailOpen = false;
       this.allSkills = [];
       // BUG-4: a live query must keep filtering after the scope changes,
@@ -1436,11 +1455,25 @@ const appOptions = {
     toggleSelection(record, checked) {
       const instances = record.instances || [record];
       const keys = new Set(this.selectedKeys);
+      const snapshot = Object.assign({}, this.selectedSnapshot);
       for (const instance of instances) {
         const key = this.targetKey(instance);
-        if (checked) keys.add(key); else keys.delete(key);
+        if (checked) {
+          keys.add(key);
+          snapshot[key] = Object.freeze({
+            name: instance.name,
+            scope: instance.scope,
+            path: instance.path || instance.physical_path || "",
+            physical_path: instance.physical_path || instance.path || "",
+            disabled: Number(instance.disabled) || 0,
+          });
+        } else {
+          keys.delete(key);
+          delete snapshot[key];
+        }
       }
       this.selectedKeys = [...keys];
+      this.selectedSnapshot = snapshot;
     },
 
     toggleSelectAll() {
@@ -1448,6 +1481,23 @@ const appOptions = {
       if (this.allVisibleSelected) this.visibleTargetKeys.forEach((key) => keys.delete(key));
       else this.visibleTargetKeys.forEach((key) => keys.add(key));
       this.selectedKeys = [...keys];
+      // Prune, so a snapshot entry never outlives the key that justified it.
+      const snapshot = Object.assign({}, this.selectedSnapshot);
+      for (const key of Object.keys(snapshot)) if (!keys.has(key)) delete snapshot[key];
+      this.selectedSnapshot = snapshot;
+    },
+
+    /* The bulk bar had no way out that did not depend on the filter.
+       `toggleSelectAll` only ever adds or removes VISIBLE keys, so three
+       hand-picked rows out of 96 left the reader with "Select visible" — which
+       would have added the other 93 — and no control that emptied the
+       selection. Changing the filter hid the chosen rows and kept them counted
+       forever. One call, and the tag field goes with it because it is an input
+       into an action that is about to have no subject. */
+    clearSelection() {
+      this.selectedKeys = [];
+      this.selectedSnapshot = {};
+      this.batchTagInput = "";
     },
 
     skipOnboarding() {
@@ -2596,7 +2646,7 @@ const appOptions = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ operation, names: [...new Set(this.selectedTargets.map((record) => record.name))], tags }),
         });
-        this.selectedKeys = [];
+        this.clearSelection();
         this.batchTagInput = "";
         await this.loadSkills();
         this.toast("Tags updated for the selected logical skills.");
@@ -2615,6 +2665,27 @@ const appOptions = {
       const writableScopes = (this.scopes || []).filter((scope) => scope.id !== this.activeScope && scope.writable);
       this.modals.batch = { operation, targets: Object.freeze(targets.slice()), plan: null, context, toScopes: Object.fromEntries(writableScopes.map((scope) => [scope.id, true])), force: false };
       this.prepareBatch();
+    },
+
+    /* What this batch will do to THIS target, in the observed-state words the
+       rest of the app uses. The dialog only ever printed the transition for
+       `enable`, so a `disable`, `remove` or `sync` review listed names and
+       paths and said nothing about what it was about to change — three of the
+       four operations reviewed a change the reader could only infer.
+
+       `disabled` is the field the backend's own `_execute_batch_post` compares
+       against (`target["disabled"] == (not desired)` -> "already-set"), so this
+       states the real branch the request will take rather than a guess. */
+    batchOutcome(target) {
+      const operation = this.modals.batch && this.modals.batch.operation;
+      const alreadyDisabled = !!Number(target.disabled);
+      if (operation === "enable") return alreadyDisabled ? "Disabled → Active" : "Active · no state change";
+      if (operation === "disable") return alreadyDisabled ? "Disabled · no state change" : "Active → Disabled";
+      if (operation === "remove") return alreadyDisabled ? "Disabled → Trash" : "Active → Trash";
+      const chosen = Object.keys((this.modals.batch && this.modals.batch.toScopes) || {})
+        .filter((id) => this.modals.batch.toScopes[id])
+        .map((id) => (this.scopes.find((scope) => scope.id === id) || {}).label || id);
+      return chosen.length ? `Active → copied to ${chosen.join(", ")}` : "Active · no target scope chosen";
     },
 
     async prepareBatch() {
@@ -2647,7 +2718,7 @@ const appOptions = {
         });
         const failed = (result.results || []).filter((item) => item.status === "failed").length;
         this.closeModal("batch");
-        this.selectedKeys = [];
+        this.clearSelection();
         await this.loadScopes();
         await this.loadSkills();
         if (modal.context && modal.context.profileName) await this.previewProfile(modal.context.profileName);

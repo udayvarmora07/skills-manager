@@ -70,7 +70,7 @@ MEASURE = """
     chips: Array.from(document.querySelectorAll('.library-bar .chip')).map(chip),
     overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     count: (document.querySelector('.list-count') || {}).textContent || '',
-    rows: document.querySelectorAll('.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty)').length,
+    rows: document.querySelectorAll('.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty)').length,
   };
 }
 """

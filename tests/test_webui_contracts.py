@@ -1133,7 +1133,7 @@ context.runGuideExplain().then(() => console.log(JSON.stringify({
         self.assertIn('@keydown.enter.self.prevent="libraryMode === \'library\' ? selectLogicalSkill(s) : selectSkill(s)"', html)
         self.assertIn('@keydown.space.self.prevent="libraryMode === \'library\' ? selectLogicalSkill(s) : selectSkill(s)"', html)
         self.assertIn('class="browse-switch" role="group"', html)
-        self.assertIn('.skill-grid > li:not(.batchbar)', css)
+        self.assertIn('.skill-grid > li:not(.selection-hint)', css)
         self.assertIn(':focus-visible', css)
 
     def test_actions_menu_and_import_dropzone_have_complete_keyboard_contracts(self):
@@ -1338,11 +1338,23 @@ console.log(JSON.stringify(received));
 
     def test_batch_modal_explains_profile_before_after_and_recovery_policy(self):
         html = _read(INDEX_HTML)
-        self.assertIn("Disabled → Active", html)
-        self.assertIn("Active → No state change", html)
+        source = _read(APP_JS)
+        # Before/after per target, for EVERY operation, not only `enable`.
+        # 4.3 moved the transition strings out of the template into
+        # `batchOutcome` so `disable`/`remove`/`sync` state their outcome too;
+        # this assertion follows the string to where it now lives and pins the
+        # STRONGER property — one outcome cell per target row, unconditionally.
+        self.assertIn("batchOutcome(target)", html)
+        self.assertNotIn('v-if="modals.batch.operation === \'enable\'" class="hint"', html)
+        self.assertIn("Disabled → Active", source)
+        self.assertIn("Active → Disabled", source)
+        self.assertIn("no state change", source)
         self.assertIn("partial-failure", html)
         self.assertIn("recovery", html)
         self.assertIn("modals.batch.targets", html)
+        # The claim that the plan cannot widen is only checkable if the hash the
+        # backend enforces is on screen.
+        self.assertIn("modals.batch.plan.plan_id", html)
 
     def test_command_palette_is_labelled_and_keyboard_operable(self):
         source = _read(APP_JS)

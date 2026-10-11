@@ -396,7 +396,7 @@
 
     </aside>
 
-    <aside class="sidebar list-pane" :inert="drawerOpen" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view) }">
+    <aside class="sidebar list-pane" :inert="drawerOpen" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view), 'has-bulkbar': view === 'skills' && selectedCount > 0 }">
       <h1 v-if="view === 'skills' && !selected" id="library-view-title" class="sr-only" tabindex="-1">Library</h1>
 
       <!-- READING ORDER, measured. The pane heading, the count and the
@@ -474,24 +474,13 @@
       </div>
 
       <ul v-if="view === 'skills'" :class="['skilllist', { 'skill-grid': browseMode === 'grid' }]" aria-label="Skills">
-        <li v-if="selectedCount" class="batchbar">
-          <div><strong>{{ selectedCount }} selected</strong><span class="hint">exact physical instances</span></div>
-          <button class="btn btn-secondary" type="button" @click="toggleSelectAll">{{ allVisibleSelected ? 'Clear visible' : 'Select visible' }}</button>
-          <input v-model.trim="batchTagInput" class="batch-tag-input" name="batch-tags" placeholder="tag, another-tag" aria-label="Tags to apply">
-          <button class="btn btn-secondary" type="button" @click="updateBatchTags('add')">Add tags</button>
-          <button class="btn btn-secondary" type="button" @click="updateBatchTags('remove')">Remove tags</button>
-          <button class="btn btn-secondary" type="button" @click="openBatch('enable')">Enable</button>
-          <button class="btn btn-secondary" type="button" @click="openBatch('disable')">Disable</button>
-          <button class="btn btn-secondary" type="button" @click="openBatch('sync')">Sync</button>
-          <button class="btn btn-danger-ghost" type="button" @click="openBatch('remove')">Remove</button>
-        </li>
         <!-- The hint explains a real hazard: a batch does not silently reach past the
              rows on screen. It was 51 characters in a 257px box (measured:
              scrollWidth 292 against clientWidth 257), so `text-overflow:
              ellipsis` cut it mid-word — "visible filtere…". Shortened to the
              same claim, and the box now WRAPS instead of clipping, so no pane
              width can amputate the warning again. -->
-        <li v-else class="selection-hint"><button class="selection-toggle" type="button" @click="toggleSelectAll">Select visible</button><span>Batch actions apply only to what is visible.</span></li>
+        <li class="selection-hint"><button class="selection-toggle" type="button" @click="toggleSelectAll">Select visible</button><span>Batch actions apply only to what is visible.</span></li>
         <li v-for="s in visibleSkills" :key="libraryMode === 'library' ? s.name : s.scope + '/' + s.name"
             :data-skill-key="libraryMode === 'library' ? ((s.primary && s.primary.scope) || '') + '/' + s.name : s.scope + '/' + s.name"
             :class="{ selected: selectedName === s.name && (libraryMode === 'library' || !selected || selected.scope === s.scope) }"
@@ -582,6 +571,43 @@
           </div>
         </li>
       </ul>
+
+      <!-- THE BULK BAR FLOATS. It was the first `<li>` INSIDE the scrolling
+           `.skilllist`, so checking one box inserted a 179px block above 96 rows
+           and moved every one of them down (measured at 1280, both themes:
+           bar box 379x179, pane scrollHeight grew by exactly that). The reader
+           lost their place to act on what they had just chosen.
+
+           It is now the pane's LAST flex child, below the scroller: it never
+           scrolls, never displaces a row, and its height is subtracted from the
+           list (see `.list-pane.has-bulkbar .skilllist`) so the last row stays
+           reachable rather than hidden behind it.
+
+           Two controls it always lacked: a CLEAR, because "Select visible"
+           only ever acted on the VISIBLE keys -- hand-picking three of 96
+           offered no way back except three more clicks; and a home for the tag
+           text field, which used to sit permanently open in the action row. -->
+      <div v-if="view === 'skills' && selectedCount" class="batchbar" role="group" aria-label="Actions for the selected instances">
+        <p class="batchbar-count" role="status"><strong>{{ formatNumber(selectedCount) }}</strong> selected<span class="batchbar-unit">exact physical instances</span></p>
+        <div class="batchbar-actions">
+          <button class="batchbar-clear" type="button" @click="clearSelection">Clear</button>
+          <details class="batchbar-tags">
+            <summary class="batchbar-verb">Tags</summary>
+            <div class="batchbar-tagpanel">
+              <label class="batchbar-taglabel" for="batch-tags">Tags to apply</label>
+              <input id="batch-tags" v-model.trim="batchTagInput" class="batch-tag-input" name="batch-tags" placeholder="tag, another-tag">
+              <div class="batchbar-tagrow">
+                <button class="btn btn-secondary" type="button" @click="updateBatchTags('add')">Add</button>
+                <button class="btn btn-secondary" type="button" @click="updateBatchTags('remove')">Remove</button>
+              </div>
+            </div>
+          </details>
+          <button class="batchbar-verb" type="button" @click="openBatch('enable')">Enable</button>
+          <button class="batchbar-verb" type="button" @click="openBatch('disable')">Disable</button>
+          <button class="batchbar-verb" type="button" @click="openBatch('sync')">Sync</button>
+          <button class="batchbar-verb batchbar-danger" type="button" @click="openBatch('remove')">Remove</button>
+        </div>
+      </div>
 
       <div v-else-if="view === 'profiles'" class="sidepanel" aria-label="Profiles">
         <div v-if="!Object.keys(catalog.profiles || {}).length" class="empty compact-empty">
@@ -2045,9 +2071,15 @@
           <span>This plan is partial-failure safe and cannot widen after review.</span>
           <span v-if="modals.batch.context && modals.batch.context.profileName">Profile {{ modals.batch.context.profileName }}: only currently observed physical instances are in scope; missing skills are not installed and divergent members remain unresolved.</span>
           <span v-if="modals.batch.context && modals.batch.context.unresolvedCount">Unresolved members: {{ modals.batch.context.unresolvedCount }} ({{ modals.batch.context.unresolvedMembers.join(', ') }}).</span>
-          <span v-if="modals.batch.operation === 'enable'">Enable result: Disabled → Active; Active → No state change, based on the returned target state.</span>
           <span>Recovery: {{ (modals.batch.plan && modals.batch.plan.recovery) || 'Per-target results are reported; partial failures leave successful items applied.' }}</span>
           <span v-if="modals.batch.operation === 'remove'">Each removal goes to Trash and remains recoverable.</span>
+          <!-- "Cannot widen after review" was an assertion with nothing behind it on
+               screen. The backend enforces exactly one thing (webapp.py refuses a
+               `plan_id` that is not the hash of these targets and options), and the
+               hash was never rendered — so the claim could not be checked, quoted or
+               pasted into a report. It is the one value that makes the sentence true
+               to the reader, so it is now stated, before the plan exists as "—". -->
+          <span class="plan-fingerprint">Plan <code>{{ modals.batch.plan ? modals.batch.plan.plan_id : 'not yet built — computing' }}</code></span>
         </div>
         <div v-if="modals.batch.operation === 'sync'" class="form-field">
           <label>Sync targets</label>
@@ -2056,7 +2088,7 @@
           </template>
           <label class="check-row"><input type="checkbox" name="batch-force" v-model="modals.batch.force"> Overwrite existing copies (creates rollback snapshots)</label>
         </div>
-        <ul class="batch-target-list"><li v-for="target in (modals.batch.plan ? modals.batch.plan.targets : modals.batch.targets)" :key="target.scope + '/' + target.name + (target.physical_path || target.path)"><strong>{{ target.name }}</strong><span>{{ target.scope_label || target.scope }}</span><code>{{ target.physical_path || target.path }}</code><span v-if="modals.batch.operation === 'enable'" class="hint">{{ target.disabled ? 'Disabled → Active' : 'Active → No state change' }}</span></li></ul>
+        <ul class="batch-target-list"><li v-for="target in (modals.batch.plan ? modals.batch.plan.targets : modals.batch.targets)" :key="target.scope + '/' + target.name + (target.physical_path || target.path)"><strong>{{ target.name }}</strong><span>{{ target.scope_label || target.scope }}</span><code>{{ target.physical_path || target.path || 'no observed path — this instance is not addressable' }}</code><span class="hint batch-target-outcome">{{ batchOutcome(target) }}</span></li></ul>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('batch')">Cancel</button>

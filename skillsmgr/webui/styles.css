@@ -1283,19 +1283,70 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    opening it does not push the rows down. */
 .tag-filter-details { position: relative; }
 .tag-filter { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; display: flex; gap: 4px; padding: 6px; flex-wrap: wrap; width: max-content; max-width: min(320px, 60vw); max-height: 200px; overflow-y: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
-.batchbar, .selection-hint {
+.selection-hint { display: flex; align-items: center; gap: var(--s2); flex-wrap: nowrap; padding: 8px var(--s4); background: var(--surface); border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: var(--t-meta); }
+
+/* ---------------------------------------------------------------- bulk bar
+
+   A floating bar, and the measurements that forced it to be one. The old bar
+   was `.batchbar` — an `<li>` inside the scrolling `.skilllist` — and measured
+   379 x 179 at 1280 in both themes: nine controls wrapped onto four lines, one
+   of them a permanently-open text field, sitting on top of 96 rows. Ticking a
+   single checkbox therefore grew the list's scrollHeight by 179 and pushed
+   every row down, so the act of choosing moved the thing you were choosing
+   from. It is now the pane's LAST flex child, BELOW the scroller:
+     - it cannot scroll away while the reader works down the list;
+     - it cannot displace a row, because it is not in the list;
+     - it is a FLEX ITEM, not an overlay, so the list shrinks to make room and
+       the last row can never end up underneath it. An earlier draft reserved
+       space with a hard-coded `padding-bottom: 52px`, which measured 60px
+       against a 52px bar and would have hidden the last row for exactly the
+       reason it claimed to protect it. The dock is now the padding.
+   Two rows at 320-380px: the count and Clear on one, the verbs on the next.
+   One row overflowed — the actions measured 478px left inside a 379px bar and
+   Disable landed under `.detail`, so the control was rendered and unclickable. */
+.batchbar {
+  flex: none;
   display: flex;
-  align-items: center;
-  gap: var(--s2);
   flex-wrap: wrap;
-  padding: 8px var(--s4);
-  background: var(--accent-soft);
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 6px var(--s2);
+  padding: 8px var(--s3) 8px var(--s4);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 -6px 16px -12px rgb(0 0 0 / 45%);
   font-size: var(--t-meta);
 }
-.batchbar > div { display: grid; min-width: 90px; }
-.batch-tag-input { min-width: 130px; max-width: 190px; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
-.selection-hint { flex-wrap: nowrap; background: var(--surface); color: var(--text-muted); font-size: var(--t-meta); }
+.batchbar-count { display: flex; align-items: baseline; gap: 5px; margin: 0; flex: none; white-space: nowrap; }
+.batchbar-count strong { font-size: var(--t-table); font-variant-numeric: tabular-nums; }
+.batchbar-unit { color: var(--text-muted); }
+/* The verbs are grouped, not listed: the two that mutate state, the one that
+   copies, and the one that destroys are separated by a rule and by weight, so
+   "Remove" is not the fourth button in a row of identical pills. */
+.batchbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; flex: 1 0 100%; }
+.batchbar-verb, .batchbar-clear {
+  min-height: 30px; padding: 0 8px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: none; color: var(--text); font: inherit; white-space: nowrap; cursor: pointer;
+}
+.batchbar-verb:hover, .batchbar-clear:hover { background: var(--surface-2); border-color: var(--border); }
+.batchbar-clear { margin-inline-end: var(--s2); border-color: var(--border); color: var(--text-muted); }
+.batchbar-danger { color: var(--err); }
+.batchbar-danger:hover { background: var(--err-soft); border-color: var(--err-soft); }
+.batchbar-tags { position: relative; }
+.batchbar-tags > summary { list-style: none; }
+.batchbar-tags > summary::-webkit-details-marker { display: none; }
+.batchbar-tags[open] > summary { background: var(--surface-2); border-color: var(--border); }
+.batchbar-tagpanel {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 6;
+  translate: -50% 0;
+  display: grid; gap: var(--s2); width: max-content; min-width: 232px;
+  padding: var(--s3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.batchbar-taglabel { font-size: var(--t-meta); color: var(--text-muted); }
+.batch-tag-input { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+.batchbar-tagrow { display: flex; gap: var(--s2); }
+.batchbar-tagrow .btn { flex: 1; }
 .selection-toggle, .selection-hint .btn { white-space: nowrap; }
 /* The hint WRAPS. It was `white-space: nowrap` + `text-overflow: ellipsis`,
    which amputated a safety sentence mid-word at every pane width narrower
@@ -1457,7 +1508,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* ~56px rows. The description clamps to one line and the identity line only
    takes a track when it renders something visible; a uniform scope or state is
    still in the accessibility tree (sr-only), never removed from it. */
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) {
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) {
   display: grid;
   grid-template-columns: 16px 7px minmax(0, 1fr);
   /* The badge track is only laid out when the row has badges; an auto track
@@ -1470,16 +1521,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   padding: 7px 14px;
   border-left-width: 3px;
 }
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; margin-top: 0; }
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; }
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; align-self: center; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; margin-top: 0; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; align-self: center; }
 /* Scope + state sit under the name on the row's own track; the long
    "scope - consumer" label wraps badly when squeezed into a side column.
    A row whose values are all suppressed takes no track at all (see the
    :has() rule below). */
-.skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .identity-summary { grid-column: 3; grid-row: 2; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) .identity-summary { grid-column: 3; grid-row: 2; }
 /* A row whose every identity value is suppressed has nothing visible here. */
-.skilllist > li:not(.batchbar) .identity-summary:not(:has(.identity-observation :not(.sr-only))) { display: none; }
+.skilllist > li .identity-summary:not(:has(.identity-observation :not(.sr-only))) { display: none; }
 .skilllist > .empty { display: block; padding: 48px 24px; }
 
 .dot {
@@ -1593,7 +1644,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   gap: var(--s2);
   padding: var(--s2) var(--s4) var(--s4);
 }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) {
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty) {
   display: grid;
   grid-template-columns: 18px 8px minmax(0, 1fr);
   grid-template-rows: auto auto auto;
@@ -1609,18 +1660,18 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   content-visibility: auto;
   contain-intrinsic-size: 148px;
 }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty):hover { border-color: var(--border-strong); }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty).selected {
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty):hover { border-color: var(--border-strong); }
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty).selected {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; margin-top: 6px; }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .card-meta { grid-column: 3; grid-row: 2; }
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; }
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; margin-top: 6px; }
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; }
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty) .card-meta { grid-column: 3; grid-row: 2; }
 .skill-grid .card-meta .identity-observation { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 2px; }
 .skill-grid .card-meta .identity-state { justify-self: start; }
-.skill-grid > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-copies {
+.skill-grid > li:not(.selection-hint):not(.skeleton):not(.empty) .row-copies {
   margin-left: 4px;
   padding: 0 6px;
   border: 1px solid var(--line);
@@ -1633,7 +1684,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   vertical-align: 1px;
 }
 .row-badges { grid-column: 3; grid-row: 3; align-self: end; padding-top: 7px; }
-.skill-grid > .batchbar, .skill-grid > .selection-hint { grid-column: 1 / -1; }
+.skill-grid > .selection-hint { grid-column: 1 / -1; }
 
 .tag {
   font-size: var(--t-meta);
@@ -2098,6 +2149,17 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .saved-profile-row .hint { display: block; margin-top: 2px; }
 .profile-members, .batch-target-list { list-style: none; margin: var(--s4) 0 0; padding: 0; }
 .profile-members li, .batch-target-list li { display: grid; grid-template-columns: minmax(130px, 1fr) auto minmax(120px, 1fr); gap: var(--s2); align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+/* Four tracks now, because the fourth cell is the per-target transition and it
+   must sit in its own column for every operation. It used to render only for
+   `enable`, as a fourth child in a THREE-column grid — so it was pushed onto an
+   implicit second row, under the path, for the one operation that showed it at
+   all. Naming the tracks is what makes "every row states its outcome" a layout
+   fact rather than a template's good intentions. */
+.batch-target-list li { grid-template-columns: minmax(120px, 1.1fr) auto minmax(140px, 1.4fr) minmax(150px, auto); align-items: baseline; }
+.batch-target-outcome { text-align: end; white-space: nowrap; }
+.batch-target-list code { overflow-wrap: anywhere; }
+.plan-fingerprint { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
+.plan-fingerprint code { padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--t-meta); overflow-wrap: anywhere; }
 .profile-members small { color: var(--text-muted); }
 .profile-summary { margin-top: var(--s3); }
 .profile-members code { color: var(--text-muted); font-size: var(--t-meta); overflow-wrap: anywhere; }
@@ -3147,8 +3209,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .update-change-item summary { align-items: flex-start; }
   .update-diff { max-height: 280px; }
   .statusbar { display: none; }
-  .batchbar { align-items: stretch; }
-  .batch-tag-input { max-width: none; flex: 1 1 100%; }
+  /* The bar keeps ONE row at every width: a bulk bar that doubles in height on a
+     phone has taken away the list it floats over. The count drops its unit word
+     first (it is repeated in the bar's own label and again in the dialog), and
+     the verbs scroll horizontally rather than wrap. */
+  .batchbar { gap: var(--s2); padding-inline: var(--s3); }
+  .batchbar-unit { display: none; }
+  .batchbar-actions { flex: 1 0 100%; }
+  .batchbar-verb, .batchbar-clear { min-height: 44px; padding: 0 12px; }
+  .batchbar-tagpanel { left: 0; translate: 0 0; width: min(272px, calc(100vw - 48px)); }
+  .batch-tag-input { width: 100%; }
   .profile-members li, .batch-target-list li { grid-template-columns: 1fr auto; }
   .profile-members small, .batch-target-list code { grid-column: 1 / -1; }
 }

@@ -314,7 +314,7 @@ class LibraryDensityTests(unittest.TestCase):
 
     def test_rows_target_56px_and_the_type_floor_is_11px(self):
         rule = re.search(
-            r"\.skilllist > li:not\(\.batchbar\):not\(\.selection-hint\):not\(\.skeleton\):not\(\.empty\) \{(.*?)\}",
+            r"\.skilllist > li:not\(\.selection-hint\):not\(\.skeleton\):not\(\.empty\) \{(.*?)\}",
             self.css,
             re.S,
         )
@@ -465,7 +465,7 @@ class UniformSuppressionTests(unittest.TestCase):
 
     def test_a_row_with_no_visible_identity_takes_no_track(self):
         self.assertIn(
-            ".skilllist > li:not(.batchbar) .identity-summary:not(:has(.identity-observation :not(.sr-only))) { display: none; }",
+            ".skilllist > li .identity-summary:not(:has(.identity-observation :not(.sr-only))) { display: none; }",
             self.css,
         )
 
