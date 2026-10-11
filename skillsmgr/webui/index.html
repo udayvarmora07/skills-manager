@@ -718,7 +718,7 @@
                    harness used to assert the item by matching its exact title copy,
                    which breaks the moment the wording improves. -->
               <li v-for="item in overviewAttention" :key="item.key" class="attention-item" :data-attention="item.key">
-                <span class="attention-index" aria-hidden="true">!</span>
+                <span class="attention-index" aria-hidden="true"><app-icon name="circle-alert" width="15" height="15"></app-icon></span>
                 <div><h3>{{ item.title }}</h3><p>{{ item.detail }}</p></div>
                 <button class="btn btn-secondary" type="button" @click="openOverviewAttention(item.key)">{{ item.action }}</button>
               </li>
@@ -768,7 +768,7 @@
             <div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div>
             <p v-if="loadingHistory" class="hint">Loading recent activity…</p>
             <p v-else-if="!overviewHistory.length" class="hint">No history entries yet.</p>
-            <ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · {{ formatDate(entry.at) }}</span></div></li></ul>
+            <ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · <time :datetime="entry.at" :title="formatDate(entry.at)">{{ formatRelative(entry.at) }}</time></span></div></li></ul>
           </section>
         </template>
         <section v-else class="overview-load-error" aria-labelledby="overview-load-error-title">

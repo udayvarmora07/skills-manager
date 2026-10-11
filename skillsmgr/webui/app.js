@@ -1136,6 +1136,33 @@ const appOptions = {
       }
     },
 
+    /* Relative time for a list whose whole question is "what just happened".
+       An absolute timestamp answers a different question, and the answer a
+       reader actually wants ("was that before or after I last looked?") is not
+       recoverable from one at a glance. Absolute time is still reachable: the
+       row carries the exact value in `title`/`datetime`, and "7 days ago"
+       falls back to the absolute date rather than pretending to be precise.
+       `now` is a parameter rather than a hidden `Date.now()` so the formatter
+       is testable without freezing the clock. */
+    formatRelative(value, now = Date.now()) {
+      if (!value) return "—";
+      const date = value instanceof Date ? value : new Date(value);
+      const ms = now - date.getTime();
+      if (Number.isNaN(ms)) return String(value);
+      /* A timestamp in the future is clock skew or a bad record, not "0 sec".
+       * Saying so is honest; a negative age is not. */
+      if (ms < -60000) return this.formatDate(value);
+      const seconds = Math.floor(ms / 1000);
+      if (seconds < 45) return "just now";
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes} min ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+      const days = Math.floor(hours / 24);
+      if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+      return this.formatDate(value);
+    },
+
     formatDate(value, options = {}) {
       if (!value) return "—";
       const date = value instanceof Date ? value : new Date(value);
