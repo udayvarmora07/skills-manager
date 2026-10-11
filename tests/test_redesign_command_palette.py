@@ -261,3 +261,160 @@ class MenuWidth(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+_APP_VM = r"""
+const fs = require('fs'), vm = require('vm');
+const sandbox = {
+  window: {SkillManagerDomain: {api(){}, formatBytes(){}, formatTokens(){}, tokenPctClass(){}, tokenBarWidth(){}, renderMarkdown(){}, parseFrontmatter(){}, formatCompat(){}, formatTools(){}, groupLogicalSkills(){}, deriveLogicalSkillIdentity(){}, observedIdentity(){}}},
+  Vue: {createApp(app){sandbox.app = app; return {mount(){}};}, nextTick(){}},
+  localStorage: {getItem(){return null;}, setItem(){}},
+  document: {addEventListener(){}, removeEventListener(){}, documentElement:{dataset:{}}, querySelectorAll(){return[];}, querySelector(){return null;}},
+  setTimeout, clearTimeout
+};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+const computed = sandbox.app.computed;
+function contextFor(query) {
+  const context = {view:'overview', selectedName:null, selected:null, selectedDisabled:false, commandPaletteQuery:query};
+  Object.defineProperty(context, 'commandPaletteCommands', {get(){return computed.commandPaletteCommands.call(context);}});
+  Object.defineProperty(context, 'filteredCommandPaletteCommands', {get(){return computed.filteredCommandPaletteCommands.call(context);}});
+  /* Vue resolves `this.<computed>` through the instance proxy; a bare object
+     would hand the watcher `undefined` and the probe would then be testing
+     its own mistake rather than the product. */
+  Object.defineProperty(context, 'bestCommandPaletteIndex', {get(){return computed.bestCommandPaletteIndex.call(context);}});
+  return context;
+}
+const QUERY = %s;
+const ctx = contextFor(QUERY);
+/* Drive the REAL watcher, not the computed: the product path is
+ * `watch.commandPaletteQuery` writing `commandPaletteActiveIndex`, and a probe
+ * that assigns the index itself proves nothing about it. */
+const watcher = sandbox.app.watch.commandPaletteQuery;
+watcher.call(ctx, QUERY);
+const drawn = computed.filteredCommandPaletteCommands.call(ctx).map(item => item.id);
+const best = computed.bestCommandPaletteIndex.call(ctx);
+const active = computed.commandPaletteActiveCommand.call(ctx);
+console.log(JSON.stringify({
+  drawn: drawn,
+  best: best,
+  active: active ? active.id : null,
+  installDrawn: computed.filteredCommandPaletteCommands.call(contextFor('install')).map(item => item.id),
+  emptyBest: computed.bestCommandPaletteIndex.call(contextFor('')),
+}));
+"""
+
+
+
+def _rank_module() -> str:
+    """`commandMatchRank` lifted verbatim out of app.js.
+
+    Same reason as `_palette_module`: app.js's top level dereferences `window`,
+    so Node cannot import it. The block is lifted, not copied, and
+    `test_the_executed_module_is_the_one_in_app_js` above is the reason a stale
+    copy would be noticed.
+    """
+    source = _read(JS_PATH)
+    start = source.index("const COMMAND_MATCH_LABEL_EXACT")
+    end = source.index("\n}", source.index("return elsewhere.includes(needle)", start)) + 2
+    return source[start:end]
+
+
+class ActiveRowFollowsTheTypedName(unittest.TestCase):
+    """Enter must run the command whose LABEL the reader typed.
+
+    Why this file exists (found by the CI browser harness, not by a test)
+    ---------------------------------------------------------------------
+    ``browser_harness.py`` drives the palette with a real keypress: type
+    "library", press Enter, assert the Library heading took focus. It failed in
+    **all eight scenarios** — every viewport, plus the synthetic empty and
+    unavailable-root inventories — with
+
+        Library command did not focus the visible Library destination
+
+    The cause is not flaky timing. 2.2 groups results and ``COMMAND_GROUP_ORDER``
+    puts Transfer before Navigation, so the query "library" draws
+
+        Transfer      Export archive      (title: "Export the current skill library")
+        Navigation    Library
+        Navigation    Focus search
+
+    and Enter ran whatever the active index pointed at, which was 0 — the
+    download. In the sandbox that answered HTTP 400 and toasted; in a populated
+    library it answered 200 and silently downloaded an archive instead of
+    navigating. Either way the reader asked for a destination and got a file.
+
+    The group order is a recorded 2.2 decision with a test of its own
+    (``tests/test_webui_contracts.py`` asserts Transfer before Navigation for
+    "install"), so it is **not** reversed here. What changes is which row is
+    active: the best *label* match, wherever it is drawn. Group order, drawn
+    order, Home/End and ArrowDown are untouched.
+    """
+
+    @staticmethod
+    def _probe(query):
+        """Run the real app.js in a Node VM and ask it what Enter would run.
+
+        A separate runner from `_node_evaluate` because that one evaluates an
+        EXPRESSION; this program needs its own top level to build the sandbox.
+        """
+        program = _APP_VM % json.dumps(query)
+        proc = subprocess.run(
+            ["node", "-e", program], capture_output=True, text=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(proc.stderr.strip() or "node failed")
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+
+    def test_typing_a_destination_name_activates_that_destination(self):
+        # RED FIRST: against the pre-fix source this returned
+        # {"active": "export-archive"} — the download, not the destination.
+        self.assertEqual(self._probe("library")["active"], "nav-library")
+
+    def test_the_drawn_order_is_unchanged_by_this_fix(self):
+        # The 2.2 decision under test is the GROUP order, and it must survive:
+        # a fix that quietly reversed it would have invalidated the recorded
+        # reasoning behind tests/test_webui_contracts.py without anyone reading
+        # that test.
+        result = self._probe("library")
+        self.assertEqual(result["drawn"], ["export-archive", "nav-library", "focus-search"])
+        self.assertEqual(result["installDrawn"], ["install-workflow", "nav-install"])
+
+    def test_an_empty_query_activates_the_first_row(self):
+        # No query means no name was typed, so row 0 is the whole answer.
+        self.assertEqual(self._probe("library")["emptyBest"], 0)
+
+    def test_an_unmatched_query_matches_nothing_and_stays_at_the_first_row(self):
+        result = self._probe("zzzz-no-such-command")
+        self.assertEqual(result["drawn"], [])
+        self.assertEqual(result["best"], 0)
+        self.assertIsNone(result["active"])
+
+    def test_every_name_match_tier_is_reachable(self):
+        """The four tiers are the model, so they are tested directly.
+
+        The end-to-end probe cannot separate them: the real command set has no
+        two commands in one group where one label is a prefix of the other, so
+        "exact" and "prefix" look identical from the outside and a mutation that
+        disabled exact-label matching stayed green. This test drives
+        `commandMatchRank` itself, lifted out of app.js, with commands chosen to
+        land in each tier.
+        """
+        program = _rank_module() + r"""
+const commands = [
+  {id:'exact',    label:'Library',        title:'Open Library', category:'Navigation', keywords:'skills browse'},
+  {id:'prefix',   label:'Library search', title:'Open Library search', category:'Navigation', keywords:''},
+  {id:'inside',   label:'Open Library',   title:'Open Library', category:'Tools', keywords:''},
+  {id:'prose',    label:'Export archive', title:'Export the current skill library', category:'Transfer', keywords:''},
+  {id:'absent',   label:'Doctor',         title:'Inspect health', category:'Tools', keywords:''},
+];
+console.log(JSON.stringify(commands.map(c => [c.id, commandMatchRank(c, 'library')])));
+"""
+        proc = subprocess.run(["node", "-e", program], capture_output=True, text=True, timeout=30)
+        if proc.returncode != 0:
+            raise AssertionError(proc.stderr.strip() or "node failed")
+        ranks = dict(json.loads(proc.stdout.strip().splitlines()[-1]))
+        self.assertEqual(ranks["exact"], 1, "an exact label match must rank best")
+        self.assertEqual(ranks["prefix"], 2)
+        self.assertEqual(ranks["inside"], 3, "a label that merely contains the query still beats prose")
+        self.assertEqual(ranks["prose"], 4, "a title sentence that mentions it is the weakest match")
+        self.assertEqual(ranks["absent"], 0, "no mention anywhere is not a match")

@@ -102,6 +102,35 @@ function compareCommandGroups(a, b) {
   return String(a || "").localeCompare(String(b || ""));
 }
 
+/* How well a command answers a query, best first. 0 means "does not match".
+ *
+ * WHY RANKING EXISTS AT ALL. The filter used to be one flat `includes()` over
+ * label + title + category + keywords, which meant a *prose* sentence could
+ * outrank the destination it merely mentions. Typing "library" ran
+ * "Export the current skill library" — a download — instead of opening the
+ * Library, because that command is declared earlier in the array and Enter
+ * always runs the first row. The label is the name the reader typed; the title
+ * is a description written for someone who has not typed anything yet. A label
+ * match therefore beats a title match, and an exact one beats a prefix one.
+ *
+ * Ranking happens before grouping, and `Array.prototype.sort` is stable, so a
+ * command keeps its declared order inside its own group. */
+const COMMAND_MATCH_LABEL_EXACT = 1;
+const COMMAND_MATCH_LABEL_PREFIX = 2;
+const COMMAND_MATCH_LABEL_CONTAINS = 3;
+const COMMAND_MATCH_OTHER = 4;
+
+function commandMatchRank(command, needle) {
+  const label = String((command && command.label) || "").toLowerCase();
+  if (label === needle) return COMMAND_MATCH_LABEL_EXACT;
+  if (label.startsWith(needle)) return COMMAND_MATCH_LABEL_PREFIX;
+  if (label.includes(needle)) return COMMAND_MATCH_LABEL_CONTAINS;
+  const elsewhere = [command && command.title, command && command.category, command && command.keywords]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+  return elsewhere.includes(needle) ? COMMAND_MATCH_OTHER : 0;
+}
+
 /* Unknown names get a `data-missing-icon` marker instead of a silent blank
    box — an icon that renders as nothing is the failure mode this whole seam
    exists to prevent, so it has to be visible in the DOM and loud in CI. */
@@ -532,13 +561,19 @@ const appOptions = {
       const needle = this.commandPaletteQuery.trim().toLowerCase();
       const matches = !needle
         ? this.commandPaletteCommands.slice()
-        : this.commandPaletteCommands.filter((command) => [command.label, command.title, command.category, command.keywords]
-          .join(" ").toLowerCase().includes(needle));
+        : this.commandPaletteCommands.filter((command) => commandMatchRank(command, needle) > 0);
       /* Group order is applied HERE, once, so there is exactly one ordering in
          the app. Grouping the results afterwards instead would make the drawn
          order differ from the order ArrowDown walks — a palette that highlights
          a row the reader cannot see is worse than an ungrouped one, and the
-         bug would only appear for a query that matched rows in two groups. */
+         bug would only appear for a query that matched rows in two groups.
+
+         The drawn order is left exactly as 2.2 left it. An earlier attempt also
+         ranked the drawn rows by name match; it was measured, found to change no
+         observable result for any query in the real command set, and deleted
+         rather than shipped as a second ordering that reads as behaviour. What
+         was never decided is which row Enter runs — that is
+         `bestCommandPaletteIndex` below. */
       return matches.sort((a, b) => compareCommandGroups(a.category, b.category));
     },
     /* Pure presentation over the ordered list above: consecutive runs of the
@@ -562,6 +597,28 @@ const appOptions = {
     },
     commandPaletteActiveCommand() {
       return this.filteredCommandPaletteCommands[this.commandPaletteActiveIndex] || null;
+    },
+    /* The row Enter runs when a query is typed.
+     *
+     * This is deliberately NOT the first drawn row. 2.2 groups the results
+     * (Transfer before Navigation, because the rail always offers navigation),
+     * so for the query "library" the drawn order is "Export the current skill
+     * library" and then "Library" — and Enter ran the download. The reader
+     * typed a name; the name is a label; the active row starts on the best
+     * label match wherever it is drawn. Group order, the drawn order, Home/End
+     * and ArrowDown all behave exactly as they did. */
+    bestCommandPaletteIndex() {
+      const commands = this.filteredCommandPaletteCommands;
+      if (!commands.length) return 0;
+      const needle = this.commandPaletteQuery.trim().toLowerCase();
+      if (!needle) return 0;
+      let best = 0;
+      let bestRank = commandMatchRank(commands[0], needle);
+      for (let index = 1; index < commands.length; index += 1) {
+        const rank = commandMatchRank(commands[index], needle);
+        if (rank > 0 && rank < bestRank) { best = index; bestRank = rank; }
+      }
+      return best;
     },
     commandPaletteStatus() {
       const count = this.filteredCommandPaletteCommands.length;
@@ -833,7 +890,7 @@ const appOptions = {
       this.loadStatsTokens();
     },
     commandPaletteQuery() {
-      this.commandPaletteActiveIndex = 0;
+      this.commandPaletteActiveIndex = this.bestCommandPaletteIndex;
     },
     filteredCommandPaletteCommands(commands) {
       const max = commands.length - 1;
