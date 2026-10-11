@@ -2236,12 +2236,41 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   line-height: 1.55;
 }
 
-.skill-details { margin-top: 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.skill-details summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; font-weight: 600; }
-.skill-details summary::-webkit-details-marker { display: none; }
-.skill-details summary::after { content: "+"; color: var(--text-muted); font-size: var(--t-page); font-weight: 400; }
-.skill-details[open] summary::after { content: "–"; }
-.skill-details .meta { margin: 0 0 16px; padding-top: 12px; }
+/* ---------------------------------------------------- 4.4 detail tab shell
+   The strip sits directly under the pane header and stays put while the
+   panel scrolls. It scrolls HORIZONTALLY rather than wrapping: five wrapped
+   rows of tabs is a second column inside a pane whose whole job is to show
+   one thing, and `flex-end` on the strip is what makes a wrapped/overflowing
+   strip still leave the FIRST tab reachable by scroll-left. */
+.detail-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-top: var(--s4);
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--surface);
+  justify-content: flex-start;
+}
+.detail-tabs::-webkit-scrollbar { display: none; }
+.detail-tabs .tab { flex: 0 0 auto; white-space: nowrap; }
+.tab-count {
+  margin-inline-start: 6px;
+  font-family: var(--mono);
+  font-size: var(--t-meta);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tab[aria-selected="true"] .tab-count { color: var(--text-muted); }
+.detail-panel { padding-top: var(--s4); }
+.detail-panel:focus-visible { outline-offset: 4px; }
+/* The facts table is two-up at desktop and ONE-up on a phone, where the
+   label and the value sharing a row costs more than it saves: a value that
+   ellipsises to three characters is not a fact. */
+.detail-facts { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.detail-fact-wide { grid-column: 1 / -1; }
+.detail-fact-wide dd { min-width: 0; }
+.detail-subhead { margin: var(--s5) 0 var(--s2); font-size: var(--t-prose); }
 
 .meta {
   display: grid;
@@ -3190,6 +3219,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .layout.mobile-detail-open .detail { display: block; flex: 1; overflow-y: auto; }
   .mobile-back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 16px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; }
   .detail { padding: 16px; min-height: 0; }
+  /* 4.4: 40px tabs and full-width facts on a coarse pointer. The strip still
+     scrolls rather than wraps (see the block header), so the row is one
+     screen-height, not two. */
+  .detail-tabs .tab { min-height: 44px; }
+  .detail-facts { grid-template-columns: minmax(0, 1fr); }
   .layout.overview-view .detail { display: block; flex: 1; overflow-y: auto; }
   .overview-shell { max-width: none; }
   .overview-status { align-items: flex-start; flex-direction: column; gap: 6px; padding-bottom: 12px; }

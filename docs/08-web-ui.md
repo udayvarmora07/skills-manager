@@ -614,8 +614,10 @@ claim, and a claim nobody re-checks decays.
   states), error (banners + toasts), disabled, focus-visible rings,
   hover/active transitions, `prefers-reduced-motion` respected.
 - Rows use a grid with a full-width name/description region and a dedicated
-  wrapping badge region. Technical metadata is a native `Skill details`
-  disclosure; documentation remains left-aligned and readable at roughly 78ch.
+  wrapping badge region. The selected skill's pane is a five-panel tab strip
+  (`role="tablist"`: Overview · Source · Instances · History · Quality) with
+  roving `tabindex` and arrow/Home/End navigation; documentation remains
+  left-aligned and readable at roughly 78ch.
 - Dialogs use a 16px radius, 24px body padding (16px on mobile), visible
   surfaces/focus, sticky header/footer, bounded viewport height, and a 40px
   import icon in a roughly 160px dropzone.

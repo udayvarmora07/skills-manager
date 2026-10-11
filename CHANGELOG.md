@@ -6,6 +6,23 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Changed
 
+- **The detail pane is a tab shell (5 panels, not one 1,900px scroll).** The
+  Library's selected-skill pane used to be a single scroll in which the entire
+  metadata table sat behind a closed `Skill details` disclosure, the list of
+  observed copies rendered only when a skill had more than one copy, and the
+  rendered document ran off the bottom — so the three things a reader opens a
+  skill for were the three things furthest from its name. It is now a
+  `role="tablist"` over five `role="tabpanel"`s (Overview · Source · Instances
+  · History · Quality) with roving `tabindex` and Arrow/Home/End navigation
+  that move selection *and* focus. A skill with one observed copy now says so
+  instead of rendering an empty panel. History is fetched when the tab is
+  opened rather than when the skill is selected, and the rows carry the
+  scope and name they belong to, so switching skill mid-request cannot land
+  the previous skill's history under the new skill's heading. The pane's
+  Quality tab states only observed evidence — parser and addressability flags,
+  measured size and token counts, provenance when the server returns it — and
+  says on screen what it does not infer.
+
 - **The web UI was redesigned.** The visual system is now specified in
   `DESIGN.md` at the repository root — tokens, their measured contrast ratios,
   and the reasoning — and enforced by `check_design_tokens.py`, which

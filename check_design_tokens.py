@@ -348,7 +348,10 @@ PRIMITIVE_PENDING_ADOPTION = {
     ".panel": "2.1 status strip, 3.1 overview sections",
     ".stepper": "5.2 registry Fetch -> Review -> Commit",
     ".diff-line": "4.8 update-from-folder review",
-    ".tab": "4.4 detail tabs",
+    # 4.4 wired the tab primitive: the detail pane's strip is `.tabs`/`.tab`,
+    # so the pending-adoption exception was removed rather than left behind.
+    # The gate fails when a wired primitive is still listed, which is what
+    # caught it here.
     ".step": "5.2 registry stepper",
 }
 # Removed by 2.2, and the removal is the interesting part: `.badge`, `.chip`,

@@ -2488,3 +2488,12 @@ endpoint, `Store` method or schema value).
 - [x] T8 Final ladder: **607 tests OK**, both smokes, `check_docs.py`,
       `check_complexity.py` (216 functions), `node --check` on both frontend
       files, CLI help, `check_package_data.py` (`UNAVAILABLE`, standing).
+- [x] Redesign 4.4 — the detail pane's tab shell (branch `redesign/ui-v2`).
+      Five `role="tabpanel"`s behind a roving-tabindex `role="tablist"`; the
+      metadata table is no longer behind a disclosure, a single-copy skill
+      says so instead of rendering nothing, and the per-skill History request
+      is made on tab open and tagged with the scope/name it belongs to. Two
+      DOM-pinning contract tests rewritten for the new structure and one stale
+      `check_design_tokens.py` adoption exception deleted — see
+      `CHANGELOG.md`, `docs/08-web-ui.md`, and the `TEST-CHANGES.md` row for
+      this task.

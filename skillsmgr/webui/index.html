@@ -1013,15 +1013,77 @@
             </div>
           </div>
 
-          <p v-if="selected.description" class="lead">{{ selected.description }}</p>
+          <!-- The pane is five panels, not one 1,900px scroll. It used to hide
+               the entire metadata table behind a closed "Skill details"
+               summary, drop the copies list entirely unless a cluster existed,
+               and then run the rendered document off the bottom of the pane —
+               so the three things a reader opens a skill FOR were the three
+               things furthest from the name. Identity and actions stay put
+               above the strip, because they do not change with the panel. -->
+          <div class="tabs detail-tabs" role="tablist" aria-label="Selected skill" @keydown="onDetailTabKey">
+            <button v-for="tab in detailTabs" :key="tab.id" class="tab" type="button" role="tab" :id="'detail-tab-' + tab.id" :data-detail-tab="tab.id" :aria-controls="'detail-panel-' + tab.id" :aria-selected="detailTab === tab.id ? 'true' : 'false'" :tabindex="detailTab === tab.id ? 0 : -1" @click="selectDetailTab(tab.id)">
+              {{ tab.label }}<span v-if="tab.count != null" class="tab-count">{{ formatNumber(tab.count) }}</span>
+            </button>
+          </div>
 
-          <section v-if="selectedLogical && selectedLogical.instanceCount > 1" class="instances-panel" aria-labelledby="instances-title">
-            <div class="section-label-row"><h2 id="instances-title">Instances</h2><span class="hint">{{ selectedLogical.instanceCount }} observed copies</span></div>
+          <section v-show="detailTab === 'overview'" class="detail-panel" role="tabpanel" id="detail-panel-overview" aria-labelledby="detail-tab-overview" tabindex="0">
+            <p v-if="selected.description" class="lead">{{ selected.description }}</p>
+            <p v-else class="hint">This skill declares no description in its frontmatter.</p>
+            <dl class="meta detail-facts">
+              <div>
+                <dt>Category</dt>
+                <dd>{{ selected.category || '—' }}</dd>
+              </div>
+              <div>
+                <dt>License</dt>
+                <dd>{{ selected.license || '—' }}</dd>
+              </div>
+              <div>
+                <dt>Compatibility</dt>
+                <dd>{{ formatCompat(selected.compatibility) || '—' }}</dd>
+              </div>
+              <div>
+                <dt>Allowed tools</dt>
+                <dd>{{ formatTools(selected.allowed_tools) || '—' }}</dd>
+              </div>
+              <div>
+                <dt>Added</dt>
+                <dd>{{ formatDate(selected.added_at) }}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{{ formatDate(selected.updated_at) }}</dd>
+              </div>
+              <div class="detail-fact-wide">
+                <dt>Path</dt>
+                <dd>
+                  <code>{{ selected.path || '—' }}</code>
+                  <button v-if="selected.path" class="copybtn" title="Copy path" aria-label="Copy path" @click="copy(selected.path)">
+                    <app-icon name="copy"></app-icon>
+                  </button>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section v-show="detailTab === 'source'" class="detail-panel" role="tabpanel" id="detail-panel-source" aria-labelledby="detail-tab-source" tabindex="0">
+            <div class="body">
+              <div v-html="renderMarkdown(selected.body)"></div>
+            </div>
+          </section>
+
+          <section v-show="detailTab === 'instances'" class="detail-panel" role="tabpanel" id="detail-panel-instances" aria-labelledby="detail-tab-instances" tabindex="0">
+            <div class="section-label-row">
+              <h2 id="instances-title">{{ detailInstanceCount }} observed cop{{ detailInstanceCount === 1 ? 'y' : 'ies' }}</h2>
+              <span v-if="selectedLogical && selectedLogical.divergent" class="badge badge-warn"><span class="dot dot-warn"></span>Divergent observed</span>
+            </div>
+            <!-- It used to render only when instanceCount > 1, so a skill with
+                 one copy answered the tab by showing nothing at all. One copy
+                 is an observation and is stated as one. -->
             <ul class="instance-list">
-              <li v-for="instance in selectedLogical.instances" :key="(instance.physical_path || instance.path || instance.scope) + '/' + instance.name" :class="{ active: selected.scope === instance.scope && selected.path === instance.path }">
+              <li v-for="instance in detailInstances" :key="(instance.physical_path || instance.path || instance.scope) + '/' + instance.name" :class="{ active: selected.scope === instance.scope && selected.path === instance.path }">
                 <button class="instance-choice" type="button" @click="selectSkill(instance)">
                   <span><strong>{{ observedIdentity(instance, scopes).scopeLabel }}</strong><small>{{ observedIdentity(instance, scopes).label }} · {{ observedIdentity(instance, scopes).stateLabel }}</small></span>
-                  <span v-if="selectedLogical.divergent" class="tag tag-warn">Divergent observed</span>
                 </button>
                 <details class="instance-path">
                   <summary>Path</summary>
@@ -1034,64 +1096,88 @@
             </ul>
           </section>
 
-          <details class="skill-details">
-            <summary>Skill details <span class="hint">metadata, context, and location</span></summary>
-          <dl class="meta">
-            <div>
-              <dt>Category</dt>
-              <dd>{{ selected.category || '—' }}</dd>
+          <section v-show="detailTab === 'history'" class="detail-panel" role="tabpanel" id="detail-panel-history" aria-labelledby="detail-tab-history" tabindex="0">
+            <div class="section-label-row">
+              <h2 id="detail-history-title">Change history</h2>
+              <button class="btn btn-secondary" type="button" @click="ensureDetailHistory(true)" :disabled="detailHistory.loading">{{ detailHistory.loading ? 'Refreshing…' : 'Refresh' }}</button>
             </div>
-            <div>
-              <dt>License</dt>
-              <dd>{{ selected.license || '—' }}</dd>
+            <p class="hint">Every recorded change to <code>{{ selected.name }}</code> across the detected roots. Nothing here is inferred — a row exists because the Store recorded one.</p>
+            <div v-if="detailHistory.error" class="banner banner-error" role="alert">
+              <app-icon name="circle-alert" class="banner-icon-error"></app-icon>
+              <div class="banner-body"><p>{{ detailHistory.error }}</p></div>
             </div>
-            <div>
-              <dt>Added</dt>
-              <dd>{{ formatDate(selected.added_at) }}</dd>
+            <div v-else-if="detailHistory.loading" class="skeleton" role="status"><div class="skel-row"></div><div class="skel-row"></div></div>
+            <p v-else-if="!detailHistory.rows.length" class="empty compact-empty">No change has been recorded for this skill.</p>
+            <div v-else class="tablewrap">
+              <table class="history-table">
+                <thead><tr><th scope="col">When</th><th scope="col">Action</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in detailHistory.rows" :key="r.id">
+                    <td>{{ formatDate(r.at) }}</td><td>{{ r.action }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div>
-              <dt>Updated</dt>
-              <dd>{{ formatDate(selected.updated_at) }}</dd>
-            </div>
-            <div>
-              <dt>Compatibility</dt>
-              <dd>{{ formatCompat(selected.compatibility) || '—' }}</dd>
-            </div>
-            <div>
-              <dt>Allowed tools</dt>
-              <dd>{{ formatTools(selected.allowed_tools) || '—' }}</dd>
-            </div>
-            <div>
-              <dt>Tokens</dt>
-              <dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'heuristic' }})</span> · {{ selected.tokens_pct != null ? formatNumber(selected.tokens_pct) + '%' : 'not observed' }} of {{ (selected.window || 'claude') }}</dd>
-            </div>
-            <div>
-              <dt>Chars / Lines</dt>
-              <dd>{{ formatNumber(selected.chars || 0) }} chars · {{ formatNumber(selected.lines || 0) }} lines</dd>
-            </div>
-            <div v-if="selected.body_tokens != null">
-              <dt>Body / Frontmatter</dt>
-              <dd>{{ formatTokens(selected.body_tokens) }} body · {{ formatTokens(selected.frontmatter_tokens) }} frontmatter</dd>
-            </div>
-          </dl>
+            <template v-if="detailHistory.snapshots.length">
+              <h3 class="detail-subhead">Snapshots</h3>
+              <div class="tablewrap">
+                <table class="history-table">
+                  <thead><tr><th scope="col">Snapshot</th><th scope="col">Action</th></tr></thead>
+                  <tbody>
+                    <tr v-for="s in detailHistory.snapshots" :key="s">
+                      <td><code>{{ s }}</code></td>
+                      <td><button class="btn btn-secondary" type="button" :disabled="busy" @click="rollbackSnapshot(selected.name, s)">Rollback</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </section>
 
-          <dl class="meta" style="margin-top:8px;">
-            <div>
-              <dt>Path</dt>
-              <dd>
-                <code>{{ selected.path || '—' }}</code>
-                <button v-if="selected.path" class="copybtn" title="Copy path" aria-label="Copy path" @click="copy(selected.path)">
-                  <app-icon name="copy"></app-icon>
-                </button>
-              </dd>
+          <section v-show="detailTab === 'quality'" class="detail-panel" role="tabpanel" id="detail-panel-quality" aria-labelledby="detail-tab-quality" tabindex="0">
+            <div class="section-label-row">
+              <h2 id="detail-quality-title">Observed evidence</h2>
+              <button class="btn btn-secondary" type="button" @click="switchView('quality')">Quality centre</button>
             </div>
-          </dl>
-          </details>
-
-          <div class="body">
-            <h2>Skill documentation</h2>
-            <div v-html="renderMarkdown(selected.body)"></div>
-          </div>
+            <p class="hint">What the filesystem and the parser returned for this exact copy. No score, verdict, or recommendation is produced here.</p>
+            <dl class="meta detail-facts">
+              <div>
+                <dt>State</dt>
+                <dd>{{ qualityStateLabel(selected) }}</dd>
+              </div>
+              <div>
+                <dt>Document parses</dt>
+                <dd>{{ detailObservation.malformedDocument ? 'No — flagged malformed' : 'Yes' }}</dd>
+              </div>
+              <div>
+                <dt>Addressable</dt>
+                <dd>{{ detailObservation.notAddressable ? 'No — the tool refuses to follow it' : 'Yes' }}</dd>
+              </div>
+              <div>
+                <dt>Tokens</dt>
+                <dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'heuristic' }})</span></dd>
+              </div>
+              <div>
+                <dt>Of window</dt>
+                <dd>{{ selected.tokens_pct != null ? formatNumber(selected.tokens_pct) + '% of ' + (selected.window || 'claude') : 'not observed' }}</dd>
+              </div>
+              <div>
+                <dt>Chars / Lines</dt>
+                <dd>{{ formatNumber(selected.chars || 0) }} chars · {{ formatNumber(selected.lines || 0) }} lines</dd>
+              </div>
+              <div v-if="selected.body_tokens != null">
+                <dt>Body / Frontmatter</dt>
+                <dd>{{ formatTokens(selected.body_tokens) }} body · {{ formatTokens(selected.frontmatter_tokens) }} frontmatter</dd>
+              </div>
+              <div class="detail-fact-wide">
+                <dt>Provenance</dt>
+                <dd>{{ detailProvenance || 'not returned by the server for this copy' }}</dd>
+              </div>
+            </dl>
+            <ul class="quality-unavailable">
+              <li><strong>Not inferred</strong><span>No quality score, safety or trust verdict, usefulness claim, or effective consumer load.</span></li>
+            </ul>
+          </section>
         </template>
 
         <div v-else-if="onboardingVisible" class="empty detail-empty onboarding-empty">

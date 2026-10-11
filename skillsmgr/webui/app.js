@@ -246,6 +246,13 @@ const appOptions = {
       profileForm: { name: "", description: "", skills: "", targets: "" },
       profilePreview: null,
       mobileDetailOpen: false,
+      // 4.4: the detail pane is a tab shell. `detailTab` is component state,
+      // NOT a route — a reload always lands on Overview, which is the one
+      // panel that needs no fetch. `detailHistory.key` is the (scope, name)
+      // the rows belong to, so a reader who switches skill mid-flight reads
+      // the rows for the skill on screen and not the one they left.
+      detailTab: "overview",
+      detailHistory: { key: "", rows: [], snapshots: [], loading: false, error: "", loaded: false },
       compactControlsOpen: false,
       // 2.1e2: below 761px the rail IS this drawer (same element, same DOM).
       // `drawerRestoreCompact` remembers what the scope/context disclosure was
@@ -394,6 +401,41 @@ const appOptions = {
 
     selectedLogical() {
       return groupLogicalSkills(this.skills, this.scopes).find((skill) => skill.name === this.selectedName) || null;
+    },
+    /* 4.4. ONE list, read by three things: the strip renders it, the arrow
+       keys index into it, and `selectDetailTab` refuses an id that is not in
+       it. A second hand-written list is a second place for the strip and the
+       keyboard contract to disagree. The Instances count is the count of what
+       the Instances panel will actually render — not the logical total, which
+       is the number of rows the reader cannot see from inside a pane. */
+    detailTabs() {
+      return [
+        { id: "overview", label: "Overview" },
+        { id: "source", label: "Source" },
+        { id: "instances", label: "Instances", count: this.detailInstanceCount },
+        { id: "history", label: "History" },
+        { id: "quality", label: "Quality" },
+      ];
+    },
+    detailInstances() {
+      const logical = this.selectedLogical;
+      if (logical && logical.instances && logical.instances.length) return logical.instances;
+      return this.selected ? [this.selected] : [];
+    },
+    detailInstanceCount() {
+      return this.detailInstances.length;
+    },
+    /* Provenance is OPTIONAL and absent for most skills in the seeded library.
+       The copy has to name which of the two happened, or a reader reads
+       "absent" as "none was recorded" — which is exactly the claim this
+       product refuses to make when the server simply did not return it. */
+    detailObservation() {
+      return this.selected ? observeRecord(this.selected) : {};
+    },
+    detailProvenance() {
+      const p = this.selected && this.selected.registry_provenance;
+      if (!p || typeof p !== "object") return "";
+      return [p.source, p.slug || p.id].filter(Boolean).join(" · ") || "recorded, with no source or identifier returned";
     },
     tagNames() {
       return [...new Set(Object.values(this.catalog.tags || {}).flat())].sort((a, b) => a.localeCompare(b));
@@ -2333,7 +2375,72 @@ const appOptions = {
       }
       this.mobileReturnKey = (s.scope || "") + "/" + s.name;
       this.mobileDetailOpen = true;
+      /* 4.4: a NEW skill starts on Overview. Resetting only when the identity
+         changes is the whole point — resetting on every `loadDetail` would
+         yank a reader off the History tab when they pressed Enable, which is
+         the one action whose result belongs on that tab. */
+      this.detailTab = "overview";
       this.loadDetail(s.name, s.scope);
+    },
+
+    /* ------------------------------------------------------- 4.4 detail tabs */
+    selectDetailTab(id) {
+      if (!this.detailTabs.some((tab) => tab.id === id)) return;
+      this.detailTab = id;
+      /* History is the only panel that needs a fetch, and a pane the reader
+         cannot see is a request they did not ask for. Fetched on first open,
+         not on selection — a reader who reads the document should not pay
+         for a history table they never looked at. */
+      if (id === "history") this.ensureDetailHistory();
+    },
+
+    onDetailTabKey(event) {
+      const ids = this.detailTabs.map((tab) => tab.id);
+      const at = ids.indexOf(this.detailTab);
+      let next = null;
+      if (event.key === "ArrowRight") next = (at + 1) % ids.length;
+      else if (event.key === "ArrowLeft") next = (at - 1 + ids.length) % ids.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = ids.length - 1;
+      /* Only these four keys are consumed. Escape, j/k, `/` and the palette
+         belong to their own handlers, and a strip that swallowed Escape would
+         trap the reader in a five-panel pane. */
+      if (next === null) return;
+      event.preventDefault();
+      this.selectDetailTab(ids[next]);
+      /* Focus, not just selection: roving tabindex means the DOM focus has to
+         follow the arrow or Tab lands on the button the reader just left. */
+      const el = event.currentTarget.querySelector('[data-detail-tab="' + ids[next] + '"]');
+      if (el) el.focus();
+    },
+
+    async ensureDetailHistory(force = false) {
+      const selected = this.selected;
+      if (!selected || !selected.name) return;
+      const key = (selected.scope || "global") + "/" + selected.name;
+      const current = this.detailHistory;
+      /* One in-flight request per (scope, name). `force` is the Refresh
+         button and `rollbackSnapshot`, both of which mean "ask again". */
+      if (!force && current.key === key && (current.loaded || current.loading)) return;
+      this.detailHistory = { key, rows: [], snapshots: [], loading: true, error: "", loaded: false };
+      try {
+        const name = encodeURIComponent(selected.name);
+        const rows = await api("/api/history?limit=200&name=" + name);
+        const scope = encodeURIComponent(selected.scope || "global");
+        const result = await api("/api/history?name=" + name + "&scope=" + scope + "&snapshots=1");
+        /* The reader may have switched skill or scope while this was in
+           flight. Writing then would land the OLD skill's rows under the NEW
+           skill's heading — a table that is confidently wrong, which is the
+           failure mode this product treats as worse than an empty one. */
+        if (this.detailHistory.key !== key) return;
+        this.detailHistory = {
+          key, rows: (rows || []).filter(Boolean), snapshots: result.snapshots || [],
+          loading: false, error: "", loaded: true,
+        };
+      } catch (e) {
+        if (this.detailHistory.key !== key) return;
+        this.detailHistory = { key, rows: [], snapshots: [], loading: false, error: e.message, loaded: true };
+      }
     },
 
     closeMobileDetail() {
@@ -3444,6 +3551,10 @@ const appOptions = {
         await this.loadSkills();
         await this.loadDetail(name, scope);
         await this.loadHistory();
+        /* 4.4: the History dialog's reload does not touch the pane's cache,
+           so after a rollback from EITHER surface the pane would keep showing
+           the pre-rollback rows until the reader pressed Refresh. */
+        await this.ensureDetailHistory(true);
       } catch (e) {
         this.toast(e.message, "err");
       } finally {

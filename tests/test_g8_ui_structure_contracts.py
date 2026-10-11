@@ -629,11 +629,23 @@ class PathDemotionTests(unittest.TestCase):
         self.assertIn("copy(instance.path || instance.physical_path)", disclosure)
 
     def test_skill_details_disclosure_still_carries_the_selected_path_and_copy(self):
-        block = _slice(self.html, '<dl class="meta" style="margin-top:8px;">', "</dl>")
+        # Rewritten for 4.4. The intent is unchanged -- the SELECTED copy's
+        # path must be a labelled fact with a working copy control -- but the
+        # subject is no longer a `<dl class="meta" style="margin-top:8px;">
+        # inside a `.skill-details` disclosure. The pane is a tab shell now and
+        # the path lives in the Overview panel's facts table, which is OPEN by
+        # default. The old marker no longer occurs in the file at all, so
+        # `_slice` returned the whole document and the assertion passed or
+        # failed on unrelated markup.
+        block = _slice(self.html, 'class="detail-facts"', "</dl>")
         self.assertIn("<dt>Path</dt>", block)
         self.assertIn("selected.path", block)
         self.assertIn('class="copybtn"', block)
         self.assertIn(".copybtn", self.css)
+        # The disclosure it replaced is gone, not merely restyled: a second
+        # place to hide the same facts would be a second place to forget them.
+        self.assertNotIn("skill-details", self.html)
+        self.assertNotIn("skill-details", self.css)
 
     def test_quality_copies_put_the_path_behind_a_disclosure(self):
         row = _slice(self.html, 'class="quality-observations"', "</ul>")

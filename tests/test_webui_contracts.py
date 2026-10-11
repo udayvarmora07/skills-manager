@@ -518,10 +518,14 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('String(md).replace(/\\r\\n?/g, "\\n").split("\\n")', source)
 
     def test_detail_path_metadata_uses_definition_list(self):
+        # Rewritten for 4.4 with its intent intact: the selected copy's path is
+        # a <dt>/<dd> pair in the detail pane, not a free-standing label. The
+        # old regex pinned `style="margin-top:8px;"` -- a layout constant on a
+        # block that 4.4 moved into the Overview panel's facts table.
         html = _read(INDEX_HTML)
         self.assertRegex(
             html,
-            r'<dl class="meta" style="margin-top:8px;">\s*<div>\s*<dt>Path</dt>',
+            r'<dl class="meta detail-facts">.*?<dt>Path</dt>',
         )
 
     def test_chip_count_does_not_reduce_contrast(self):
