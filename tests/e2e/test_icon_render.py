@@ -81,7 +81,22 @@ class IconsPaintInABrowserTests(unittest.TestCase):
             # Mount, not load: the topbar only exists once Vue has compiled and
             # mounted the template, and an icon count taken before that would
             # measure an empty page and pass.
-            page.wait_for_selector("#app header.topbar .app-icon", timeout=15000)
+            #
+            # The wait is for `#app` HAVING CHILDREN, not for an icon being
+            # visible. The first match of the old selector was
+            # `.nav-drawer-trigger`'s `menu` glyph, which is `display: none` at
+            # 1280 by design — the drawer trigger only exists below 760px — so
+            # `wait_for_selector` blocked on a control the product had
+            # deliberately hidden, timed out, and the whole class was reported
+            # as a SKIP. 0b.4a's measurement: the server was reachable and the
+            # page had mounted; the selector was asserting the wrong thing.
+            # Reverted, this file skips again (measured, not assumed).
+            page.wait_for_function(
+                "() => document.querySelector('#app') "
+                "&& document.querySelector('#app').children.length > 0",
+                timeout=15000,
+            )
+            page.wait_for_selector("#app header.topbar .app-icon", state="attached", timeout=15000)
         except Exception as exc:
             cls._browser.close()
             cls._pw_cm.stop()

@@ -66,6 +66,18 @@ class ShellChromeMeasuredTests(unittest.TestCase):
         cls._page.on("pageerror", lambda e: cls._console_errors.append(str(e)))
         try:
             cls._page.goto(cls._base, wait_until="domcontentloaded", timeout=20000)
+            # 2.1e moved the scope switcher into the rail's collapsible
+            # `#compact-controls` panel, so `.scope-trigger` is in the DOM but
+            # `display: none` until that panel is opened. Waiting for it
+            # directly blocked on a control the product had deliberately
+            # hidden and reported the whole class as a SKIP — measured in
+            # 0b.4a: the server was up and the Library view rendered; the
+            # suite was asserting against a closed disclosure. The suite's
+            # subject is the topbar/status-bar chrome, so it opens the panel
+            # the way a reader does and then measures. (`.viewtabs` still
+            # exists — 2.1e collapsed the rail's LABELS, not its nav element —
+            # so the Library click below is unchanged.)
+            cls._page.click(".mobile-controls-toggle")
             cls._page.wait_for_selector(".scope-trigger", timeout=15000)
             cls._page.click('.viewtabs button:has-text("Library")')
             cls._page.wait_for_selector(".library-bar", timeout=10000)
