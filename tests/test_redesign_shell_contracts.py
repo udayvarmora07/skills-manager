@@ -231,7 +231,18 @@ class ScopeSwitcherPlacementTests(unittest.TestCase):
         # The menu is rendered by `v-if`, so it may not exist on the first tick
         # on a slow mount. Returning early keeps the downward default rather
         # than flipping a menu that was never measured.
-        self.assertIn("if (!menu) return;", APP)
+        #
+        # This asserted the literal `if (!menu) return;` and broke when the guard
+        # was *strengthened* to `if (!menu || !trigger) return;` — a pure
+        # improvement that the sentence did not survive. What is actually being
+        # protected is the early return that guards on the menu, so assert that:
+        # scoped to the method, and indifferent to what else joined the condition.
+        placement = _between(APP, "positionScopeMenu() {", "closeScopeMenu(restoreFocus = false) {")
+        self.assertRegex(
+            placement,
+            r"if \(\s*![^\n;]*\bmenu\b[^\n;]*\)\s*return;",
+            "positionScopeMenu must return early when the menu is absent",
+        )
 
 
 class DeadShellCssTests(unittest.TestCase):

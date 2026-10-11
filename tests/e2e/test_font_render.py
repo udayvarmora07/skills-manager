@@ -12,10 +12,24 @@ catch that. Measuring a rendered probe can.
 
 So this is deliberately not a unittest. It needs a real font engine, which means
 Playwright, which lives in the project venv (RULES #9 forbids installing one
-globally). It is therefore *skipped loudly*, never silently passed, when
-Playwright or the dev server is absent. The stdlib half of the same contract
-(faces declared, files shipped, none restricted away from ASCII) lives in
-``tests/test_redesign_contracts.py`` and always runs.
+globally). The stdlib half of the same contract (faces declared, files shipped,
+none restricted away from ASCII) lives in ``tests/test_redesign_contracts.py``
+and always runs.
+
+How this file is collected — read this before trusting a green run
+----------------------------------------------------------------
+**`unittest discover -s tests` does not reach this directory.** There is no
+``__init__.py``, so discovery never recurses into it. That is deliberate: the CI
+unit job must not launch a browser. The consequence, stated plainly because it
+was previously claimed away, is that **these tests are not skipped when
+Playwright is absent — they are never collected at all**, and emit no skip line,
+no skip count and no exit-code signal. A green `discover` run is *silent* about
+this file.
+
+Run it explicitly (see ``tests/e2e/README.md``). When Playwright or the dev
+server is missing, the explicit run reports ``skipped``, which is a green
+result: **a skip here means the evidence was NOT produced**, not that the
+contract holds.
 
 Run
 ---

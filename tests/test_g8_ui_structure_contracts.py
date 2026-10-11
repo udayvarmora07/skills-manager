@@ -280,8 +280,8 @@ class UniformSuppressionTests(unittest.TestCase):
         # methods. The value-less helpers must NOT be methods: as methods they
         # are truthy function objects in a template and the `sr-only` binding
         # fires unconditionally, hiding every real state.
-        self.assertIn("groupedIdentities(item)", _slice(self.source, "\n  methods: {", '}).mount("#app");'))
-        methods = _slice(self.source, "\n  methods: {", '}).mount("#app");')
+        self.assertIn("groupedIdentities(item)", _slice(self.source, "\n  methods: {", "\n  },\n};"))
+        methods = _slice(self.source, "\n  methods: {", "\n  },\n};")
         for name in ("visibleIdentityItems()", "uniformStateLabel()"):
             self.assertNotIn(name, methods, f"{name} is duplicated as a method")
 
