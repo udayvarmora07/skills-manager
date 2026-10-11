@@ -629,11 +629,21 @@
         <div class="banner-body"><p>{{ banner.text }}</p></div>
       </div>
         <header class="overview-status">
-          <h1 id="overview-title" tabindex="-1">Overview</h1>
+          <div class="overview-heading">
+            <h1 id="overview-title" tabindex="-1">Overview</h1>
+            <!-- Freshness of THIS page's own settled read. The aggregate list
+                 route carries no server-side observation timestamp, so the age
+                 is stamped client-side on a successful read and is cleared
+                 again by a failed one. It never claims a backend scan. -->
+            <p v-if="scannedAgoLabel" class="overview-scanned" data-scanned="true">
+              <span>Scanned {{ scannedAgoLabel }}</span><span aria-hidden="true"> · </span>
+              <button class="text-button" type="button" data-rescan :disabled="rescanBusy" @click="rescanOverview">{{ rescanBusy ? 'Rescanning\u2026' : 'Rescan' }}</button>
+            </p>
+          </div>
           <!-- One status line. The counts are shown only once the inventory has
                settled, so a pending or failed load never reads as an empty
                library. The observed evidence itself is unchanged: the queue and
-               the summary below carry it. -->
+               the summary strip below carry it. -->
           <p class="overview-statusline">
             <span v-if="loadingList">Reading the observed skill inventory…</span>
             <span v-else-if="banner">Observed library unavailable — see the message above.</span>
@@ -663,13 +673,62 @@
           </div>
         </section>
 
-        <template v-else-if="!banner">
+<template v-else-if="!banner">
+          <!-- One bordered bar, four cells, hairlines between them. These are the
+               four numbers a reader decides on before anything else: how many
+               things exist, how many physical copies back them up, whether any
+               of them need a decision, and how much context they cost. The
+               cell is a definition pair so a screen reader announces the label
+               with the number rather than reading a bare figure. -->
+          <section class="overview-summary" aria-labelledby="overview-summary-title">
+            <h2 id="overview-summary-title">Summary</h2>
+            <dl class="overview-metrics" aria-label="Library summary">
+              <div><dt>Skills</dt><dd>{{ formatNumber(overviewLogicalCount) }}<small>deduplicated names</small></dd></div>
+              <div><dt>Observed copies</dt><dd>{{ formatNumber(overviewInstanceCount) }}<small>physical instances</small></dd></div>
+              <div><dt>Needs attention</dt><dd>{{ formatNumber(overviewAttentionCount) }}<small>observed items</small></dd></div>
+              <div><dt>Context used</dt><dd v-if="budget">{{ formatTokens(budget.all_tokens) }}<small>{{ formatNumber(budget.all_pct_window) }}% of one {{ budget.window }} window</small></dd><dd v-else class="is-absent">&mdash;<small>not read yet</small></dd></div>
+            </dl>
+            <!-- The four headline cells deliberately cannot hold seven states.
+                 These are the remaining observed counts, so nothing the deleted
+                 health panel showed is lost: they read as one instrument
+                 readout rather than a second card grid. -->
+            <ul class="overview-breakdown" aria-label="Observed state breakdown">
+              <li><span class="num">{{ formatNumber(overviewActiveCount) }}</span> active<span class="sr-only"> (enabled, parsed, addressable)</span></li>
+              <li><span class="num">{{ formatNumber(overviewDisabledCount) }}</span> disabled</li>
+              <li><span class="num">{{ formatNumber(overviewMalformedCount) }}</span> malformed</li>
+              <li><span class="num">{{ formatNumber(overviewLinkedCount) }}</span> linked outside root</li>
+              <li><span class="num">{{ formatNumber(overviewUnaddressableCount) }}</span> unaddressable</li>
+              <li><span class="num">{{ formatNumber(overviewDivergentGroups.length) }}</span> divergent group{{ overviewDivergentGroups.length === 1 ? '' : 's' }}</li>
+              <li><span class="num">{{ formatNumber(trashCount) }}</span> in trash</li>
+            </ul>
+          </section>
+
+          <!-- Needs attention is first because it is the only block on this page
+               that can ask the reader for a decision. The context budget is
+               deliberately second: it is the most consequential thing the tool
+               observes, but it is a measurement, not a request. -->
+          <section class="attention-queue" aria-labelledby="attention-title">
+            <div class="overview-section-head"><div><p class="eyebrow">Next actions</p><h2 id="attention-title">Attention queue</h2></div><span class="list-count">{{ formatNumber(overviewAttentionCount) }}</span></div>
+            <p class="overview-section-note">Derived from observed instance state; no validation or provenance status is inferred here.</p>
+            <ol v-if="overviewAttention.length" class="attention-list">
+              <!-- data-attention is the stable identity of the queue item. The dev
+                   harness used to assert the item by matching its exact title copy,
+                   which breaks the moment the wording improves. -->
+              <li v-for="item in overviewAttention" :key="item.key" class="attention-item" :data-attention="item.key">
+                <span class="attention-index" aria-hidden="true">!</span>
+                <div><h3>{{ item.title }}</h3><p>{{ item.detail }}</p></div>
+                <button class="btn btn-secondary" type="button" @click="openOverviewAttention(item.key)">{{ item.action }}</button>
+              </li>
+            </ol>
+            <div v-else class="queue-clear"><span class="status-mark status-mark-ok" aria-hidden="true">✓</span><div><h3>No queued observations</h3><p>Use the Library to inspect documents or the health check for read-only diagnostics.</p></div><button class="btn btn-secondary" type="button" @click="switchView('skills')">Open Library</button></div>
+          </section>
+
           <!-- The context budget is the most consequential thing this tool
-               observes, so it leads. Every agent that loads all skills from one
-               root starts with the rest of its instructions already truncated;
-               that is a silent, lossy failure, and burying it under a skill
-               count would be the wrong priority. The bar axis runs past 100%
-               on purpose — see scopeBudgetRows in app.js. -->
+               observes, so it leads the measurements. Every agent that loads all
+               skills from one root starts with the rest of its instructions
+               already truncated; that is a silent, lossy failure, and burying it
+               under a skill count would be the wrong priority. The bar axis runs
+               past 100% on purpose — see scopeBudgetRows in app.js. -->
           <section v-if="budget" class="budget-hero" aria-labelledby="budget-hero-title">
             <div class="budget-hero-lead">
               <h2 id="budget-hero-title">
@@ -702,48 +761,12 @@
             <p v-if="!budget.has_tiktoken" class="budget-hero-foot">Counts are a chars/4 estimate. Install <code>tiktoken</code> for exact BPE figures.</p>
           </section>
 
-          <section class="attention-queue" aria-labelledby="attention-title">
-            <div class="overview-section-head"><div><p class="eyebrow">Next actions</p><h2 id="attention-title">Attention queue</h2></div><span class="list-count">{{ formatNumber(overviewAttentionCount) }}</span></div>
-            <p class="overview-section-note">Derived from observed instance state; no validation or provenance status is inferred here.</p>
-            <ol v-if="overviewAttention.length" class="attention-list">
-              <!-- data-attention is the stable identity of the queue item. The dev
-                   harness used to assert the item by matching its exact title copy,
-                   which breaks the moment the wording improves. -->
-              <li v-for="item in overviewAttention" :key="item.key" class="attention-item" :data-attention="item.key">
-                <span class="attention-index" aria-hidden="true">!</span>
-                <div><h3>{{ item.title }}</h3><p>{{ item.detail }}</p></div>
-                <button class="btn btn-secondary" type="button" @click="openOverviewAttention(item.key)">{{ item.action }}</button>
-              </li>
-            </ol>
-            <div v-else class="queue-clear"><span class="status-mark status-mark-ok" aria-hidden="true">✓</span><div><h3>No queued observations</h3><p>Use the Library to inspect documents or the health check for read-only diagnostics.</p></div><button class="btn btn-secondary" type="button" @click="switchView('skills')">Open Library</button></div>
+          <section class="overview-activity" aria-labelledby="activity-title">
+            <div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div>
+            <p v-if="loadingHistory" class="hint">Loading recent activity…</p>
+            <p v-else-if="!overviewHistory.length" class="hint">No history entries yet.</p>
+            <ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · {{ formatDate(entry.at) }}</span></div></li></ul>
           </section>
-
-          <div class="overview-columns">
-            <section class="overview-health" aria-labelledby="overview-health-title">
-              <div class="overview-health-main">
-                <div class="overview-health-kicker"><span class="status-mark" :class="overviewAttentionCount ? 'status-mark-warn' : 'status-mark-ok'" aria-hidden="true">{{ overviewAttentionCount ? '!' : '✓' }}</span><span>{{ overviewAttentionCount ? 'Attention needed' : 'No observed issues' }}</span></div>
-                <h2 id="overview-health-title">{{ overviewAttentionCount ? 'A few items deserve your attention' : 'Your observed library is in good shape' }}</h2>
-                <p>{{ overviewAttentionCount ? 'The queue above moves directly to the existing surface that can explain or recover each item.' : 'No divergence, disabled instances, malformed documents, or unaddressable entries are currently observed.' }}</p>
-                <button class="btn btn-secondary" type="button" @click="openDoctor">Run health check</button>
-              </div>
-              <!-- One observed-count surface. The separate "Observed state" panel
-                   was deleted because every row it showed is already stated here
-                   or in the queue above; the counts themselves are unchanged. -->
-              <dl class="overview-metrics" aria-label="Library summary">
-                <div><dt>Logical skills</dt><dd>{{ formatNumber(overviewLogicalCount) }}<small>deduplicated names</small></dd></div>
-                <div><dt>Active instances</dt><dd>{{ formatNumber(overviewActiveCount) }}<small>enabled, parsed, addressable</small></dd></div>
-                <div><dt>Observed copies</dt><dd>{{ formatNumber(overviewInstanceCount) }}<small>physical instances</small></dd></div>
-                <div><dt>Malformed</dt><dd>{{ formatNumber(overviewMalformedCount) }}<small>undecodable or invalid</small></dd></div><div><dt>Linked outside root</dt><dd>{{ formatNumber(overviewLinkedCount) }}<small>symlink the tool refuses to follow</small></dd></div>
-                <div><dt>Unaddressable</dt><dd>{{ formatNumber(overviewUnaddressableCount) }}<small>name outside the canonical rule</small></dd></div>
-                <div><dt>Disabled</dt><dd>{{ formatNumber(overviewDisabledCount) }}<small>will be skipped</small></dd></div>
-                <div><dt>Recovery</dt><dd>{{ formatNumber(trashCount) }}<small>in global trash</small></dd></div>
-              </dl>
-            </section>
-
-            <aside class="overview-secondary" aria-label="Secondary overview information">
-              <section class="overview-compact" aria-labelledby="activity-title"><div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div><p v-if="loadingHistory" class="hint">Loading recent activity…</p><p v-else-if="!overviewHistory.length" class="hint">No history entries yet.</p><ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · {{ formatDate(entry.at) }}</span></div></li></ul></section>
-            </aside>
-          </div>
         </template>
         <section v-else class="overview-load-error" aria-labelledby="overview-load-error-title">
           <p class="eyebrow">Overview unavailable</p>

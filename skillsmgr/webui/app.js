@@ -226,6 +226,14 @@ const appOptions = {
       recoverySnapshots: [],
       loadingHistory: true,
       overviewHistory: [],
+      /* Wall-clock stamp of THIS page's own last settled successful list read.
+       * The aggregate /api/skills route carries no server-side observation
+       * timestamp (it is stamped per record by Store.get, not by the list), so
+       * the age cannot come from the API. Stamped on success only and cleared
+       * on failure, so "Scanned 4 min ago" never outlives the read that
+       * justified it. */
+      lastScanAt: null,
+      rescanBusy: false,
       loadingWorkspaces: false,
       workspaces: null,
       workspaceProject: "",
@@ -718,6 +726,22 @@ const appOptions = {
     },
     overviewAttentionCount() {
       return this.overviewAttention.length;
+    },
+    scannedAgoLabel() {
+      /* Null until a settled successful read exists, so a pending or failed
+       * load shows no age at all rather than a stale one. Rounded down to the
+       * minute; "just now" covers the first 45s so the label does not churn
+       * on every navigation. */
+      if (!this.lastScanAt) return null;
+      const seconds = Math.floor((Date.now() - this.lastScanAt) / 1000);
+      if (seconds < 0) return null;
+      if (seconds < 45) return "just now";
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes} min ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+      const days = Math.floor(hours / 24);
+      return `${days} day${days === 1 ? "" : "s"} ago`;
     },
     themeModeLabel() {
       return this.theme === "system" ? "System" : (this.theme === "dark" ? "Dark" : "Light");
@@ -1449,6 +1473,18 @@ const appOptions = {
       await this.loadStatsTokens();
     },
 
+    /* Rescan re-reads the same surfaces loadInitialData reads, and keeps the
+     * reader where they are. It does not navigate, so a reader who pressed it
+     * from the Overview does not silently land in the Library. */
+    async rescanOverview() {
+      this.rescanBusy = true;
+      try {
+        await this.loadInitialData();
+      } finally {
+        this.rescanBusy = false;
+      }
+    },
+
     openInstallCenter() {
       this.switchView("install");
     },
@@ -1805,6 +1841,8 @@ const appOptions = {
         this.offline = false;
         this.skills = rows;
         this.allSkills = rows.slice();
+        /* Success path only: this read is what makes the page's age claim true. */
+        this.lastScanAt = Date.now();
         if (this.query.trim() && this.view === "skills") this.applySearch();
         if (this.selectedName) {
           const still = this.skills.find((sk) => sk.name === this.selectedName && (s === "all" || sk.scope === s));
@@ -1826,6 +1864,10 @@ const appOptions = {
          * banner. Anything else stays a scoped message. */
         const unreachable = e instanceof TypeError;
         if (unreachable) this.offline = true;
+        /* A failed read retires the age claim: "Scanned 4 min ago" describes a
+         * read that happened, and the page now shows rows it could not
+         * refresh. Null is honest; the old stamp would not be. */
+        this.lastScanAt = null;
         this.banner = {
           type: unreachable ? "warn" : "error",
           text: unreachable

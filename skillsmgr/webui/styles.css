@@ -1830,44 +1830,57 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* One status line, not a hero. The h1 stays the programmatic focus target and
    the shell's accessible name; it is sized as a heading rather than a poster so
    the attention queue is the first substantial block on the page. */
-.overview-status { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s4); padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.overview-status { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--s2) var(--s4); padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .overview-status h1 { margin: 0; font-size: var(--t-page); line-height: 1.2; font-weight: 650; letter-spacing: -.01em; }
 .overview-status h1:focus-visible { border-radius: var(--radius-sm); }
+.overview-heading { display: grid; gap: 3px; min-width: 0; }
+/* Freshness sits UNDER the title, never beside it: a reader deciding whether to
+   trust the numbers is looking at the heading, not at the action cluster. */
+.overview-scanned { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; margin: 0; color: var(--text-muted); font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
+.overview-scanned .text-button { font-size: var(--t-meta); }
 .overview-statusline { margin: 0; color: var(--text-muted); font-size: var(--t-ui); font-variant-numeric: tabular-nums; }
 .overview-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); margin-left: auto; }
-.overview-health { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 28px; margin-top: 28px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); box-shadow: var(--shadow); }
-.overview-health-main { min-width: 0; }
-.overview-health-kicker { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: var(--t-table); font-weight: 650; }
+/* The health panel that stood here repeated the attention queue's claim one
+   block below it and carried the page's only stray --shadow. It is gone; its
+   counts live in the strip below and its sentence was the queue's title. */
 .status-mark { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--t-table); font-weight: 750; }
 .status-mark-ok { color: var(--ok); background: var(--ok-soft); }
 .status-mark-warn { color: var(--warn); background: var(--warn-soft); }
-.overview-health h2 { margin: 14px 0 6px; font-size: var(--t-empty); line-height: 1.15; }
-.overview-health p { max-width: 62ch; margin: 0 0 18px; color: var(--text-muted); }
-.overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; align-content: stretch; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--border); }
-.overview-metrics > div { min-width: 0; padding: 14px; background: var(--surface); }
+/* One bordered bar, four cells, hairlines between them. The cells share a
+   single surface with no elevation: this is a readout, not a set of cards. */
+.overview-summary { margin-top: 28px; }
+.overview-summary > h2 { margin: 0 0 10px; font-size: var(--t-prose); }
+.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; align-content: stretch; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--border); }
+.overview-metrics > div { min-width: 0; padding: 14px 16px; background: var(--surface); }
 .overview-metrics dt { color: var(--text-muted); font-size: var(--t-meta); }
 .overview-metrics dd { margin: 4px 0 1px; font-size: var(--t-empty); font-weight: 700; font-variant-numeric: tabular-nums; }
 .overview-metrics small { display: block; margin-top: 4px; color: var(--text-muted); font-size: var(--t-meta); font-weight: 400; }
-.overview-columns { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 28px; margin-top: 28px; }
+.overview-metrics dd.is-absent { color: var(--text-muted); font-weight: 600; }
+/* The seven remaining observed counts read as ONE instrument line. Separators
+   are hairlines, not pills: seven bordered chips would out-shout the four
+   cells above them, which are the numbers a decision is actually made on. */
+.overview-breakdown { display: flex; flex-wrap: wrap; gap: 0 18px; margin: 12px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--t-table); }
+.overview-breakdown li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; }
+.overview-breakdown li + li { border-left: 1px solid var(--border); padding-left: 18px; }
+.overview-breakdown .num { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
 .overview-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .overview-section-head h2 { margin: 0; font-size: var(--t-page); }
 .overview-section-note { margin: 6px 0 14px; color: var(--text-muted); font-size: var(--t-table); }
-.attention-queue, .overview-compact { min-width: 0; }
-.attention-queue { margin-top: 20px; }
+/* Three separate full-width blocks now: summary, queue, meters, activity. The
+   2-column wrapper is gone — the only thing beside the summary strip was a
+   five-line activity list, which did not earn a column. */
+.attention-queue, .budget-hero, .overview-activity { min-width: 0; margin-top: 28px; }
 .attention-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 .attention-item, .queue-clear { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .attention-index { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); font-weight: 750; }
 .attention-item h3, .queue-clear h3 { margin: 0; font-size: var(--t-ui); }
 .attention-item p, .queue-clear p { margin: 3px 0 0; color: var(--text-muted); font-size: var(--t-table); }
 .queue-clear { grid-template-columns: 30px minmax(0, 1fr) auto; }
-.overview-secondary { display: grid; align-content: start; gap: 20px; }
-.overview-compact { padding-top: 2px; }
-.overview-compact h2 { font-size: var(--t-prose); }
+.overview-activity h2 { font-size: var(--t-prose); }
 .text-button { min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: var(--accent-text); cursor: pointer; font: inherit; font-size: var(--t-table); text-decoration: underline; text-underline-offset: 2px; }
-.overview-compact ul, .activity-list { list-style: none; margin: 10px 0 0; padding: 0; }
-.overview-compact li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: var(--t-table); }
-.overview-compact li:last-child { border-bottom: 0; }
-.overview-compact li strong { color: var(--text); font-size: var(--t-ui); font-variant-numeric: tabular-nums; }
+.activity-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.activity-list > li { padding: 9px 0; border-bottom: 1px solid var(--border); }
+.activity-list > li:last-child { border-bottom: 0; }
 .activity-list li { display: flex; align-items: flex-start; justify-content: flex-start; gap: 9px; }
 .activity-list li > div { display: grid; gap: 1px; min-width: 0; }
 .activity-list strong { overflow-wrap: anywhere; }
@@ -2988,9 +3001,10 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .first-scan-actions .btn { width: 100%; }
   .first-scan-root-list li { align-items: flex-start; flex-direction: column; gap: 2px; }
   .first-scan-root-list span { text-align: start; }
-  .overview-health, .overview-columns { grid-template-columns: 1fr; gap: 18px; margin-top: 18px; }
-  .overview-health { padding: 18px; }
+  .overview-summary { margin-top: 18px; }
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-breakdown { gap: 0 14px; }
+  .overview-breakdown li + li { padding-left: 14px; }
   .quality-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quality-observations li, .quality-unavailable li, .quality-finding-instances li { grid-template-columns: 1fr; gap: 2px; padding: 10px 0; }
   .quality-hygiene-metrics { grid-template-columns: 1fr; }
@@ -2998,7 +3012,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .overview-empty-actions { justify-content: flex-start; max-width: none; }
   .attention-item, .queue-clear { grid-template-columns: 28px minmax(0, 1fr); align-items: start; padding: 13px; }
   .attention-item .btn, .queue-clear .btn { grid-column: 2; justify-self: start; }
-  .overview-secondary { gap: 16px; }
   .settings-select-option { grid-template-columns: 1fr; align-items: stretch; }
   .settings-locale-preview { align-items: flex-start; flex-direction: column; }
   .settings-locale-preview span { text-align: start; }

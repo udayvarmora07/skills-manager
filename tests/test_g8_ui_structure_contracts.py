@@ -86,14 +86,31 @@ class OverviewStructureTests(unittest.TestCase):
 
     def test_attention_queue_is_the_first_block_below_the_status_line(self):
         shell = _slice(self.html, 'class="overview-shell"', 'class="detail-inner"')
+        # The queue is still the first block that can ask for a decision. The
+        # summary strip reads first because it is a measurement, not a request;
+        # the health panel it replaced used to repeat the queue's own claim.
         order = [
             shell.index('class="overview-status"'),
+            shell.index('class="overview-summary"'),
             shell.index('class="attention-queue"'),
-            shell.index('class="overview-health"'),
-            shell.index('class="overview-compact"'),
+            shell.index('class="budget-hero"'),
+            shell.index('class="overview-activity"'),
             shell.index('class="first-scan-guide"'),
         ]
         self.assertEqual(order, sorted(order), "Overview blocks are out of order")
+
+    def test_summary_strip_is_four_cells_and_reads_before_the_queue(self):
+        strip = _slice(self.html, 'class="overview-metrics"', "</dl>")
+        cells = strip.count("<dt>")
+        self.assertEqual(cells, 4, "the summary strip must stay four cells")
+        for label in ("Skills", "Observed copies", "Needs attention", "Context used"):
+            self.assertIn(f"<dt>{label}</dt>", strip)
+        # "Context used" must name the window it is measured against, and must
+        # degrade to an explicit absence rather than an empty cell when the
+        # stats read has not landed.
+        self.assertIn("budget.all_tokens", strip)
+        self.assertIn('budget.window', strip)
+        self.assertIn('v-else class="is-absent"', strip)
 
     def test_first_run_guidance_sits_below_the_queue(self):
         shell = _slice(self.html, 'class="overview-shell"', 'class="detail-inner"')
@@ -109,18 +126,45 @@ class OverviewStructureTests(unittest.TestCase):
     def test_duplicate_observed_state_panel_is_deleted_but_its_counts_remain(self):
         self.assertNotIn('aria-labelledby="observed-title"', self.html)
         self.assertNotIn(">Observed state<", self.html)
+        # The second health panel went the same way: its sentence duplicated the
+        # queue heading directly above it and it carried the page's only stray
+        # --shadow. Its counts are the strip plus the breakdown line.
+        self.assertNotIn('class="overview-health"', self.html)
+        self.assertNotIn(".overview-health ", self.css)
         source = self.read_source()
-        # Every count the deleted panel rendered is still computed and still shown.
-        metrics = _slice(self.html, 'class="overview-metrics"', "</dl>")
-        for label in ("Logical skills", "Active instances", "Observed copies",
-                      "Malformed", "Unaddressable", "Recovery"):
-            self.assertIn(f"<dt>{label}</dt>", metrics)
+        # Every count the deleted panels rendered is still computed AND still
+        # rendered: the four headline cells plus the seven breakdown counts.
+        summary = _slice(self.html, 'class="overview-summary"', "</section>")
+        for expression in ("overviewLogicalCount", "overviewInstanceCount",
+                           "overviewAttentionCount", "budget.all_tokens",
+                           "overviewActiveCount", "overviewDisabledCount",
+                           "overviewMalformedCount", "overviewLinkedCount",
+                           "overviewUnaddressableCount", "overviewDivergentGroups",
+                           "trashCount"):
+            self.assertIn(expression, summary,
+                          f"{expression} is computed but no longer rendered")
+        breakdown = _slice(summary, 'class="overview-breakdown"', "</ul>")
+        for label in ("active", "disabled", "malformed", "linked outside root",
+                      "unaddressable", "divergent group", "in trash"):
+            self.assertIn(label, breakdown)
         for expression in ("overviewInstanceCount", "overviewMalformedCount",
                            "overviewUnaddressableCount", "overviewDivergentGroups"):
             self.assertIn(expression, source)
         # Divergent groups were already stated by the queue item, so they are
         # not repeated a third time.
         self.assertIn("unequal observed instances", self.source)
+
+    def test_scan_age_is_stamped_only_by_a_settled_successful_read(self):
+        # /api/skills?scope=all carries no server-side observation timestamp,
+        # so "Scanned N ago" is this page's own successful read and nothing
+        # else. Both the stamp and its clearing are pinned here because a stamp
+        # that outlives a failed read is exactly the dishonest version.
+        self.assertIn("lastScanAt: null", self.source)
+        self.assertIn("this.lastScanAt = Date.now()", self.source)
+        self.assertIn("this.lastScanAt = null", self.source)
+        self.assertIn('data-rescan', self.html)
+        self.assertIn(':disabled="rescanBusy"', self.html)
+        self.assertIn("scannedAgoLabel", self.source)
 
     def test_metrics_stay_a_definition_list(self):
         self.assertIn('<dl class="overview-metrics"', self.html)
