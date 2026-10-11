@@ -821,6 +821,23 @@ const appOptions = {
           .some((value) => String(value || "").toLowerCase().includes(q));
       });
     },
+    /* Does `query` filter anything at all on the view in front of the reader?
+
+     * The search field is GLOBAL — one input in the topbar, one `v-model`, one
+     * `/` binding — so it renders on every view. That is right: it filters the
+     * Library, Trash, Quality evidence and the registry inventory. But `query`
+     * is read by exactly four filtered lists, and Recovery is not one of them:
+     * its pane is "Source snapshots" for the selected skill, with no list to
+     * search. The field still promised "Search recovery…" there, so the UI
+     * stated a capability that did not exist (RULES #12).
+     *
+     * The claim, not the control, is what is wrong. Removing the field on the
+     * views that cannot use it is the only way the placeholder can stop being
+     * a promise — and `/` must then stop being a promise too, which is why the
+     * key handler consults this same list rather than the element. */
+    searchAppliesHere() {
+      return ["skills", "trash", "quality", "install"].includes(this.view);
+    },
     registryInventoryCount() {
       return this.filteredRegistryInventory.length;
     },
@@ -2777,6 +2794,10 @@ const appOptions = {
       const tag = (e.target.tagName || "").toLowerCase();
       const typing = ["input", "textarea", "select"].includes(tag) || e.target.isContentEditable;
       if (e.key === "/" && !typing && !this.activeModal) {
+        // Only a shortcut that will do something. Recovery and the other
+        // filter-less views do not render the field, so swallowing `/` there
+        // would be a keypress that visibly does nothing.
+        if (!this.searchAppliesHere) return;
         e.preventDefault();
         this.$refs.searchInput && this.$refs.searchInput.focus();
       } else if (e.key === "?" && !typing && !this.activeModal) {

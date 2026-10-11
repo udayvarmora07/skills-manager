@@ -232,7 +232,12 @@
       <span class="sr-only">Go to Overview</span>
     </button>
 
-    <div class="searchwrap">
+    <!-- Global search, scoped to the views where `query` actually filters
+         (app.js `searchAppliesHere`: Library, Trash, Quality, Install). It used
+         to render on every view, so Recovery promised "Search recovery…" over a
+         pane that lists the selected skill's snapshots and no list at all. The
+         field is not what was wrong — the claim was. -->
+    <div v-if="searchAppliesHere" class="searchwrap">
       <span class="s-icon" aria-hidden="true">
         <app-icon name="search" aria-hidden="true" width="15" height="15"></app-icon>
       </span>
