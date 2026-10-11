@@ -951,7 +951,11 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertIn("guideUnavailableRoots", source)
         self.assertIn("guidePreviewRecord", source)
         self.assertIn("/api/doctor?explain=", source)
-        self.assertIn("firstScanGuideDismissed: false", source)
+        self.assertIn('skillsmgr-first-scan-dismissed', source)
+        # Remembered across a reload: "it is remembered" is on the card, so
+        # it has to actually be. Skip writes, restart clears.
+        self.assertIn('localStorage.setItem("skillsmgr-first-scan-dismissed", "1")', source)
+        self.assertIn('localStorage.removeItem("skillsmgr-first-scan-dismissed")', source)
         self.assertIn("dismissFirstScanGuide()", source)
         self.assertIn("restartFirstScanGuide()", source)
         self.assertIn('data-first-scan-skip', html)
@@ -962,20 +966,21 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertIn('data-first-scan-preview-target', html)
         self.assertIn('role="status" aria-live="polite"', html)
         self.assertIn("Effective state elsewhere remains unresolved", html)
-        self.assertIn("undocumented order", html)
+        self.assertIn("An unknown or undocumented order is reported as such", html)
         self.assertIn("The scope list reports detected roots only", html)
-        # The guide is bounded by the next view, not by `overview-empty`. It used
-        # to sit *before* the empty state; §G8 moved it below the attention queue,
-        # and an `overview-empty` bound would then produce an empty slice and
-        # pass every assertion below without testing anything.
-        guide_start = html.index('class="first-scan-guide"')
+        # The guide is bounded by the next view, not by `overview-empty`. It is
+        # now the FIRST block of the Overview (§G.1 "at the top") and it is
+        # hidden while the empty state owns the page, so an `overview-empty`
+        # bound would produce an empty slice and pass every assertion below
+        # without testing anything.
+        guide_start = html.index('class="first-scan"')
         guide = html[guide_start:html.index('class="detail-inner"', guide_start)]
         self.assertGreater(len(guide), 2000, "first-scan guide slice collapsed to nothing")
         for path_access in ("root.path", "guideSampleRecord.path", "physical_path", "physical_root"):
             self.assertNotIn(path_access, guide)
-        self.assertIn(".first-scan-steps { display: grid;", css)
-        self.assertIn(".first-scan-steps { grid-template-columns: 1fr; }", css)
-        self.assertIn(".first-scan-actions .btn { width: 100%; }", css)
+        self.assertIn(".first-scan { display: grid;", css)
+        self.assertIn(".first-scan-lead { grid-template-columns: minmax(0, 1fr); }", css)
+        self.assertIn(".first-scan-actions .btn { flex: 1 1 100%; }", css)
 
     def test_first_scan_guide_restart_explains_with_existing_read_api_and_picks_exact_preview_target(self):
         script = r"""
@@ -986,7 +991,7 @@ const domain = {api: async url => { apiCalls.push(url); return {explain:{consume
 const sandbox = {
   window:{SkillManagerDomain:new Proxy(domain,{get(target,key){ return target[key] || (()=>{}); }})},
   Vue:{createApp(value){definition=value; return {mount(){}};}, nextTick(fn){if(fn) fn(); return Promise.resolve();}},
-  localStorage:{getItem(){return null;},setItem(){}},
+  localStorage:{getItem(){return null;},setItem(){},removeItem(){}},
   document:{querySelector(){return {focus(){}};}}
 };
 vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js','utf8'), sandbox);
@@ -1000,6 +1005,7 @@ const context = Object.assign(data, {
   $nextTick(fn){if(fn) fn(); return Promise.resolve();}
 });
 Object.defineProperty(context,'overviewRecords',{get(){return definition.computed.overviewRecords.call(context);}});
+Object.defineProperty(context,'overviewInstanceCount',{get(){return definition.computed.overviewInstanceCount.call(context);}});
 Object.defineProperty(context,'guideSampleRecord',{get(){return definition.computed.guideSampleRecord.call(context);}});
 Object.defineProperty(context,'guidePreviewRecord',{get(){return definition.computed.guidePreviewRecord.call(context);}});
 Object.defineProperty(context,'firstScanGuideVisible',{get(){return definition.computed.firstScanGuideVisible.call(context);}});

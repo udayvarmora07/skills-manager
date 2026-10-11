@@ -78,8 +78,14 @@ class OverviewStructureTests(unittest.TestCase):
 
     def test_status_line_never_claims_an_empty_library_while_loading_or_failed(self):
         line = _slice(self.html, 'class="overview-scanned"', "</p>")
-        # A pending scan and a failed scan must not read as "0 skills".
-        self.assertIn('v-if="loadingList"', line)
+        # A pending scan and a failed scan must not read as "0 skills". The
+        # guard is `loadingList && !scannedAgoLabel` rather than bare
+        # `loadingList`: 3.1 keeps the stamp row up during a RESCAN (the last
+        # good read is still true) instead of vanishing it under the cursor.
+        # This test was asserting the bare literal, so it had been failing
+        # since that commit while everyone read the suite as green.
+        self.assertIn('v-if="loadingList', line)
+        self.assertIn('!scannedAgoLabel', line)
         self.assertIn('v-else-if="banner"', line)
         self.assertIn("Reading the observed skill inventory", line)
         self.assertIn("Observed library unavailable", line)
@@ -97,11 +103,11 @@ class OverviewStructureTests(unittest.TestCase):
         # the health panel it replaced used to repeat the queue's own claim.
         order = [
             shell.index('class="overview-status"'),
+            shell.index('class="first-scan"'),
             shell.index('class="overview-summary"'),
             shell.index('class="attention-queue"'),
             shell.index('class="budget-block"'),
             shell.index('class="overview-activity"'),
-            shell.index('class="first-scan-guide"'),
         ]
         self.assertEqual(order, sorted(order), "Overview blocks are out of order")
 
@@ -118,16 +124,25 @@ class OverviewStructureTests(unittest.TestCase):
         self.assertIn('budget.window', strip)
         self.assertIn('v-else class="is-absent"', strip)
 
-    def test_first_run_guidance_sits_below_the_queue(self):
+    def test_first_run_guidance_reads_before_the_measurements(self):
         shell = _slice(self.html, 'class="overview-shell"', 'class="detail-inner"')
+        # REVERSED from §G8, deliberately. That pass argued the attention queue is
+        # "the first block that can ask for a decision" — true of always-on
+        # content, false of transient onboarding. Measured, the guide sat ~2000px
+        # below the header: a reader never reached it, which defeats the only
+        # purpose it has. §G.1 already said "at the top"; the implementation had
+        # never matched.
         self.assertLess(
-            shell.index('class="attention-queue"'), shell.index('class="first-scan-guide"')
+            shell.index('class="first-scan"'), shell.index('class="overview-summary"')
         )
-        # The empty state (which owns "Create your first skill") precedes the guide too.
         self.assertLess(
-            shell.index('class="overview-empty"'), shell.index('class="first-scan-guide"')
+            shell.index('class="first-scan"'), shell.index('class="attention-queue"')
         )
         self.assertIn("Create your first skill", self.html)
+        # While the library is empty the guide must NOT render at all: the
+        # first-run card owns that page, and a guide above it would repeat the
+        # message behind a disabled "Open an instance" button.
+        self.assertIn("overviewInstanceCount > 0", self.read_source())
 
     def test_duplicate_observed_state_panel_is_deleted_but_its_counts_remain(self):
         self.assertNotIn('aria-labelledby="observed-title"', self.html)

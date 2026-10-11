@@ -203,11 +203,21 @@ console.log(JSON.stringify({{
 
     def test_the_budget_block_reads_after_the_queue(self):
         html = _read(INDEX_HTML)
-        shell = _slice(html, 'v-if="view === \'overview\'"', "</section>\n\n          <section class=\"attention-queue\"")
-        self.assertIn('class="budget-block"', shell)
-        self.assertIn("scopeBudgetRows", shell)
+        # Compare POSITIONS instead of slicing to a whitespace literal. The old
+        # form anchored on `"</section>\n\n          <section class=\"attention-queue\""`,
+        # which raises ValueError the moment anything is inserted between the
+        # two blocks — so the test broke for a reason that had nothing to do
+        # with the budget meter (task 3.4 moved the first-scan guide in). An
+        # index comparison states the intent directly and cannot rot on
+        # indentation.
+        queue = html.index('<section class="attention-queue"')
+        budget = html.index('<section v-if="budget" class="budget-block"')
+        self.assertLess(queue, budget,
+                        "the context budget must read after the attention queue")
+        block = html[budget:html.index("</section>", budget)]
+        self.assertIn("scopeBudgetRows", block)
         # It must not claim to know anything the API did not report.
-        self.assertNotIn("winner", shell.lower())
+        self.assertNotIn("winner", block.lower())
 
     def test_meter_colour_is_scoped_to_the_fill_not_the_label(self):
         # Regression: the percentage label and the bar share a class name, and

@@ -192,7 +192,7 @@ const appOptions = {
       libraryMode: localStorage.getItem("skillsmgr-library-mode") || "library",
       browseMode: localStorage.getItem("skillsmgr-browse-mode") === "grid" ? "grid" : "list",
       onboardingDismissed: false,
-      firstScanGuideDismissed: false,
+      firstScanGuideDismissed: localStorage.getItem("skillsmgr-first-scan-dismissed") === "1",
       guideExplainConsumer: "codex",
       guideExplainResult: null,
       guideExplainError: null,
@@ -422,7 +422,61 @@ const appOptions = {
       return (this.scopes || []).filter((scope) => scope.exists);
     },
     firstScanGuideVisible() {
-      return this.view === "overview" && !this.firstScanGuideDismissed;
+      // An empty library already has a first-run card carrying its own
+      // actions; a guide above it would repeat the message and offer a
+      // disabled primary. The guide appears once there is something to
+      // observe — which is also the only time any of its three marks
+      // can carry a non-empty fact.
+      return this.view === "overview" && !this.firstScanGuideDismissed
+        && this.overviewInstanceCount > 0;
+    },
+    // Three marks, not three step cards. Nothing the reader can do completes
+    // these, so each reports an OBSERVATION with an explicit unknown when the
+    // scan could not settle. `unknown` is a first-class state on purpose: the
+    // previous version let a failed root read fall through to prose that read
+    // like a completed scan.
+    firstScanMarks() {
+      const n = this.overviewInstanceCount;
+      const divergent = this.overviewDivergentGroups.length;
+      const roots = this.guideRoots.length;
+      const missing = this.guideUnavailableRoots.length;
+      const sample = this.guideSampleRecord;
+      if (this.loadingList) {
+        return [
+          { id: "roots", state: "pending", label: "Roots", detail: "pending" },
+          { id: "instance", state: "pending", label: "Instance", detail: "pending" },
+          { id: "conflicts", state: "pending", label: "Conflicts", detail: "pending" }
+        ];
+      }
+      if (this.banner) {
+        return [
+          { id: "roots", state: "unknown", label: "Roots", detail: "scan failed" },
+          { id: "instance", state: "unknown", label: "Instance", detail: "scan failed" },
+          { id: "conflicts", state: "unknown", label: "Conflicts", detail: "scan failed" }
+        ];
+      }
+      return [
+        {
+          id: "roots",
+          state: this.scopeScanFailed ? "unknown" : missing ? "warn" : "ok",
+          label: "Roots",
+          detail: this.scopeScanFailed
+            ? "root details unavailable"
+            : `${this.formatNumber(roots)} detected${missing ? `, ${this.formatNumber(missing)} missing` : ""}`
+        },
+        {
+          id: "instance",
+          state: sample ? "ok" : "warn",
+          label: "Instance",
+          detail: sample ? sample.name : "none readable"
+        },
+        {
+          id: "conflicts",
+          state: this.scopeScanFailed ? "unknown" : divergent ? "warn" : "ok",
+          label: "Conflicts",
+          detail: divergent ? `${this.formatNumber(divergent)} divergent` : "none observed"
+        }
+      ];
     },
     guideRoots() {
       return (this.scopes || []).filter((scope) => scope.exists);
@@ -1329,10 +1383,12 @@ const appOptions = {
 
     dismissFirstScanGuide() {
       this.firstScanGuideDismissed = true;
+      localStorage.setItem("skillsmgr-first-scan-dismissed", "1");
     },
 
     restartFirstScanGuide() {
       this.firstScanGuideDismissed = false;
+      localStorage.removeItem("skillsmgr-first-scan-dismissed");
       this.view = "overview";
       this.$nextTick(() => {
         const heading = document.querySelector("#first-scan-title");
