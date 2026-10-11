@@ -1316,9 +1316,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   box-shadow: 0 -6px 16px -12px rgb(0 0 0 / 45%);
   font-size: var(--t-meta);
 }
-.batchbar-count { display: flex; align-items: baseline; gap: 5px; margin: 0; flex: none; white-space: nowrap; }
+/* Clear belongs to the COUNT, not to the verb row. Measured at 390: the six
+   verbs needed 373px inside a 362px bar and wrapped to two lines, giving a
+   135px bar -- but `Clear` (57px) does not act ON the selection, it ends it,
+   and sitting on the count row it reads as what it is. The verb row drops to
+   316px and fits one line at every width measured (390/768/1280). */
+.batchbar-count { display: flex; align-items: baseline; gap: 5px; margin: 0; flex: 1 1 auto; min-width: 0; white-space: nowrap; }
 .batchbar-count strong { font-size: var(--t-table); font-variant-numeric: tabular-nums; }
-.batchbar-unit { color: var(--text-muted); }
+.batchbar-unit { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
 /* The verbs are grouped, not listed: the two that mutate state, the one that
    copies, and the one that destroys are separated by a rule and by weight, so
    "Remove" is not the fourth button in a row of identical pills. */
@@ -1329,7 +1334,8 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   background: none; color: var(--text); font: inherit; white-space: nowrap; cursor: pointer;
 }
 .batchbar-verb:hover, .batchbar-clear:hover { background: var(--surface-2); border-color: var(--border); }
-.batchbar-clear { margin-inline-end: var(--s2); border-color: var(--border); color: var(--text-muted); }
+/* Clear sits at the end of the count row and aligns to its baseline. */
+.batchbar-clear { align-self: center; margin-inline-start: var(--s2); border-color: var(--border); color: var(--text-muted); }
 .batchbar-danger { color: var(--err); }
 .batchbar-danger:hover { background: var(--err-soft); border-color: var(--err-soft); }
 .batchbar-tags { position: relative; }
@@ -1344,6 +1350,12 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   background: var(--surface); box-shadow: var(--shadow);
 }
 .batchbar-taglabel { font-size: var(--t-meta); color: var(--text-muted); }
+/* The tag plan is a WARNING, not a caption: it is the only place the reader is
+   told that "3 instances selected" writes 1 catalog name covering 3 copies. It
+   reads as a note, in the warning ink, above the field it governs. */
+.batchbar-tagplan { display: grid; gap: 2px; margin: 0; font-size: var(--t-meta); line-height: 1.45; color: var(--warn); }
+.batchbar-tagentry { display: flex; gap: 5px; min-width: 0; align-items: baseline; }
+.batchbar-tagentry code { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 .batch-tag-input { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
 .batchbar-tagrow { display: flex; gap: var(--s2); }
 .batchbar-tagrow .btn { flex: 1; }
@@ -2157,6 +2169,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    fact rather than a template's good intentions. */
 .batch-target-list li { grid-template-columns: minmax(120px, 1.1fr) auto minmax(140px, 1.4fr) minmax(150px, auto); align-items: baseline; }
 .batch-target-outcome { text-align: end; white-space: nowrap; }
+/* The staleness sentence. It is a limit on what this review can promise, so it
+   reads as a warning, not as one more muted caption in a row of them. */
+.batch-stale-note { color: var(--warn); border-inline-start: 2px solid var(--warn-line); padding-inline-start: var(--s2); }
 .batch-target-list code { overflow-wrap: anywhere; }
 .plan-fingerprint { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
 .plan-fingerprint code { padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--t-meta); overflow-wrap: anywhere; }
@@ -3212,7 +3227,8 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   /* The bar keeps ONE row at every width: a bulk bar that doubles in height on a
      phone has taken away the list it floats over. The count drops its unit word
      first (it is repeated in the bar's own label and again in the dialog), and
-     the verbs scroll horizontally rather than wrap. */
+     Clear -- which moved onto the count row in 4.3b -- leaves with it, taking
+     57px off a verb row that measured 373px inside 362px. */
   .batchbar { gap: var(--s2); padding-inline: var(--s3); }
   .batchbar-unit { display: none; }
   .batchbar-actions { flex: 1 0 100%; }

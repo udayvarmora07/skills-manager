@@ -588,13 +588,22 @@
            offered no way back except three more clicks; and a home for the tag
            text field, which used to sit permanently open in the action row. -->
       <div v-if="view === 'skills' && selectedCount" class="batchbar" role="group" aria-label="Actions for the selected instances">
-        <p class="batchbar-count" role="status"><strong>{{ formatNumber(selectedCount) }}</strong> selected<span class="batchbar-unit">exact physical instances</span></p>
+        <p class="batchbar-count" role="status"><strong>{{ formatNumber(selectedCount) }}</strong> selected<span class="batchbar-unit">exact physical instances</span><button class="batchbar-clear" type="button" @click="clearSelection">Clear</button></p>
         <div class="batchbar-actions">
-          <button class="batchbar-clear" type="button" @click="clearSelection">Clear</button>
           <details class="batchbar-tags">
             <summary class="batchbar-verb">Tags</summary>
             <div class="batchbar-tagpanel">
               <label class="batchbar-taglabel" for="batch-tags">Tags to apply</label>
+              <!-- The truthfulness control. The bar counts EXACT PHYSICAL
+                   INSTANCES, but /api/catalog/tags is keyed by LOGICAL NAME --
+                   tags live in the catalog, one entry per name, not per file.
+                   Selecting one copy of a 3-copy skill and pressing Tags writes
+                   all three. That is not a bug in the API (the REST contract is
+                   frozen and the catalog genuinely has no per-instance key), so
+                   the UI owes the reader the sentence the bar was already
+                   implying. tagPlan is the honest restatement: the names that
+                   will be written, and how many copies each one carries. -->
+              <p class="batchbar-tagplan" role="note">Writes <strong>{{ batchTagPlan.names.length }}</strong> catalog name(s), not {{ formatNumber(selectedCount) }} instance(s):<span v-for="entry in batchTagPlan.entries" :key="entry.name" class="batchbar-tagentry"><code>{{ entry.name }}</code> — {{ formatNumber(entry.copies) }} cop{{ entry.copies === 1 ? 'y' : 'ies' }}</span></p>
               <input id="batch-tags" v-model.trim="batchTagInput" class="batch-tag-input" name="batch-tags" placeholder="tag, another-tag">
               <div class="batchbar-tagrow">
                 <button class="btn btn-secondary" type="button" @click="updateBatchTags('add')">Add</button>
@@ -2073,6 +2082,7 @@
           <span v-if="modals.batch.context && modals.batch.context.unresolvedCount">Unresolved members: {{ modals.batch.context.unresolvedCount }} ({{ modals.batch.context.unresolvedMembers.join(', ') }}).</span>
           <span>Recovery: {{ (modals.batch.plan && modals.batch.plan.recovery) || 'Per-target results are reported; partial failures leave successful items applied.' }}</span>
           <span v-if="modals.batch.operation === 'remove'">Each removal goes to Trash and remains recoverable.</span>
+          <span v-if="batchStaleTargets.length" class="batch-stale-note">{{ batchStaleTargets.length }} of these target(s) are no longer in the loaded list. Their path and state are the values observed when you selected them, not a fresh read of the filesystem; re-run the query to re-check them.</span>
           <!-- "Cannot widen after review" was an assertion with nothing behind it on
                screen. The backend enforces exactly one thing (webapp.py refuses a
                `plan_id` that is not the hash of these targets and options), and the

@@ -373,6 +373,184 @@ class BulkBarTests(unittest.TestCase):
         )
         self.assertEqual(empties, [], f"targets rendered with an empty path cell: {empties}")
 
+    # -- 5. every width, not just 1280 (4.3b) ---------------------------
+    #
+    # This file ran at ONE width until 4.3b. The 390px wrap regression was caught
+    # by a capture script measuring a 22px document overflow -- not by a test --
+    # which is exactly how it came back. The properties below are the ones that
+    # break silently at narrow widths, asserted at all three.
+
+    WIDTHS = (390, 768, 1280)
+
+    def _open_library_at(self, width):
+        self._page.set_viewport_size({"width": width, "height": 900})
+        self._page.wait_for_timeout(250)
+        drawer = self._page.locator(".nav-drawer-trigger")
+        if width <= 760:
+            drawer.click()
+            self._page.wait_for_timeout(250)
+            self._page.click("button[data-tip='Library']")
+        else:
+            # A drawer opened by the PREVIOUS subTest is still up and covers the
+            # rail, so closing it is part of changing width, not of navigating.
+            if drawer.get_attribute("aria-expanded") == "true":
+                drawer.click()
+                self._page.wait_for_timeout(250)
+            self._page.click("button[data-tip='Library']")
+        self._page.wait_for_selector(".skilllist > li[data-skill-key]", timeout=15000)
+        self._page.wait_for_timeout(250)
+
+    def _select_three(self):
+        boxes = self._page.locator(".skilllist > li[data-skill-key] .row-select")
+        for i in range(min(3, boxes.count())):
+            # `check()`, not `click()`: the loop runs once per width on ONE page,
+            # and a plain click on an already-ticked row unticks it -- so the
+            # second subTest would empty the selection the first one made and
+            # then wait forever for a bar that is correctly gone.
+            boxes.nth(i).check()
+        self._page.wait_for_selector(".batchbar", timeout=5000)
+        self._page.wait_for_timeout(200)
+
+    def test_the_bar_fits_every_measured_width_on_one_verb_row(self):
+        """Six verbs measured 373px inside a 362px bar at 390 and wrapped.
+
+        `Clear` moved onto the count row -- it ends the selection rather than
+        acting on it -- taking 57px off the verb row. The assertion is the
+        geometry, not the intent: sum the verb row and compare it to the room
+        the bar actually has.
+        """
+        for width in self.WIDTHS:
+            with self.subTest(width=width):
+                self._open_library_at(width)
+                self._select_three()
+                state = self._page.evaluate(
+                    """() => {
+                      const bar = document.querySelector('.batchbar');
+                      const cs = getComputedStyle(bar);
+                      const verbs = [...bar.querySelectorAll('.batchbar-actions > *')];
+                      const used = verbs.reduce((n, el) => n + el.getBoundingClientRect().width, 0);
+                      const inner = bar.getBoundingClientRect().width
+                        - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+                      const tops = [...new Set(verbs.map((el) => Math.round(el.getBoundingClientRect().top)))];
+                      return { used: Math.round(used), inner: Math.round(inner), rows: tops.length,
+                               barH: Math.round(bar.getBoundingClientRect().height) };
+                    }"""
+                )
+                self.assertLessEqual(
+                    state["used"], state["inner"],
+                    f"at {width}px the verb row needs {state['used']}px of {state['inner']}px")
+                self.assertEqual(
+                    state["rows"], 1,
+                    f"at {width}px the verbs wrapped onto {state['rows']} rows "
+                    f"(bar {state['barH']}px tall)")
+
+    def test_no_width_pushes_the_document_past_the_viewport(self):
+        """The 22px overflow that 4.3 found by hand. `scrollWidth` on the ROOT,
+        not on an element: an inner scroller absorbs overflow and hides it."""
+        for width in self.WIDTHS:
+            with self.subTest(width=width):
+                self._open_library_at(width)
+                self._select_three()
+                self.assertEqual(
+                    self._page.evaluate(
+                        "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"),
+                    0, f"the document overflows horizontally at {width}px")
+
+    def test_every_verb_stays_inside_the_bar_at_every_width(self):
+        """A verb that renders outside its container is present and unclickable.
+
+        Scoped to the verb row, NOT to every descendant: the tag panel is a
+        popover positioned above the bar and is meant to overhang it. Asserting
+        on the whole subtree flags the panel's own Add/Remove buttons as
+        escapes -- a check that fails for the right-looking reason and is
+        therefore useless.
+        """
+        for width in self.WIDTHS:
+            with self.subTest(width=width):
+                self._open_library_at(width)
+                self._select_three()
+                escaped = self._page.evaluate(
+                    """() => {
+                      const bar = document.querySelector('.batchbar').getBoundingClientRect();
+                      return [...document.querySelectorAll('.batchbar-actions > *, .batchbar-count > button')]
+                        .filter((el) => { const r = el.getBoundingClientRect();
+                          return r.right > bar.right + 1 || r.left < bar.left - 1; })
+                        .map((el) => el.textContent.trim());
+                    }"""
+                )
+                self.assertEqual(escaped, [], f"at {width}px these left the bar: {escaped}")
+
+    # -- 6. the tag path tells the truth (4.3b) --------------------------
+    #
+    # The bar counts EXACT PHYSICAL INSTANCES. `/api/catalog/tags` is keyed by
+    # LOGICAL NAME, so one selected copy of a three-copy skill writes all three.
+    # The REST contract is frozen and the catalog has no per-instance key, so the
+    # fix is the sentence -- and a sentence that only exists when it is true.
+
+    def test_the_tag_panel_states_catalog_names_not_selected_instances(self):
+        """The defect: the control beneath "exact physical instances" was not
+        exact, and nothing said so."""
+        self._boxes.nth(0).click()
+        self._page.wait_for_selector(".batchbar", timeout=5000)
+        self._page.click(".batchbar-tags > summary")
+        self._page.wait_for_selector(".batchbar-tagplan", timeout=5000)
+        plan = self._page.evaluate(
+            """() => {
+              const p = document.querySelector('.batchbar-tagplan');
+              const entries = [...p.querySelectorAll('.batchbar-tagentry')];
+              return { text: p.textContent.trim(), role: p.getAttribute('role'),
+                       entries: entries.map((e) => e.textContent.trim()) };
+            }"""
+        )
+        self.assertEqual(plan["role"], "note", plan)
+        self.assertTrue(plan["entries"], f"the tag plan named no entry: {plan}")
+        self.assertIn("catalog name", plan["text"], plan)
+        # Every entry names a skill and a copy count -- an entry without a count
+        # would restate the problem it exists to fix.
+        for entry in plan["entries"]:
+            self.assertRegex(entry, r"\d+\s+cop", f"entry states no copy count: {entry}")
+
+    def test_the_tag_plan_matches_what_the_api_would_be_given(self):
+        """The sentence must be TRUE, not decorative: it counts from the same
+        `this.skills` the request's `names` are derived from."""
+        for i in range(3):
+            self._boxes.nth(i).click()
+        self._page.wait_for_selector(".batchbar", timeout=5000)
+        self._page.click(".batchbar-tags > summary")
+        self._page.wait_for_selector(".batchbar-tagplan", timeout=5000)
+        state = self._page.evaluate(
+            """() => {
+              const shown = [...document.querySelectorAll('.batchbar-tagplan code')]
+                .map((c) => c.textContent.trim());
+              const count = document.querySelector('.batchbar-count strong').textContent.trim();
+              return { shown, count };
+            }"""
+        )
+        self.assertEqual(
+            len(set(state["shown"])), len(state["shown"]),
+            f"the plan lists one entry twice: {state}")
+        self.assertLessEqual(
+            len(state["shown"]), int(state["count"]),
+            f"the plan claims more names ({state['shown']}) than instances selected ({state['count']})")
+
+    def test_the_dialog_says_when_a_target_is_no_longer_loaded(self):
+        """`selectedSnapshot` bounds staleness to targets that fell out of the
+        loaded set -- but a review built from stale fields has to admit it."""
+        for i in range(3):
+            self._boxes.nth(i).click()
+        self._page.wait_for_selector(".batchbar", timeout=5000)
+        self._page.fill(".topbar input[type='search'], .topbar input", "zzz-no-such-skill")
+        self._page.wait_for_timeout(600)
+        self._page.click(".batchbar-verb:has-text('Disable')")
+        self._page.wait_for_selector('[data-modal="batch"] .batch-target-list li', timeout=15000)
+        note = self._page.evaluate(
+            """() => { const n = document.querySelector('.batch-stale-note');
+                       return n ? n.textContent.trim() : null; }"""
+        )
+        self.assertIsNotNone(note, "3 targets fell out of the loaded list and the dialog did not say so")
+        self.assertIn("no longer in the loaded list", note, note)
+        self.assertIn("selected", note, note)
+
 
 if __name__ == "__main__":
     unittest.main()

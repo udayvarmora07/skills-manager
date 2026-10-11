@@ -427,6 +427,57 @@ const appOptions = {
       return found.concat(restored);
     },
     selectedCount() { return this.selectedTargets.length; },
+    /* What "Tags" will ACTUALLY write, stated before it writes it.
+
+       The bar counts exact physical instances; `/api/catalog/tags` is keyed by
+       LOGICAL NAME (the catalog is one dict of name -> tags, catalog.py
+       `update_tags`), so selecting one copy of a three-copy skill writes all
+       three. The REST contract is frozen and the catalog has no per-instance
+       key to address, so the fix is not a different request -- it is the
+       sentence. This counts, per distinct name in the selection, how many
+       loaded instances carry it, and the panel renders it. Measured off
+       `this.skills`, the same source `selectedTargets` reads, so the two can
+       never disagree about which instances exist.
+
+       `widened` is the honest summary: true when the selection spans fewer
+       names than it does instances, i.e. pressing Tags does more than the bar
+       advertised. */
+    batchTagPlan() {
+      const counts = new Map();
+      for (const record of this.selectedTargets) {
+        if (record && record.name) counts.set(record.name, 0);
+      }
+      for (const record of this.skills) {
+        if (record && record.name && counts.has(record.name)) {
+          counts.set(record.name, counts.get(record.name) + 1);
+        }
+      }
+      const entries = [...counts.keys()]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ name, copies: counts.get(name) }));
+      const instanceCount = this.selectedTargets.length;
+      return {
+        names: entries.map((entry) => entry.name),
+        entries,
+        widened: entries.length !== instanceCount,
+      };
+    },
+    /* A target that came from `selectedSnapshot` is a row the reader ticked
+       before the list was re-queried and is no longer in the loaded set, so its
+       path and `disabled` flag are the values observed AT SELECTION TIME, not
+       the filesystem's current answer. Loaded records always win (see
+       `selectedTargets`), which bounds this to targets that fell out of the
+       loaded set entirely -- but the dialog reviews a plan built from those
+       stale fields, so it has to say which rows it cannot re-check.
+
+       A COMPUTED, not a method: the template reads `batchStaleTargets.length`,
+       and a method of the same name would answer the number of its own
+       parameters -- 0, every time, which renders a false "nothing is stale". */
+    batchStaleTargets() {
+      const loaded = new Set(this.skills.map((record) => this.targetKey(record)));
+      return (this.modals.batch ? this.modals.batch.targets : [])
+        .filter((target) => !loaded.has(this.targetKey(target)));
+    },
     profileObservedCount() {
       return (this.profilePreview && this.profilePreview.members || [])
         .reduce((count, member) => count + (member.instances || []).length, 0);
