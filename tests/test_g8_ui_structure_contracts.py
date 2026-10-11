@@ -65,7 +65,8 @@ class OverviewStructureTests(unittest.TestCase):
         self.assertNotIn("Keep your local skills ready.", self.html)
         self.assertIn('class="overview-status"', self.html)
         self.assertIn('id="overview-title" tabindex="-1"', self.html)
-        self.assertIn("class=\"overview-statusline\"", self.html)
+        self.assertIn("class=\"overview-scanned\"", self.html)
+        self.assertNotIn("class=\"overview-statusline\"", self.html)
         self.assertIn(".overview-status {", self.css)
         # One line: the counts, in the order the audit specified.
         for expression in (
@@ -76,13 +77,18 @@ class OverviewStructureTests(unittest.TestCase):
             self.assertIn(expression, self.html)
 
     def test_status_line_never_claims_an_empty_library_while_loading_or_failed(self):
-        line = _slice(self.html, 'class="overview-statusline"', "</p>")
+        line = _slice(self.html, 'class="overview-scanned"', "</p>")
         # A pending scan and a failed scan must not read as "0 skills".
         self.assertIn('v-if="loadingList"', line)
         self.assertIn('v-else-if="banner"', line)
         self.assertIn("Reading the observed skill inventory", line)
         self.assertIn("Observed library unavailable", line)
-        self.assertIn("<template v-else>", line)
+        self.assertIn("<template v-else-if=", line)
+        # The counts this line used to repeat are now stated once, in the strip.
+        for expression in ("overviewLogicalCount", "overviewActiveCount",
+                           "overviewAttentionCount"):
+            self.assertNotIn(expression, line,
+                             "the header line must not restate the summary strip")
 
     def test_attention_queue_is_the_first_block_below_the_status_line(self):
         shell = _slice(self.html, 'class="overview-shell"', 'class="detail-inner"')

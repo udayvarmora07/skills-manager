@@ -1838,7 +1838,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    trust the numbers is looking at the heading, not at the action cluster. */
 .overview-scanned { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; margin: 0; color: var(--text-muted); font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
 .overview-scanned .text-button { font-size: var(--t-meta); }
-.overview-statusline { margin: 0; color: var(--text-muted); font-size: var(--t-ui); font-variant-numeric: tabular-nums; }
 .overview-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); margin-left: auto; }
 /* The health panel that stood here repeated the attention queue's claim one
    block below it and carried the page's only stray --shadow. It is gone; its

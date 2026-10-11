@@ -631,26 +631,29 @@
         <header class="overview-status">
           <div class="overview-heading">
             <h1 id="overview-title" tabindex="-1">Overview</h1>
-            <!-- Freshness of THIS page's own settled read. The aggregate list
-                 route carries no server-side observation timestamp, so the age
-                 is stamped client-side on a successful read and is cleared
-                 again by a failed one. It never claims a backend scan. -->
-            <p v-if="scannedAgoLabel" class="overview-scanned" data-scanned="true">
-              <span>Scanned {{ scannedAgoLabel }}</span><span aria-hidden="true"> · </span>
-              <button class="text-button" type="button" data-rescan :disabled="rescanBusy" @click="rescanOverview">{{ rescanBusy ? 'Rescanning\u2026' : 'Rescan' }}</button>
+            <!-- ONE line under the title, carrying three exclusive states. It
+                 used to be two lines: this one and a status line reading
+                 "94 skills · 91 active · 4 need attention" — three numbers the
+                 summary strip directly below already states, within 300px.
+                 Freshness is this page's own settled successful read: the
+                 aggregate list route carries no server-side observation
+                 timestamp, so the age is stamped client-side and CLEARED by a
+                 failed read. A pending or failed load says so and says nothing
+                 about counts. -->
+            <p class="overview-scanned">
+              <!-- The first two branches are the ones with nothing to show:
+                   no settled read yet, and a read that failed. A RESCAN is
+                   neither — the stamp from the last good read is still true,
+                   so the row stays put and the button goes disabled rather
+                   than the whole line vanishing under the cursor. -->
+              <span v-if="loadingList && !scannedAgoLabel">Reading the observed skill inventory…</span>
+              <span v-else-if="banner">Observed library unavailable — see the message above.</span>
+              <template v-else-if="scannedAgoLabel">
+                <span data-scanned="true">Scanned {{ scannedAgoLabel }}</span><span aria-hidden="true"> · </span>
+                <button class="text-button" type="button" data-rescan :disabled="rescanBusy" @click="rescanOverview">{{ rescanBusy ? 'Rescanning\u2026' : 'Rescan' }}</button>
+              </template>
             </p>
           </div>
-          <!-- One status line. The counts are shown only once the inventory has
-               settled, so a pending or failed load never reads as an empty
-               library. The observed evidence itself is unchanged: the queue and
-               the summary strip below carry it. -->
-          <p class="overview-statusline">
-            <span v-if="loadingList">Reading the observed skill inventory…</span>
-            <span v-else-if="banner">Observed library unavailable — see the message above.</span>
-            <template v-else>
-              <span>{{ formatNumber(overviewLogicalCount) }} skill{{ overviewLogicalCount === 1 ? '' : 's' }}</span><span aria-hidden="true"> · </span><span>{{ formatNumber(overviewActiveCount) }} active</span><span aria-hidden="true"> · </span><span>{{ formatNumber(overviewAttentionCount) }} need{{ overviewAttentionCount === 1 ? 's' : '' }} attention</span>
-            </template>
-          </p>
           <div class="overview-actions" aria-label="Common skill actions">
             <button class="btn btn-primary" type="button" @click="openCreate">Create a skill</button>
             <button class="btn btn-secondary" type="button" @click="openAdd">Add a folder</button>
