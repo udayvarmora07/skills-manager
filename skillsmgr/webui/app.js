@@ -1328,6 +1328,30 @@ const appOptions = {
         .sort((a, b) => Number(b.problem) - Number(a.problem) || a.stateLabel.localeCompare(b.stateLabel));
     },
 
+    /* The disagreement between copies, stated once on the row.
+     *
+     * `groupedIdentities` reports what each copy IS. Divergence is a different
+     * fact — it is about two copies not matching each other — so it cannot be
+     * carried by a chip attributed to one scope, and it cannot be carried by
+     * the copy count either ("2 copies" is the row's shape, not its problem).
+     *
+     * Every value here is observed. The group's `divergent` flag is the same
+     * one that already drives `identical` and the Detail pane's "Divergent
+     * observed" tag; the copy count is `clusterSize`; the scope names are the
+     * identities' own `scopeLabel`. Nothing is inferred, and when the copies
+     * agree this returns null so the row says nothing at all.
+     */
+    clusterDisagreement(item) {
+      if (!item || this.libraryMode !== "library") return null;
+      if (!item.divergent) return null;
+      const size = this.clusterSize(item);
+      if (size < 2) return null;
+      return {
+        who: `${this.formatNumber(size)} copies`,
+        state: "Divergent",
+      };
+    },
+
     setLibraryMode(mode) {
       this.libraryMode = mode === "instances" ? "instances" : "library";
     },

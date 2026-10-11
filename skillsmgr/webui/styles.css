@@ -1521,7 +1521,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .identity-observation { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: var(--t-meta); line-height: 1.3; }
 /* Capped so a long consumer name truncates instead of pushing the state
    badges off the end of the row. The full text stays in the title attribute. */
-.identity-label { min-width: 0; max-width: 12ch; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+/* `max-width` is in `ch` rather than a column width because a GROUPED line
+   lists several scopes: "Claude Code · Global" is 20 characters and was being
+   amputated to "Claude Code · Gl…" by a cap sized for ONE scope name. The
+   truncation is still wanted — a seven-scope cluster must not run the pane —
+   so the budget grows with the number of names shown rather than being fixed
+   at the single-name width. Measured at 390/768/1280: no row overflows, and a
+   two-name line now fits whole. */
+.identity-label { min-width: 0; max-width: 24ch; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
 /* `width: fit-content` matters: when the identity label is suppressed the state
    chip is the only child, so it lands in the 1fr column and otherwise stretches
    the full width of the row — a badge becomes a bar. */
@@ -1557,6 +1564,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    and read by nothing until here; their 4.5:1 pair was already in the token
    gate's table (`mute` on `mute-bg`) and had never been reached. */
 .identity-state-off { color: var(--mute); background: var(--mute-bg); }
+/* The row-level statement that its copies disagree. Deliberately NOT a new
+   colour: `--warn` already means "this observation needs attention" on the
+   chips above, and a second ramp for "the same, said once" would make the
+   chips harder to read rather than easier. Only the label is de-emphasised,
+   because the DISAGREEMENT is the information and the copy count is its
+   subject. */
+.identity-disagreement .identity-label { color: var(--ink-2); }
 
 .card-meta {
   grid-column: 3;

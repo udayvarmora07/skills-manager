@@ -886,7 +886,56 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertTrue(any("Global" in label and "skills-manager" in label for label in labels))
         self.assertTrue(any("Agents agent" in label and "shared-agent-skills" in label for label in labels))
         self.assertTrue(any("Project .agents workspace" in label for label in labels))
-        self.assertIn("Divergent", " ".join(item["stateLabel"] for item in alpha["identities"]))
+        # THE PROTECTED CLAIM, restated. Before task 4.2e this was
+        #   assertIn("Divergent", " ".join(item["stateLabel"] for item in
+        #                                alpha["identities"]))
+        # which asserted that divergence reaches a reader SOMEWHERE — and it
+        # did, by stamping it onto every copy, so a chip labelled "Global"
+        # claimed Global's own document was divergent when the observation is
+        # only that the three hashes disagree.
+        #
+        # The claim is now two-sided, and both halves are the intent:
+        #   * the group still reports Divergent (dropping the observation
+        #     would be a worse defect than mis-attributing it), and
+        #   * NO identity carries it, because no single copy is divergent.
+        self.assertIn("Divergent", alpha["stateLabels"])
+        self.assertTrue(alpha["divergent"])
+        for identity in alpha["identities"]:
+            self.assertNotIn(
+                "Divergent",
+                identity["stateLabel"],
+                "a chip attributed to one scope may not claim that scope's own "
+                "copy is divergent",
+            )
+            self.assertNotIn("divergent", identity["stateKeys"])
+        # And each identity still reports what its OWN copy is — the per-copy
+        # observation must survive the change that removed the group flag.
+        self.assertEqual(
+            {item["stateLabel"] for item in alpha["identities"]},
+            {"Active", "Disabled"},
+        )
+        # A group whose copies are byte-identical is not divergent at all. This
+        # is the control: without it, "every identity says Active" would
+        # satisfy the assertions above while divergence had been deleted
+        # outright rather than moved.
+        identical_script = script.replace(
+            "console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(rows, scopes)));",
+            "const same = rows.filter(r => r.name === 'alpha')"
+            ".map(r => ({...r, content_hash: 'identical'}));"
+            "console.log(JSON.stringify("
+            "sandbox.window.SkillManagerDomain.groupLogicalSkills(same, scopes)));",
+        )
+        identical = json.loads(subprocess.run(
+            ["node", "-e", identical_script],
+            capture_output=True, text=True, check=True,
+        ).stdout)
+        self.assertFalse(identical[0]["divergent"])
+        self.assertNotIn("Divergent", identical[0]["stateLabels"])
+        # Identical copies report no state either, so the chip is plain Active.
+        self.assertEqual(
+            {item["stateLabel"] for item in identical[0]["identities"]},
+            {"Active", "Disabled"},
+        )
         mystery = groups[1]
         self.assertIn("Unknown consumer", mystery["identities"][0]["label"])
         self.assertEqual(mystery["identities"][0]["stateLabel"], "Unaddressable")

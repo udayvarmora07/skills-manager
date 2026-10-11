@@ -286,12 +286,38 @@ function observedIdentity(record, scopes, options = {}) {
   };
 }
 
+/* Derive the per-scope identities of one logical skill.
+ *
+ * `options.divergent` is NOT threaded into the identities any more, and that
+ * removal is this function's point.
+ *
+ * Divergence is a fact about the RELATIONSHIP between two copies, not a
+ * property any single copy possesses. A chip labelled "Claude Code" reading
+ * "Active · Divergent" asserted that Claude Code's own document was divergent
+ * — a claim about one file that the observation does not support. It is true
+ * that the copies disagree; it is not true that any one of them is defective.
+ *
+ * The disagreement is still reported, because dropping it would be worse. It is
+ * carried by `groupLogicalSkills`, which computes the cluster-level `divergent`
+ * flag itself and puts it on the row's own `states`/`identical`/detail tag, and
+ * `clusterDisagreement` states it in words where the reader scans for it.
+ *
+ * NOTE on what is deliberately NOT done here: this function's aggregate
+ * `stateKeys`/`stateLabels` were left alone rather than being taught to fold
+ * `divergent` back in. Measured: they have no reader. `groupLogicalSkills` takes
+ * only `.identities` from this return, and every consumer in app.js reads
+ * `identity.stateKeys` off an *individual* identity. Folding the group flag into
+ * the aggregate would have been the fix that looks right, passes every test
+ * written from the source, and ships a value nothing looks at — the class 1.5
+ * and 4.2d both found.
+ */
 function deriveLogicalSkillIdentity(records, scopes, options = {}) {
   const source = Array.isArray(records) ? records.filter(Boolean) : [];
   const divergent = !!options.divergent;
   const byKey = new Map();
   for (const record of source) {
-    const identity = observedIdentity(record, scopes, { divergent });
+    /* No `divergent` here: each identity reports what ITS OWN copy is. */
+    const identity = observedIdentity(record, scopes);
     const prior = byKey.get(identity.key);
     if (prior) {
       prior.count += 1;

@@ -545,6 +545,16 @@
               <span class="identity-label" :title="group.full.join(' | ')">{{ group.names.join(' · ') }}</span>
               <span class="identity-state" :class="['identity-state-' + group.severity, { 'sr-only': uniformStateLabel || uniformProblemLabel }]">{{ group.stateLabel }}</span>
             </span>
+            <!-- The disagreement itself, stated once. Each chip above reports
+                 what its OWN copy is; divergence is a fact about the copies
+                 disagreeing with each other, so it belongs on the row and not
+                 on a scope. Before this, a chip labelled "Claude Code" read
+                 "Active · Divergent", which asserted that Claude Code's own
+                 document was defective. -->
+            <span v-if="clusterDisagreement(s)" class="identity-observation identity-disagreement">
+              <span class="identity-label">{{ clusterDisagreement(s).who }}</span>
+              <span class="identity-state identity-state-warn">{{ clusterDisagreement(s).state }}</span>
+            </span>
           </div>
           <div v-if="rowBadgeItems(s).length" class="row-badges">
             <span v-for="badge in rowBadgeItems(s)" :key="badge.key" class="tag">{{ badge.text }}</span>
