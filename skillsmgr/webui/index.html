@@ -394,36 +394,20 @@
     <aside class="sidebar list-pane" :inert="drawerOpen" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view) }">
       <h1 v-if="view === 'skills' && !selected" id="library-view-title" class="sr-only" tabindex="-1">Library</h1>
 
-      <!-- One control bar replaces three stacked filter rows. Every control
-           keeps its own group role, label, and aria-pressed state, so
-           collapsing the stack changed the height and nothing else. -->
-      <div v-if="view === 'skills'" class="library-bar">
-        <div class="filters" role="group" aria-label="Filter by state">
-          <button class="chip" :class="{ active: !filter }" @click="setFilter('')" :aria-pressed="!filter">All</button>
-          <button class="chip" :class="{ active: filter === 'active' }" @click="setFilter('active')" :aria-pressed="filter === 'active'">Active</button>
-          <button class="chip" :class="{ active: filter === 'disabled' }" @click="setFilter('disabled')" :aria-pressed="filter === 'disabled'">Disabled</button>
-        </div>
-        <div class="library-switch" role="group" aria-label="Skill list mode">
-          <button class="chip" :class="{ active: libraryMode === 'library' }" @click="setLibraryMode('library')" :aria-pressed="libraryMode === 'library'">Library <span class="chip-count">{{ formatNumber(logicalSkills.length) }}</span></button>
-          <button class="chip" :class="{ active: libraryMode === 'instances' }" @click="setLibraryMode('instances')" :aria-pressed="libraryMode === 'instances'">Instances <span class="chip-count">{{ formatNumber(filteredSkills.length) }}</span></button>
-        </div>
-      </div>
-      <!-- The tag disclosure keeps its own slim row: filters, list mode, and
-           presentation fit one 40px bar inside the 320-380px list pane, and
-           adding a fourth group overflowed it. -->
-      <!-- Omitted entirely when no tag is observed: a filter over an empty set
-           offers nothing. The tags themselves still appear on the rows. -->
-      <details v-if="view === 'skills' && (tagNames.length || tagFilter)" class="tag-filter-details" :open="!!tagFilter">
-        <summary>Tags <span v-if="tagFilter" class="tag-filter-current">{{ tagFilter === '__untagged' ? 'Untagged' : '#' + tagFilter }}</span><span v-else class="hint">{{ formatNumber(tagNames.length) }} available</span></summary>
-        <div class="tag-filter" role="group" aria-label="Tag filter">
-          <button class="chip" :class="{ active: !tagFilter }" @click="setTagFilter('')" :aria-pressed="!tagFilter">All tags</button>
-          <button class="chip" :class="{ active: tagFilter === '__untagged' }" @click="setTagFilter('__untagged')" :aria-pressed="tagFilter === '__untagged'">Untagged</button>
-          <button v-for="tag in tagNames" :key="tag" class="chip" :class="{ active: tagFilter === tag }" @click="setTagFilter(tag)" :aria-pressed="tagFilter === tag">{{ tag }}</button>
-        </div>
-      </details>
-
+      <!-- READING ORDER, measured. The pane heading, the count and the
+           presentation toggle sat BELOW two control bands: a reader opening the
+           Library met All/Active/Disabled, then a "Tags" disclosure, and only
+           then learned which pane they were in and how many rows it held
+           (listpane-head y=140, library-bar y=48, tag disclosure y=109 in the
+           seeded tree). Identity first is also what DESIGN-V2 §G.2 describes --
+           the toolbar is named, then filtered, then presented. -->
       <div v-if="view === 'skills'" class="listpane-head">
-        <div><p class="eyebrow">{{ activeScope === 'all' ? 'Library' : (scopes.find(s => s.id === activeScope) || {}).label || activeScope }}</p><h2>{{ libraryMode === 'library' ? 'Skills' : 'Instances' }}</h2></div>
+        <!-- The eyebrow names the SCOPE. It read "Library" when every scope was
+             selected, one band above a mode chip that also read "Library" with a
+             different number attached -- the same word for two different things
+             in adjacent bands. It now says what the scope switcher itself calls
+             it (app.js scopeOptions[0]), so one name means one thing. -->
+        <div><p class="eyebrow">{{ activeScope === 'all' ? 'All scopes' : (scopes.find(s => s.id === activeScope) || {}).label || activeScope }}</p><h2>{{ libraryMode === 'library' ? 'Skills' : 'Instances' }}</h2></div>
         <div class="listpane-head-actions">
           <span class="list-count">{{ formatNumber(visibleSkills.length) }}</span>
           <div class="browse-switch" role="group" aria-label="Library presentation">
@@ -445,6 +429,40 @@
           <span>All {{ formatNumber(uniformProblemCount) }} visible instances are <strong>{{ uniformProblemLabel }}</strong>. The per-row badge is hidden so any row that differs stays visible.</span>
         </p>
       </div>
+
+      <!-- One control bar replaces three stacked filter rows. Every control
+           keeps its own group role, label, and aria-pressed state, so
+           collapsing the stack changed the height and nothing else. -->
+      <div v-if="view === 'skills'" class="library-bar">
+        <div class="filters" role="group" aria-label="Filter by state">
+          <button class="chip" :class="{ active: !filter }" @click="setFilter('')" :aria-pressed="!filter">All</button>
+          <button class="chip" :class="{ active: filter === 'active' }" @click="setFilter('active')" :aria-pressed="filter === 'active'">Active</button>
+          <button class="chip" :class="{ active: filter === 'disabled' }" @click="setFilter('disabled')" :aria-pressed="filter === 'disabled'">Disabled</button>
+        </div>
+        <div class="library-switch" role="group" aria-label="Skill list mode">
+          <!-- No count on these two chips. Each carried one, and the pane header
+               directly above already states the visible count -- "96" was
+               printed twice inside 90px, and the two numbers (96 and 105) looked
+               like one figure disagreeing with itself. A mode selector is not a
+               readout: switching is one press and the header count follows. -->
+          <button class="chip" :class="{ active: libraryMode === 'library' }" @click="setLibraryMode('library')" :aria-pressed="libraryMode === 'library'">Library</button>
+          <button class="chip" :class="{ active: libraryMode === 'instances' }" @click="setLibraryMode('instances')" :aria-pressed="libraryMode === 'instances'">Instances</button>
+        </div>
+      </div>
+      <!-- The tag disclosure keeps its own slim row: filters, list mode, and
+           presentation fit one 40px bar inside the 320-380px list pane, and
+           adding a fourth group overflowed it. -->
+      <!-- Omitted entirely when no tag is observed: a filter over an empty set
+           offers nothing. The tags themselves still appear on the rows. -->
+      <details v-if="view === 'skills' && (tagNames.length || tagFilter)" class="tag-filter-details" :open="!!tagFilter">
+        <summary>Tags <span v-if="tagFilter" class="tag-filter-current">{{ tagFilter === '__untagged' ? 'Untagged' : '#' + tagFilter }}</span><span v-else class="hint">{{ formatNumber(tagNames.length) }} available</span></summary>
+        <div class="tag-filter" role="group" aria-label="Tag filter">
+          <button class="chip" :class="{ active: !tagFilter }" @click="setTagFilter('')" :aria-pressed="!tagFilter">All tags</button>
+          <button class="chip" :class="{ active: tagFilter === '__untagged' }" @click="setTagFilter('__untagged')" :aria-pressed="tagFilter === '__untagged'">Untagged</button>
+          <button v-for="tag in tagNames" :key="tag" class="chip" :class="{ active: tagFilter === tag }" @click="setTagFilter(tag)" :aria-pressed="tagFilter === tag">{{ tag }}</button>
+        </div>
+      </details>
+
       <div v-if="banner" :class="'banner banner-' + banner.type" role="alert">
         <app-icon :name="banner.type === 'error' ? 'circle-alert' : (banner.type === 'warn' ? 'circle-alert' : (banner.type === 'ok' ? 'circle-check' : 'circle'))" :class="'banner-icon-' + banner.type"></app-icon>
         <div class="banner-body"><p>{{ banner.text }}</p></div>

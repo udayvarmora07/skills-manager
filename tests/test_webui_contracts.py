@@ -525,10 +525,22 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         )
 
     def test_chip_count_does_not_reduce_contrast(self):
+        # Rewritten for 4.1. The old assertion found `.chip-count { ... }` in the
+        # stylesheet and checked the block for `opacity` -- a property this rule
+        # never had, so it could not fail without someone first adding the very
+        # thing it forbade. 4.1 removed the count from the two Library/Instances
+        # chips (the pane header already states it), and the two CSS rules went
+        # with it: a count nobody renders is dead CSS that reads as coverage.
+        # The intent -- a number inside a chip is never dimmed below AA -- is
+        # now asserted over the thing that actually paints it.
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
-        match = re.search(r"\.chip-count\s*\{([^}]*)\}", css)
-        self.assertIsNotNone(match)
-        self.assertNotIn("opacity", match.group(1))
+        html = _read(INDEX_HTML)
+        self.assertNotIn("chip-count", css, "chip-count is no longer rendered; its rules are dead")
+        self.assertNotIn("chip-count", html)
+        for chip in re.findall(r'<button class="chip"[^>]*>(.*?)</button>', html, re.S):
+            self.assertNotIn(
+                "chip-count", chip, "a chip must not reintroduce a muted count"
+            )
 
     def test_detail_surfaces_raw_metadata_failure(self):
         source = _read(APP_JS)

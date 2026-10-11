@@ -257,6 +257,61 @@ class LibraryDensityTests(unittest.TestCase):
     def test_empty_tag_disclosure_is_not_rendered(self):
         self.assertIn("tagNames.length || tagFilter", self.html)
 
+    def test_the_pane_names_itself_before_it_offers_filters(self):
+        # Added in 4.1. Reading order is a property of the DOCUMENT, so it is
+        # asserted over the document: the pane header (scope, mode, count,
+        # presentation) comes first, then the filter bar, then the tag
+        # disclosure. Measured before: the header sat at y=140 with the filter
+        # bar at y=48 and the tag disclosure at y=109, so a reader met two
+        # control bands before learning which pane they were in or how many rows
+        # it held.
+        order = [
+            self.html.index(marker)
+            for marker in ('class="listpane-head"', 'class="library-bar"',
+                           'class="tag-filter-details"')
+        ]
+        self.assertEqual(order, sorted(order), order)
+        # Exactly one of each. A duplicated heading renders twice and reads as
+        # two panes; that is what the move was for.
+        for marker in ('class="listpane-head"', 'class="library-bar"',
+                       'class="tag-filter-details"'):
+            self.assertEqual(self.html.count(marker), 1, marker)
+
+    def test_the_narrow_band_orders_the_three_bands_explicitly(self):
+        # Mutation-found gap in 4.1. DOM order alone does not hold the layout
+        # at <=760px: the heading and the filter bar carry `order` 0 and 1 and
+        # the tag disclosure carried none, so it tied with the heading and
+        # rendered BETWEEN them -- the same defect, back, on phones. Removing
+        # the `order: 2` left every other assertion green.
+        narrow = _slice(self.css, "@media (max-width: 760px)", "@media (max-width: 420px)")
+        orders = {}
+        for selector, key in (("listpane-head", "listpane-head"), ("library-bar", "library-bar"),
+                              ("tag-filter-details", "tag-filter-details")):
+            match = re.search(
+                r"\.sidebar\.list-pane \." + selector + r"\s*\{([^}]*)\}", narrow)
+            self.assertIsNotNone(match, selector + " must be addressed in the narrow band")
+            found = re.search(r"order:\s*(\d+)", match.group(1))
+            self.assertIsNotNone(found, selector + " must declare its order at narrow widths")
+            orders[key] = int(found.group(1))
+        self.assertEqual(
+            [orders["listpane-head"], orders["library-bar"], orders["tag-filter-details"]],
+            sorted(orders.values()),
+            "narrow-band order must read heading, then filters, then tags",
+        )
+
+    def test_the_scope_eyebrow_and_the_mode_chip_stop_sharing_a_word(self):
+        # 4.1. The eyebrow names the SCOPE and read "Library" when every scope
+        # was selected -- one band above a mode chip that also read "Library",
+        # carrying a different number. One name, one thing: it now says what
+        # the scope switcher itself calls the all-scopes option.
+        self.assertIn("activeScope === 'all' ? 'All scopes'", self.html)
+        self.assertNotIn("activeScope === 'all' ? 'Library'", self.html)
+        # The stronger statement: the eyebrow uses the SAME literal the scope
+        # switcher offers, so the two can never drift apart again.
+        match = re.search(r'label:\s*"(All scopes)"', _read(APP_JS))
+        self.assertIsNotNone(match, "the scope switcher must still offer an all-scopes option")
+        self.assertIn(f"activeScope === 'all' ? '{match.group(1)}'", self.html)
+
     def test_rows_target_56px_and_the_type_floor_is_11px(self):
         rule = re.search(
             r"\.skilllist > li:not\(\.batchbar\):not\(\.selection-hint\):not\(\.skeleton\):not\(\.empty\) \{(.*?)\}",
