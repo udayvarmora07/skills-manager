@@ -201,14 +201,29 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     await send('Page.addScriptToEvaluateOnNewDocument', {source:preload});
   }
   await send('Page.navigate',{url});
+  // 3.4 retired every hook this probe used to require. The .overview-health
+  // class was already absent; .first-scan-guide is now .first-scan carrying a
+  // data-first-scan-guide attribute; .first-scan-status is now the verdict
+  // sentence; and the guide hides itself entirely on an empty library and on a
+  // failed read, so requiring it could never settle those two scenarios.
+  // "Settled" is the block the page renders once the read resolves (summary
+  // strip, first-run card, or the load-error card) plus a stamp that is
+  // neither pending nor failed.
+  //
+  // NOTE FOR THE NEXT EDIT: this whole file is ONE JavaScript source embedded
+  // in a Python raw triple-quoted string, and the CDP expressions are JS
+  // template literals. A backtick inside a comment therefore TERMINATES the
+  // enclosing template literal and turns prose into code. Never type one here.
   const readyExpression = `(() => {
     const app = document.querySelector('#app');
     const overview = document.querySelector('[data-overview-ready="true"]');
     const heading = document.querySelector('#overview-title');
-    const representative = overview && (overview.querySelector('.overview-health') || overview.querySelector('[data-overview-empty="true"]') || overview.querySelector('.first-scan-guide'));
-    const guide = overview && overview.querySelector('.first-scan-guide');
-    const status = guide && guide.querySelector('.first-scan-status');
-    return {ready: !!app && !app.hasAttribute('v-cloak') && !!heading && !!representative && !!status, scanComplete: !!(status && status.innerText.startsWith('Scan complete:')), marker: overview ? overview.innerText.slice(0, 400) : ''};
+    const stamp = document.querySelector('.overview-scanned');
+    const stampText = stamp ? stamp.innerText.trim() : '';
+    const settled = !!(overview && (overview.querySelector('.overview-summary') || overview.querySelector('[data-overview-empty="true"]') || overview.querySelector('.overview-load-error')));
+    const pending = stampText.indexOf('Reading the observed') === 0;
+    const failed = stampText.indexOf('Observed library unavailable') === 0;
+    return {ready: !!app && !app.hasAttribute('v-cloak') && !!heading && !!stamp && settled && !pending, scanComplete: !pending && !failed, marker: overview ? overview.innerText.slice(0, 400) : ''};
   })()`;
   let previousMarker = null, stableChecks = 0, ready = false, lastState = null;
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -322,22 +337,28 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   if (!qualityReady) errors.push('Quality view did not render bounded evidence without overflow');
   await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,100));
-  const guideInitial = await send('Runtime.evaluate', {expression:`(() => { const guide=document.querySelector('.first-scan-guide'); const attention=[...document.querySelectorAll('.attention-item h3')].map(node=>node.innerText); return {visible:!!guide,status:(document.querySelector('.first-scan-status') || {}).innerText || '',empty:!!document.querySelector('[data-overview-empty="true"]'),loadError:!!document.querySelector('.overview-load-error'),unavailable:!!(guide && guide.innerText.includes('detected root is missing or unsupported')),// Match the queue item by its stable key, not by its title copy. The old
+  const guideInitial = await send('Runtime.evaluate', {expression:`(() => { const guide=document.querySelector('[data-first-scan-guide]'); const verdict=(document.querySelector('.first-scan-verdict') || {}).innerText || ''; const marks=[...document.querySelectorAll('[data-first-scan-guide] .first-scan-mark')].map(mark=>{const label=mark.querySelector('.first-scan-mark-label');const detail=mark.querySelector('.first-scan-mark-detail');return {label:(label||{}).innerText||'',detail:(detail||{}).innerText||''};}); const roots=marks.find(mark=>mark.label==='Roots'); return {visible:!!guide,status:verdict.trim(),marks:marks,rootsMissing:!!(roots && /missing/.test(roots.detail)),firstRun:!!document.querySelector('[data-overview-empty="true"]'),empty:!!document.querySelector('[data-overview-empty="true"]'),loadError:!!document.querySelector('.overview-load-error'),unavailable:!!(roots && /missing/.test(roots.detail)),// Match the queue item by its stable key, not by its title copy. The old
         // check compared against the exact string 'malformed or unaddressable' and so
         // failed the moment the wording was corrected to name a refused symlink
         // for what it is.
         unreadableAttention:!!document.querySelector('[data-attention="observed-invalid"]'),divergentAttention:!!document.querySelector('[data-attention="divergent"]'),instanceActionDisabled:!!(document.querySelector('[data-first-scan-library]') && document.querySelector('[data-first-scan-library]').disabled),overflow:document.documentElement.scrollWidth>window.innerWidth}; })()`, returnByValue:true});
   const guideInitialState = guideInitial.result && guideInitial.result.result && guideInitial.result.result.value;
+  // The guide is deliberately ABSENT when nothing was observed: 3.4 gated it
+  // on instance count, so an empty library gets the first-run card and a failed
+  // read gets the load-error card instead. Requiring it would have made those
+  // two scenarios unassertable, which is what the previous version did.
+  const guideExpectedVisible = scenario === 'populated' || scenario === 'scope-failure' || scenario === 'unavailable-root';
   const scanExpected = scenario === 'scope-failure'
-    ? guideInitialState && /root details are unavailable/i.test(guideInitialState.status) && !guideInitialState.empty
-    : scenario === 'inventory-failure'
-      ? guideInitialState && /inventory scan failed/i.test(guideInitialState.status) && guideInitialState.loadError && !guideInitialState.empty
-      : scenario === 'unavailable-root'
-        ? guideInitialState && guideInitialState.status.startsWith('Scan complete:') && guideInitialState.unavailable
-      : guideInitialState && guideInitialState.status.startsWith('Scan complete:')
-        && (scenario !== 'empty' || guideInitialState.empty)
-        && (scenario !== 'populated' || (guideInitialState.unreadableAttention && guideInitialState.divergentAttention));
-  if (!guideInitialState || !guideInitialState.visible || !scanExpected || guideInitialState.overflow) errors.push('First-scan guide did not represent the expected scan state without overflow: ' + JSON.stringify(guideInitialState));
+    ? guideInitialState && /root details are unavailable/i.test(guideInitialState.status)
+    : scenario === 'unavailable-root'
+      ? guideInitialState && /observed instances across/i.test(guideInitialState.status) && guideInitialState.rootsMissing
+      : scenario === 'inventory-failure'
+        ? guideInitialState && guideInitialState.loadError && !guideInitialState.visible
+        : scenario === 'empty'
+          ? guideInitialState && guideInitialState.firstRun && !guideInitialState.visible
+          : guideInitialState && /observed instances across/i.test(guideInitialState.status)
+            && guideInitialState.unreadableAttention && guideInitialState.divergentAttention;
+  if (!guideInitialState || guideInitialState.visible !== guideExpectedVisible || !scanExpected || guideInitialState.overflow) errors.push('Overview did not represent the expected scan state without overflow: ' + JSON.stringify(guideInitialState));
   if (scenario === 'empty') {
     await send('Runtime.evaluate', {expression:`(() => { const action=[...document.querySelectorAll('.overview-empty-actions button')].find(button => button.innerText.includes('Create your first skill')); if(action) action.click(); return !!action; })()`, returnByValue:true});
     await new Promise(r=>setTimeout(r,80));
@@ -346,18 +367,24 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
     await send('Runtime.evaluate', {expression:`(() => { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`, returnByValue:true});
     await new Promise(r=>setTimeout(r,80));
   }
+  // Everything below drives the guide itself, so it runs only where the guide
+  // rendered. On empty and inventory-failure the guide is deliberately absent
+  // and its absence is already asserted above; clicking a missing Skip button
+  // there would have reported a broken restart affordance.
+  let guideSkippedState = null, guideRestartedState = null, explainReady = false, previewReady = false, previewDisabledForEmpty = false;
+  if (guideExpectedVisible) {
   await send('Runtime.evaluate', {expression:`(() => { const skip=document.querySelector('[data-first-scan-skip]'); if (skip) skip.click(); return !!skip; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,80));
-  const guideSkipped = await send('Runtime.evaluate', {expression:`(() => ({hidden:!document.querySelector('.first-scan-guide'),restart:!!document.querySelector('[data-first-scan-restart]')}))()`, returnByValue:true});
-  const guideSkippedState = guideSkipped.result && guideSkipped.result.result && guideSkipped.result.result.value;
+  const guideSkipped = await send('Runtime.evaluate', {expression:`(() => ({hidden:!document.querySelector('[data-first-scan-guide]'),restart:!!document.querySelector('[data-first-scan-restart]')}))()`, returnByValue:true});
+  guideSkippedState = guideSkipped.result && guideSkipped.result.result && guideSkipped.result.result.value;
   if (!guideSkippedState || !guideSkippedState.hidden || !guideSkippedState.restart) errors.push('First-scan guide skip did not hide the guide or offer restart');
   await send('Runtime.evaluate', {expression:`(() => { const restart=document.querySelector('[data-first-scan-restart]'); if (restart) restart.click(); return !!restart; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,80));
-  const guideRestarted = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('.first-scan-guide'),focused:document.activeElement && document.activeElement.id==='first-scan-title'}))()`, returnByValue:true});
-  const guideRestartedState = guideRestarted.result && guideRestarted.result.result && guideRestarted.result.result.value;
+  const guideRestarted = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('[data-first-scan-guide]'),focused:document.activeElement && document.activeElement.id==='first-scan-title'}))()`, returnByValue:true});
+  guideRestartedState = guideRestarted.result && guideRestarted.result.result && guideRestarted.result.result.value;
   if (!guideRestartedState || !guideRestartedState.visible || !guideRestartedState.focused) errors.push('First-scan guide restart did not restore the guide and focus its heading');
   await send('Runtime.evaluate', {expression:`(() => { const explain=document.querySelector('[data-first-scan-explain]'); if (explain) explain.click(); return !!explain; })()`, returnByValue:true});
-  let explainReady = false, explainState = null;
+  let explainState = null;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const state = await send('Runtime.evaluate', {expression:`(() => ({result:!!document.querySelector('.first-scan-result'),error:!!document.querySelector('.first-scan-caution[role="status"]'),text:(document.querySelector('.first-scan-result') || document.querySelector('.first-scan-caution[role="status"]') || {}).innerText || ''}))()`, returnByValue:true});
     explainState = state.result && state.result.result && state.result.result.value;
@@ -367,20 +394,20 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   if (!explainReady || !/unresolved/.test(explainState.text)) errors.push('Read-only effective explanation did not return a clearly unresolved result');
   const previewClicked = await send('Runtime.evaluate', {expression:`(() => { const preview=document.querySelector('[data-first-scan-preview-target]'); if (preview && !preview.disabled) preview.click(); return !!(preview && !preview.disabled); })()`, returnByValue:true});
   const previewWasClicked = !!(previewClicked.result && previewClicked.result.result && previewClicked.result.result.value);
-  let previewReady = false, previewState = null;
+  let previewState = null;
   for (let attempt = 0; previewWasClicked && attempt < 40; attempt += 1) {
-    const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update from folder for this exact skill instance"]'),guide:!!document.querySelector('.first-scan-guide')}))()`, returnByValue:true});
+    const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update from folder for this exact skill instance"]'),guide:!!document.querySelector('[data-first-scan-guide]')}))()`, returnByValue:true});
     previewState = state.result && state.result.result && state.result.result.value;
     if (previewState && previewState.heading && previewState.action && !previewState.guide) { previewReady = true; break; }
     await new Promise(r=>setTimeout(r,50));
   }
-  const previewDisabledForEmpty = scenario === 'empty' && !previewWasClicked
+  previewDisabledForEmpty = !previewWasClicked
     && !!(guideInitialState && guideInitialState.instanceActionDisabled);
   if (scenario === 'populated' && !previewReady) errors.push('First-scan preview link did not land on the exact writable instance surface: ' + JSON.stringify(previewState));
   if (scenario === 'empty' && !previewDisabledForEmpty) errors.push('Empty inventory did not disable exact-instance actions');
   await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
   await new Promise(r=>setTimeout(r,100));
-  const guideFinal = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('.first-scan-guide'),overflow:document.documentElement.scrollWidth>window.innerWidth,focusable:!!document.querySelector('[data-first-scan-skip]:not([disabled])'),result:!!document.querySelector('.first-scan-result')}))()`, returnByValue:true});
+  const guideFinal = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('[data-first-scan-guide]'),overflow:document.documentElement.scrollWidth>window.innerWidth,focusable:!!document.querySelector('[data-first-scan-skip]:not([disabled])'),result:!!document.querySelector('.first-scan-result')}))()`, returnByValue:true});
   const guideFinalState = guideFinal.result && guideFinal.result.result && guideFinal.result.result.value;
   if (!guideFinalState || !guideFinalState.visible || guideFinalState.overflow || !guideFinalState.focusable || !guideFinalState.result) errors.push('First-scan guide lost its accessible state after returning from the exact Library detail');
   if (screenshot) {
