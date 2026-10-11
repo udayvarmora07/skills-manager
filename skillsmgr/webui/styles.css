@@ -1298,8 +1298,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .batch-tag-input { min-width: 130px; max-width: 190px; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
 .selection-hint { flex-wrap: nowrap; background: var(--surface); color: var(--text-muted); font-size: var(--t-meta); }
 .selection-toggle, .selection-hint .btn { white-space: nowrap; }
-.selection-hint > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.selection-toggle { border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+/* The hint WRAPS. It was `white-space: nowrap` + `text-overflow: ellipsis`,
+   which amputated a safety sentence mid-word at every pane width narrower
+   than ~292px — "visible filtere…". A warning that can lose its last word is
+   not a warning, and the row costs one extra line only when it must. */
+.selection-hint > span { min-width: 0; overflow-wrap: anywhere; }
+/* `padding: 0` measured this control at 77x18 at 320, 390, 768 and 1280 --
+   an 18px target on the one control that selects every row in the pane. The
+   underline keeps it reading as a text affordance; the box is now big enough
+   to hit. Coarse pointers get the full 44px below. */
+.selection-toggle { border: 0; padding: 3px 0; min-height: 24px; background: none; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .row-select { width: 18px; height: 18px; flex: none; accent-color: var(--accent); cursor: pointer; }
 .sidepanel { overflow-y: auto; padding: var(--s2) var(--s4); }
 .sidepanel-row { display: grid; width: 100%; gap: 1px; padding: 10px 8px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); text-align: start; cursor: pointer; }
@@ -2820,6 +2828,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 @media (pointer: coarse) {
   .toast button, .toast-dismiss { min-height: 44px; }
+  /* RULES #13 touch floor. The select-visible control measured 18px tall at
+     every width; 4.1c found it and fixed it rather than excluding the
+     assertion, which is the 2.1e2 precedent for a rail control that became
+     a touch target. */
+  .selection-toggle { min-height: 44px; padding: 0 8px; }
 }
 
 /* The offline strip is the only banner that is not in the flow: it has to be
