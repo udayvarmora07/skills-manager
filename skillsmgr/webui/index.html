@@ -502,7 +502,17 @@
                  :checked="libraryMode === 'library' ? groupSelectionState(s) === 'all' : isSelected(s)"
                  :aria-label="'Select ' + s.name"
                  @click.stop @change="toggleSelection(s, $event.target.checked)">
-          <span class="dot" :class="s.divergent || identityItems(s).some(identity => identity.stateKeys.includes('malformed')) ? 'dot-warn' : 'dot-ok'" :title="libraryMode === 'library' && s.divergent ? 'Divergent copies' : 'Skill instance'"></span>
+          <!-- The dot is REDUNDANT state. Every row states its state in words
+               immediately beside it (`.identity-state`: Active, Disabled,
+               Malformed · Unaddressable, Active · Divergent, Linked outside
+               root), so the dot carried no information a reader did not
+               already have — and its tooltip said "Skill instance" on 84 of 96
+               rows, which is the row's own identity restated. A tooltip that
+               says the same thing on every row is noise, not help.
+               So it is decorative and says so: `aria-hidden`, no title. The
+               colour stays as the at-a-glance cue it has always been, and the
+               WORDS carry the meaning. -->
+          <span class="dot" aria-hidden="true" :class="s.divergent || identityItems(s).some(identity => identity.stateKeys.includes('malformed')) ? 'dot-warn' : 'dot-ok'"></span>
           <div class="row-main">
             <!-- The copy count sits on the name line, not on a line of its own.
                  It was a separate row under every skill, which cost ~24px on a
