@@ -341,7 +341,7 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
         // check compared against the exact string 'malformed or unaddressable' and so
         // failed the moment the wording was corrected to name a refused symlink
         // for what it is.
-        unreadableAttention:!!document.querySelector('[data-attention="observed-invalid"]'),divergentAttention:!!document.querySelector('[data-attention="divergent"]'),instanceActionDisabled:!!(document.querySelector('[data-first-scan-library]') && document.querySelector('[data-first-scan-library]').disabled),overflow:document.documentElement.scrollWidth>window.innerWidth}; })()`, returnByValue:true});
+        unreadableAttention:!!document.querySelector('[data-attention="observed-invalid"]'),divergentAttention:!!document.querySelector('[data-attention="divergent"]'),instanceActionDisabled:!!(document.querySelector('[data-first-scan-library]') && document.querySelector('[data-first-scan-library]').disabled),exactActionPresent:!!document.querySelector('[data-first-scan-library]'),overflow:document.documentElement.scrollWidth>window.innerWidth}; })()`, returnByValue:true});
   const guideInitialState = guideInitial.result && guideInitial.result.result && guideInitial.result.result.value;
   // The guide is deliberately ABSENT when nothing was observed: 3.4 gated it
   // on instance count, so an empty library gets the first-run card and a failed
@@ -371,45 +371,60 @@ function getJson(path) { return new Promise((resolve, reject) => { const req=htt
   // rendered. On empty and inventory-failure the guide is deliberately absent
   // and its absence is already asserted above; clicking a missing Skip button
   // there would have reported a broken restart affordance.
-  let guideSkippedState = null, guideRestartedState = null, explainReady = false, previewReady = false, previewDisabledForEmpty = false;
+  let guideSkippedState = null, guideRestartedState = null, explainReady = false, previewReady = false, guideFinalState = null, previewWasClicked = false;
   if (guideExpectedVisible) {
-  await send('Runtime.evaluate', {expression:`(() => { const skip=document.querySelector('[data-first-scan-skip]'); if (skip) skip.click(); return !!skip; })()`, returnByValue:true});
-  await new Promise(r=>setTimeout(r,80));
-  const guideSkipped = await send('Runtime.evaluate', {expression:`(() => ({hidden:!document.querySelector('[data-first-scan-guide]'),restart:!!document.querySelector('[data-first-scan-restart]')}))()`, returnByValue:true});
-  guideSkippedState = guideSkipped.result && guideSkipped.result.result && guideSkipped.result.result.value;
-  if (!guideSkippedState || !guideSkippedState.hidden || !guideSkippedState.restart) errors.push('First-scan guide skip did not hide the guide or offer restart');
-  await send('Runtime.evaluate', {expression:`(() => { const restart=document.querySelector('[data-first-scan-restart]'); if (restart) restart.click(); return !!restart; })()`, returnByValue:true});
-  await new Promise(r=>setTimeout(r,80));
-  const guideRestarted = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('[data-first-scan-guide]'),focused:document.activeElement && document.activeElement.id==='first-scan-title'}))()`, returnByValue:true});
-  guideRestartedState = guideRestarted.result && guideRestarted.result.result && guideRestarted.result.result.value;
-  if (!guideRestartedState || !guideRestartedState.visible || !guideRestartedState.focused) errors.push('First-scan guide restart did not restore the guide and focus its heading');
-  await send('Runtime.evaluate', {expression:`(() => { const explain=document.querySelector('[data-first-scan-explain]'); if (explain) explain.click(); return !!explain; })()`, returnByValue:true});
-  let explainState = null;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const state = await send('Runtime.evaluate', {expression:`(() => ({result:!!document.querySelector('.first-scan-result'),error:!!document.querySelector('.first-scan-caution[role="status"]'),text:(document.querySelector('.first-scan-result') || document.querySelector('.first-scan-caution[role="status"]') || {}).innerText || ''}))()`, returnByValue:true});
-    explainState = state.result && state.result.result && state.result.result.value;
-    if (explainState && (explainState.result || explainState.error)) { explainReady = true; break; }
-    await new Promise(r=>setTimeout(r,50));
+    await send('Runtime.evaluate', {expression:`(() => { const skip=document.querySelector('[data-first-scan-skip]'); if (skip) skip.click(); return !!skip; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,80));
+    const guideSkipped = await send('Runtime.evaluate', {expression:`(() => ({hidden:!document.querySelector('[data-first-scan-guide]'),restart:!!document.querySelector('[data-first-scan-restart]')}))()`, returnByValue:true});
+    guideSkippedState = guideSkipped.result && guideSkipped.result.result && guideSkipped.result.result.value;
+    if (!guideSkippedState || !guideSkippedState.hidden || !guideSkippedState.restart) errors.push('First-scan guide skip did not hide the guide or offer restart');
+    await send('Runtime.evaluate', {expression:`(() => { const restart=document.querySelector('[data-first-scan-restart]'); if (restart) restart.click(); return !!restart; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,80));
+    const guideRestarted = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('[data-first-scan-guide]'),focused:document.activeElement && document.activeElement.id==='first-scan-title'}))()`, returnByValue:true});
+    guideRestartedState = guideRestarted.result && guideRestarted.result.result && guideRestarted.result.result.value;
+    if (!guideRestartedState || !guideRestartedState.visible || !guideRestartedState.focused) errors.push('First-scan guide restart did not restore the guide and focus its heading');
+    // 3.4 moved the explainer behind a <details>, so the button is not painted
+    // until a reader opens it. Clicking it while hidden reported a green result
+    // whose text could not be read: innerText is "" for hidden content, which is
+    // the same trap as the nav drawer's, in a different place. Open the
+    // disclosure, and read textContent rather than innerText -- textContent is
+    // what the assertion means and is not a visibility measurement.
+    const detailsOpened = await send('Runtime.evaluate', {expression:`(() => { const details=document.querySelector('.first-scan-details'); const summary=details && details.querySelector('summary'); if (summary) summary.click(); return !!(details && details.open); })()`, returnByValue:true});
+    if (!(detailsOpened.result && detailsOpened.result.result && detailsOpened.result.result.value)) errors.push('First-scan guide did not open its detail disclosure');
+    await send('Runtime.evaluate', {expression:`(() => { const explain=document.querySelector('[data-first-scan-explain]'); if (explain) explain.click(); return !!explain; })()`, returnByValue:true});
+    let explainState = null;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const state = await send('Runtime.evaluate', {expression:`(() => ({result:!!document.querySelector('.first-scan-result'),error:!!document.querySelector('.first-scan-caution[role="status"]'),text:(document.querySelector('.first-scan-result') || document.querySelector('.first-scan-caution[role="status"]') || {}).textContent || ''}))()`, returnByValue:true});
+      explainState = state.result && state.result.result && state.result.result.value;
+      if (explainState && (explainState.result || explainState.error)) { explainReady = true; break; }
+      await new Promise(r=>setTimeout(r,50));
+    }
+    if (!explainReady || !explainState || !/unresolved/.test(explainState.text)) errors.push('Read-only effective explanation did not return a clearly unresolved result: ' + JSON.stringify(explainState));
+    const previewClicked = await send('Runtime.evaluate', {expression:`(() => { const preview=document.querySelector('[data-first-scan-preview-target]'); if (preview && !preview.disabled) preview.click(); return !!(preview && !preview.disabled); })()`, returnByValue:true});
+    previewWasClicked = !!(previewClicked.result && previewClicked.result.result && previewClicked.result.result.value);
+    let previewState = null;
+    for (let attempt = 0; previewWasClicked && attempt < 40; attempt += 1) {
+      const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update from folder for this exact skill instance"]'),guide:!!document.querySelector('[data-first-scan-guide]')}))()`, returnByValue:true});
+      previewState = state.result && state.result.result && state.result.result.value;
+      if (previewState && previewState.heading && previewState.action && !previewState.guide) { previewReady = true; break; }
+      await new Promise(r=>setTimeout(r,50));
+    }
+    if (scenario === 'populated' && !previewReady) errors.push('First-scan preview link did not land on the exact writable instance surface: ' + JSON.stringify(previewState));
+    await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
+    await new Promise(r=>setTimeout(r,100));
+    const guideFinal = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('[data-first-scan-guide]'),overflow:document.documentElement.scrollWidth>window.innerWidth,focusable:!!document.querySelector('[data-first-scan-skip]:not([disabled])'),result:!!document.querySelector('.first-scan-result')}))()`, returnByValue:true});
+    guideFinalState = guideFinal.result && guideFinal.result.result && guideFinal.result.result.value;
+    if (!guideFinalState || !guideFinalState.visible || guideFinalState.overflow || !guideFinalState.focusable || !guideFinalState.result) errors.push('First-scan guide lost its accessible state after returning from the exact Library detail');
   }
-  if (!explainReady || !/unresolved/.test(explainState.text)) errors.push('Read-only effective explanation did not return a clearly unresolved result');
-  const previewClicked = await send('Runtime.evaluate', {expression:`(() => { const preview=document.querySelector('[data-first-scan-preview-target]'); if (preview && !preview.disabled) preview.click(); return !!(preview && !preview.disabled); })()`, returnByValue:true});
-  const previewWasClicked = !!(previewClicked.result && previewClicked.result.result && previewClicked.result.result.value);
-  let previewState = null;
-  for (let attempt = 0; previewWasClicked && attempt < 40; attempt += 1) {
-    const state = await send('Runtime.evaluate', {expression:`(() => ({heading:document.querySelector('#view-title') && document.querySelector('#view-title').textContent.trim(),action:!!document.querySelector('button[aria-label="Update from folder for this exact skill instance"]'),guide:!!document.querySelector('[data-first-scan-guide]')}))()`, returnByValue:true});
-    previewState = state.result && state.result.result && state.result.result.value;
-    if (previewState && previewState.heading && previewState.action && !previewState.guide) { previewReady = true; break; }
-    await new Promise(r=>setTimeout(r,50));
-  }
-  previewDisabledForEmpty = !previewWasClicked
-    && !!(guideInitialState && guideInitialState.instanceActionDisabled);
-  if (scenario === 'populated' && !previewReady) errors.push('First-scan preview link did not land on the exact writable instance surface: ' + JSON.stringify(previewState));
-  if (scenario === 'empty' && !previewDisabledForEmpty) errors.push('Empty inventory did not disable exact-instance actions');
-  await send('Runtime.evaluate', {expression:`(() => { const t = document.querySelector('.nav-drawer-trigger'); if (t && t.offsetWidth) { if (!document.getElementById('nav-drawer').classList.contains('open')) t.click(); return true; } return false; })(); (() => { const tab = [...document.querySelectorAll('.viewtabs button')].find(el => (el.textContent || '').trim() === 'Overview'); if (tab) tab.click(); return !!tab; })()`, returnByValue:true});
-  await new Promise(r=>setTimeout(r,100));
-  const guideFinal = await send('Runtime.evaluate', {expression:`(() => ({visible:!!document.querySelector('[data-first-scan-guide]'),overflow:document.documentElement.scrollWidth>window.innerWidth,focusable:!!document.querySelector('[data-first-scan-skip]:not([disabled])'),result:!!document.querySelector('.first-scan-result')}))()`, returnByValue:true});
-  const guideFinalState = guideFinal.result && guideFinal.result.result && guideFinal.result.result.value;
-  if (!guideFinalState || !guideFinalState.visible || guideFinalState.overflow || !guideFinalState.focusable || !guideFinalState.result) errors.push('First-scan guide lost its accessible state after returning from the exact Library detail');
+  // The empty library owns the inverse invariant, and it is stated where the
+  // guide is NOT. 3.4 moved that surface onto the first-run card, so the old
+  // assertion -- that an exact-instance button is present and DISABLED -- would
+  // pin a control 3.4 deliberately deleted. Absence is the claim now, and it is
+  // the one that can still fail.
+  const previewDisabledForEmpty = scenario === 'empty'
+    ? !(guideInitialState && guideInitialState.exactActionPresent)
+    : (!previewWasClicked && !!(guideInitialState && guideInitialState.instanceActionDisabled));
+  if (scenario === 'empty' && !previewDisabledForEmpty) errors.push('Empty inventory still offered an exact-instance action beside its first-run card');
   if (screenshot) {
     const capture = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:true});
     require('fs').writeFileSync(screenshot, Buffer.from(capture.result.data, 'base64'));
