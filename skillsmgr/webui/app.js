@@ -2120,6 +2120,47 @@ const appOptions = {
       }
     },
 
+    /* ---------------------------------------------------------- row keys */
+
+    /* Move focus between Library rows with j/k (and the arrow keys, which are
+     * what a reader who does not know the letters already tries).
+     *
+     * WHY FOCUS AND NOT SELECTION. Each row already handles Enter and Space on
+     * itself, guarded with `.self` so a keypress inside a row's checkbox does
+     * not also open the detail. Moving DOM focus therefore composes with what
+     * is there instead of adding a second path to the same action -- and the
+     * focused row is the one the a11y tree announces, which a "current row"
+     * that is only styled is not.
+     *
+     * WHY IT STOPS AT THE ENDS. The command palette deliberately wraps
+     * (2.2): it is a flat set you are hunting through, and wrapping makes the
+     * last item reachable from the first without walking back. A list is
+     * positional and ordered -- wrapping j from the last row to the first
+     * would move focus without the list having changed, so a reader cannot
+     * tell whether anything happened. Clamp, and do not pretend otherwise.
+     */
+    moveRowFocus(delta) {
+      // One `<ul>` carries both presentations (`:class="['skilllist', ...]"`),
+      // so one selector covers List and Grid. Rows that are not rows -- the
+      // batch bar, the selection hint, a skeleton, an empty state -- carry no
+      // `data-skill-key` and are excluded by the same query.
+      const rows = Array.from(
+        document.querySelectorAll(".skilllist > li[data-skill-key]")
+      );
+      if (!rows.length) return false;
+      const current = rows.indexOf(document.activeElement);
+      const next = current === -1
+        ? (delta > 0 ? 0 : rows.length - 1)
+        : Math.min(rows.length - 1, Math.max(0, current + delta));
+      const row = rows[next];
+      if (!row || row === document.activeElement) return false;
+      row.focus();
+      if (typeof row.scrollIntoView === "function") {
+        row.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      return true;
+    },
+
     selectSkill(s) {
       // BUG-3: the list keys rows by scope+name and the UI supports the same
       // skill name in several scopes, so comparing the name alone made
@@ -2793,6 +2834,31 @@ const appOptions = {
       }
       const tag = (e.target.tagName || "").toLowerCase();
       const typing = ["input", "textarea", "select"].includes(tag) || e.target.isContentEditable;
+      /* Row keys. Library only, never while typing, never inside a dialog or
+         the drawer -- the same exclusions `/`, `?` and Cmd-K already honour, so
+         no new precedence had to be invented.
+
+         The two menus are excluded too, and that is not tidiness: the scope
+         menu and the actions menu both bind ArrowUp/ArrowDown, they open
+         WITHOUT `activeModal` being set, and this branch runs before anything
+         else would notice. INVENTORY flagged exactly this -- "arrow-key
+         handlers do exist but they belong to other widgets".
+
+         `j`/`k` are unconditional within those guards; the ARROWS only take
+         over once focus is already on a row. A reader who has not entered the
+         list yet is scrolling the pane with ArrowDown, and that first press
+         must still scroll it. */
+      const onRow = !!(e.target && e.target.closest
+        && e.target.closest(".skilllist > li[data-skill-key]"));
+      const rowKey = !typing && !this.activeModal && !this.drawerOpen && !this.scopeMenuOpen
+        && !this.menuOpen && this.view === "skills"
+        && (e.key === "j" || e.key === "k" || (onRow && (e.key === "ArrowDown" || e.key === "ArrowUp")))
+        ? (e.key === "j" || e.key === "ArrowDown" ? 1 : -1)
+        : 0;
+      if (rowKey && this.moveRowFocus(rowKey)) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === "/" && !typing && !this.activeModal) {
         // Only a shortcut that will do something. Recovery and the other
         // filter-less views do not render the field, so swallowing `/` there
