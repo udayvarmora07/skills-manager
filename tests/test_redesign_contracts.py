@@ -201,10 +201,10 @@ console.log(JSON.stringify({{
         self.assertEqual(out["rows"][0]["pct"], 0)
         self.assertFalse(out["rows"][0]["over"])
 
-    def test_the_hero_is_the_first_block_of_the_overview(self):
+    def test_the_budget_block_reads_after_the_queue(self):
         html = _read(INDEX_HTML)
         shell = _slice(html, 'v-if="view === \'overview\'"', "</section>\n\n          <section class=\"attention-queue\"")
-        self.assertIn('class="budget-hero"', shell)
+        self.assertIn('class="budget-block"', shell)
         self.assertIn("scopeBudgetRows", shell)
         # It must not claim to know anything the API did not report.
         self.assertNotIn("winner", shell.lower())

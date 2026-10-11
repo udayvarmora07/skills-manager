@@ -99,7 +99,7 @@ class OverviewStructureTests(unittest.TestCase):
             shell.index('class="overview-status"'),
             shell.index('class="overview-summary"'),
             shell.index('class="attention-queue"'),
-            shell.index('class="budget-hero"'),
+            shell.index('class="budget-block"'),
             shell.index('class="overview-activity"'),
             shell.index('class="first-scan-guide"'),
         ]

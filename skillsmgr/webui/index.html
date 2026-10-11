@@ -732,36 +732,47 @@
                already truncated; that is a silent, lossy failure, and burying it
                under a skill count would be the wrong priority. The bar axis runs
                past 100% on purpose — see scopeBudgetRows in app.js. -->
-          <section v-if="budget" class="budget-hero" aria-labelledby="budget-hero-title">
-            <div class="budget-hero-lead">
-              <h2 id="budget-hero-title">
+          <section v-if="budget" class="budget-block" aria-labelledby="budget-block-title">
+            <div class="budget-block-lead">
+              <h2 id="budget-block-title">
                 <template v-if="overBudgetScopeCount">{{ formatNumber(overBudgetScopeCount) }} of {{ formatNumber(scopeBudgetRows.length) }} scope roots hold more skill text than one context window</template>
                 <template v-else>All {{ formatNumber(scopeBudgetRows.length) }} scope roots fit inside one context window</template>
               </h2>
               <p v-if="overBudgetScopeCount">Each bar is one root on its own. An agent that loads every skill below one of these roots begins with a truncated, silently lossy instruction set. Everything else on this page is secondary to that.</p>
               <p v-else>Each bar is one root on its own, measured against a {{ budget.window }} window of {{ formatTokens(budget.window_tokens) }} tokens.</p>
-              <div class="budget-hero-actions">
+              <p class="budget-block-range">Bars run to {{ formatNumber(budgetAxisMax) }}% of one window, so a root that overruns it has somewhere to show the overshoot. The rule on each track marks 100%.</p>
+              <div class="budget-block-actions">
                 <button class="btn btn-primary" type="button" @click="switchView('skills')">Trim the largest scopes</button>
                 <button class="btn btn-secondary" type="button" @click="openDoctor">See the breakdown</button>
               </div>
             </div>
-            <div class="budget-hero-total">
+            <div class="budget-block-total">
               <span class="num">{{ formatTokens(budget.all_tokens) }}</span>
-              <span class="budget-hero-unit">tokens on disk<br>{{ formatNumber(budget.all_pct_window) }}% of one window</span>
+              <span class="budget-block-unit">tokens on disk<br>{{ formatNumber(budget.all_pct_window) }}% of one window</span>
             </div>
-            <div class="budget-axis" aria-hidden="true">
-              <span class="budget-axis-rule" :style="{ left: scopeThresholdPos }"></span>
-              <span class="budget-axis-label" :style="{ left: scopeThresholdPos }">100% of one context window</span>
+            <!-- The scale is a grid cell, not a floating strip over the card.
+                 It used to be positioned against the full card width while the
+                 fills were positioned against the track column, so the rule sat
+                 110px right of the value it claimed to mark. Same template as
+                 a row => the same track column => aligned by construction. -->
+            <div class="scope-meter-scale" aria-hidden="true">
+              <span class="scope-meter-scale-cell">
+                <span class="scope-meter-scale-rule" :style="{ left: scopeThresholdPos }"></span>
+                <span class="scope-meter-scale-label" :style="{ left: scopeThresholdPos }">100% of one context window</span>
+              </span>
             </div>
             <ol class="scope-meter">
               <li v-for="row in scopeBudgetRows" :key="row.id" class="scope-meter-row">
                 <span class="scope-meter-name">{{ row.label }}</span>
-                <span class="scope-meter-track"><span class="scope-meter-fill" :class="scopePctClass(row.pct)" :style="{ width: scopePctOf(row.pct) }"></span></span>
+                <span class="scope-meter-track">
+                  <span class="scope-meter-fill" :class="scopePctClass(row.pct)" :style="{ width: scopePctOf(row.pct) }"></span>
+                  <span class="scope-meter-mark" :style="{ left: scopeThresholdPos }"></span>
+                </span>
                 <span class="scope-meter-num num">{{ formatTokens(row.tokens) }}</span>
                 <span class="scope-meter-pct num" :class="scopePctClass(row.pct)">{{ formatNumber(row.pctRounded) }}%</span>
               </li>
             </ol>
-            <p v-if="!budget.has_tiktoken" class="budget-hero-foot">Counts are a chars/4 estimate. Install <code>tiktoken</code> for exact BPE figures.</p>
+            <p v-if="!budget.has_tiktoken" class="budget-block-foot">Counts are a chars/4 estimate. Install <code>tiktoken</code> for exact BPE figures.</p>
           </section>
 
           <section class="overview-activity" aria-labelledby="activity-title">

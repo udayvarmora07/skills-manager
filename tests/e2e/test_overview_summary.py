@@ -162,7 +162,7 @@ class OverviewSummaryTests(unittest.TestCase):
                 const el = document.querySelector(sel);
                 return el ? el.getBoundingClientRect().top + window.scrollY : null;
             };
-            return ['.overview-metrics', '.attention-queue', '.budget-hero',
+            return ['.overview-metrics', '.attention-queue', '.budget-block',
                     '.overview-activity'].map(pick);
         }""")
         self.assertTrue(all(v is not None for v in order), order)

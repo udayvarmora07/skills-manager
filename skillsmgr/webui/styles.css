@@ -1662,7 +1662,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
    The axis deliberately runs past 100%. On a 0-100% axis, 111% and 121% both
    clamp to a full bar and the chart hides the one thing it exists to show. */
-.budget-hero {
+.budget-block {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--s5) var(--s6);
@@ -1673,7 +1673,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   background: var(--surface);
 }
 
-.budget-hero-lead h2 {
+.budget-block-lead h2 {
   margin: 0;
   max-width: 46ch;
   font-size: var(--t-page);
@@ -1681,16 +1681,21 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   font-weight: 600;
   letter-spacing: -.014em;
 }
-.budget-hero-lead p {
+.budget-block-lead p {
   margin: var(--s2) 0 0;
   max-width: 62ch;
   color: var(--text-muted);
   font-size: var(--t-table);
 }
-.budget-hero-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+.budget-block-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+/* `.budget-block-range` states what the axis actually runs to and deliberately
+   declares no styles of its own: it is a second muted sentence under the first,
+   and `.budget-block-lead p` already sets that weight, size and measure. The
+   meter rescales past 125% when one root is that far over, so writing a fixed
+   "125%" into the copy would be a claim the chart does not honour. */
 
-.budget-hero-total { text-align: right; align-self: start; }
-.budget-hero-total .num {
+.budget-block-total { text-align: right; align-self: start; }
+.budget-block-total .num {
   display: block;
   font-family: var(--mono);
   font-size: var(--t-empty);
@@ -1699,7 +1704,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
 }
-.budget-hero-unit {
+.budget-block-unit {
   display: block;
   margin-top: 2px;
   color: var(--text-muted);
@@ -1707,15 +1712,47 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   line-height: 1.4;
 }
 
-.budget-axis { position: relative; height: 14px; grid-column: 1 / -1; }
-.budget-axis-rule {
+/* The scale row repeats the meter row's grid template exactly, so its rule
+   cell IS a track cell: `left: 80%` here means the same pixel as `left: 80%`
+   inside every bar below it. The previous version positioned the rule against
+   the full card width while the fills were positioned against the track column
+   — measured at 1280px, the rule landed 110px to the RIGHT of the value it
+   claimed to mark, so every bar read against it was wrong. Alignment by
+   construction beats a second position that has to be kept in step. */
+.scope-meter-scale {
+  position: relative;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 92px 52px;
+  gap: var(--s3);
+  height: 16px;
+  grid-column: 1 / -1;
+}
+/* The cell IS the track column. It has to be a real, in-flow grid item with
+   `position: relative`: putting `grid-column: 2` on the absolutely-positioned
+   rule itself is not enough — the containing block of an abspos grid child is
+   still the grid *container's* padding box, so `left: 80%` resolved against
+   the full 1086px card and landed 134px right of the mark on every bar. */
+.scope-meter-scale-cell { position: relative; grid-column: 2; display: block; }
+.scope-meter-scale-rule {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 1px;
   background: var(--border-strong);
 }
-.budget-axis-label {
+/* The same 100% mark, repeated on every track so a single bar is readable
+   without counting rows up to the scale. Painted ABOVE the fill (z-index 1),
+   because a bar past the threshold covers the whole mark otherwise. */
+.scope-meter-mark {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  z-index: 1;
+  width: 1px;
+  background: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--surface);
+}
+.scope-meter-scale-label {
   position: absolute;
   top: 0;
   color: var(--text-muted);
@@ -1723,11 +1760,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   white-space: nowrap;
   /* Anchored to the LEFT of the 100% rule, not the right.
 
-     The rule sits at 80% of the axis (the axis runs to 125%), so a caption
+     The rule sits at 80% of the track (the axis runs to 125%), so a caption
      hung to its right has only the last fifth of the track to live in, and
      `white-space: nowrap` means it does not give that back — it rendered
      straight past the axis and off the viewport. To the left there is 80% of
-     the axis at every width measured (320–1680px), so the caption always fits
+     the track at every width measured (320–1680px), so the caption always fits
      whole and the words stay readable.
 
      This was a real defect before this task, not one the typeface introduced:
@@ -1769,12 +1806,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   text-overflow: ellipsis;
 }
 .scope-meter-track {
+  position: relative;
   height: 8px;
   border-radius: var(--radius-xs);
   background: var(--surface-2);
   overflow: hidden;
 }
-.scope-meter-fill { display: block; height: 100%; border-radius: var(--radius-xs); }
+/* z-index 0 on the fill and 1 on the mark, stated rather than left to source
+   order: a bar past the threshold paints over the whole track, and the 100%
+   rule is the one thing on it a reader must still be able to see. */
+.scope-meter-fill { display: block; position: relative; z-index: 0; height: 100%; border-radius: var(--radius-xs); }
 .scope-meter-num { text-align: right; color: var(--text-muted); }
 .scope-meter-pct { text-align: right; font-weight: 600; }
 
@@ -1789,13 +1830,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .scope-meter-fill.pct-warn { background: var(--warn); }
 .scope-meter-fill.pct-bad  { background: var(--err); }
 
-.budget-hero-foot {
+.budget-block-foot {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--text-muted);
   font-size: var(--t-meta);
 }
-.budget-hero-foot code {
+.budget-block-foot code {
   padding: 0 3px;
   border-radius: 3px;
   background: var(--code-bg);
@@ -1807,8 +1848,8 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    is not a meter, and the axis label runs off the right edge. Give each row a
    full-width track and move the threshold caption above the list. */
 @media (max-width: 620px) {
-  .budget-hero { grid-template-columns: minmax(0, 1fr); }
-  .budget-hero-total { text-align: left; }
+  .budget-block { grid-template-columns: minmax(0, 1fr); }
+  .budget-block-total { text-align: left; }
   .scope-meter-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
@@ -1821,8 +1862,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .scope-meter-track { grid-area: track; }
   .scope-meter-pct { grid-area: pct; }
   .scope-meter-num { grid-area: tok; text-align: left; color: var(--ink-3); }
-  .budget-axis { order: -1; margin-bottom: var(--s2); }
-  /* No .budget-axis-label override here any more: anchoring the caption to the
+  .scope-meter-scale { order: -1; margin-bottom: var(--s2); }
+  /* In this band the track spans BOTH columns of the row ("track track"), so
+     the scale drops its internal template and becomes full-width — which is
+     the same box the track occupies, and the mark still lands on it. */
+  .scope-meter-scale { display: block; }
+  .scope-meter-scale-cell { grid-column: auto; }
+  /* No .scope-meter-scale-label override here any more: anchoring the caption to the
      left of the rule is the base rule (see the note there), which is why this
      range no longer overflows. */
 }
@@ -1868,7 +1914,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* Three separate full-width blocks now: summary, queue, meters, activity. The
    2-column wrapper is gone — the only thing beside the summary strip was a
    five-line activity list, which did not earn a column. */
-.attention-queue, .budget-hero, .overview-activity { min-width: 0; margin-top: 28px; }
+.attention-queue, .budget-block, .overview-activity { min-width: 0; margin-top: 28px; }
 .attention-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 /* No --shadow. The summary strip set the rule on this page: a readout is
    flat, and a queue row is a readout. The 1px border plus the surface
