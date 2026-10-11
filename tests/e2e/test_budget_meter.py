@@ -27,6 +27,21 @@ BASE = os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
 READY = '[data-overview-ready="true"]'
 WIDTHS = (390, 768, 1280)
 
+_AXIS_MAX_RE = __import__("re").compile(r"(\d[\d,]*)%")
+
+
+def _axis_max(range_text: str):
+    """Read the axis maximum out of the sentence that states it.
+
+    `.budget-block-range` says "Bars run to 150% of one window, so a root that
+    overruns it has somewhere to show the overshoot." The number in that
+    sentence is the same number `budgetAxisMax` computed, so the geometry
+    assertions are checked against what the page CLAIMS as well as what it
+    draws -- a stale sentence and a correct bar would otherwise both pass.
+    """
+    m = _AXIS_MAX_RE.search(range_text or "")
+    return int(m.group(1).replace(",", "")) if m else None
+
 # Every percentage the meter can render, so no assertion depends on whatever
 # the seed happens to contain.
 GEOMETRY = """() => {
@@ -212,26 +227,102 @@ class BudgetMeterTests(unittest.TestCase):
             self.assertGreaterEqual(mz, fz,
                                     f"{row['name']}: the 100% mark must paint over the fill")
 
-    def test_a_bar_past_one_hundred_percent_overshoots_the_mark_when_one_exists(self):
-        """Conditional on the fixture, and it says so. A fixture that never
-        produces an over-budget root cannot be made to fail here, and a test
-        that passes because its branch never ran is worse than no test."""
+    def _select_smallest_window(self, page):
+        """Drive the meter through its own control, the way a reader does.
+
+        The default window is `claude` at 1M tokens, so a corpus that overruns
+        `gpt-4o` (128k, the smallest selectable window) still reads as a
+        fraction on the default. Selecting the window is the user-facing way to
+        reach the over-budget branch, so the test uses it rather than poking
+        Vue state -- a fixture-only assertion would prove nothing about the
+        control that chooses the denominator.
+        """
+        # The select lives inside the rail's "Show scope controls" disclosure,
+        # so it is genuinely not visible until a reader opens it. Open it the
+        # way a reader does rather than forcing the action past the check --
+        # a forced select would prove the option exists, not that the control
+        # that owns it can be reached.
+        page.click(".mobile-controls-toggle")
+        page.wait_for_selector(".budgetbar-select", state="visible", timeout=10000)
+        page.select_option(".budgetbar-select", "gpt-4o")
+        page.wait_for_function(
+            """() => {
+                 const s = document.querySelector('.budgetbar-select');
+                 return s && s.value === 'gpt-4o';
+               }""",
+            timeout=15000,
+        )
+        page.wait_for_timeout(600)  # let the stats refetch settle the rows
+
+    def test_the_axis_places_the_mark_at_one_hundred_percent_for_every_row(self):
+        """The fixture-independent invariant.
+
+        Every row's mark must sit at exactly `100 / axisMax` of its own track
+        and its fill at `pct / axisMax` -- the two numbers the axis is drawn
+        from. This holds for ANY corpus, so it needs no oversized fixture and
+        is the assertion that actually protects the defect 3.3 fixed: the rule
+        used to be positioned against the card while the fills were positioned
+        against the track, so both numbers were individually plausible and the
+        pair was wrong.
+        """
         page = self._open(1280)
         try:
+            g = page.evaluate(GEOMETRY)
+        finally:
+            page.close()
+        axis_max = _axis_max(g["range"])
+        self.assertIsNotNone(axis_max, f"cannot read the axis maximum out of {g['range']!r}")
+        for row in g["rows"]:
+            track = row["trackWidth"]
+            mark_frac = (row["markX"] - row["trackLeft"]) / track
+            fill_frac = (row["fillRight"] - row["trackLeft"]) / track
+            pct = float(row["pctText"].rstrip("%"))
+            self.assertAlmostEqual(
+                mark_frac, 100.0 / axis_max, delta=0.02,
+                msg=f"{row['name']}: the 100% mark sits at {mark_frac:.3f} of the track, "
+                    f"but the axis runs to {axis_max}% so it must sit at {100.0 / axis_max:.3f}",
+            )
+            self.assertAlmostEqual(
+                fill_frac, pct / axis_max, delta=0.02,
+                msg=f"{row['name']}: a {row['pctText']} bar fills {fill_frac:.3f} of the track, "
+                    f"but the axis runs to {axis_max}% so it must fill {pct / axis_max:.3f}",
+            )
+
+    def test_a_root_past_the_window_overshoots_the_mark_and_rescales_the_axis(self):
+        """The branch the meter exists for, driven through the window select.
+
+        A 125% axis floor means a root at 134% must still draw INSIDE the
+        track, not clamped: `budgetAxisMax` rescales to 150%, the bar lands at
+        134/150 of the track, and the 100% rule stays at 100/150. Both halves
+        are asserted, because a bar that clamps and a bar that overflows the
+        track are equally wrong readings of the same number.
+        """
+        page = self._open(1280)
+        try:
+            self._select_smallest_window(page)
             g = page.evaluate(GEOMETRY)
         finally:
             page.close()
         over = [r for r in g["rows"] if float(r["pctText"].rstrip("%")) > 100.0]
         if not over:
             self.skipTest(
-                "the dev seed has no scope root past one context window, so the "
-                "overshoot branch cannot be exercised here (backlog 3.3a)"
+                "no scope root overruns the smallest selectable window in this "
+                "corpus, so the overshoot branch cannot be exercised"
             )
-        cellWidth = g["rows"][0]["trackWidth"]
+        axis_max = _axis_max(g["range"])
+        self.assertGreater(axis_max, 125,
+                           "a root past one window must push the axis past its 125% floor")
+        track = over[0]["trackWidth"]
         for row in over:
-            fillFrac = (row["fillRight"] - row["trackLeft"]) / cellWidth
-            markFrac = (row["markX"] - row["trackLeft"]) / cellWidth
-            self.assertGreater(fillFrac, markFrac, f"{row['name']}: {row['pctText']} did not overshoot")
+            fill_frac = (row["fillRight"] - row["trackLeft"]) / track
+            mark_frac = (row["markX"] - row["trackLeft"]) / track
+            self.assertGreater(fill_frac, mark_frac,
+                               f"{row['name']}: {row['pctText']} did not overshoot the 100% mark")
+            self.assertLessEqual(fill_frac, 1.0,
+                                 f"{row['name']}: the fill ran past the end of its own track")
+            self.assertIn("pct-bad", row["pctClass"],
+                          f"{row['name']}: an over-budget root must be marked pct-bad, "
+                          f"got {row['pctClass']!r}")
 
     # -- nothing about the shell regressed --------------------------------
     def test_no_horizontal_overflow_and_no_console_errors_at_any_width(self):
