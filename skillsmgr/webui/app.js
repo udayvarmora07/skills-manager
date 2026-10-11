@@ -23,7 +23,7 @@ const {
   formatBytes, formatTokens, tokenPctClass, tokenBarWidth,
   renderMarkdown, parseFrontmatter, formatCompat, formatTools,
   groupLogicalSkills, deriveLogicalSkillIdentity, observedIdentity,
-  observeRecord, observedStateFor, observedStateKeys,
+  observeRecord, observedStateFor, observedStateKeys, observedSeverity,
 } = SkillManagerDomain;
 
 /* ------------------------------------------------------------------ app */
@@ -379,6 +379,16 @@ const appOptions = {
     },
     uniformProblemCount() {
       return this.visibleIdentityItems.length;
+    },
+
+    /* The promoted banner states the SAME observation as the per-row chip it
+     * replaced, so it paints on the same severity ladder. Before this it was
+     * hard-wired to the warn ramp, which meant "all four rows are Disabled"
+     * still produced an amber alarm box — the task's defect, relocated rather
+     * than removed. Derived from the items themselves, never re-classified. */
+    uniformSeverity() {
+      const items = this.visibleIdentityItems;
+      return items.length ? observedSeverity(items.flatMap((item) => item.stateKeys || [])) : "ok";
     },
 
     selectedLogical() {
@@ -1300,6 +1310,10 @@ const appOptions = {
             key,
             stateLabel: it.stateLabel,
             problem: !!it.problem,
+            /* `problem` still answers "differs from Active" and still sorts;
+             * `severity` answers "how loudly to paint it", which is why a
+             * Disabled group is a problem and not an alarm. */
+            severity: observedSeverity(it.stateKeys),
             names: [],
             full: [],
           });

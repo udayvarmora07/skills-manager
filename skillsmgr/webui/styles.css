@@ -1528,6 +1528,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .identity-state { flex: none; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: var(--t-meta); font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 
 /* A state shared by every visible row, stated once above the list. */
+/* Geometry only. The COLOUR comes from the severity class the template binds,
+   because this banner is the per-row chip's own statement promoted to the pane
+   header — painting it from a fixed ramp would reintroduce the defect 4.2d
+   fixed (a uniform "all Disabled" list rendering as an alarm box) one element
+   higher up the page. */
 .uniform-state-note {
   display: flex;
   align-items: flex-start;
@@ -1541,9 +1546,17 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   font-size: var(--t-meta);
   line-height: 1.45;
 }
+.uniform-state-note-warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn); }
+.uniform-state-note-off { border-color: var(--mute-line); background: var(--mute-bg); color: var(--mute); }
 .uniform-state-note strong { font-weight: 700; }
 .identity-state-ok { color: var(--ok); background: var(--ok-soft); }
 .identity-state-warn { color: var(--warn); background: var(--warn-soft); }
+/* Disabled is a reader's own act, not an alarm, so it paints neutral rather
+   than in the warn ramp with Malformed and Unaddressable. `--mute` /
+   `--mute-bg` / `--mute-line` were declared in both themes for exactly this
+   and read by nothing until here; their 4.5:1 pair was already in the token
+   gate's table (`mute` on `mute-bg`) and had never been reached. */
+.identity-state-off { color: var(--mute); background: var(--mute-bg); }
 
 .card-meta {
   grid-column: 3;
@@ -1926,6 +1939,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .status-mark { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--t-table); font-weight: 750; }
 .status-mark-ok { color: var(--ok); background: var(--ok-soft); }
 .status-mark-warn { color: var(--warn); background: var(--warn-soft); }
+/* Same ladder as the chip it promotes: a reader who turned a skill off is not
+   being shown an alert. */
+.status-mark-off { color: var(--mute); background: var(--mute-bg); }
 /* One bordered bar, four cells, hairlines between them. The cells share a
    single surface with no elevation: this is a readout, not a set of cards. */
 .overview-summary { margin-top: 28px; }

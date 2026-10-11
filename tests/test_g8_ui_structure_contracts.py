@@ -419,13 +419,31 @@ class UniformSuppressionTests(unittest.TestCase):
         self.assertIn("uniformStateLabel", summary)
         self.assertIn("uniformProblemLabel", summary)
         # The state chip itself must carry the suppression class, not merely
-        # be somewhere in the block.
-        self.assertIn('class="identity-state" :class="[group.problem', summary)
-        self.assertIn("{ 'sr-only': uniformStateLabel || uniformProblemLabel }", summary)
+        # be somewhere in the block. Asserted structurally: the chip's own
+        # :class must be an ARRAY (so a class can be added alongside the tone,
+        # which is why it stopped being a bare ternary string) and that array
+        # must name both the tone and the suppression key.
+        # A regex rather than `_slice`, which has a 200-character floor designed for
+        # whole blocks and is far too blunt for a 148-character span. It is
+        # still falsifiable: it must find exactly ONE chip, and that chip's own
+        # :class must satisfy everything below.
+        chips = re.findall(r'class="identity-state" :class="([^"]*)"', summary)
+        self.assertEqual(len(chips), 1, "the summary block has exactly one state chip")
+        chip = chips[0]
+        self.assertIn("'sr-only'", chip)
+        self.assertIn("{ 'sr-only': uniformStateLabel || uniformProblemLabel }", chip)
+        # The chip's :class must stay an ARRAY so a class can be added alongside
+        # the tone. A bare ternary string cannot carry the suppression, which is
+        # how this assertion came to need rewriting.
+        self.assertIn("[", chip, "the state chip's :class must stay an array")
         self.assertNotIn('v-if="group.stateLabel"', summary)
-        # The seam still supplies the values; nothing is re-derived here.
-        for expression in ("group.names", "group.stateLabel", "group.problem"):
+        # The seam still supplies the values; nothing is re-derived here. The
+        # chip reads `group.severity`, which `groupedIdentities` computes from
+        # the seam's own `stateKeys` -- the template never compares a state.
+        for expression in ("group.names", "group.stateLabel", "group.severity"):
             self.assertIn(expression, summary)
+        self.assertNotIn(".includes('malformed')", summary)
+        self.assertNotIn(".includes('disabled')", summary)
 
     def test_a_uniform_problem_state_is_stated_once_not_on_every_row(self):
         # A badge that is true of 100% of rows is not per-row information: it

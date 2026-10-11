@@ -117,6 +117,61 @@ const OBSERVED_STATE_LABELS = Object.freeze({
   divergent: "Divergent",
 });
 
+/* How loudly a state is painted, which is NOT the same question as whether it
+ * is a problem.
+ *
+ * `problem` means "differs from Active" and it is load-bearing in three places
+ * that already agree: it sorts identity chips problems-first, it suppresses a
+ * uniformly-Active row, and the Overview counts Disabled under "Needs
+ * attention" because a disabled skill is skipped by its consumer. Redefining it
+ * would silently change a sort order and a pane-header sentence, so it stands.
+ *
+ * The *colour* is the thing that was wrong. It drew every non-Active state in
+ * the alarm ramp, so a skill someone deliberately turned off rendered in the
+ * same colour as a document the tool could not decode. That trains a reader to
+ * stop treating colour as information, and it is the whole reason the warn ramp
+ * exists for the states that genuinely need action.
+ *
+ * So the severity lives here, beside the vocabulary it classifies, and has
+ * exactly three steps:
+ *
+ *   "ok"    Active. Nothing to do.
+ *   "warn"  The tool could not use this, or two copies disagree. Malformed,
+ *           unaddressable, linked-outside-root and divergent all land here.
+ *   "off"   Disabled. A deliberate act by a reader, which the consumer will
+ *           honour by skipping the skill. Neutral, not alarming -- and still
+ *           named in words, because the words are the evidence and the colour
+ *           is only a cue.
+ *
+ * A state combination takes the loudest step present, so a record that is both
+ * disabled and malformed still paints as `warn`: the unreadable document is the
+ * part that needs action.
+ */
+const OBSERVED_STATE_SEVERITY = Object.freeze({
+  active: "ok",
+  disabled: "off",
+  invalid: "warn",
+  malformed: "warn",
+  linked: "warn",
+  unaddressable: "warn",
+  divergent: "warn",
+});
+
+const SEVERITY_ORDER = Object.freeze(["ok", "off", "warn"]);
+
+/* The loudest severity among a set of observed state keys. An unknown key is
+ * treated as `warn` rather than ignored: a state this build has never heard of
+ * is exactly the case where a quiet colour would under-report. */
+function observedSeverity(stateKeys) {
+  const keys = Array.isArray(stateKeys) ? stateKeys : [];
+  let worst = "ok";
+  for (const key of keys) {
+    const severity = OBSERVED_STATE_SEVERITY[key] || "warn";
+    if (SEVERITY_ORDER.indexOf(severity) > SEVERITY_ORDER.indexOf(worst)) worst = severity;
+  }
+  return worst;
+}
+
 /* One reader for the several shapes the API uses for the same observation:
  * a top-level flag (`malformed`, `decode_error`, `addressable`, `disabled`) and
  * the backend's `instance_states` vocabulary. Every surface that decides what
@@ -224,6 +279,10 @@ function observedIdentity(record, scopes, options = {}) {
     stateLabels,
     stateLabel: stateLabels.join(" · "),
     problem: baseStates.some((state) => state !== "active"),
+    /* Independent of `problem` on purpose: a Disabled identity is a problem
+     * (it differs from Active, it is skipped, it sorts above Active) and is
+     * not an alarm. See OBSERVED_STATE_SEVERITY. */
+    severity: observedSeverity(baseStates),
   };
 }
 
@@ -416,6 +475,8 @@ window.SkillManagerDomain = Object.freeze({
   apiText,
   apiBlob,
   OBSERVED_STATE_LABELS,
+  OBSERVED_STATE_SEVERITY,
+  observedSeverity,
   observeRecord,
   observedStateFor,
   observedStateKeys,

@@ -429,8 +429,8 @@
         <!-- A state that is true of every visible row is stated once, here,
              instead of as a badge on every row. The per-row chip stays in the
              accessibility tree as sr-only, so nothing is lost. -->
-        <p v-if="uniformProblemLabel" class="uniform-state-note" role="status">
-          <span class="status-mark status-mark-warn" aria-hidden="true">!</span>
+        <p v-if="uniformProblemLabel" class="uniform-state-note" :class="'uniform-state-note-' + uniformSeverity" role="status">
+          <span class="status-mark" :class="'status-mark-' + uniformSeverity" aria-hidden="true">!</span>
           <span>All {{ formatNumber(uniformProblemCount) }} visible instances are <strong>{{ uniformProblemLabel }}</strong>. The per-row badge is hidden so any row that differs stays visible.</span>
         </p>
       </div>
@@ -529,7 +529,7 @@
           <div v-if="browseMode === 'grid'" class="card-meta" aria-label="Observed identity and state">
             <span v-for="identity in identityItems(s)" :key="identity.key" class="identity-observation">
               <span class="identity-label" :title="identity.label">{{ identity.label }}</span>
-              <span class="identity-state" :class="identity.problem ? 'identity-state-warn' : 'identity-state-ok'" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
+              <span class="identity-state" :class="'identity-state-' + identity.severity" :title="identity.stateLabel + (identity.count > 1 ? ' · ' + formatNumber(identity.count) + ' observed' : '')">{{ identity.stateLabel }}<span v-if="identity.count > 1"> · {{ formatNumber(identity.count) }} observed</span></span>
             </span>
           </div>
           <!-- List rows carry scope + state on the primary line. A value that is
@@ -543,7 +543,7 @@
           <div v-else class="identity-summary" aria-label="Observed identity and state">
             <span v-for="group in groupedIdentities(s)" :key="group.key" class="identity-observation">
               <span class="identity-label" :title="group.full.join(' | ')">{{ group.names.join(' · ') }}</span>
-              <span class="identity-state" :class="[group.problem ? 'identity-state-warn' : 'identity-state-ok', { 'sr-only': uniformStateLabel || uniformProblemLabel }]">{{ group.stateLabel }}</span>
+              <span class="identity-state" :class="['identity-state-' + group.severity, { 'sr-only': uniformStateLabel || uniformProblemLabel }]">{{ group.stateLabel }}</span>
             </span>
           </div>
           <div v-if="rowBadgeItems(s).length" class="row-badges">
