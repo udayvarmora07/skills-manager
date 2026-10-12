@@ -998,15 +998,21 @@
               <button v-if="updateTargetAvailable" class="btn btn-secondary" type="button" @click="openUpdate" :disabled="busy" aria-label="Update from folder for this exact skill instance">
                 Update from folder
               </button>
-              <button v-if="!selected.disabled" class="btn btn-secondary" @click="toggleSelected">
+              <!-- `:disabled="busy"` matches Edit and Update from folder,
+                   which already carry it. Disable/Enable was the one action
+                   in this row that looked clickable while a request was in
+                   flight, and the enable/disable is the one action where a
+                   reader's second click is most likely (they cannot tell
+                   whether the first landed). -->
+              <button v-if="!selected.disabled" class="btn btn-secondary" type="button" :disabled="busy" @click="toggleSelected">
                 <app-icon name="file-text"></app-icon>
                 Disable
               </button>
-              <button v-else class="btn btn-secondary" @click="toggleSelected">
+              <button v-else class="btn btn-secondary" type="button" :disabled="busy" @click="toggleSelected">
                 <app-icon name="file-text"></app-icon>
                 Enable
               </button>
-              <button class="btn btn-danger-ghost" @click="confirmRemove(selected)">
+              <button class="btn btn-danger-ghost" type="button" :disabled="busy" @click="confirmRemove(selected)">
                 <app-icon name="archive"></app-icon>
                 Remove
               </button>

@@ -3535,6 +3535,21 @@ const appOptions = {
 
     async toggleSelected() {
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
+      /* A second press while the first is still in flight is a reader who was
+       * not sure the first landed — not a second decision. Measured: two
+       * dispatches in one tick produced two POSTs, and the backend's own
+       * rejection ("skill 'x' is already enabled", lower case, single quotes)
+       * reached the screen VERBATIM, in a different voice from every other
+       * message in the app and reading as a failure of the tool rather than of
+       * the click.
+       *
+       * `this.busy = true` is set before the first await, so this guard sees
+       * the second press; `:disabled="busy"` on the button is what makes it
+       * visible. One is not a substitute for the other — the attribute cannot
+       * stop two dispatches inside a single frame, and the guard alone leaves
+       * the button looking clickable.
+       */
+      if (this.busy) return;
       const name = this.selectedName;
       const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
       const qp = "?scope=" + encodeURIComponent(sc);
