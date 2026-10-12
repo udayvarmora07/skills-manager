@@ -334,7 +334,7 @@ for (const key of keys) {
 console.log(JSON.stringify({keys, closed}));
 """
         out = _node(script)
-        self.assertEqual(len(out["keys"]), 16, "expected the 16 declared dialogs")
+        self.assertEqual(len(out["keys"]), 15, "expected the 15 declared dialogs")
         closed_keys = [entry.split(":")[0] for entry in out["closed"]]
         for key in out["keys"]:
             self.assertIn(key, closed_keys, f"{key} is not Escape-closable")

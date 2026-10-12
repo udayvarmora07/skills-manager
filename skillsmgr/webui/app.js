@@ -316,7 +316,6 @@ const appOptions = {
         newtemplate: null,
         import: null,
         sync: null,
-        install: null,
         batch: null,
         update: null,
         help: null,
@@ -3745,6 +3744,10 @@ const appOptions = {
         remove: () => this.selectedName && this.confirmRemove(this.selected),
         sync: this.openSync,
         update: this.openUpdate,
+        /* 5.2b — kept, and now honest: both palette entries land on the same
+           page, which 2.2's grouped palette deliberately shows as two named
+           routes ("Install" under Navigation, "Install workflow" under
+           Transfer). They used to be two DOORS; there is one now. */
         install: this.openInstall,
         help: () => this.openModal("help", {}),
         import: this.openImport,
@@ -3763,9 +3766,14 @@ const appOptions = {
       if (fn) fn.call(this);
     },
 
+    /* 5.2b — ONE door. This used to raise a modal that carried a SECOND copy
+       of the installer's form (operation, view, source, page size, stale
+       cache, preview, review-and-trust) over the same `install.*` state. The
+       view is the form now, so `openInstall` navigates there instead: the
+       Overview button, the rail and the palette entry all land on the same
+       page, and there is no second form left to drift. */
     openInstall() {
-      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
-      this.modals.install = true;
+      this.openInstallCenter();
     },
 
     /* ----------------------------------------------------- skill actions */

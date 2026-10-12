@@ -2202,7 +2202,10 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .profile-members code { color: var(--text-muted); font-size: var(--t-meta); overflow-wrap: anywhere; }
 .profile-actions { margin-top: var(--s4); }
 .sidepanel-intro { display: grid; gap: 4px; padding: var(--s4); border-bottom: 1px solid var(--border); }
-.install-center .detail-actions, .recovery-center .detail-actions { flex-wrap: wrap; }
+/* 5.2b — `.install-center` left with the unreachable second install branch. A
+   rule whose class nothing renders is not neutral: it reads like live styling
+   in review and in `grep`. The install view's own actions are in 5.1c's block. */
+.recovery-center .detail-actions { flex-wrap: wrap; }
 .recovery-actions { margin-top: var(--s3); }
 .result-block { max-height: 220px; overflow: auto; margin: var(--s3) 0 0; padding: var(--s3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: 12px/1.45 var(--mono); white-space: pre-wrap; }
 .notice-list { margin: var(--s3) 0 0; padding-left: 20px; color: var(--text-muted); }

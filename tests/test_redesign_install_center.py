@@ -280,20 +280,55 @@ class InstallerWorkflowContracts(unittest.TestCase):
             self.assertIn(f'{{ id: "{op}"', sources)
         self.assertNotIn('"runner"', sources)
 
-    def test_the_dialog_no_longer_owns_a_second_installer_form(self):
-        """Two forms for one behaviour drift, and the drift is invisible until
-        a request sends `-a claude-code` twice. The dialog keeps the registry
-        half (5.2 owns whether it is retired); it must not keep the runner."""
-        # Scoped to the DIALOG, not to index.html: the view now carries these
-        # ids, so an unscoped assertion would fail on the very form that
-        # replaced the one it was written to police.
-        dialog = HTML[HTML.index('data-modal="install"'):]
-        self.assertNotIn('id="install-mode"', dialog)
-        self.assertNotIn('id="install-runner"', dialog)
-        self.assertNotIn('id="install-agents"', dialog)
-        self.assertNotIn('name="install-copy"', dialog)
-        self.assertNotIn("install.mode === 'runner'", dialog)
-        self.assertEqual(HTML.count('id="install-runner"'), 1)  # the view's, only
+    def test_there_is_exactly_one_install_branch_and_one_door(self):
+        """5.2b. Two defects, one root: **a second `v-else-if="view ===
+        'install'"` that never rendered.**
+
+        Vue honours the first matching branch of a chain and ignores the rest,
+        so the block 5.1a added ("Install / update inbox": the registry form,
+        the review evidence table, the inventory, and an "Open full install
+        workflow" button) was dead markup the day it was written — the branch
+        above it, 5.1's `.install-shell`, matches first. Three source-level
+        contract tests stayed green throughout, because the strings were in the
+        file. This asserts the invariant that would have caught it, and which
+        the delete is what makes true.
+        """
+        self.assertEqual(HTML.count("""<div v-else-if="view === 'install'" """.strip()), 2,
+                         "expected only the sidepanel and the install shell")
+        self.assertNotIn('data-modal="install"', HTML)
+        self.assertNotIn("install-center", HTML)
+        # The inventory was the one part of the dead block that was not a
+        # duplicate of anything, so it moved into the branch that renders.
+        shell = _install_block()
+        self.assertIn("data-install-inventory", shell)
+        self.assertIn("filteredRegistryInventory", shell)
+
+    def test_the_live_view_owns_the_operation_selector_the_dialog_had(self):
+        """The deleted second block carried a `<select>` bound to
+        `install.registryOp`; the live view chooses the operation with the
+        source tab strip instead. Assert the control that survives IS the one
+        the reader uses — a test that only checked the deleted id would have
+        passed while the page offered no operation control at all."""
+        view = _install_block()
+        for binding in ('v-model.trim="install.source"', 'v-model="install.view"',
+                        'v-model="install.allowStale"', 'v-model="install.runner"'):
+            self.assertIn(binding, view, f"{binding} is not in the Install view")
+        self.assertIn("install.registryOp === s.id", view)  # the tab strip
+        self.assertIn("selectInstallSource(s.id)", view)
+        # And the runner half still has exactly one owner.
+        self.assertEqual(HTML.count('id="install-runner"'), 1)
+
+    def test_the_one_door_is_the_view_not_a_modal(self):
+        """`openInstall` is still the name three call sites use (the Overview
+        action row, the palette entry, the actions map). It must navigate.
+        Opening a modal that no longer exists would set `modals.install`,
+        which `activeModal` reads — so the assertion is on what it does, and
+        on the state key being gone, not on the comment."""
+        self.assertIn("openInstallCenter()", APP)
+        self.assertNotIn("this.modals.install = true", APP)
+        # `modals` has no `install` key left for `activeModal` to find.
+        modals = APP[APP.index("modals: {"):APP.index("modals: {") + 2400]
+        self.assertNotIn("\n        install:", modals)
 
     def test_the_agents_field_parses_in_one_place_and_both_sites_use_it(self):
         """The comma split was an inline `@change` expression. It is a method
@@ -331,7 +366,14 @@ class InstallerWorkflowContracts(unittest.TestCase):
         never carries."""
         getter = _computed_body("installRunnerResult")
         self.assertIn('typeof result.exit_code === "number"', getter)
-        self.assertIn("!installRunnerResult", HTML)
+        # 5.2b: the `!installRunnerResult` guard lived in the deleted dialog's
+        # result dump. The separation it enforced is now structural -- the
+        # listing renders from `installRows` and the runner's exit line from
+        # `installRunnerOutcome`, and no branch renders both.
+        view = _install_block()
+        self.assertIn("installRows", view)
+        self.assertIn("installRunnerOutcome", view)
+        self.assertNotIn("lastResult", view)
 
     def test_the_outcome_names_the_exit_code_and_never_interprets_it(self):
         outcome = _computed_body("installRunnerOutcome")

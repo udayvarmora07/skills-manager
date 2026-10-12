@@ -1207,6 +1207,24 @@
             <p class="hint fetch-commit-note">Confirming installs the snapshot that was reviewed. Trust and hashes stay recorded as evidence; this does not claim the skill is safe.</p>
           </div>
         </template>
+
+        <!-- 5.2b — this section used to sit in a SECOND
+             `v-else-if="view === 'install'"` block, forty lines further down the
+             same chain. Vue honours the first matching branch and ignores the
+             rest, so that whole block — its registry form, its review evidence
+             table, its inventory, and its "Open full install workflow" button —
+             rendered nothing, ever, and still cost three source-level contract
+             tests a passing green because the strings were in the file. The
+             part that was not a duplicate (the inventory of already-installed
+             registry-backed skills) is here; the rest was the dialog's second
+             copy plus a third of the workflow strip. `data-install-inventory`
+             lets a test prove the section is inside the branch that renders. -->
+        <section class="profile-preview install-inventory" aria-labelledby="registry-inventory-title" data-install-inventory>
+          <div class="section-label-row"><h2 id="registry-inventory-title">Registry-backed skills</h2><span class="hint">{{ formatNumber(registryInventoryCount) }} observed</span></div>
+          <p class="hint">This inventory reports existing <code>registry_provenance</code> fields only. It does not infer that an update is available.</p>
+          <ul v-if="filteredRegistryInventory.length" class="profile-members"><li v-for="record in filteredRegistryInventory" :key="record.name + (record.registry_provenance.id || '')"><strong>{{ record.name }}</strong><span class="tag">{{ record.registry_provenance.id || record.registry_provenance.source || 'source known' }}</span><small>hash {{ record.registry_provenance.local_snapshot_hash || record.registry_provenance.registry_hash || 'not recorded' }}</small></li></ul>
+          <p v-else class="hint">No registry-backed skills were observed.</p>
+        </section>
       </div>
       <div v-else-if="view === 'skills'" class="detail-inner">
         <button class="mobile-back" type="button" @click="closeMobileDetail">← Back to Library</button>
@@ -1597,41 +1615,6 @@
           </ul>
           <div class="detail-actions profile-actions"><button v-if="profileObservedCount" class="btn btn-primary" type="button" @click="openProfileBatch" :disabled="busy">Review enable plan</button></div>
           <p class="hint">Missing and divergent members stay visible and unresolved. Applying this bounded plan enables only the exact observed instances listed above; preview does not write to skills.</p>
-        </section>
-      </div>
-
-      <div v-else-if="view === 'install'" class="detail-inner install-center">
-        <div class="detail-head">
-          <div><h1 id="view-title" tabindex="-1">Install / update inbox</h1><p class="lead">Browse and search the existing skills.sh registry, inspect a validated snapshot, then explicitly trust that review before it is installed into the global Store.</p></div>
-          <div class="detail-actions"><button class="btn btn-secondary" type="button" @click="openInstall">Open full install workflow</button></div>
-        </div>
-        <section class="profile-editor" aria-labelledby="install-center-title">
-          <h2 id="install-center-title">Registry review</h2>
-          <p class="hint">The first fetch only creates a private, expiring review. It does not install or claim an update. A separate trust action commits that reviewed snapshot without another network request.</p>
-          <div class="form-grid">
-            <div class="form-field"><label for="center-registry-op">Operation</label><select id="center-registry-op" name="registry-operation" v-model="install.registryOp"><option value="browse">Browse leaderboard</option><option value="search">Search catalog</option><option value="curated">Curated catalog</option><option value="fetch">Fetch for review</option></select></div>
-            <div class="form-field" v-if="install.registryOp === 'browse'"><label for="center-registry-view">Leaderboard view</label><select id="center-registry-view" name="registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select></div>
-            <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'"><label for="center-registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label><input id="center-registry-source" name="registry-source" v-model.trim="install.source" placeholder="owner/repo/skill" spellcheck="false"></div>
-            <div class="form-field full"><label class="check-row"><input type="checkbox" name="registry-allow-stale" v-model="install.allowStale"> Use an expired cache if the registry is unavailable</label></div>
-          </div>
-          <div class="detail-actions">
-            <button class="btn btn-secondary" type="button" :disabled="busy || !registryReady()" @click="runRegistry">{{ install.registryOp === 'fetch' ? 'Fetch review snapshot' : 'Load registry evidence' }}</button>
-          </div>
-        </section>
-        <section v-if="install.review" class="profile-preview" aria-live="polite" aria-labelledby="registry-review-title">
-          <div class="section-label-row"><h2 id="registry-review-title">Review evidence</h2><span class="badge badge-warn">review required</span></div>
-          <dl class="meta compact-meta"><div><dt>Review id</dt><dd><code>{{ install.review.review_id }}</code></dd></div><div><dt>Reviewed registry</dt><dd><code>{{ (install.review.registry || {}).id || (install.review.registry || {}).source || (install.review.registry || {}).slug || 'returned source' }}</code></dd></div><div><dt>Expires</dt><dd>{{ install.review.review_expires_at || '—' }}</dd></div><div><dt>Validation</dt><dd>{{ install.review.inspection && install.review.inspection.validation && install.review.inspection.validation.valid ? 'valid' : 'review warnings' }}</dd></div><div><dt>Registry hash</dt><dd><code>{{ (install.review.registry || {}).registry_hash || (install.review.registry || {}).remote_registry_hash || '—' }}</code></dd></div></dl>
-          <p class="hint">This action is bound to the returned review id and registry above; changing the current form values cannot change what will be committed.</p>
-          <div class="detail-actions"><button class="btn btn-primary" type="button" :disabled="busy" @click="commitRegistryReview">Trust and install reviewed snapshot {{ install.review.review_id }}</button></div>
-          <p class="hint">Advisory risk findings and validation warnings are evidence, not a safety or trust verdict.</p>
-          <ul v-if="install.review.inspection && install.review.inspection.validation && install.review.inspection.validation.warnings && install.review.inspection.validation.warnings.length" class="notice-list"><li v-for="warning in install.review.inspection.validation.warnings" :key="warning.key + warning.message">{{ warning.message }}</li></ul>
-          <pre v-if="install.review.inspection && install.review.inspection.risk" class="result-block">{{ JSON.stringify(install.review.inspection.risk, null, 2) }}</pre>
-        </section>
-        <section class="profile-preview" aria-labelledby="registry-inventory-title">
-          <div class="section-label-row"><h2 id="registry-inventory-title">Registry-backed skills</h2><span class="hint">{{ formatNumber(registryInventoryCount) }} observed</span></div>
-          <p class="hint">This inventory reports existing <code>registry_provenance</code> fields only. It does not infer that an update is available.</p>
-          <ul v-if="filteredRegistryInventory.length" class="profile-members"><li v-for="record in filteredRegistryInventory" :key="record.name + (record.registry_provenance.id || '')"><strong>{{ record.name }}</strong><span class="tag">{{ record.registry_provenance.id || record.registry_provenance.source || 'source known' }}</span><small>hash {{ record.registry_provenance.local_snapshot_hash || record.registry_provenance.registry_hash || 'not recorded' }}</small></li></ul>
-          <p v-else class="hint">No registry-backed skills were observed.</p>
         </section>
       </div>
 
@@ -2331,64 +2314,17 @@
     </div>
   </div>
 
-  <!-- Install via a runner or the skills.sh registry -->
-  <div v-if="modals.install" class="overlay" data-modal="install" @mousedown.self="closeModal('install')">
-    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="install-modal-title" tabindex="-1">
-      <h2 id="install-modal-title" class="sr-only">Install skills</h2>
-      <div class="modal-head"><h2>Install or browse registry</h2><button class="modal-close" aria-label="Close" @click="closeModal('install')"><app-icon name="x"></app-icon></button></div>
-      <div class="modal-body">
-        <p class="hint">Fetch one validated skill from skills.sh into the global store with provenance, then read the evidence before you trust it. Browsing the catalog and running an ecosystem install live on the Install page.</p>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="registry-op">Registry operation</label>
-            <select id="registry-op" name="install-registry-operation" v-model="install.registryOp">
-              <option value="browse">Browse leaderboard</option>
-              <option value="search">Search catalog</option>
-              <option value="curated">Curated catalog</option>
-              <option value="fetch">Fetch for review</option>
-            </select>
-          </div>
-          <div class="form-field" v-if="install.registryOp === 'browse'">
-            <label for="registry-view">Leaderboard view</label>
-            <select id="registry-view" name="install-registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select>
-          </div>
-          <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'">
-            <label for="registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label>
-            <input id="registry-source" name="install-registry-source" v-model.trim="install.source" :placeholder="install.registryOp === 'search' ? 'react native' : 'owner/repo/skill'" spellcheck="false">
-          </div>
-          <div class="form-field" v-if="install.registryOp === 'browse'">
-            <label for="registry-page">Page size</label>
-            <input id="registry-page" name="install-registry-page-size" v-model.number="install.perPage" type="number" min="1" max="500">
-          </div>
-          <div class="form-field full">
-            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-registry-allow-stale" v-model="install.allowStale" style="accent-color:var(--accent);"> Use an expired cache if the registry is unavailable</label>
-            <span class="hint">Trust, audit status, and hashes remain explicit evidence; cache state is shown in the result. Fetch requires this explicit action and records provenance.</span>
-          </div>
-        </div>
-        <div style="margin-top:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:13px;display:flex;gap:8px;align-items:center;">
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ installPreview() }}</span>
-          <button class="btn btn-secondary" style="flex:none;height:32px;" @click="copy(installPreview())">Copy</button>
-        </div>
-        <div v-if="install.review" class="preview-panel" role="status" aria-live="polite">
-          <strong>Reviewed registry snapshot</strong>
-          <span>Review id: <code>{{ install.review.review_id }}</code></span>
-          <span>Registry: <code>{{ (install.review.registry || {}).id || (install.review.registry || {}).source || (install.review.registry || {}).slug || 'returned source' }}</code></span>
-          <small>This commit uses the returned review above; current form values do not change it.</small>
-          <button class="btn btn-primary" :disabled="busy" @click="commitRegistryReview">Trust and install reviewed snapshot {{ install.review.review_id }}</button>
-        </div>
-        <!-- The runner's own output belongs to the Install view now, so this
-             dump shows a registry response or nothing. `installRunnerResult`
-             tells them apart by the `exit_code` the install route returns, not
-             by whichever half asked last. -->
-        <div v-if="install.lastResult && !installRunnerResult" style="margin-top:10px;max-height:220px;overflow:auto;background:#111;color:#ddd;border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;">{{ JSON.stringify(install.lastResult, null, 2) }}</div>
-      </div>
-      <div class="modal-foot">
-        <button class="btn btn-secondary" @click="closeModal('install')">Close</button>
-        <button class="btn btn-secondary" :disabled="busy || !registryReady()" @click="runInstall(false)">Preview</button>
-        <button class="btn btn-primary" :disabled="busy || !registryReady()" @click="runInstall(true)">{{ install.registryOp === 'fetch' ? 'Fetch review snapshot' : 'Browse registry' }}</button>
-      </div>
-    </div>
-  </div>
+  <!-- The install DIALOG used to live here and carried its own copy of the
+       registry form — operation, leaderboard view, source, page size, the
+       stale-cache checkbox, the previewed command, the reviewed-snapshot
+       panel and its trust button. Two forms for one behaviour, bound to the
+       same `install.*` state, drift silently: the dialog's page-size field
+       wrote `install.perPage`, the view's did not exist, so which page
+       size a "Preview" used depended on which door you came through. 5.1
+       moved the form to the Install view and this copy stayed behind, which
+       is the only reason the Install button and the palette entry still
+       opened a dialog. There is ONE form now and ONE door; `openInstall()`
+       routes to the view. -->
 
   <!-- Previewable batch plan -->
   <div v-if="modals.batch" class="overlay" data-modal="batch" @mousedown.self="closeModal('batch')">

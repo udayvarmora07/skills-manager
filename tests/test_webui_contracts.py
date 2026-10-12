@@ -560,6 +560,11 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         source = _read(APP_JS)
         html = _read(INDEX_HTML)
         self.assertIn('registryOp: "browse"', source)
+        # 5.2b: `<option value="fetch">` lived in the dialog's operation
+        # select and in the second install branch. `fetch` is a WORKFLOW on
+        # the live view, so that is what proves it is still reachable.
+        self.assertIn('{ id: "fetch", label: "Fetch & trust" }', source)
+        self.assertIn('data-install-workflow', html)
         self.assertIn('async runRegistry()', source)
         self.assertIn('"/api/install"', source)
         self.assertNotIn("review_id: op === \"fetch\" ? this.install.review_id : undefined", source)
@@ -574,9 +579,16 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('{ id: "registry", label: "Registry" }', source)
         self.assertIn('{ id: "runner", label: "Installer" }', source)
         self.assertIn('data-install-workflow="w.id"', html)
-        self.assertIn('value="fetch"', html)
-        self.assertIn("Use an expired cache if the registry is unavailable", html)
-        self.assertIn("Fetch review snapshot", html)
+        # 5.2b: `<option value="fetch">` was the DIALOG's operation
+        # select, and its copy in the second, never-rendered install
+        # branch. Both are gone; `fetch` is a workflow on the live view,
+        # asserted above. Keep this line off the dead markup.
+        self.assertNotIn('value="fetch"', html)
+        # 5.2b: both of these strings were the dead branch's wording. The
+        # live view states the same two facts in its own words -- the
+        # stale-cache escape hatch and the fetch action's label.
+        self.assertIn("Serve an expired cache when the registry cannot be reached", html)
+        self.assertIn("Fetch for review", html)
 
     def test_task_centers_and_registry_review_boundary_are_explicit(self):
         source = _read(APP_JS)
@@ -590,7 +602,9 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn("commitRegistryReview", source)
         self.assertIn("review_id: review.review_id", source)
         self.assertIn("trust_confirmed: true", source)
-        self.assertIn("Trust and install reviewed snapshot", html)
+        # 5.2b: this label lived in the second, never-rendered install
+        # branch. The fetch workflow's trust action is its own control.
+        self.assertIn("Trust and install into the global store", html)
         self.assertIn("Global store only", html)
         self.assertIn("No update is claimed", html)
 
@@ -662,7 +676,11 @@ const context = {
         self.assertIn("const review = this.install.review", commit.group(1))
         self.assertIn("review_id: review.review_id", commit.group(1))
         self.assertIn("install.review.review_id", html)
-        self.assertIn("current form values do not change it", html)
+        # 5.2b: the sentence that says the commit is bound to the RETURNED
+        # review and not to the form used to live in the install dialog, which
+        # is deleted. The install view states the same rule; assert the rule,
+        # not the one wording that happened to carry it.
+        self.assertIn("Confirming installs the snapshot that was reviewed", html)
 
     def test_settings_surface_has_accessible_theme_and_text_size_controls(self):
         source = _read(APP_JS)
