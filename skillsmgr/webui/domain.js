@@ -416,7 +416,21 @@ function renderMarkdown(md) {
   // every row used to be emitted as a `td`, so `.body th` styled nothing and a
   // header row was indistinguishable from a data row.
   let pendingCells = null, sawSeparator = false;
+  // 4.6b: a RUN of consecutive lines is ONE block. Before this every source
+  // line became its own block, so a sentence the author had wrapped across
+  // three lines rendered as three paragraphs - and because 4.6 put paragraph
+  // spacing on the type scale, the holes in the prose grew with it. Each
+  // buffer is flushed by a block start, by a blank line and at EOF, so the
+  // rule is stated once and applies to prose, quotes and list items alike.
+  let paraBuf = [], quoteBuf = [];
 
+  const flushPara = () => {
+    if (paraBuf.length) { out.push("<p>" + inlineMd(paraBuf.join(" ")) + "</p>"); paraBuf = []; }
+  };
+  const closeText = () => {
+    flushPara();
+    if (quoteBuf.length) { out.push("<blockquote>" + inlineMd(quoteBuf.join(" ")) + "</blockquote>"); quoteBuf = []; }
+  };
   const closeList = () => { if (inList) { out.push("</" + inList + ">"); inList = null; } };
   const closeTable = () => {
     if (!inTable) return;
@@ -438,7 +452,7 @@ function renderMarkdown(md) {
       } else codeBuf.push(line);
       i++; continue;
     }
-    if (/^```/.test(line.trim())) { inCode = true; i++; continue; }
+    if (/^```/.test(line.trim())) { closeText(); closeList(); closeTable(); inCode = true; i++; continue; }
 
     const blank = !line.trim();
     const h = /^(#{1,6})\s+(.*)$/.exec(line);
@@ -447,8 +461,10 @@ function renderMarkdown(md) {
     const ol = /^\s*\d+\.\s+(.*)$/.exec(line);
     const quote = /^\s*>\s?(.*)$/.exec(line);
 
-    if (blank) { closeList(); closeTable(); i++; continue; }
+    if (blank) { closeText(); closeList(); closeTable(); i++; continue; }
     const tableRow = /^\s*\|.*\|\s*$/.test(line) && !h;
+    // Any block start ends the paragraph and the quote run above it.
+    if (tableRow || h || hr || ul || ol) closeText();
     if (tableRow) {
       closeList();
       const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
@@ -476,7 +492,15 @@ function renderMarkdown(md) {
     }
     if (h) { closeList(); closeTable(); out.push(`<h${h[1].length}>` + inlineMd(h[2]) + `</h${h[1].length}>`); i++; continue; }
     if (hr) { closeList(); closeTable(); out.push("<hr>"); i++; continue; }
-    if (quote) { closeList(); closeTable(); out.push("<blockquote>" + inlineMd(quote[1]) + "</blockquote>"); i++; continue; }
+    if (quote) {
+      // A bare `>` is a blank line INSIDE the quote, so it ends the run rather
+      // than joining it. Everything else in the run is one quoted paragraph -
+      // which is why the PARAGRAPH is flushed here and the quote is not.
+      closeList(); closeTable(); flushPara();
+      if (!quote[1].trim()) closeText();
+      else quoteBuf.push(quote[1].trim());
+      i++; continue;
+    }
     if (ul || ol) {
       const tag = ul ? "ul" : "ol";
       const text = (ul || ol)[1];
@@ -485,11 +509,22 @@ function renderMarkdown(md) {
       out.push("<li>" + inlineMd(text) + "</li>");
       i++; continue;
     }
-    closeList(); closeTable(); out.push("<p>" + inlineMd(line) + "</p>");
+    // The same run rule, one element over: a line under a list item that
+    // starts no block of its own is that item's continuation, so a wrapped
+    // item is not split into two bullets.
+    if (inList && out.length && out[out.length - 1].startsWith("<li>")) {
+      const last = out.length - 1;
+      out[last] = out[last].replace(/<\/li>$/, " " + inlineMd(line.trim()) + "</li>");
+      i++; continue;
+    }
+    // No flush here: this line CONTINUES the run above it. Flushing first is
+    // what made every line its own paragraph in the first place.
+    closeList(); closeTable();
+    paraBuf.push(line.trim());
     i++;
   }
 
-  closeList(); closeTable();
+  closeText(); closeList(); closeTable();
   if (inCode) out.push('<pre><code>' + esc(codeBuf.join("\n")) + "</code></pre>");
   let html = out.join("\n");
   html = html.replace(/<table>/g, '<div class="tablewrap"><table>');
