@@ -2301,30 +2301,45 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .copybtn:hover { color: var(--text); background: var(--surface-2); }
 .copybtn svg { width: 14px; height: 14px; }
 
+/* 4.5b DOCUMENT HOSTS. `.body` is the Source tab's pane; `.markdown-preview`
+   is the editor's live preview. Both are handed the output of the SAME
+   `renderMarkdown`, so a document the reader is writing must look in the
+   preview exactly as it will look once saved - that is the entire reason the
+   editor has a preview. Every rule below therefore carries BOTH hosts. The
+   document shape lives here once; only the pane's chrome (the rule above) is
+   `.body`-specific, and it is not document typography.
+   `tests/test_redesign_markdown_document.py` asserts the two host lists are
+   identical rule-for-rule, so a `.body blockquote` added without its preview
+   twin goes red rather than quietly reintroducing two renderings. */
+
 .body {
   margin-top: 28px;
   padding-top: 24px;
   border-top: 1px solid var(--border);
   max-width: 72ch;
 }
-.body h2 { margin-top: 0; border: 0; font-size: var(--t-page); }
+.body h2, .markdown-preview h2 { margin-top: 0; border: 0; font-size: var(--t-page); }
 
-.body h1, .body h2, .body h3, .body h4, .body h5, .body h6 {
+.body h1, .body h2, .body h3, .body h4, .body h5, .body h6,
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
   line-height: 1.3;
   margin: 1.4em 0 0.5em;
   letter-spacing: -0.01em;
 }
-.body h1 { font-size: var(--t-empty); }
-.body h2 { font-size: var(--t-page); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-.body h3 { font-size: var(--t-prose); }
-.body h4, .body h5, .body h6 { font-size: var(--t-table); }
-.body > :first-child { margin-top: 0; }
+.body h1, .markdown-preview h1 { font-size: var(--t-empty); }
+.body h2, .markdown-preview h2 { font-size: var(--t-page); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.body h3, .markdown-preview h3 { font-size: var(--t-prose); }
+.body h4, .body h5, .body h6,
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 { font-size: var(--t-table); }
+.body > :first-child, .markdown-preview > :first-child { margin-top: 0; }
 
-.body p { margin: 0.7em 0; line-height: 1.65; }
-.body ul, .body ol { padding-left: 1.4em; margin: 0.7em 0; }
-.body li { margin: 0.25em 0; line-height: 1.6; }
-.body a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
-.body blockquote {
+.body p, .markdown-preview p { margin: 0.7em 0; line-height: 1.65; }
+.body ul, .body ol,
+.markdown-preview ul, .markdown-preview ol { padding-left: 1.4em; margin: 0.7em 0; }
+.body li, .markdown-preview li { margin: 0.25em 0; line-height: 1.6; }
+.body a, .markdown-preview a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+.body blockquote, .markdown-preview blockquote {
   /* avoid-ai-design-ignore: K4 — the blockquote rule is the convention itself */
   margin: 0.9em 0;
   padding: var(--s2) var(--s4);
@@ -2333,9 +2348,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text-muted);
 }
-.body hr { border: none; border-top: 1px solid var(--border); margin: var(--s9) 0; }
-.body code { font-family: var(--mono); font-size: var(--t-table); background: var(--code-bg); border-radius: 4px; padding: 1px 6px; }
-.body pre {
+.body hr, .markdown-preview hr { border: none; border-top: 1px solid var(--border); margin: var(--s9) 0; }
+.body code, .markdown-preview code { font-family: var(--mono); font-size: var(--t-table); background: var(--code-bg); border-radius: 4px; padding: 1px 6px; }
+.body pre, .markdown-preview pre {
   background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2343,12 +2358,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   overflow-x: auto;
   line-height: 1.55;
 }
-.body pre code { background: none; padding: 0; font-size: var(--t-table); }
+.body pre code, .markdown-preview pre code { background: none; padding: 0; font-size: var(--t-table); }
 
 .tablewrap { overflow-x: auto; margin: 0.9em 0; }
-.body table { border-collapse: collapse; width: 100%; font-size: var(--t-ui); }
-.body th, .body td { border: 1px solid var(--border); padding: 6px 12px; text-align: start; }
-.body th { background: var(--surface-2); font-weight: 600; }
+.body table, .markdown-preview table { border-collapse: collapse; width: 100%; font-size: var(--t-ui); }
+.body th, .body td,
+.markdown-preview th, .markdown-preview td { border: 1px solid var(--border); padding: 6px 12px; text-align: start; }
+.body th, .markdown-preview th { background: var(--surface-2); font-weight: 600; }
 
 /* ----------------------------------------------------------- empty/loading */
 
@@ -2782,9 +2798,47 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   background: var(--surface);
 }
 .form-field textarea { resize: vertical; min-height: 144px; font-family: var(--mono); font-size: var(--t-table); line-height: 1.55; }
-.markdown-preview { margin-top: 8px; padding: 10px; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-size: var(--t-table); }
-.markdown-preview > :first-child { margin-top: 0; }
+
+/* 4.5b SPLIT LIVE PREVIEW. One column by default; two from 900px, which is
+   where the dialog has room for a legible line in each. The height is declared
+   on the container rather than on either pane so the two scroll areas are the
+   same box - "shared scroll height" means they cannot drift apart, not that a
+   constant was copied twice. `resize: none` in the split for the same reason:
+   a drag handle that lets one pane outgrow the other defeats the invariant it
+   is next to. Both panes keep their own overflow, so a long document scrolls in
+   place instead of pushing Save out of the dialog. */
+/* Scoped to `.form-field` so these beat the coarse-pointer band further down
+   (`@media (pointer: coarse) .form-field textarea { min-height: 44px }`) on
+   specificity rather than on source order - which is a coin toss the next
+   insertion breaks silently. */
+.form-field .body-split { display: grid; gap: 12px; min-width: 0; }
+/* Below the split, the textarea is a flex child of `.form-field` and was being
+   squeezed to whatever height was left over — measured 219px against a 402px
+   preview at 768, i.e. the field you type in smaller than the field you check
+   it against. `flex: none` plus a declared floor fixes that. Neither pane
+   scrolls internally at these widths: the dialog already scrolls, and a
+   scrollbar inside a scrollbar on a phone is 3.4's 170px nested scroller. */
+.form-field .body-split > textarea { flex: none; min-height: 280px; }
+.markdown-preview {
+  padding: 10px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  /* No `font-size` here, deliberately. The preview carries the same document as
+     `.body`, so it must resolve its base size the same way `.body` does - by
+     inheriting `--t-ui` from the document. It used to declare `--t-table`,
+     which made the entire subtree one step smaller than the Source tab for
+     every element type at once; measured, not argued, by comparing computed
+     styles between the two live renders. */
+}
 .markdown-preview > :last-child { margin-bottom: 0; }
+
+@media (min-width: 900px) {
+  .form-field .body-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); height: 420px; }
+  .form-field .body-split > textarea, .form-field .body-split > .markdown-preview { height: 100%; min-height: 0; overflow-y: auto; }
+  .form-field .body-split > textarea { resize: none; }
+}
 .preview-panel { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--t-meta); }
 .preview-panel strong { color: var(--accent-text); }
 .form-field input[readonly] { opacity: 0.6; cursor: not-allowed; }

@@ -1604,9 +1604,11 @@
           </div>
           <div class="form-field full">
             <label for="f-body">Body (SKILL.md content)</label>
-            <textarea id="f-body" name="skill-body" v-model="modals.skill.form.body" rows="10" spellcheck="false" aria-describedby="f-body-hint"></textarea>
-            <span id="f-body-hint" class="hint">Markdown instructions for the skill. Preview below.</span>
-            <div class="markdown-preview" aria-label="Markdown preview" v-html="renderMarkdown(modals.skill.form.body)"></div>
+            <span id="f-body-hint" class="hint">Markdown instructions for the skill. The preview updates as you type.</span>
+            <div class="body-split">
+              <textarea id="f-body" name="skill-body" v-model="modals.skill.form.body" rows="10" spellcheck="false" aria-describedby="f-body-hint"></textarea>
+              <div class="markdown-preview" role="region" aria-label="Markdown preview" tabindex="0" v-html="renderMarkdown(modals.skill.form.body)"></div>
+            </div>
           </div>
         </div>
       </div>

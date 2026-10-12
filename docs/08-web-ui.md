@@ -529,7 +529,15 @@ claimed.
 - **Markdown**: block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.
 - **Keyboard**: `/` focuses search; `Ctrl/Cmd+K` toggles Commands only when no other dialog is open; its combobox keeps focus while Arrow Up/Down, Home/End, and Enter navigate or execute available results. `?` opens shortcut help; `Esc` closes menus/modals; `Tab` is trapped within the active dialog and focus returns to its opener. Destructive dialogs focus the safer cancel action first. Settings uses native radio groups and a labelled regional-format select with visible labels and 44px option rows. Dialog backgrounds expose `inert`/`aria-hidden` while open, with labelled dialogs and live status/error announcements.
 - **Semantic audit**: Overview and Quality metric cards use valid `dt`/`dd` definition-list pairs. The brand and Commands controls derive accessible names from visible labels plus screen-reader-only action context, so compact breakpoints do not hide their purpose. The document declares a concise local-first description; a 2026-09-22 Lighthouse snapshot reports zero failed accessibility, best-practice, SEO, and agentic-browsing audits.
-- **Preview and safety**: skill editors show an escaped live Markdown preview; sync dialogs show source/target resolution, skip-versus-overwrite behavior, and rollback expectations before commit.
+- **Preview and safety**: skill editors show an escaped live Markdown preview;
+  sync dialogs show source/target resolution, skip-versus-overwrite behavior, and
+  rollback expectations before commit. The editor's preview and the Library
+  detail pane's Source tab are handed the output of the same `renderMarkdown`
+  and are styled by the same document rules, so the preview is what the document
+  will look like once saved rather than a second rendering of it. From 900px the
+  two sit side by side on one declared shared scroll height and scroll in place;
+  below that they stack and neither scrolls internally, because the dialog
+  already scrolls. The preview is a named, focusable region.
 - **Responsive**: At desktop the frontend renders sibling navigation rail,
   list pane, and document pane. From 761–1199px it remains horizontal with a
   compact rail and readable list; it does not cap the list at a short viewport

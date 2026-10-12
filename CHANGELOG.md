@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Changed
 
+- **The editor's preview was a second rendering of the same document.** The
+  create/edit dialog and the Library's Source tab already called the same
+  `renderMarkdown`, and the preview still looked nothing like the Source tab:
+  `.markdown-preview` carried three declarations (a border, some padding and a
+  14px size) and none of the document rules that give `.body` its heading
+  ladder, list rhythm, blockquote, code and tables. A reader comparing the two
+  places a skill body appears was comparing two renderings. Every document rule
+  now carries both hosts, the preview inherits its base size the way `.body`
+  does instead of declaring a smaller one, and the two are pinned by comparing
+  *computed styles between the two live renders* rather than by a list of
+  selectors. From 900px the body field splits into Markdown and rendered
+  preview side by side on one declared shared scroll height, so a long document
+  scrolls in place instead of pushing Save out of the dialog; below that the
+  panes stack and neither scrolls internally. The preview is a named, focusable
+  region, because a scrollable pane with no name is unreachable by keyboard.
+
 - **The detail pane is a tab shell (5 panels, not one 1,900px scroll).** The
   Library's selected-skill pane used to be a single scroll in which the entire
   metadata table sat behind a closed `Skill details` disclosure, the list of
