@@ -1612,20 +1612,20 @@
           <div><h1 id="view-title" tabindex="-1">Profiles</h1><p class="lead">A profile is a desired set of existing skills and targets. Review enable plans apply only to currently observed physical instances; they do not install missing skills, reconcile divergent content, infer an effective state, or disable anything outside the profile.</p></div>
         </div>
         <section class="profile-editor" aria-labelledby="profile-editor-title">
-          <h2 id="profile-editor-title">Save a profile</h2>
+          <div class="section-label-row"><h2 id="profile-editor-title">{{ profileFormTitle }}</h2><span class="hint">{{ profileEditing ? 'saves over this profile' : 'desired sets only' }}</span></div>
           <div class="form-grid">
-            <div class="form-field"><label for="profile-name">Name</label><input id="profile-name" name="profile-name" v-model.trim="profileForm.name" placeholder="release-ready"></div>
+            <div class="form-field"><label for="profile-name">Name</label><input id="profile-name" name="profile-name" v-model.trim="profileForm.name" placeholder="release-ready" :disabled="busy || !!profileEditing"><small v-if="profileEditing" class="hint">The name is the profile's identity. Saving here writes over <strong>{{ profileEditing }}</strong> and leaves every other profile alone.</small></div>
             <div class="form-field"><label for="profile-description">Description</label><input id="profile-description" name="profile-description" v-model.trim="profileForm.description" placeholder="Skills for a release workflow"></div>
             <div class="form-field full"><label for="profile-skills">Skill names</label><input id="profile-skills" name="profile-skills" v-model.trim="profileForm.skills" placeholder="review, test, release"></div>
             <div class="form-field full"><label for="profile-targets">Targets (optional)</label><input id="profile-targets" name="profile-targets" v-model.trim="profileForm.targets" placeholder="global, agents, claude-code"></div>
           </div>
-          <button class="btn btn-primary" type="button" @click="saveProfile" :disabled="busy">Save profile</button>
+          <div class="profile-editor-actions"><button class="btn btn-primary" type="button" @click="saveProfile" :disabled="busy">{{ profileSaveLabel }}</button><button v-if="profileEditing" class="btn btn-secondary" type="button" @click="cancelProfileEdit" :disabled="busy">Cancel</button></div>
         </section>
         <section v-if="Object.keys(catalog.profiles || {}).length" class="profile-preview" aria-labelledby="saved-profiles-title">
           <div class="section-label-row"><h2 id="saved-profiles-title">Saved profiles</h2><span class="hint">desired sets only</span></div>
-          <div v-for="(profile, name) in catalog.profiles" :key="name" class="saved-profile-row">
+          <div v-for="(profile, name) in catalog.profiles" :key="name" class="saved-profile-row" :class="{ 'is-editing': profileEditing === name }">
             <div><strong>{{ name }}</strong><span class="hint">{{ formatNumber(profile.skills.length) }} skills · {{ profile.targets.length ? formatNumber(profile.targets.length) : 'all targets' }}</span></div>
-            <div class="detail-actions"><button class="btn btn-secondary" type="button" @click="previewProfile(name)">Preview</button><button class="btn btn-danger-ghost" type="button" @click="deleteProfile(name)">Delete</button></div>
+            <div class="detail-actions"><button class="btn btn-secondary" type="button" @click="previewProfile(name)">Preview</button><button class="btn btn-secondary" type="button" @click="editProfile(name)" :disabled="busy" :aria-pressed="profileEditing === name ? 'true' : 'false'">Edit</button><button class="btn btn-danger-ghost" type="button" @click="deleteProfile(name)" :disabled="busy">Delete</button></div>
           </div>
         </section>
         <section v-if="profilePreview" class="profile-preview" aria-live="polite">
@@ -1636,6 +1636,7 @@
             <li v-for="member in profilePreview.members" :key="member.name"><strong>{{ member.name }}</strong><span class="tag" :class="member.state === 'missing' || member.state === 'divergent' ? 'tag-warn' : ''">{{ member.state }}</span><small>{{ formatNumber(member.instances.length) }} observed instance{{ member.instances.length === 1 ? '' : 's' }}</small><code v-for="instance in member.instances" :key="instance.scope + '/' + instance.path">{{ instance.scope }} · {{ instance.path }}</code></li>
           </ul>
           <div class="detail-actions profile-actions"><button v-if="profileObservedCount" class="btn btn-primary" type="button" @click="openProfileBatch" :disabled="busy">Review enable plan</button></div>
+          <p v-if="!profileObservedCount" class="hint profile-no-targets">No observed physical instance to enable. Every member of this profile is missing or divergent on disk, and a plan can only target a copy the app has already seen — so there is nothing to review until a member is present.</p>
           <p class="hint">Missing and divergent members stay visible and unresolved. Applying this bounded plan enables only the exact observed instances listed above; preview does not write to skills.</p>
         </section>
       </div>

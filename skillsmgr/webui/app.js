@@ -267,6 +267,12 @@ const appOptions = {
       qualitySeverityFilter: "all",
       qualityExpandedFindings: [],
       profileForm: { name: "", description: "", skills: "", targets: "" },
+      // 5.3a: which saved profile the form is currently editing, or null for a
+      // new one. The backend upserts by name (catalog.save_profile), so editing
+      // is a frontend path only — but an editable name field would silently
+      // create a SECOND profile and leave the original untouched, which is why
+      // the field is locked while this is set.
+      profileEditing: null,
       profilePreview: null,
       mobileDetailOpen: false,
       // 4.4: the detail pane is a tab shell. `detailTab` is component state,
@@ -545,6 +551,20 @@ const appOptions = {
     profileObservedCount() {
       return (this.profilePreview && this.profilePreview.members || [])
         .reduce((count, member) => count + (member.instances || []).length, 0);
+    },
+    /* 5.3a — the editor's heading and verb follow profileEditing. These are
+       computed, not inline template ternaries, so the heading, the primary
+       button and the toast cannot disagree about what the form is doing. */
+    profileFormTitle() {
+      return this.profileEditing ? `Edit ${this.profileEditing}` : "New profile";
+    },
+    profileSaveLabel() {
+      return this.profileEditing ? "Save changes" : "Save profile";
+    },
+    profileSaveOutcome() {
+      return this.profileEditing
+        ? `Profile ${this.profileEditing} updated.`
+        : `Profile ${(this.profileForm.name || "").trim()} saved.`;
     },
     profileUnresolvedMembers() {
       return (this.profilePreview && this.profilePreview.members || [])
@@ -3468,6 +3488,15 @@ const appOptions = {
     async saveProfile() {
       const form = this.profileForm;
       if (!form.name.trim()) { this.toast("Profile name is required.", "err"); return; }
+      // 5.3a: an edit is a save under an UNCHANGED name. If the field was
+      // unlocked and retyped, this would post a second profile and leave the
+      // original exactly as it was — so the divergence is refused here, where
+      // the request is built, and not only by the disabled field in the markup.
+      const editing = this.profileEditing;
+      if (editing && form.name.trim() !== editing) {
+        this.toast(`This editor saves over ${editing}. Cancel it to create a profile under a new name.`, "err");
+        return;
+      }
       this.busy = true;
       try {
         this.catalog = await api("/api/catalog/profiles", {
@@ -3480,10 +3509,38 @@ const appOptions = {
             targets: form.targets.split(",").map((target) => target.trim()).filter(Boolean),
           }),
         });
+        this.profileEditing = null;
         this.profileForm = { name: "", description: "", skills: "", targets: "" };
-        this.toast("Profile saved.");
+        this.toast(this.profileSaveOutcome);
       } catch (e) { this.toast(e.message, "err"); }
       finally { this.busy = false; }
+    },
+
+    /* 5.3a — the edit path. The backend upserts by name, so there is no
+       update verb to discover: load the stored profile into the same form and
+       let Save write over it. `skills`/`targets` are stored as arrays and the
+       fields are comma-separated, so the join is stated here once. */
+    editProfile(name) {
+      const profile = (this.catalog.profiles || {})[name];
+      if (!profile) return;
+      this.profileEditing = name;
+      this.profileForm = {
+        name,
+        description: profile.description || "",
+        skills: (profile.skills || []).join(", "),
+        targets: (profile.targets || []).join(", "),
+      };
+      this.$nextTick(() => {
+        const field = document.getElementById("profile-description");
+        if (!field) return;
+        field.focus();
+        field.scrollIntoView({ block: "center" });
+      });
+    },
+
+    cancelProfileEdit() {
+      this.profileEditing = null;
+      this.profileForm = { name: "", description: "", skills: "", targets: "" };
     },
 
     async previewProfile(name) {
@@ -3506,6 +3563,7 @@ const appOptions = {
       this.busy = true;
       try {
         this.catalog = await api("/api/catalog/profiles/" + encodeURIComponent(name), { method: "DELETE" });
+        if (this.profileEditing === name) this.cancelProfileEdit();
         if (this.profilePreview && this.profilePreview.name === name) this.profilePreview = null;
         this.toast("Profile deleted.");
       } catch (e) { this.toast(e.message, "err"); }

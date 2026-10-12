@@ -2179,6 +2179,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .profile-editor, .profile-preview, .workspace-observation { margin-top: var(--s4); padding: var(--s4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .profile-editor h2, .profile-preview h2, .workspace-observation h2, .adapter-grid h2 { margin: 0; font-size: var(--t-prose); }
 .profile-editor .form-grid { margin: var(--s4) 0; }
+/* 5.3a — the editor's primary verb and its Cancel are one row. Without this
+   the Cancel lands on its own line under a full-width Save, which reads as a
+   second form rather than as the way out of this one. */
+.profile-editor-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
+/* The row being edited carries a left accent rule rather than a fill: a tinted
+   row would put a background behind text that is also in the editor above it,
+   and two copies of one thing on screen at once is the thing to avoid. */
+.saved-profile-row.is-editing { box-shadow: inset 2px 0 0 var(--accent); padding-left: var(--s3); }
+.profile-no-targets { margin: var(--s3) 0 0; }
 .saved-profile-row { display: flex; justify-content: space-between; align-items: center; gap: var(--s4); padding: 10px 0; border-bottom: 1px solid var(--border); }
 .saved-profile-row .hint { display: block; margin-top: 2px; }
 .profile-members, .batch-target-list { list-style: none; margin: var(--s4) 0 0; padding: 0; }
