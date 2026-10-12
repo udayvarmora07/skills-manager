@@ -1166,6 +1166,27 @@ const appOptions = {
         + " and emptying the trash does not delete them.";
     },
 
+    /* 4.8 — the exit button says what pressing it will do.
+     *
+     * It said "Review later", and no path in the product can review later: the
+     * review lives server-side with an expiry, nothing lists pending reviews
+     * (API gap, RULES #1), and the only two answers to the question the press
+     * raises are "keep reviewing here" and a DELETE. A label promising a
+     * return the dialog cannot deliver is RULES #12's failure in a button.
+     *
+     * In `computed`, not `methods`: the template reads the property, and a
+     * function's `.length` is its ARITY — as a method this would have printed
+     * "0" on every review (4.7's `syncPickedTargets`, 4.3b's
+     * `batchStaleTargets`, 2.1 before both).
+     */
+    updateExitLabel() {
+      const modal = this.modals.update;
+      if (modal && !modal.success && modal.review && modal.review.review_state === "pending") {
+        return "Cancel review…";
+      }
+      return "Close";
+    },
+
   },
 
 
@@ -1918,12 +1939,6 @@ const appOptions = {
       });
     },
 
-    updateReviewIsBlocked(review) {
-      return !!(review && (review.review_state === "blocked"
-        || review.review_state === "no-change"
-        || (review.validation && review.validation.valid === false)));
-    },
-
     updateReviewCanApply(modal = this.modals.update) {
       return !!(modal && modal.review
         && modal.review.review_state === "pending"
@@ -2031,6 +2046,18 @@ const appOptions = {
       if (!modal) return;
       if (modal.review && modal.review.review_state === "pending" && !modal.success) {
         modal.confirmingClose = true;
+        /* 4.8 — this band is the LAST child of the scrolling `.modal-body`,
+         * and the evidence above it (target, tree hashes, a per-file diff,
+         * validity, risk, recovery policy) is far taller than the body at
+         * every width. A reader at the top who presses Escape, mis-clicks the
+         * scrim or presses the foot button is therefore asked a question that
+         * rendered off-screen, which reads as "nothing happened" — the exact
+         * defect 4.5 slice A fixed for the editor's band, and the more likely
+         * one here because the foot button is always on screen. */
+        this.$nextTick(() => {
+          const band = document.querySelector('[data-modal="update"] .update-close-confirm');
+          if (band && band.scrollIntoView) band.scrollIntoView({ block: "nearest" });
+        });
         return;
       }
       this.closeModal("update");

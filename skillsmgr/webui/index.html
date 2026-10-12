@@ -1920,7 +1920,7 @@
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-secondary" type="button" @click="requestCloseUpdate">{{ modals.update.success ? 'Close' : 'Review later' }}</button>
+        <button class="btn btn-secondary" type="button" @click="requestCloseUpdate">{{ updateExitLabel }}</button>
         <button v-if="modals.update.review && modals.update.review.review_state === 'pending' && !modals.update.success" class="btn btn-primary" type="button" :disabled="!updateReviewCanApply(modals.update)" @click="applyUpdateReview">Apply reviewed update</button>
       </div>
     </div>
