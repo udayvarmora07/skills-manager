@@ -93,6 +93,7 @@ const signature = (row) => M.detailSignature(row);
 
 const BASE = __BASE__;
 const CHANGES = __CHANGES__;
+const ABSENT = __ABSENT__;
 const out = { sig: signature(BASE) };
 for (const k of Object.keys(CHANGES)) {
   out['sig_' + k] = signature(Object.assign({}, BASE, { [k]: CHANGES[k] }));
@@ -101,7 +102,7 @@ out.unchanged = current(BASE, BASE);
 out.missing = current(null, BASE);
 out.other = current(Object.assign({}, BASE, { name: 'other' }), BASE);
 out.otherScope = current(Object.assign({}, BASE, { scope: 'claude-code' }), BASE);
-out.changed = current(Object.assign({}, BASE, CHANGES.content_hash), BASE);
+out.changed = current(Object.assign({}, BASE, { content_hash: CHANGES.content_hash }), BASE);
 out.absent = current(BASE, Object.assign({}, BASE, ABSENT));
 console.log(JSON.stringify(out));
 '''
@@ -109,7 +110,8 @@ console.log(JSON.stringify(out));
 
 def _run() -> dict:
     script = (BODY.replace("__BASE__", json.dumps(BASE_ROW))
-                  .replace("__CHANGES__", json.dumps(CHANGES)))
+                  .replace("__CHANGES__", json.dumps(CHANGES))
+                  .replace("__ABSENT__", json.dumps(ABSENT)))
     result = subprocess.run(
         ["node", "-e", script], capture_output=True, text=True, cwd=str(ROOT)
     )
