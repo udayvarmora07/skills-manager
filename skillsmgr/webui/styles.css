@@ -3234,6 +3234,99 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   box-shadow: var(--shadow-lg);
 }
 
+/* ------------------------------------------------------- 5.1 install center */
+
+/* One column, one band per fact. The Install view was three prose paragraphs
+   stacked behind an empty pane; it is a heading, a source strip, the
+   precondition sentence, and then rows. Nothing here needs a grid — a
+   two-column "results | metadata" split is what put three equal cards on the
+   Overview in 3.4, and a registry listing is a LIST. */
+.install-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  max-width: 860px;
+}
+
+.install-title {
+  font-size: var(--t-page);
+  margin: 0;
+}
+
+/* The honest sentence under the heading. It is muted, not hidden, and it
+   wraps: a reader must be able to find out that nothing here writes to disk
+   without opening a dialog. */
+.install-scope-note {
+  color: var(--text-muted);
+  font-size: var(--t-table);
+  margin: 0;
+  max-width: 46ch;
+}
+
+.install-tabs {
+  border-bottom: 1px solid var(--border);
+}
+
+/* The precondition line carries `role="status"` and is the sentence a reader
+   reads first, so it is given the interface step and a minimum height rather
+   than collapsing to nothing when it is the only content on the page. */
+.install-precondition {
+  font-size: var(--t-table);
+  color: var(--text-muted);
+  margin: 0;
+  min-height: 20px;
+}
+
+.install-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s4);
+}
+
+.install-query {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+/* The stale-cache control is a switch on a boundary, not a preference: it
+   decides whether a failed network read is allowed to answer at all. It sits
+   on its own row at narrow widths rather than shrinking the query field. */
+.install-stale-toggle {
+  flex: 0 0 auto;
+}
+
+/* The panel is focusable (tabindex="0") so the arrow keys have something to
+   move selection relative to, and it inherits LAYER 3's global focus ring like
+   every other control — there is deliberately no second focus rule here, which
+   would be one definition of "focused" that can disagree with the first. */
+
+.install-cache-banner,
+.install-error-banner {
+  margin: 0;
+}
+
+/* The row's own trailing mark. "Listed" is the only honest thing it can say:
+   a row in a registry catalogue has been listed BY the registry, and nothing
+   here has fetched, reviewed or installed it. */
+.registry-row-state {
+  flex: none;
+  font-size: var(--t-table);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.registry-source {
+  font-family: var(--mono);
+  font-size: var(--t-table);
+  color: var(--text-muted);
+}
+
+.registry-row .row-desc > span + span::before {
+  content: " · ";
+  color: var(--text-muted);
+}
+
 /* -------------------------------------------------------------- statusbar */
 
 .statusbar {

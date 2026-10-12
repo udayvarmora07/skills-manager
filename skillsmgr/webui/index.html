@@ -971,6 +971,100 @@
           <button class="btn btn-secondary" type="button" @click="loadInitialData">Try again</button>
         </section>
       </div>
+      <!-- 5.1 Install center. The nav destination existed and rendered
+           NOTHING: every piece of machinery (install.registryOp, runRegistry,
+           install.lastResult) was already there behind a dialog, so clicking
+           Install in the rail produced an empty pane under a search field
+           promising "Search registry sources…".
+
+           Three READ sources, and their preconditions are the BACKEND's, not
+           the form's: `search` rejects a query under two characters
+           (registry.py:773) and `browse`/`curated` need a project token
+           (`_require_token`). The strip therefore does not fire a request the
+           route is certain to reject — it says which precondition is unmet and
+           leaves the request to the reader.
+
+           `fetch` is deliberately absent. It does not read, it writes a
+           review, and 5.2 owns the stepper flow it belongs to. -->
+      <div v-else-if="view === 'install'" class="install-shell" aria-labelledby="install-view-title">
+        <div class="detail-head">
+          <div>
+            <p class="eyebrow">Registry</p>
+            <h1 id="install-view-title" class="install-title">Install</h1>
+          </div>
+          <p class="install-scope-note">Reads the skills.sh registry. Nothing on this page writes to disk — fetching a snapshot for review is a separate, deliberate action.</p>
+        </div>
+
+        <div class="tabs install-tabs" role="tablist" aria-label="Registry source" @keydown="onInstallTabKey">
+          <button v-for="s in installSources" :key="s.id" class="tab" type="button" role="tab" :data-install-tab="s.id" :id="'install-tab-' + s.id" :aria-controls="'install-panel-' + s.id" :aria-selected="install.registryOp === s.id ? 'true' : 'false'" :tabindex="install.registryOp === s.id ? 0 : -1" @click="selectInstallSource(s.id)">
+            {{ s.label }}
+          </button>
+        </div>
+
+        <div class="install-controls">
+          <div v-if="install.registryOp === 'search'" class="form-field install-query">
+            <label for="install-query">Search query</label>
+            <input id="install-query" name="install-query" v-model.trim="install.source" type="search" spellcheck="false" autocomplete="off" placeholder="owner/repo/skill" :aria-describedby="'install-precondition-' + install.registryOp">
+          </div>
+          <div v-else-if="install.registryOp === 'browse'" class="form-field install-query">
+            <label for="install-leaderboard-view">Leaderboard</label>
+            <select id="install-leaderboard-view" name="install-leaderboard-view" v-model="install.view">
+              <option value="all-time">All time</option>
+              <option value="trending">Trending</option>
+              <option value="hot">Hot</option>
+            </select>
+          </div>
+          <label class="check-row install-stale-toggle"><input type="checkbox" name="install-allow-stale" v-model="install.allowStale"> Serve an expired cache when the registry cannot be reached</label>
+        </div>
+
+        <p :id="'install-precondition-' + install.registryOp" class="install-precondition" role="status">
+          <span v-if="!installCanRead">{{ installMissingReason }}</span>
+          <span v-else-if="installMeta">{{ formatNumber(installRows.length) }} row{{ installRows.length === 1 ? '' : 's' }} from {{ installSource.label }} · {{ installCacheStateLabel }}<span v-if="installResultTruncated"> · more rows matched than were returned</span></span>
+          <span v-else-if="install.registryOp === 'browse'">The leaderboard needs a project token. Without one the registry answers with that message rather than a list.</span>
+          <span v-else-if="install.registryOp === 'curated'">The curated catalog needs a project token. Without one the registry answers with that message rather than a list.</span>
+          <span v-else>Type at least 2 characters, then read the catalog.</span>
+        </p>
+
+        <!-- The banner is about `stale`, not about a cache existing:
+             `fresh`, `refreshed` and `miss` all mean the answer came from the
+             registry, and only `stale` means it did not. -->
+        <div v-if="installShowingStaleCache" class="banner banner-warn install-cache-banner" role="status">
+          <app-icon name="circle-alert" aria-hidden="true"></app-icon>
+          <span>These rows came from the local registry cache. The registry could not be reached, so nothing here was confirmed against it just now. <button type="button" class="text-button" @click="runRegistry">Try again</button></span>
+        </div>
+
+        <div v-if="install.error" class="banner banner-error install-error-banner" role="alert">
+          <app-icon name="circle-alert" aria-hidden="true"></app-icon>
+          <span><strong>{{ installSource.label }} could not be read.</strong> {{ install.error }}</span>
+        </div>
+
+        <div :id="'install-panel-' + install.registryOp" class="install-panel" role="tabpanel" :aria-labelledby="'install-tab-' + install.registryOp" tabindex="0">
+          <p v-if="busy" class="hint">Reading {{ installSource.label }}…</p>
+          <div v-else-if="install.error" class="empty compact-empty">
+            <h3>No rows were returned</h3>
+            <p>The message above is the registry's own. No conclusion is drawn from a read that failed.</p>
+            <div class="empty-actions"><button class="btn btn-secondary" type="button" @click="runRegistry" :disabled="!installCanRead">Try again</button></div>
+          </div>
+          <div v-else-if="installRows.length === 0 && installMeta" class="empty compact-empty">
+            <h3>{{ installSource.label }} returned no rows</h3>
+            <p>The registry answered and the answer was empty. That is a result, not a failure.</p>
+          </div>
+          <ul v-else-if="installRows.length" class="registry-list">
+            <li v-for="row in installRows" :key="row.key" class="registry-row">
+              <div class="row-main">
+                <div class="row-name">{{ row.name }}</div>
+                <div class="row-desc"><span v-if="row.source" class="registry-source">{{ row.source }}</span><span v-if="row.installs !== null">{{ formatNumber(row.installs) }} install{{ row.installs === 1 ? '' : 's' }}</span><span v-if="!row.source && row.installs === null">The registry returned this row without a source or an install count.</span></div>
+              </div>
+              <span class="registry-row-state">Listed</span>
+            </li>
+          </ul>
+          <div v-else class="empty compact-empty">
+            <h3>Nothing has been read yet</h3>
+            <p>No registry request has been made from this page, so there is nothing to report. Reading a source contacts skills.sh.</p>
+            <div class="empty-actions"><button class="btn btn-primary" type="button" @click="runRegistry" :disabled="!installCanRead">Read {{ installSource.label }}</button></div>
+          </div>
+        </div>
+      </div>
       <div v-else-if="view === 'skills'" class="detail-inner">
         <button class="mobile-back" type="button" @click="closeMobileDetail">← Back to Library</button>
         <template v-if="loadingDetail">

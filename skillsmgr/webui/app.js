@@ -225,7 +225,7 @@ const appOptions = {
       scopeScanFailed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null },
+      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, error: null },
       theme: ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system",
       resolvedTheme: "light",
       systemTheme: "light",
@@ -952,6 +952,84 @@ const appOptions = {
     },
     systemThemeLabel() {
       return this.systemTheme === "dark" ? "dark" : "light";
+    },
+    /* --- 5.1 Install center -------------------------------------------------
+       Three READ sources over one `POST /api/install` route. All the machinery
+       existed before this view — `install.registryOp`, `runRegistry`,
+       `install.lastResult` — and none of it rendered, so a reader who clicked
+       Install in the rail saw the global search field promising "Search
+       registry sources…" above an empty pane.
+
+       **[NOTE] Rows are read DEFENSIVELY, because the payload is not ours.**
+       `RegistryClient.browse`/`curated` validate only that the response carries
+       a list under `data` (`_validate_listing`, registry.py:488); every field
+       INSIDE a row is whatever the registry chose to send, and `_validate_
+       public_search` copies the public route's objects through untouched. So a
+       row is normalised here, once, instead of six optional chains in the
+       template. */
+    installSources() {
+      return [
+        { id: "curated", label: "Curated" },
+        { id: "browse", label: "Browse" },
+        { id: "search", label: "Search" },
+      ];
+    },
+    installSource() {
+      return this.installSources.find((s) => s.id === this.install.registryOp) || this.installSources[0];
+    },
+    /* The precondition the BACKEND enforces, not the one the form would
+       prefer. `search` rejects anything under two characters
+       (registry.py:773) — which is why an empty search box does not fire a
+       request at all rather than firing one that is certain to fail. */
+    installQueryLength() {
+      return this.install.source.trim().length;
+    },
+    installCanRead() {
+      if (this.install.registryOp === "search") return this.installQueryLength >= 2;
+      return true;
+    },
+    installMissingReason() {
+      if (this.installCanRead) return "";
+      return `The registry search rejects a query shorter than 2 characters. ${this.installQueryLength} entered.`;
+    },
+    installMeta() {
+      const meta = this.install.lastResult && this.install.lastResult._registry;
+      return meta && typeof meta === "object" ? meta : null;
+    },
+    /* `cache_state` is one of miss|fresh|stale|refreshed (registry.py:75) and
+       the banner is about `stale`, which is the only one of the four that means
+       "this was not asked of the registry just now". Derived from the boolean
+       the backend sets rather than from the string, so an unknown state cannot
+       quietly read as fresh. */
+    installShowingStaleCache() {
+      const meta = this.installMeta;
+      return !!meta && meta.stale === true;
+    },
+    installCacheStateLabel() {
+      const meta = this.installMeta;
+      if (!meta) return "";
+      const state = String(meta.cache_state || "");
+      if (state === "stale") return "Cached copy";
+      if (state === "fresh") return "Cached copy, still inside its lifetime";
+      if (state === "refreshed") return "Refreshed from the registry";
+      if (state === "miss") return "Fetched from the registry";
+      return state;
+    },
+    installRows() {
+      const result = this.install.lastResult;
+      if (!result || !Array.isArray(result.data)) return [];
+      return result.data
+        .filter((row) => row && typeof row === "object")
+        .map((row, index) => ({
+          key: String(row.id || row.slug || row.name || index),
+          name: String(row.name || row.slug || row.id || "Unnamed entry"),
+          source: String(row.source || row.owner || ""),
+          installs: Number.isFinite(row.installs) ? row.installs : null,
+          url: String(row.url || ""),
+        }));
+    },
+    installResultTruncated() {
+      return !!(this.install.lastResult && this.install.lastResult.truncated);
     },
     registryInventory() {
       const source = this.allSkills.length ? this.allSkills : this.skills;
@@ -2277,6 +2355,7 @@ const appOptions = {
       this.install.review = null;
       this.install.lastResult = null;
       this.busy = true;
+      this.install.error = null;
       try {
         const op = this.install.registryOp;
         const payload = {
@@ -2304,6 +2383,12 @@ const appOptions = {
           this.toast(`Registry ${op} loaded (${(res.data || []).length} result groups).`, "ok");
         }
       } catch (e) {
+        // A toast is gone in four seconds, and a registry read that failed is
+        // the whole content of this page — so the pane states it, in the
+        // backend's own words rather than a sentence invented here (RULES #12).
+        // The toast stays: it names the failure at the moment it happens,
+        // wherever the reader happens to be.
+        this.install.error = e && e.message ? e.message : String(e);
         this.toast(e.message, "err");
       } finally {
         this.busy = false;
@@ -2600,6 +2685,40 @@ const appOptions = {
          not on selection — a reader who reads the document should not pay
          for a history table they never looked at. */
       if (id === "history") this.ensureDetailHistory();
+    },
+
+    /* 5.1. Switching source RETIRES the previous answer rather than letting it
+       sit under a tab that does not describe it. `install.lastResult` is the
+       only record of what the pane is showing, and a result from Curated left
+       up while the reader reads Browse is exactly the "stale sentence beside a
+       correct bar" pair 3.3 got wrong. The error goes with it. */
+    selectInstallSource(id) {
+      if (!this.installSources.some((s) => s.id === id)) return;
+      if (this.install.registryOp === id) return;
+      this.install.registryOp = id;
+      this.install.lastResult = null;
+      this.install.error = null;
+      /* No request is fired here on purpose: `browse`/`curated` without a token
+         and `search` under two characters are all requests the route is certain
+         to reject, and a page that fires them to find out is a page that
+         produces a red banner for doing nothing. */
+    },
+    onInstallTabKey(event) {
+      const ids = this.installSources.map((s) => s.id);
+      const at = ids.indexOf(this.install.registryOp);
+      let next = null;
+      if (event.key === "ArrowRight") next = (at + 1) % ids.length;
+      else if (event.key === "ArrowLeft") next = (at - 1 + ids.length) % ids.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = ids.length - 1;
+      /* Only these four keys are consumed — the same rule as the detail strip
+         above. `/` focuses search, Escape and the palette belong to their own
+         handlers, and a three-tab strip has nothing to close. */
+      if (next === null) return;
+      event.preventDefault();
+      this.selectInstallSource(ids[next]);
+      const el = event.currentTarget.querySelector('[data-install-tab="' + ids[next] + '"]');
+      if (el) el.focus();
     },
 
     onDetailTabKey(event) {
