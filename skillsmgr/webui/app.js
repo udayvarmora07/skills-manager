@@ -1020,6 +1020,17 @@ const appOptions = {
     installRunnerActionLabel() {
       return this.install.listOnly ? "List only" : "Run";
     },
+    /* The name of the workflow currently on the page, read from the SAME list the
+       strip renders rather than typed here. The fetch half's error banner opens
+       with it ("Fetch & trust did not complete."), and a hardcoded string there
+       would be a fourth place to rename a workflow — the exact drift 4.7 spent a
+       night removing from the batch dialog. Falls back to the first entry so it
+       is never empty: an error banner that says ". did not complete." is worse
+       than no banner. */
+    installWorkflowLabel() {
+      const current = this.installWorkflows.find((w) => w.id === this.install.mode);
+      return (current || this.installWorkflows[0]).label;
+    },
     installRunnerOutcome() {
       const result = this.installRunnerResult;
       if (!result) return "";
@@ -2901,6 +2912,12 @@ const appOptions = {
       if (!this.installWorkflows.some((w) => w.id === id)) return;
       if (this.install.mode === id) return;
       this.install.mode = id;
+      /* The error belongs to the workflow that failed. Carrying it across the
+         switch would name the WRONG workflow in the banner that opens with it
+         ("Registry did not complete" for a commit that failed under Fetch &
+         trust) — `selectInstallSource` has always cleared it for exactly this
+         reason, and `fetch` set `registryOp` without inheriting the habit. */
+      this.install.error = null;
       /* `fetch` is a registry operation but it is NOT one of the three READ
          sources the strip owns, so it rides on `registryOp` rather than
          becoming a fourth tab: `runRegistry` already switches on it and the
@@ -3045,7 +3062,7 @@ const appOptions = {
         this.scrollActiveViewTab();
         const heading = v === "skills"
           ? document.querySelector("#library-view-title")
-          : document.querySelector("#view-title, #overview-title");
+          : document.querySelector("#view-title, #overview-title, #install-view-title");
         if (heading) heading.focus();
       });
     },

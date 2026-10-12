@@ -990,7 +990,13 @@
         <div class="detail-head">
           <div>
             <p class="eyebrow">Registry</p>
-            <h1 id="install-view-title" class="install-title">Install</h1>
+            <!-- `tabindex="-1"` like every other view's heading: the palette
+                 navigates here from two rows (`nav-install` and
+                 `install-workflow`) and `switchView` focuses the heading it can
+                 find. This view's `<h1>` was the only one missing from that
+                 query, so both rows swapped the dialog for the view and left
+                 focus on an element that no longer existed. -->
+            <h1 id="install-view-title" class="install-title" tabindex="-1">Install</h1>
           </div>
           <p class="install-scope-note">{{ installScopeNote }}</p>
         </div>
@@ -1159,6 +1165,22 @@
             </template>
           </ol>
           <p class="fetch-step-detail">{{ installFetchDetail }}</p>
+
+          <!-- 5.2c. `commitRegistryReview` writes the failure into
+               `install.error` with a comment that promises the reader is told
+               "on the pane whose whole content is this transaction, rather than
+               in a toast that is gone in four seconds". The pane had no slot to
+               render it in — the error banner lived only inside the
+               `install.mode === 'registry'` template, so the only writer of
+               `install.error` on this half had nowhere to display it. A failed
+               commit is the one failure here the reader must not miss: the
+               review is still pending and still committable. A comment naming
+               a behaviour the markup does not implement is this repo's
+               recorded class, and this was the fifth instance. -->
+          <div v-if="install.error" class="banner banner-error install-error-banner" role="alert">
+            <app-icon name="circle-alert" aria-hidden="true"></app-icon>
+            <span><strong>{{ installWorkflowLabel }} did not complete.</strong> {{ install.error }}</span>
+          </div>
 
           <div v-if="install.committed" class="banner banner-success install-fetch-banner" role="status">
             <app-icon name="circle-check" aria-hidden="true"></app-icon>
