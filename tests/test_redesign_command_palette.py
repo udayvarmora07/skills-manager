@@ -294,12 +294,29 @@ watcher.call(ctx, QUERY);
 const drawn = computed.filteredCommandPaletteCommands.call(ctx).map(item => item.id);
 const best = computed.bestCommandPaletteIndex.call(ctx);
 const active = computed.commandPaletteActiveCommand.call(ctx);
+/* 5.2d: two Install rows for one destination. The property, not the absence
+   of one id — a tree that grew a DIFFERENT duplicate would satisfy the latter.
+   `action|args` is what `runCommand` dispatches on, so two rows with the same
+   key are two rows the reader cannot tell apart by what they do. */
+const allRows = computed.commandPaletteCommands.call(contextFor('zzz-no-such-command'));
+const seenAction = {};
+const dupes = [];
+for (const r of allRows) {
+  const key = r.action + '|' + JSON.stringify(r.args || []);
+  if (Object.prototype.hasOwnProperty.call(seenAction, key)) dupes.push([seenAction[key], r.id, key]);
+  else seenAction[key] = r.id;
+}
+const allIds = allRows.map(r => r.id);
 console.log(JSON.stringify({
   drawn: drawn,
   best: best,
   active: active ? active.id : null,
   installDrawn: computed.filteredCommandPaletteCommands.call(contextFor('install')).map(item => item.id),
+  runnerDrawn: computed.filteredCommandPaletteCommands.call(contextFor('bunx')).map(item => item.id),
   emptyBest: computed.bestCommandPaletteIndex.call(contextFor('')),
+  dupes: dupes,
+  duplicateIds: allIds.filter((id, i) => allIds.indexOf(id) !== i),
+  rowCount: allRows.length,
 }));
 """
 
@@ -377,7 +394,55 @@ class ActiveRowFollowsTheTypedName(unittest.TestCase):
         # that test.
         result = self._probe("library")
         self.assertEqual(result["drawn"], ["export-archive", "nav-library", "focus-search"])
-        self.assertEqual(result["installDrawn"], ["install-workflow", "nav-install"])
+        # `installDrawn` was `["install-workflow", "nav-install"]` until 5.2d
+        # deleted the second Install row. That it was drawn in THAT order was
+        # 2.2's Transfer-before-Navigation rule working correctly on a row that
+        # should not have existed, so the order assertion goes with the row.
+        # The property that keeps it deleted is the next test, not this line.
+        self.assertEqual(result["installDrawn"], ["nav-install"])
+
+    def test_no_two_palette_rows_do_the_same_thing(self):
+        """5.2d's rule: one destination is one row.
+
+        `install-workflow` survived 5.2b — which deleted the dialog it used to
+        name — as a second palette row whose action was a one-line alias of
+        `nav-install`'s. Two rows that land on the same page offer a choice the
+        reader cannot act on, and because 2.2 ranks Transfer before Navigation
+        the copy naming a surface the product no longer has was drawn ABOVE
+        the one naming the real destination, so Enter on "install" highlighted
+        it.
+
+        """
+        # Asserting the absence of the string `install-workflow` would pass on
+        # a tree that had grown a DIFFERENT duplicate, so this drives the real
+        # computed in the Node VM above and compares `(action, args)` across
+        # every row — the property, which is what the fix actually was.
+        result = self._probe("")
+        self.assertEqual(result["dupes"], [],
+                         "two palette rows run the same action with the same "
+                         "arguments — one destination, one row (5.2d)")
+        self.assertEqual(result["duplicateIds"], [],
+                         "a palette row id appears twice")
+        # 0 is the number that can fail here: deleting every row satisfies
+        # "no duplicates" and would prove nothing at all.
+        self.assertGreater(result["rowCount"], 20,
+                           "the palette list was empty — nothing was compared")
+
+    def test_the_runner_keywords_the_deleted_row_carried_still_reach_install(self):
+        """The other half, and the one that makes the collapse honest.
+
+        `install-workflow`'s keywords were `install npx pnpm bunx registry`.
+        Deleting the row without moving them would make "bunx" — the word a
+        reader who wants the installer half actually types — match nothing,
+        which turns a tidied palette into a less reachable one. The words moved
+        to `nav-install`; this drives the filter with one of them.
+        """
+        for term in ("npx", "bunx", "pnpm", "runner"):
+            with self.subTest(term=term):
+                drawn = self._probe(term)["drawn"]
+                self.assertIn("nav-install", drawn,
+                              f"{term!r} no longer reaches the Install view "
+                              f"(5.2d dropped the runner keywords): {drawn}")
 
     def test_an_empty_query_activates_the_first_row(self):
         # No query means no name was typed, so row 0 is the whole answer.

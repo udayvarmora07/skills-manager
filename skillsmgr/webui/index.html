@@ -990,12 +990,12 @@
         <div class="detail-head">
           <div>
             <p class="eyebrow">Registry</p>
-            <!-- `tabindex="-1"` like every other view's heading: the palette
-                 navigates here from two rows (`nav-install` and
-                 `install-workflow`) and `switchView` focuses the heading it can
-                 find. This view's `<h1>` was the only one missing from that
-                 query, so both rows swapped the dialog for the view and left
-                 focus on an element that no longer existed. -->
+            <!-- `tabindex="-1"` like every other view's heading: `switchView`
+                 focuses the heading it can find, and the palette navigates here
+                 from `nav-install`. This view's `<h1>` was the only one missing
+                 from that query, so the palette closed and left keyboard focus
+                 on the body — a dead end a Tab from re-enters the rail. 5.2d
+                 fixed the twin problem, the second row for one destination. -->
             <h1 id="install-view-title" class="install-title" tabindex="-1">Install</h1>
           </div>
           <p class="install-scope-note">{{ installScopeNote }}</p>
@@ -1054,7 +1054,7 @@
 
         <div v-if="install.error" class="banner banner-error install-error-banner" role="alert">
           <app-icon name="circle-alert" aria-hidden="true"></app-icon>
-          <span><strong>{{ installSource.label }} could not be read.</strong> {{ install.error }}</span>
+          <span><strong>{{ installSource.label }} could not be read</strong> &mdash; {{ install.error }}</span>
         </div>
 
         <div :id="'install-panel-' + install.registryOp" class="install-panel" role="tabpanel" :aria-labelledby="'install-tab-' + install.registryOp" tabindex="0">
@@ -1179,7 +1179,7 @@
                recorded class, and this was the fifth instance. -->
           <div v-if="install.error" class="banner banner-error install-error-banner" role="alert">
             <app-icon name="circle-alert" aria-hidden="true"></app-icon>
-            <span><strong>{{ installWorkflowLabel }} did not complete.</strong> {{ install.error }}</span>
+            <span><strong>{{ installWorkflowLabel }} did not complete</strong> &mdash; {{ install.error }}</span>
           </div>
 
           <div v-if="install.committed" class="banner banner-success install-fetch-banner" role="status">
@@ -2346,7 +2346,7 @@
        moved the form to the Install view and this copy stayed behind, which
        is the only reason the Install button and the palette entry still
        opened a dialog. There is ONE form now and ONE door; `openInstall()`
-       routes to the view. -->
+       routes to the view, and since 5.2d the palette has ONE row for it. -->
 
   <!-- Previewable batch plan -->
   <div v-if="modals.batch" class="overlay" data-modal="batch" @mousedown.self="closeModal('batch')">

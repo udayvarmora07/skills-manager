@@ -271,9 +271,38 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('class="skip-link" href="#main-workspace"', html)
         self.assertIn('id="main-workspace"', html)
         self.assertIn('id="overview-title" tabindex="-1"', html)
-        self.assertIn('document.querySelector("#view-title, #overview-title")', source)
         self.assertIn(".skip-link:focus", css)
         self.assertIn("prefers-reduced-motion", css)
+        # 5.2d. This used to pin the LITERAL
+        # `querySelector("#view-title, #overview-title")`, which is a snapshot
+        # of one moment. 5.2c added `#install-view-title` to the real query —
+        # correctly, because the palette must land focus on the view it
+        # navigates to — and left this assertion behind, so the branch has been
+        # red since `fe4ef19`. It is the recorded failure mode: a fix that is
+        # right and an assertion that counted things.
+        #
+        # The property is the one the reader needs: EVERY view heading that
+        # carries `tabindex="-1"` must be in the query, so no destination can
+        # be navigated to by the palette and silently drop focus on the body.
+        # Deriving the ids from the markup rather than listing them means the
+        # next view added has to be added here too, by being absent.
+        # `switchView` picks the heading in a TERNARY: Library names its own
+        # (`#library-view-title`, which 4.4 gave), every other destination
+        # shares the second query. Both halves are read, because a heading that
+        # only one of them names is still a heading focus never reaches. The
+        # search is scoped to `switchView` so a `querySelector` elsewhere in
+        # the file cannot stand in for it.
+        start = source.index("    switchView(v) {")
+        end = source.index("    scrollActiveViewTab() {", start)
+        switch_view = source[start:end]
+        calls = re.findall(r'querySelector\(\s*"([^"]*#[\w-][^"]*)"', switch_view)
+        self.assertTrue(calls, "switchView must focus the view heading with a querySelector")
+        focused_ids = {i for call in calls for i in re.findall(r'#([\w-]+)', call)}
+        heading_ids = set(re.findall(r'<h1[^>]*\bid="([\w-]+)"[^>]*tabindex="-1"', html))
+        self.assertTrue(heading_ids, "no focusable view heading found in the markup")
+        missing = sorted(heading_ids - focused_ids)
+        self.assertEqual(missing, [],
+                         f"switchView does not focus these view headings: {missing}")
 
     def test_navigation_groups_and_mobile_actions_keep_orientation(self):
         html = _read(INDEX_HTML)
@@ -1449,27 +1478,35 @@ function palette(context) {
 }
 const base = {view:'overview', selectedName:null, selected:null, selectedDisabled:false, commandPaletteQuery:'install'};
 const overview = palette(base).map(item => item.id);
+const runnerBase = Object.assign({}, base, {commandPaletteQuery:'bunx'});
+const runner = palette(runnerBase).map(item => item.id);
 const selectedContext = {view:'skills', selectedName:'alpha', selected:{name:'alpha', disabled:false}, selectedDisabled:false, commandPaletteQuery:'disable'};
 const selected = palette(selectedContext).map(item => item.id);
-console.log(JSON.stringify({overview, selected}));
+console.log(JSON.stringify({overview, runner, selected}));
 '''
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
         value = json.loads(result.stdout)
-        # Task 2.2 changed this ORDER deliberately and the reason is in the
-        # assertion, not only in a comment: `nav-install` is Navigation and
-        # `install-workflow` is Transfer, and 2.2's group order puts Transfer
-        # FIRST — what applies to what you are looking at, then the things you
-        # bring in and take out, then Navigation last because it is the one
-        # group you can always reach by clicking the rail. The old expectation
-        # was declaration order, which is what the flat list used to render.
+        # Task 5.2d DELETED the second Install row; this assertion is the place
+        # that change is recorded, so read it before "restoring" the row.
         #
-        # This test's real subject is FILTERING (both commands match "install",
-        # and both must survive), so it asserts the set and the grouping rather
-        # than a sequence that a design decision is allowed to move.
-        self.assertEqual(sorted(value["overview"]), ["install-workflow", "nav-install"],
-                         "both install commands must match the query 'install'")
-        self.assertEqual(value["overview"], ["install-workflow", "nav-install"],
-                         "Transfer ranks before Navigation (see COMMAND_GROUP_ORDER)")
+        # There used to be two: `install-workflow` ("Install via a runner or
+        # registry", Transfer) and `nav-install` (Navigation), and the test
+        # below pinned BOTH matching "install" and Transfer ranking first. That
+        # pairing was true and meaningless: since 5.2b deleted the install
+        # dialog, `install-workflow`'s action was `openInstall`, which is a
+        # one-line alias of `openInstallCenter()` — `switchView("install")`.
+        # Two rows for one page is a choice the reader cannot act on, and 2.2's
+        # group order drew the copy that names a surface the product no longer
+        # has ABOVE the copy that names the real one.
+        #
+        # The runner keywords the deleted row carried (`npx pnpm bunx`) are now
+        # on `nav-install`, so the CONTROL below is the half that can fail:
+        # collapsing the row is only honest if the words that found it still do.
+        self.assertEqual(value["overview"], ["nav-install"],
+                         "one Install destination, one palette row (5.2d)")
+        self.assertEqual(value["runner"], ["nav-install"],
+                         "the runner keywords the deleted row carried must "
+                         "still reach the Install view")
         self.assertEqual(value["selected"], ["selected-toggle"])
 
     def test_safe_local_update_has_exact_target_review_and_explicit_apply(self):

@@ -728,14 +728,22 @@ const appOptions = {
         { id: "nav-overview", label: "Overview", title: "Open Overview", category: "Navigation", keywords: "dashboard home", action: "switchView", args: ["overview"], focusDestination: true },
         { id: "nav-library", label: "Library", title: "Open Library", category: "Navigation", keywords: "skills browse", action: "switchView", args: ["skills"], focusDestination: true },
         { id: "nav-profiles", label: "Profiles", title: "Open Profiles", category: "Navigation", keywords: "catalog groups", action: "switchView", args: ["profiles"], focusDestination: true },
-        { id: "nav-install", label: "Install", title: "Open Install", category: "Navigation", keywords: "workflow registry", action: "switchView", args: ["install"], focusDestination: true },
+        /* 5.2d: the runner keywords live here now. There was a second row,
+           `install-workflow` ("Install via a runner or registry", Transfer),
+           which since 5.2b deleted the dialog has done exactly what this one
+           does — navigate to this page. Two rows for one destination means the
+           palette offers the reader a choice that does not exist, and because
+           2.2 ranks Transfer first the *Transfer* copy was drawn above the
+           Navigation one, so Enter on "install" highlighted a row whose label
+           names a thing the product no longer has a separate surface for.
+           `openInstall` is the Overview button's name, not a second route. */
+        { id: "nav-install", label: "Install", title: "Open Install", category: "Navigation", keywords: "workflow registry runner npx pnpm bunx", action: "switchView", args: ["install"], focusDestination: true },
         { id: "nav-recovery", label: "Recovery", title: "Open Recovery", category: "Navigation", keywords: "trash restore backups", action: "switchView", args: ["recovery"], focusDestination: true },
         { id: "nav-workspaces", label: "Workspaces", title: "Open Workspaces", category: "Navigation", keywords: "projects adapters", action: "switchView", args: ["workspaces"], focusDestination: true },
         { id: "nav-quality", label: "Quality", title: "Open Quality", category: "Navigation", keywords: "evidence health", action: "switchView", args: ["quality"], focusDestination: true },
         { id: "nav-settings", label: "Settings", title: "Open Settings", category: "Navigation", keywords: "preferences accessibility theme", action: "switchView", args: ["settings"], focusDestination: true },
         { id: "create-skill", label: "Create skill", title: "Create a new skill", category: "Skill actions", keywords: "new add author", action: "openCreate", focusDestination: true },
         { id: "add-folder", label: "Add folder", title: "Add skills from a folder", category: "Skill actions", keywords: "import directory upload", action: "openAdd" },
-        { id: "install-workflow", label: "Install workflow", title: "Install via a runner or registry", category: "Transfer", keywords: "install npx pnpm bunx registry", action: "openInstall", focusDestination: true },
         { id: "import-archive", label: "Import archive", title: "Import a skills archive", category: "Transfer", keywords: "archive tar zip migration", action: "openImport", focusDestination: true },
         { id: "export-archive", label: "Export archive", title: "Export the current skill library", category: "Transfer", keywords: "download backup archive", action: "exportArchive" },
         { id: "full-export", label: "Full migration export", title: "Export skills, trash, and templates", category: "Transfer", keywords: "full backup migration archive", action: "exportArchive", args: [true] },
@@ -3761,11 +3769,14 @@ const appOptions = {
         remove: () => this.selectedName && this.confirmRemove(this.selected),
         sync: this.openSync,
         update: this.openUpdate,
-        /* 5.2b — kept, and now honest: both palette entries land on the same
-           page, which 2.2's grouped palette deliberately shows as two named
-           routes ("Install" under Navigation, "Install workflow" under
-           Transfer). They used to be two DOORS; there is one now. */
-        install: this.openInstall,
+        /* 5.2d — `install: this.openInstall` is GONE, deliberately. Every
+           command's `action` is looked up in this map, and after 5.2d no
+           command names `openInstall` (the palette's Install row is
+           `switchView`, the Overview button calls the method directly), so the
+           entry was a key with no writer — the "declared and never read" class
+           this repo has now found five times. 5.2b kept it and wrote a comment
+           claiming two routes were deliberate; there has been one door since
+           the dialog went. */
         help: () => this.openModal("help", {}),
         import: this.openImport,
         export: this.exportArchive,
@@ -3787,8 +3798,10 @@ const appOptions = {
        of the installer's form (operation, view, source, page size, stale
        cache, preview, review-and-trust) over the same `install.*` state. The
        view is the form now, so `openInstall` navigates there instead: the
-       Overview button, the rail and the palette entry all land on the same
-       page, and there is no second form left to drift. */
+       Overview button and the rail both land on the same page, and there is no
+       second form left to drift. 5.2d: the palette's second Install row went
+       too, so `openInstall` is called from markup only — it is not a palette
+       action and there is no dispatch-map entry for it. */
     openInstall() {
       this.openInstallCenter();
     },

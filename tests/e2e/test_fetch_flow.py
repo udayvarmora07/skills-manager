@@ -31,10 +31,14 @@ What is measured here that no source assertion could measure:
    already documents why a helper that does not scroll fails every long form
    at 390px.
 4. **The palette leaves focus on the heading it navigated to.** `nav-install`
-   and `install-workflow` are two rows for one page since 5.2b, and until this
+   and `install-workflow` were two rows for one page since 5.2b, and until this
    run NEITHER moved focus: the install `<h1>` was the only view heading missing
    from `switchView`'s focus query, so both rows destroyed the palette and left
-   keyboard focus on the document body.
+   keyboard focus on the document body. **5.2d deleted the second row** (its
+   action was `openInstall`, a one-line alias of `switchView("install")`), and
+   the test below now drives the one row that remains — through both the words
+   that used to find the deleted one (`bunx`, its runner keywords) and the
+   plain word.
 
 The sandbox has no network, so the two responses a real fetch would return are
 seeded the way `test_install_view.py` seeds a registry listing: `install` is a
@@ -653,16 +657,22 @@ class FetchFlowTests(unittest.TestCase):
     # -- 5. the palette must leave focus where it navigated --------------------
 
     def test_both_palette_rows_land_on_this_page_with_focus_on_its_heading(self):
-        """`nav-install` (Navigation) and `install-workflow` (Transfer) have both
-        pointed at this page since 5.2b, and until this run NEITHER moved focus:
-        the install `<h1>` was the only view heading absent from `switchView`'s
-        focus query, so the palette closed and keyboard focus sat on the body.
-        That is a keyboard reader's dead end — Tab from there re-enters the rail.
+        """5.2d: there is ONE Install row now, and it must land focus.
+
+        Until 5.2c the install `<h1>` was the only view heading absent from
+        `switchView`'s focus query, so the palette closed and keyboard focus
+        sat on the body — a keyboard reader's dead end, since Tab from there
+        re-enters the rail. There were then TWO rows for this page (the defect
+        5.2d removed: `install-workflow`'s action was `openInstall`, a one-line
+        alias of `switchView("install")`), and the loop drives BOTH ways of
+        typing: the runner keywords the deleted row carried, and the plain word.
+        Deleting a row and losing its keywords with it would make "bunx" — what
+        a reader who wants the installer half actually types — match nothing.
 
         Driven through the real palette, not `switchView` directly, because the
         defect was in the route the palette takes.
         """
-        for term in ("install", "Install workflow"):
+        for term in ("install", "bunx"):
             with self.subTest(term=term):
                 self._page.evaluate("() => window.__skillsManagerApp.switchView('overview')")
                 self._page.wait_for_selector(".overview-shell", timeout=10000)
@@ -670,15 +680,17 @@ class FetchFlowTests(unittest.TestCase):
                 self._page.wait_for_selector("[data-modal='commands']", timeout=10000)
                 self._page.fill("#command-palette-input", term)
                 self._page.wait_for_timeout(150)
-                # The row that will actually run must be one of the two, not
-                # whichever happened to be row 0 in a grouped palette.
-                row = self._page.evaluate(
-                    """() => { const i = document.getElementById('command-palette-input');
-                        const id = i && i.getAttribute('aria-activedescendant');
-                        return id ? id.replace(/^command-option-/, '') : null; }"""
+                # Exactly one Install row, and Enter must run it. A grouped
+                # palette draws Transfer before Navigation, so this is also the
+                # assertion that the deleted duplicate is really gone.
+                rows = self._page.eval_on_selector_all(
+                    "[data-modal='commands'] [role='option']",
+                    "els => els.map(e => e.id.replace(/^command-option-/, ''))",
                 )
-                self.assertIn(row, ("nav-install", "install-workflow"),
-                              f"Enter would run {row!r}, not an Install row")
+                install_rows = [r for r in rows if r.startswith("nav-install")
+                                or r.startswith("install-workflow")]
+                self.assertEqual(install_rows, ["nav-install"],
+                                 f"{term!r} matched Install rows {install_rows}")
                 self._page.keyboard.press("Enter")
                 self._page.wait_for_selector(".install-shell", timeout=10000)
                 focused = self._page.evaluate(
