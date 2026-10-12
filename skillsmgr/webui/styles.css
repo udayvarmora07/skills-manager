@@ -677,9 +677,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .diff-del .diff-sign { color: var(--err); }
 .diff-hunk { background: var(--surface-2); color: var(--text-muted); padding: var(--s1) var(--s3); }
 
-@media (max-width: 640px) {
-  .panel { padding: 8px; }
-}
 /* ---------------------------------------------------------------- topbar */
 
 .topbar {
