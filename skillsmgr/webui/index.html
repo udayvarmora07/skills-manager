@@ -1533,14 +1533,25 @@
   <!-- ============================================================ modals -->
 
   <!-- New / Edit skill -->
-  <div v-if="modals.skill" class="overlay" data-modal="skill" @mousedown.self="closeModal('skill')">
+  <div v-if="modals.skill" class="overlay" data-modal="skill" @mousedown.self="requestCloseSkill">
     <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="skill-modal-title" tabindex="-1">
       <span id="skill-modal-title" class="sr-only">{{ modals.skill.mode === 'create' ? 'New skill' : 'Edit skill' }}</span>
       <div class="modal-head">
         <h2>{{ modals.skill.mode === 'create' ? 'New skill' : 'Edit ' + modals.skill.mode }}</h2>
-        <button class="modal-close" aria-label="Close" @click="closeModal('skill')"><app-icon name="x"></app-icon></button>
+        <button class="modal-close" aria-label="Close" @click="requestCloseSkill"><app-icon name="x"></app-icon></button>
       </div>
       <div class="modal-body">
+        <div class="banner banner-warn" role="alert" v-if="modals.skill.confirmingClose">
+          <app-icon name="circle-alert" class="banner-icon-warn"></app-icon>
+          <div class="banner-body">
+            <p class="banner-title">Discard your changes?</p>
+            <p>{{ modals.skill.mode === 'create' ? 'This skill has not been created yet. Closing discards everything you typed.' : 'Your edits to ' + modals.skill.mode + ' have not been saved. Closing discards them.' }}</p>
+            <div class="banner-actions">
+              <button class="btn btn-secondary" @click="modals.skill.confirmingClose = false">Keep editing</button>
+              <button class="btn btn-danger-ghost" @click="closeModal('skill')">Discard</button>
+            </div>
+          </div>
+        </div>
         <div class="form-grid">
           <div class="form-field" :class="{ 'has-error': !!modals.skill.errors.name }">
             <label for="f-name">Name</label>
@@ -1600,7 +1611,7 @@
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-secondary" @click="closeModal('skill')">Cancel</button>
+        <button class="btn btn-secondary" @click="requestCloseSkill">Cancel</button>
         <button class="btn btn-primary" :disabled="busy" @click="saveSkill">
           <app-icon name="loader-circle" v-if="busy"></app-icon>
           {{ modals.skill.mode === 'create' ? 'Create skill' : 'Save changes' }}

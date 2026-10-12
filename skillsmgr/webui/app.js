@@ -3161,6 +3161,7 @@ const appOptions = {
         if (this.scopeMenuOpen) this.closeScopeMenu(true);
         else if (this.menuOpen) this.closeActionsMenu(true);
         else if (this.activeModal === "update") this.requestCloseUpdate();
+        else if (this.activeModal === "skill") this.skillEscape();
         else if (this.activeModal) this.closeModal(this.activeModal);
         else if (this.drawerOpen) this.closeDrawer();
       }
@@ -3220,13 +3221,16 @@ const appOptions = {
         mode: "create",
         form: { name: "", description: "", category: "", version: "", license: "", compatibility: "", allowed_tools: "", body: "", scope: defScope },
         errors: {},
+        confirmingClose: false,
       };
+      this.captureSkillBaseline();
       nextTick(() => { const el = document.getElementById("f-name"); (el || this.modalElement())?.focus(); });
     },
 
     async openEdit() {
       if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
+      const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
       this.modals.skill = {
         mode: this.selectedName,
         form: {
@@ -3238,11 +3242,18 @@ const appOptions = {
           compatibility: this.selected.compatibility || "",
           allowed_tools: this.selected.allowed_tools || "",
           body: this.selected.body || "",
+          // The Scope select is rendered for both modes and `saveSkill` falls
+          // back to the selected skill's scope, so leaving it undefined made the
+          // control render *blank* in Edit — a scope the reader cannot see and a
+          // second vocabulary for "where this lives" that disagreed with the
+          // one the Library list already used.
+          scope: sc,
         },
         errors: {},
+        confirmingClose: false,
       };
+      this.captureSkillBaseline();
       try {
-        const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
         const qp = "?scope=" + encodeURIComponent(sc);
         const text = await apiText("/api/skills/" + encodeURIComponent(this.selectedName) + "/raw" + qp);
         const fm = parseFrontmatter(text);
@@ -3250,12 +3261,81 @@ const appOptions = {
         if (fm.compatibility && !this.modals.skill.form.compatibility) this.modals.skill.form.compatibility = fm.compatibility;
         if (fm.allowed_tools && !this.modals.skill.form.allowed_tools) this.modals.skill.form.allowed_tools = fm.allowed_tools;
       } catch (e) { /* optional */ }
+      // Re-baseline once the back-fill has settled -- see the note below.
+      this.captureSkillBaseline();
+    },
+
+    /* ------------------------------------------------ unsaved changes (4.5)
+
+    The editor could be dismissed four ways -- Cancel, the close glyph, a
+    mousedown on the scrim, and Escape -- and all four were a bare
+    `this.modals.skill = null`. A reader who spent twenty minutes in a body
+    and mis-clicked the scrim lost all of it, with no error and no undo.
+
+    This is the update review's shape, not a second invention:
+    `requestCloseUpdate` + `modals.update.confirmingClose` already exists
+    (`requestCloseUpdate`), so "you are about to drop something" has one
+    vocabulary in the product instead of two.
+
+    **The baseline is captured after `openEdit`'s `/raw` fetch settles.** That
+    fetch back-fills `compatibility` and `allowed_tools` from the document on
+    disk, so a snapshot taken at open would report the *application's own*
+    edit as the reader's typing and ask them to discard a change they never
+    made. The re-capture at the end of `openEdit` is that fix; capturing at
+    open as well keeps a close-during-fetch honest rather than unguarded. */
+    skillBaseline(form) {
+      return ["name", "description", "category", "version", "license",
+        "compatibility", "allowed_tools", "body", "scope"]
+        .map((k) => String((form && form[k]) || ""))
+        .join("\u0000");
+    },
+
+    captureSkillBaseline() {
+      const m = this.modals.skill;
+      if (m) m.baseline = this.skillBaseline(m.form);
+    },
+
+    skillFormDirty() {
+      const m = this.modals.skill;
+      if (!m || m.baseline == null) return false;
+      return this.skillBaseline(m.form) !== m.baseline;
+    },
+
+    requestCloseSkill() {
+      const m = this.modals.skill;
+      if (!m) return;
+      if (this.skillFormDirty()) {
+        m.confirmingClose = true;
+        /* The band is the first child of the scrolling `.modal-body`, and a
+           reader who has scrolled down to the body textarea -- the single
+           longest field in the form -- is exactly the one who pressed Escape
+           or mis-clicked the scrim. Without this they are asked a question
+           that rendered off-screen, which reads as "nothing happened". */
+        this.$nextTick(() => {
+          const band = document.querySelector('[data-modal="skill"] .banner');
+          if (band && band.scrollIntoView) band.scrollIntoView({ block: "nearest" });
+        });
+        return;
+      }
+      this.closeModal("skill");
+    },
+
+    /* Escape while the confirmation is up clears the confirmation and leaves
+       the reader in the editor. Pressing it again re-asks -- which is the
+       point: a second Escape that destroyed the work would reintroduce the
+       exact failure this task removes. */
+    skillEscape() {
+      const m = this.modals.skill;
+      if (!m) return;
+      if (m.confirmingClose) { m.confirmingClose = false; return; }
+      this.requestCloseSkill();
     },
 
     async saveSkill() {
       const m = this.modals.skill;
       if (!m) return;
       m.errors = {};
+      m.confirmingClose = false;
       if (!m.form.name) m.errors.name = "Name is required.";
       if (!m.form.description) m.errors.description = "Description is required.";
       if (Object.keys(m.errors).length) {
