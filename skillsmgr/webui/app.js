@@ -3221,6 +3221,10 @@ const appOptions = {
         mode: "create",
         form: { name: "", description: "", category: "", version: "", license: "", compatibility: "", allowed_tools: "", body: "", scope: defScope },
         errors: {},
+        /* 4.5c — fields the reader has actually typed into. "Required" is only
+           said about a field they filled and emptied; tabbing through a form
+           you have not started must not scold you for it. */
+        touched: {},
         confirmingClose: false,
       };
       this.captureSkillBaseline();
@@ -3250,6 +3254,10 @@ const appOptions = {
           scope: sc,
         },
         errors: {},
+        /* 4.5c — fields the reader has actually typed into. "Required" is only
+           said about a field they filled and emptied; tabbing through a form
+           you have not started must not scold you for it. */
+        touched: {},
         confirmingClose: false,
       };
       this.captureSkillBaseline();
@@ -3331,13 +3339,81 @@ const appOptions = {
       this.requestCloseSkill();
     },
 
+    /* 4.5c — ONE validator, read by both the blur handler and `saveSkill`.
+       Two copies of a rule is how a form starts accepting what it then
+       rejects; extracting it is what lets a test assert the two paths agree.
+
+       The name rule is the SERVER's, not a taste decision: the catalog
+       validator is `^[a-z0-9]+(-[a-z0-9]+)*$` over 1-64 characters, and this
+       field's hint has always stated it in prose while nothing checked it —
+       so the reader met the rule as a 400 and a toast. Saying it on blur is
+       the same fact, earlier. In edit mode the name input is `:readonly`, so
+       only the "required" branch applies there: an error the reader cannot act
+       on is a guard that teaches them to dismiss errors. */
+    skillFieldError(field) {
+      const m = this.modals.skill;
+      if (!m) return "";
+      const v = (m.form[field] || "").trim();
+      if (field === "name") {
+        if (!v) return "Name is required.";
+        if (m.mode !== "create") return "";
+        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v)) {
+          /* A VERDICT, not the rule again. The field's hint states the rule and
+             sits permanently 12px above this message; the first version of
+             this repeated it in different words ("hyphens" above, "single
+             hyphens only" below), so the dialog described one rule twice in
+             two vocabularies on adjacent lines. Found by reading a capture,
+             not by any assertion — every test passed. */
+          return "Not a valid name.";
+        }
+        if (v.length > 64) return "Name is 1-64 characters; this one is " + v.length + ".";
+      }
+      if (field === "description" && !v) return "Description is required.";
+      return "";
+    },
+
+    /* Only speaks for a field the reader has finished with, and only says
+       "required" about a field they have actually typed into. Measured: the
+       first version of this shipped a scolding for every empty field the
+       reader tabbed past on the way to the next one, which is 4.5 slice A's
+       failure mode pointed at a field instead of a dialog — the learned
+       response to a form that talks back spuriously is to dismiss messages
+       without reading, and that is how the work it protects gets lost.
+
+       A FORMAT or LENGTH message is different in kind: it implies something was
+       typed, so it needs no marker. */
+    noteSkillFieldEdited(field) {
+      const m = this.modals.skill;
+      if (!m) return;
+      if (!m.touched) m.touched = {};
+      m.touched[field] = true;
+    },
+
+    validateSkillField(field) {
+      const m = this.modals.skill;
+      if (!m) return;
+      const touched = !!(m.touched && m.touched[field]);
+      const raw = (m.form[field] || "").trim();
+      const err = (!touched && raw === "" && /is required\.$/.test(this.skillFieldError(field)))
+        ? ""
+        : this.skillFieldError(field);
+      const next = Object.assign({}, m.errors);
+      if (err) next[field] = err; else delete next[field];
+      m.errors = next;
+    },
+
     async saveSkill() {
       const m = this.modals.skill;
       if (!m) return;
-      m.errors = {};
       m.confirmingClose = false;
-      if (!m.form.name) m.errors.name = "Name is required.";
-      if (!m.form.description) m.errors.description = "Description is required.";
+      /* Recomputed from the shared validator rather than reset first, so a
+         field the reader was already told about keeps its message instead of
+         blinking out and back on the frame the button is pressed. */
+      m.errors = {};
+      for (const f of ["name", "description"]) {
+        const err = this.skillFieldError(f);
+        if (err) m.errors[f] = err;
+      }
       if (Object.keys(m.errors).length) {
         this.$nextTick(() => {
           const firstInvalid = document.querySelector('[data-modal="skill"] .form-field.has-error input, [data-modal="skill"] .form-field.has-error textarea, [data-modal="skill"] .form-field.has-error select');

@@ -1556,7 +1556,7 @@
           <div class="form-field" :class="{ 'has-error': !!modals.skill.errors.name }">
             <label for="f-name">Name</label>
             <input id="f-name" name="skill-name" v-model.trim="modals.skill.form.name" placeholder="my-skill-name"
-                   :readonly="modals.skill.mode !== 'create'" spellcheck="false"
+                   :readonly="modals.skill.mode !== 'create'" spellcheck="false" @input="noteSkillFieldEdited('name')" @blur="validateSkillField('name')"
                    :aria-invalid="modals.skill.errors.name ? 'true' : undefined"
                    :aria-describedby="modals.skill.mode === 'create' ? (modals.skill.errors.name ? 'f-name-hint f-name-error' : 'f-name-hint') : (modals.skill.errors.name ? 'f-name-error' : undefined)">
             <span id="f-name-hint" class="hint" v-if="modals.skill.mode === 'create'">Lowercase letters, digits, hyphens. Becomes the folder name.</span>
@@ -1565,6 +1565,7 @@
           <div class="form-field" :class="{ 'has-error': !!modals.skill.errors.description }">
             <label for="f-desc">Description</label>
             <input id="f-desc" name="skill-description" v-model.trim="modals.skill.form.description" placeholder="What this skill does, in one sentence"
+                   @input="noteSkillFieldEdited('description')" @blur="validateSkillField('description')"
                    :aria-invalid="modals.skill.errors.description ? 'true' : undefined"
                    :aria-describedby="modals.skill.errors.description ? 'f-description-error' : undefined">
             <span id="f-description-error" v-if="modals.skill.errors.description" class="field-error">{{ modals.skill.errors.description }}</span>
@@ -1589,8 +1590,9 @@
                 <input id="f-comp" name="skill-compatibility" v-model.trim="modals.skill.form.compatibility" placeholder="e.g. opencode >= 1.0" spellcheck="false">
               </div>
               <div class="form-field full">
-                <label for="f-tools">Allowed tools (comma-separated)</label>
+                <label for="f-tools">Allowed tools</label>
                 <input id="f-tools" name="skill-allowed-tools" v-model.trim="modals.skill.form.allowed_tools" placeholder="bash, read" spellcheck="false">
+                <span class="hint">Comma-separated.</span>
               </div>
             </div>
           </details>
@@ -1603,8 +1605,8 @@
             <span class="hint">Where this skill lives. Sync copies it to other agents.</span>
           </div>
           <div class="form-field full">
-            <label for="f-body">Body (SKILL.md content)</label>
-            <span id="f-body-hint" class="hint">Markdown instructions for the skill. The preview updates as you type.</span>
+            <label for="f-body">Body</label>
+            <span id="f-body-hint" class="hint">Markdown instructions for the skill, written to SKILL.md. The preview updates as you type.</span>
             <div class="body-split">
               <textarea id="f-body" name="skill-body" v-model="modals.skill.form.body" rows="10" spellcheck="false" aria-describedby="f-body-hint"></textarea>
               <div class="markdown-preview" role="region" aria-label="Markdown preview" tabindex="0" v-html="renderMarkdown(modals.skill.form.body)"></div>

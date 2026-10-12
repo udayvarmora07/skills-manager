@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Changed
 
+- **The editor waits for Save to tell you a field is empty, and never told you
+  a name was invalid at all.** Required-field messages appeared only after
+  `saveSkill`, and the name field's own hint stated the catalog's rule —
+  lowercase letters, digits and single hyphens, 1–64 characters — in prose while
+  nothing checked it, so the reader met that rule as a 400 and a toast. There
+  is now one validator, read by both the blur handler and `saveSkill`, so the
+  two paths cannot drift apart. "Required" is said only about a field the reader
+  typed into and emptied: tabbing through a form you have not started says
+  nothing. A format message is a verdict rather than a second statement of the
+  rule, because the hint above it is always visible. Two labels that carried
+  their own format hint in parentheses — `Allowed tools (comma-separated)` and
+  `Body (SKILL.md content)` — no longer do, so every field the detail pane also
+  names is spelled identically in both places.
+
 - **The editor's preview was a second rendering of the same document.** The
   create/edit dialog and the Library's Source tab already called the same
   `renderMarkdown`, and the preview still looked nothing like the Source tab:
