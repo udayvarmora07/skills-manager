@@ -62,6 +62,29 @@ const TOAST_MS = 4000;
 const TOAST_UNDO_MS = 8000;
 const TOAST_MAX = 3;
 
+/* The sentence the toggle reports, for BOTH tenses.
+ *
+ * It used to be built as `'Skill "' + name + '" ' + action + "d in " + sc` —
+ * past tense by concatenation, which holds for exactly two English words and
+ * says nothing about the third verb. It also printed `sc`, the wire slug, into
+ * a sentence: `disabled in claude-code.` beside a Library row whose chip said
+ * `Claude Code`. The record already carries the observed `scope_label`; a
+ * record without one falls back to the slug rather than inventing a name,
+ * because RULES #12 says the UI states only what was observed.
+ */
+const TOGGLE_PAST = { disable: "Disabled", enable: "Enabled" };
+
+function toggleOutcome(record, action) {
+  const name = (record && record.name) || "";
+  const where = String((record && record.scope_label) || (record && record.scope) || "");
+  const verb = TOGGLE_PAST[action];
+  /* An action with no stated past tense is a NEW verb, and guessing one by
+   * appending a letter is how `enable` became `enabled` by luck. Say plainly
+   * that it happened rather than ship a malformed word. */
+  if (!verb) return 'Skill "' + name + '" ' + action + " in " + where + ".";
+  return 'Skill "' + name + '" ' + verb + " in " + where + ".";
+}
+
 if (!ICON_NAMES.length) {
   console.error("app-icon: the icon sprite is missing or empty");
 }
@@ -3533,6 +3556,23 @@ const appOptions = {
       input.click();
     },
 
+    /* One request, for both the button and its Undo. `toggleSelected` could
+     * have closed over itself, but then the undo path would carry its own copy
+     * of the POST and its own error handling, and the two would drift — which
+     * is exactly how 4.7 shipped a literal `N` in a sentence that measured it.
+     * The reader's Undo and the reader's click must send the same request.
+     *
+     * `toggleSkillState` does NOT touch `busy`. The undo runs from the toast,
+     * which is outside the detail row's disabled set, so it has no business
+     * claiming the flag; it reports its own outcome instead.
+     */
+    async toggleSkillState(name, scope, action) {
+      const qp = "?scope=" + encodeURIComponent(scope);
+      await api("/api/skills/" + encodeURIComponent(name) + "/" + action + qp, { method: "POST" });
+      await this.loadScopes();
+      await this.loadSkills();
+    },
+
     async toggleSelected() {
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
       /* A second press while the first is still in flight is a reader who was
@@ -3552,14 +3592,44 @@ const appOptions = {
       if (this.busy) return;
       const name = this.selectedName;
       const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
-      const qp = "?scope=" + encodeURIComponent(sc);
       this.busy = true;
       try {
         const action = this.selectedDisabled ? "enable" : "disable";
-        await api("/api/skills/" + encodeURIComponent(name) + "/" + action + qp, { method: "POST" });
-        this.toast('Skill "' + name + '" ' + action + "d in " + sc + ".");
-        await this.loadScopes();
-        await this.loadSkills();
+        await this.toggleSkillState(name, sc, action);
+        /* The sentence names the scope the way every other surface in the app
+         * does. `sc` is the wire slug (`claude-code`, `opencode`, …) and it
+         * used to be printed raw, so the toast read `… disabled in
+         * claude-code.` beside a Library row whose chip said `Claude Code` and
+         * a scope menu whose option said the same. The record already carries
+         * the label the backend observed (`scope_label`), and
+         * `observedIdentity` is what the rest of the UI reads it through.
+         *
+         * `action + "d"` built the past tense by concatenation, which is
+         * correct for exactly two English words and asserts nothing about the
+         * third verb anyone adds later. `toggleOutcome` names both tenses.
+         */
+        this.toast(toggleOutcome(this.selected || {}, action),
+                   "ok",
+                   // Undo, not a confirm dialog.
+                   //
+                   // The decision: disabling is REVERSIBLE and takes one click
+                   // on the same button that performed it, so a modal would tax
+                   // every reader for a mistake they can already fix. The
+                   // confirmation the product does owe is that the reader can
+                   // tell what happened AND put it back without finding the row
+                   // again — which is what this is.
+                   //
+                   // It was already built and unreachable: 2.3 shipped
+                   // `toast(text, type, undo)` with an 8-second
+                   // `TOAST_UNDO_MS` lifetime for exactly this case, an Undo
+                   // button in the toast markup, and `undoToast` to run it —
+                   // and measured, NO caller in the product has ever passed a
+                   // third argument. The 8s window had no occupant. `enable`
+                   // gets no Undo: re-enabling is the restore, and offering
+                   // "Undo" on it would offer the action the reader just took.
+                   action === "disable"
+                     ? () => this.toggleSkillState(name, sc, "enable")
+                     : null);
       } catch (e) {
         this.toast(e.message, "err");
       } finally {
