@@ -3033,6 +3033,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .purge-list { list-style: none; margin: var(--s3) 0 0; padding: var(--s3) 0 0; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: var(--s2); max-height: 132px; overflow-y: auto; }
 .purge-list code { font-family: var(--mono); font-size: var(--t-meta); color: var(--text-muted); }
 
+/* 4.7c SCOPE NOTE -- the sentence that says what an action covers beyond what
+ * it can show. It carries no icon on purpose: the four dialogs already use a
+ * red mark for "this will hurt you" and an alert glyph here would make a
+ * factual boundary read as an error. A left rule and muted text say it without
+ * borrowing the severity vocabulary. */
+.scope-note { margin: var(--s3) 0 0; padding-left: var(--s3); border-left: 2px solid var(--border-strong); color: var(--text-muted); font-size: var(--t-meta); line-height: 1.5; }
+.scope-note-inline { margin-top: var(--s2); }
+
 .validate-issues { list-style: none; margin: var(--s3) 0 0; padding: 0; }
 .validate-name-field { margin-bottom: var(--s3); }
 .validate-issue { display: flex; gap: var(--s2); align-items: flex-start; padding: var(--s2) 0; border-bottom: 1px solid var(--border); font-size: var(--t-ui); }

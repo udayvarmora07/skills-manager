@@ -687,8 +687,8 @@
         <div v-if="loadingTrash" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <div v-else-if="filteredTrash.length === 0" class="empty">
           <div class="empty-icon"><app-icon name="archive"></app-icon></div>
-          <h3>{{ trashSkills.length ? 'No matching trashed skills' : 'Trash is empty' }}</h3>
-          <p>{{ trashSkills.length ? 'Try a different search term or reset the filter.' : 'Removed skills land here and can be restored.' }}</p>
+          <h3>{{ trashSkills.length ? 'No matching trashed skills' : 'The global trash is empty' }}</h3>
+          <p>{{ trashSkills.length ? 'Try a different search term or reset the filter.' : 'Skills removed from the global scope land here and can be restored.' }}</p>
           <div v-if="query && trashSkills.length" class="empty-actions"><button class="btn btn-secondary" type="button" @click="query = ''">Reset search</button></div>
         </div>
         <template v-else>
@@ -702,7 +702,7 @@
           </li>
           <li style="padding: 8px 16px;">
             <button class="btn btn-danger-ghost" style="width:100%;" @click="confirmPurge" :disabled="busy">
-              Empty trash permanently
+              Empty the global trash
             </button>
           </li>
         </template>
@@ -1497,12 +1497,13 @@
       </div>
       <div v-else class="detail-inner">
         <div class="detail-head">
-          <h1 id="view-title" tabindex="-1">Trash &amp; recovery</h1>
+          <h1 id="view-title" tabindex="-1">Global trash</h1>
           <div class="detail-actions">
-            <button v-if="trashSkills.length" class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy" aria-label="Empty trash permanently">Empty trash permanently</button>
+            <button v-if="trashSkills.length" class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy" aria-label="Empty the global trash permanently">Empty the global trash</button>
           </div>
         </div>
-        <p class="lead">Skills you removed. Restore one or empty the trash forever.</p>
+        <p class="lead">Skills you removed from the global scope. Restore one, or empty the trash forever.</p>
+        <p class="scope-note scope-note-inline">{{ purgeScopeNote }}</p>
         <div v-if="selectedTrash" class="meta" style="margin: 16px 0 0;">
           <div><dt>Trashed as</dt><dd><code>{{ selectedTrash.trash_path }}</code></dd></div>
           <div><dt>Trashed at</dt><dd>{{ formatDate(selectedTrash.modified) }}</dd></div>
@@ -1672,17 +1673,18 @@
   <!-- Purge trash -->
   <div v-if="modals.purge" class="overlay" data-modal="purge" @mousedown.self="closeModal('purge')">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="purge-modal-title" tabindex="-1">
-      <h2 id="purge-modal-title" class="sr-only">Empty trash permanently</h2>
-      <div class="modal-head"><h2>Empty trash permanently</h2></div>
+      <h2 id="purge-modal-title" class="sr-only">Empty the global trash permanently</h2>
+      <div class="modal-head"><h2>Empty the global trash</h2></div>
       <div class="modal-body">
-        <p>Permanently delete <strong>{{ formatNumber(trashSkills.length) }}</strong> trashed {{ trashSkills.length === 1 ? 'skill' : 'skills' }}? Their documents are unlinked from disk. Nothing here can be restored afterwards.</p>
+        <p>{{ purgeScopeSentence }} Their documents are unlinked from disk. Nothing here can be restored afterwards.</p>
         <ul v-if="trashSkills.length" class="purge-list">
           <li v-for="t in trashSkills" :key="t.name"><code>{{ t.name }}</code></li>
         </ul>
+        <p class="scope-note">{{ purgeScopeNote }}</p>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('purge')">Cancel</button>
-        <button class="btn btn-danger" :disabled="busy" @click="purgeTrash" aria-label="Confirm empty trash permanently">Empty trash permanently</button>
+        <button class="btn btn-danger" :disabled="busy" @click="purgeTrash" aria-label="Empty the global trash permanently">Empty the global trash</button>
       </div>
     </div>
   </div>

@@ -1126,6 +1126,46 @@ const appOptions = {
       return "Writes 1 copy to " + n + (n === 1 ? " scope" : " scopes") + ".";
     },
 
+    /* 4.7c -- what the purge COVERS, not only what it can show.
+     *
+     * The backlog row for this task asserted that `/api/trash/purge` is
+     * unscoped: it does not cover every scope's trash while the dialog only
+     * sees the global list.  Observed on the sandbox, that is the opposite.
+     * A scope removal parks a copy at `~/.commandcode/trash/<scope>__<name>-<ts>`
+     * and `Store.purge_trash()` walks one directory -- the global
+     * `<data>/skills-manager/trash` -- so the purge returned exactly the three
+     * names `GET /api/trash` had listed and left the scope copy on disk.
+     *
+     * The list is therefore complete, which is not the same as the dialog
+     * being honest: nothing in the trash view said its list was the GLOBAL
+     * trash, so a reader who removed a skill from an agent scope, saw it leave
+     * the Library, and opened this view was told nothing was there.  The one
+     * sentence that admitted it (`restore from trash view is global-only`) was
+     * a toast the reader may have missed by the time they cared.
+     *
+     * `agentScopeLabels` names the scopes from `/api/scopes`, never from a
+     * hardcoded list, so a scope that is not detected is not claimed.
+     */
+    agentScopeLabels() {
+      return (this.scopes || [])
+        .filter((s) => s && s.kind === "agent" && s.label)
+        .map((s) => s.label);
+    },
+    purgeScopeSentence() {
+      const n = this.trashSkills.length;
+      return "Permanently delete " + this.formatNumber(n) + " trashed "
+        + (n === 1 ? "skill" : "skills") + " from the global trash?";
+    },
+    purgeScopeNote() {
+      const labels = this.agentScopeLabels;
+      const where = labels.length
+        ? " (" + labels.join(", ") + ")"
+        : "";
+      return "A skill removed from an agent scope" + where
+        + " is trashed beside that scope. This list does not show those copies,"
+        + " and emptying the trash does not delete them.";
+    },
+
   },
 
 
@@ -3705,7 +3745,14 @@ const appOptions = {
       try {
         const res = await api("/api/trash/purge", { method: "POST" });
         this.closeModal("purge");
-        this.toast("Purged " + (res.purged || []).length + " skill(s) from trash.");
+        // The server's count is what it OBSERVED deleting, which is a different
+        // fact from the count the dialog predicted; the dialog reads the loaded
+        // list, so the two can differ and this must not reuse the dialog's
+        // figure.  `skill(s)` was the last ungrammatical string in the four
+        // dialogs and it was also the one that never named the scope.
+        const purged = res.purged || [];
+        this.toast("Purged " + this.formatNumber(purged.length) + " trashed "
+          + (purged.length === 1 ? "skill" : "skills") + " from the global trash.");
         this.selectedTrash = null;
         await this.loadTrash();
         await this.loadSkills();

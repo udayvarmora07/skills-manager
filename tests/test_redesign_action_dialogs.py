@@ -206,7 +206,14 @@ class NoPlaceholderInShippedCopy(unittest.TestCase):
 
     def test_purge_names_what_it_deletes_and_says_the_cost(self):
         body = _modal("purge")
-        self.assertIn("trashSkills.length === 1 ? 'skill' : 'skills'", body)
+        # 4.7c moved the plural out of the template into `purgeScopeSentence`,
+        # so that the dialog and the toast cannot disagree about the grammar.
+        # The INTENT of this test is unchanged -- the count reads as a word,
+        # never as `skill(s)` -- but the mechanism it named is gone. The
+        # ternary itself is asserted against the getter that now owns it, in
+        # tests/test_redesign_purge_scope.py at 0 / 1 / many.
+        self.assertIn("purgeScopeSentence", body)
+        self.assertNotIn("(s)", body)
         # "This cannot be undone" was the whole warning and it names nothing.
         self.assertIn("Nothing here can be restored", body)
 
