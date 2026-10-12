@@ -2165,6 +2165,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .badge-ok { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
 .badge-warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
 
+/* The row wraps at 390 and at 768; that is fine and stays. What must not
+ * happen is the action left ALONE on a wrapped line growing to fill it — see
+ * the narrow band's `flex` below, which is where the fix actually is.
+ *
+ * `align-items: center` was tried here first and is NOT the fix. Reverting it
+ * leaves every measurement in `test_detail_action_row` unchanged — measured,
+ * not assumed, and the stylesheet carries no declaration that does nothing.
+ * The buttons are already one height, so stretching and centring coincide. */
 .detail-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 .detail-actions .btn-primary { order: -1; }
 
@@ -3471,7 +3479,25 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .settings-locale-preview span { text-align: start; }
   .detail-head { display: block; }
   .detail-actions { margin-top: 16px; }
-  .detail-actions .btn { flex: 1; }
+  /* `flex: 1` here is what made Remove the widest thing on the pane. Measured
+   * at 390: with the four actions wrapping, the one left alone on the last
+   * line grew to fill it — Remove measured **358x44 in a 358px row** against
+   * 98x44 for the three above it. 4.7d.
+   *
+   * The mechanism is GROWTH, not base size, which cost one measurement to
+   * learn: `flex: 1 1 auto` still left Remove at 358px while shrinking its
+   * siblings, because `flex-grow: 1` hands it every pixel of free space on a
+   * line where it is the only item. So the rule is `flex-grow: 0`.
+   *
+   * What that costs, stated rather than glossed: the row no longer distributes
+   * slack across the actions on a phone, so the band is left-aligned instead of
+   * edge-to-edge. That is the honest trade — a wrapped destructive action that
+   * fills its line reads as a different, larger decision than the three above
+   * it, and no reader is helped by four buttons sharing 358px of width. The
+   * touch floor is unaffected (44px, asserted by e2e), because that is
+   * `height`, not `flex-grow`.
+   */
+  .detail-actions .btn { flex: 0 1 auto; }
   .form-grid { grid-template-columns: 1fr; }
   .modal { max-height: calc(100dvh - 24px); }
   .overlay { padding: 12px; }
