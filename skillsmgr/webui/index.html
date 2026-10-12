@@ -982,12 +982,12 @@
             <div>
               <h1 id="view-title" tabindex="-1">{{ selected.name }}</h1>
               <div class="badge-row">
-                <span class="badge">{{ observedIdentity(selected, scopes).label }}</span>
-                <span class="badge" :class="observedIdentity(selected, scopes).problem ? 'badge-warn' : 'badge-ok'">
+                <span class="badge-probe">{{ observedIdentity(selected, scopes).label }}</span>
+                <span class="badge-probe" :class="observedIdentity(selected, scopes).problem ? 'badge-warn' : 'badge-ok'">
                   <span class="dot" :class="observedIdentity(selected, scopes).problem ? 'dot-warn' : 'dot-ok'"></span>
                   {{ observedIdentity(selected, scopes).stateLabel }}
                 </span>
-                <span v-if="selected.version" class="badge">v{{ selected.version }}</span>
+                <span v-if="selected.version" class="badge-probe">v{{ selected.version }}</span>
               </div>
             </div>
             <div class="detail-actions">
@@ -1075,7 +1075,7 @@
           <section v-show="detailTab === 'instances'" class="detail-panel" role="tabpanel" id="detail-panel-instances" aria-labelledby="detail-tab-instances" tabindex="0">
             <div class="section-label-row">
               <h2 id="instances-title">{{ detailInstanceCount }} observed cop{{ detailInstanceCount === 1 ? 'y' : 'ies' }}</h2>
-              <span v-if="selectedLogical && selectedLogical.divergent" class="badge badge-warn"><span class="dot dot-warn"></span>Divergent observed</span>
+              <span v-if="selectedLogical && selectedLogical.divergent" class="badge-probe badge-warn"><span class="dot dot-warn"></span>Divergent observed</span>
             </div>
             <!-- It used to render only when instanceCount > 1, so a skill with
                  one copy answered the tab by showing nothing at all. One copy
@@ -1244,7 +1244,7 @@
             <div class="detail-actions quality-actions"><button class="btn btn-primary" type="button" @click="openValidate">Validate</button><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="inspectQualityInLibrary">Inspect in Library</button></div>
           </div>
           <section class="quality-section" aria-labelledby="quality-validity-title">
-            <div class="section-label-row"><h2 id="quality-validity-title">Specification and observed validity</h2><span class="badge" :class="selected.malformed || selected.addressable === false ? 'badge-warn' : ''">{{ qualityStateLabel(selected) }}</span></div>
+            <div class="section-label-row"><h2 id="quality-validity-title">Specification and observed validity</h2><span class="badge-probe" :class="selected.malformed || selected.addressable === false ? 'badge-warn' : ''">{{ qualityStateLabel(selected) }}</span></div>
             <p class="hint">The current payload shows filesystem observations only. Use Validate for parser/specification findings; no validation verdict is inferred here.</p>
             <dl class="meta compact-meta"><div><dt>Name</dt><dd><code>{{ selected.name }}</code></dd></div><div><dt>Addressable</dt><dd>{{ selected.addressable === false ? 'no' : 'observed / not flagged' }}</dd></div><div><dt>Document</dt><dd>{{ selected.path || selected.physical_path || 'path unavailable' }}</dd></div></dl>
           </section>
@@ -1265,7 +1265,7 @@
             <dl class="meta compact-meta"><div><dt>Tokens</dt><dd>{{ formatTokens(selected.tokens) }} <span class="hint">({{ selected.tokens_method || 'method unavailable' }})</span></dd></div><div><dt>Window share</dt><dd>{{ selected.tokens_pct != null ? formatNumber(selected.tokens_pct) + '%' : 'not observed' }} of {{ selected.window || 'configured window' }}</dd></div><div><dt>Document size</dt><dd>{{ selected.chars != null ? formatNumber(selected.chars) + ' chars' : 'not observed' }} · {{ selected.lines != null ? formatNumber(selected.lines) + ' lines' : 'line count unavailable' }}</dd></div><div><dt>Body / frontmatter</dt><dd>{{ selected.body_tokens != null ? formatTokens(selected.body_tokens) : 'not observed' }} / {{ selected.frontmatter_tokens != null ? formatTokens(selected.frontmatter_tokens) : 'not observed' }}</dd></div></dl>
           </section>
           <section class="quality-section" aria-labelledby="quality-unavailable-title">
-            <div class="section-label-row"><h2 id="quality-unavailable-title">Signals not observed</h2><span class="badge badge-warn">unavailable</span></div>
+            <div class="section-label-row"><h2 id="quality-unavailable-title">Signals not observed</h2><span class="badge-probe badge-warn">unavailable</span></div>
             <ul class="quality-unavailable"><li><strong>Risk / safety</strong><span>No risk scan or safety verdict is exposed by the current payload.</span></li><li><strong>Evaluation / usefulness</strong><span>No eval result or usefulness measure is exposed for this skill.</span></li><li><strong>Effective load</strong><span>No precedence-resolved consumer load is available; this view does not infer one.</span></li></ul>
           </section>
         </template>
@@ -1318,7 +1318,7 @@
                 </article>
               </div>
               <section v-if="qualityHygiene.largest_instances && qualityHygiene.largest_instances.length" class="quality-section quality-largest" aria-labelledby="quality-largest-title"><h3 id="quality-largest-title">Largest context observations</h3><ul class="quality-finding-instances"><li v-for="instance in qualityHygiene.largest_instances" :key="targetKey(instance)"><span>{{ instance.name }} · {{ formatTokens(instance.tokens) }} tokens</span><code>{{ instance.physical_path || instance.path || 'path unavailable' }}</code></li></ul></section>
-              <section class="quality-section" aria-labelledby="quality-unavailable-report-title"><div class="section-label-row"><h3 id="quality-unavailable-report-title">Unavailable evidence</h3><span class="badge badge-warn">not observed</span></div><ul class="quality-unavailable"><li v-for="item in qualityHygiene.unavailable_signals" :key="item.signal + (item.name || '')"><strong>{{ item.signal }}</strong><span>{{ item.explanation }}</span></li></ul></section>
+              <section class="quality-section" aria-labelledby="quality-unavailable-report-title"><div class="section-label-row"><h3 id="quality-unavailable-report-title">Unavailable evidence</h3><span class="badge-probe badge-warn">not observed</span></div><ul class="quality-unavailable"><li v-for="item in qualityHygiene.unavailable_signals" :key="item.signal + (item.name || '')"><strong>{{ item.signal }}</strong><span>{{ item.explanation }}</span></li></ul></section>
             </template>
           </section>
         </section>
@@ -1376,7 +1376,7 @@
           </div>
         </section>
         <section v-if="install.review" class="profile-preview" aria-live="polite" aria-labelledby="registry-review-title">
-          <div class="section-label-row"><h2 id="registry-review-title">Review evidence</h2><span class="badge badge-warn">review required</span></div>
+          <div class="section-label-row"><h2 id="registry-review-title">Review evidence</h2><span class="badge-probe badge-warn">review required</span></div>
           <dl class="meta compact-meta"><div><dt>Review id</dt><dd><code>{{ install.review.review_id }}</code></dd></div><div><dt>Reviewed registry</dt><dd><code>{{ (install.review.registry || {}).id || (install.review.registry || {}).source || (install.review.registry || {}).slug || 'returned source' }}</code></dd></div><div><dt>Expires</dt><dd>{{ install.review.review_expires_at || '—' }}</dd></div><div><dt>Validation</dt><dd>{{ install.review.inspection && install.review.inspection.validation && install.review.inspection.validation.valid ? 'valid' : 'review warnings' }}</dd></div><div><dt>Registry hash</dt><dd><code>{{ (install.review.registry || {}).registry_hash || (install.review.registry || {}).remote_registry_hash || '—' }}</code></dd></div></dl>
           <p class="hint">This action is bound to the returned review id and registry above; changing the current form values cannot change what will be committed.</p>
           <div class="detail-actions"><button class="btn btn-primary" type="button" :disabled="busy" @click="commitRegistryReview">Trust and install reviewed snapshot {{ install.review.review_id }}</button></div>
@@ -1412,14 +1412,14 @@
           <button class="btn btn-secondary" type="button" @click="loadWorkspaces" :disabled="loadingWorkspaces">Check project</button>
         </div>
         <section v-if="workspaces" class="workspace-observation" aria-live="polite">
-          <div class="section-label-row"><h2>Project observation</h2><span class="badge" :class="workspaces.project.status === 'accepted' ? 'badge-ok' : 'badge-warn'">{{ workspaces.project.status }}</span></div>
+          <div class="section-label-row"><h2>Project observation</h2><span class="badge-probe" :class="workspaces.project.status === 'accepted' ? 'badge-ok' : 'badge-warn'">{{ workspaces.project.status }}</span></div>
           <p v-if="workspaces.project.path" class="hint"><code>{{ workspaces.project.path }}</code></p>
           <div v-if="workspaces.project.skills_roots.length" class="root-observation"><span v-for="root in workspaces.project.skills_roots" :key="root.relative" class="tag" :class="root.exists ? 'tag-scope' : ''">{{ root.relative }} · {{ root.exists ? 'available' : 'missing' }}</span></div>
         </section>
         <section class="adapter-grid" aria-labelledby="adapter-title">
           <div class="section-label-row"><h2 id="adapter-title">Adapter catalog</h2><span class="hint">{{ formatNumber(workspaces && workspaces.adapters.length || 0) }} adapters</span></div>
           <article v-for="adapter in ((workspaces && workspaces.adapters) || []).filter(Boolean)" :key="adapter.id" class="adapter-card">
-            <div class="adapter-card-head"><h3>{{ adapter.label }}</h3><span class="badge" :class="adapter.status === 'verified' ? 'badge-ok' : 'badge-warn'">{{ adapter.status }}</span></div>
+            <div class="adapter-card-head"><h3>{{ adapter.label }}</h3><span class="badge-probe" :class="adapter.status === 'verified' ? 'badge-ok' : 'badge-warn'">{{ adapter.status }}</span></div>
             <p class="hint">{{ Array.isArray(adapter.precedence.notes) ? adapter.precedence.notes.join(' ') : (adapter.precedence.notes || 'Precedence evidence is recorded.') }}</p>
             <dl class="meta compact-meta"><div><dt>Precedence</dt><dd>{{ adapter.precedence.status }}</dd></div><div><dt>Reload</dt><dd>{{ adapter.reload }}</dd></div><div><dt>Evidence</dt><dd><a :href="adapter.precedence.evidence" target="_blank" rel="noopener">primary source</a></dd></div></dl>
             <div class="root-observation"><span v-for="root in adapter.candidate_roots" :key="(root.scope || root.relative_path || root.absolute_path || 'unknown') + adapter.id" class="tag" :class="root.path_known ? 'tag-scope' : 'tag-warn'">{{ root.scope || root.relative_path || root.absolute_path || 'path unknown' }}<span v-if="root.recursive"> · recursive</span></span></div>
@@ -1677,7 +1677,7 @@
               {{ formatNumber(modals.validate.result.issues.length) }} issue(s) found.
             </div>
             <div v-for="(issue, i) in modals.validate.result.issues" :key="i" class="issue">
-              <span class="badge" :class="issue.level === 'error' ? 'badge-warn' : ''">{{ issue.level }}</span>
+              <span class="badge-probe" :class="issue.level === 'error' ? 'badge-warn' : ''">{{ issue.level }}</span>
               <span>{{ issue.message }} <span v-if="issue.key" class="issue-key">[{{ issue.key }}]</span></span>
             </div>
           </div>
@@ -1805,7 +1805,7 @@
 
         <template v-if="modals.update.review">
           <section class="update-evidence-section" aria-labelledby="update-review-state-title">
-            <div class="section-label-row"><h3 id="update-review-state-title">Review state</h3><span class="badge" :class="modals.update.review.review_state === 'pending' ? 'badge-ok' : 'badge-warn'">{{ modals.update.review.review_state }}</span></div>
+            <div class="section-label-row"><h3 id="update-review-state-title">Review state</h3><span class="badge-probe" :class="modals.update.review.review_state === 'pending' ? 'badge-ok' : 'badge-warn'">{{ modals.update.review.review_state }}</span></div>
             <p class="hint">Review {{ modals.update.review.review_id || 'not persisted' }} · expires {{ formatDate(modals.update.review.review_expires_at) }}</p>
           </section>
 
@@ -1838,7 +1838,7 @@
           </section>
 
           <section class="update-evidence-section" aria-labelledby="update-validation-title">
-            <div class="section-label-row"><h3 id="update-validation-title">Validity</h3><span class="badge" :class="modals.update.review.validation && modals.update.review.validation.valid ? 'badge-ok' : 'badge-warn'">{{ modals.update.review.validation && modals.update.review.validation.valid ? 'valid' : 'blocked' }}</span></div>
+            <div class="section-label-row"><h3 id="update-validation-title">Validity</h3><span class="badge-probe" :class="modals.update.review.validation && modals.update.review.validation.valid ? 'badge-ok' : 'badge-warn'">{{ modals.update.review.validation && modals.update.review.validation.valid ? 'valid' : 'blocked' }}</span></div>
             <ul v-if="modals.update.review.validation && modals.update.review.validation.errors && modals.update.review.validation.errors.length" class="notice-list update-errors"><li v-for="issue in modals.update.review.validation.errors" :key="issue.key + issue.message">{{ issue.message }}</li></ul>
             <p v-else class="hint">No structural validation errors.</p>
             <ul v-if="modals.update.review.validation && modals.update.review.validation.warnings && modals.update.review.validation.warnings.length" class="notice-list"><li v-for="warning in modals.update.review.validation.warnings" :key="warning.key + warning.message">Warning: {{ warning.message }}</li></ul>
@@ -1852,7 +1852,7 @@
           </section>
 
           <section class="update-evidence-section" aria-labelledby="update-recovery-title">
-            <div class="section-label-row"><h3 id="update-recovery-title">Recovery policy</h3><span class="badge">snapshot required</span></div>
+            <div class="section-label-row"><h3 id="update-recovery-title">Recovery policy</h3><span class="badge-probe">snapshot required</span></div>
             <p>A whole-tree recovery snapshot is created before replacement. Activation state is preserved: {{ modals.update.review.activation_preserved ? (modals.update.review.resulting_disabled ? 'disabled' : 'active') : 'not confirmed' }}.</p>
             <p class="hint">Applying requires a separate explicit confirmation and creates another snapshot for rollback. A rollback is another validated update, not a blind restore.</p>
           </section>

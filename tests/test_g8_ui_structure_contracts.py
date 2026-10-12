@@ -637,7 +637,7 @@ class PathDemotionTests(unittest.TestCase):
         # default. The old marker no longer occurs in the file at all, so
         # `_slice` returned the whole document and the assertion passed or
         # failed on unrelated markup.
-        block = _slice(self.html, 'class="detail-facts"', "</dl>")
+        block = _slice(self.html, 'class="meta detail-facts"', "</dl>")
         self.assertIn("<dt>Path</dt>", block)
         self.assertIn("selected.path", block)
         self.assertIn('class="copybtn"', block)

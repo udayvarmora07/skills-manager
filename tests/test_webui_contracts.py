@@ -525,7 +525,7 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         html = _read(INDEX_HTML)
         self.assertRegex(
             html,
-            r'<dl class="meta detail-facts">.*?<dt>Path</dt>',
+            r'<dl class="meta detail-facts">[\s\S]*?<dt>Path</dt>',
         )
 
     def test_chip_count_does_not_reduce_contrast(self):

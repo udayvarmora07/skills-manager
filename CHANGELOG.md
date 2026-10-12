@@ -23,6 +23,24 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   measured size and token counts, provenance when the server returns it — and
   says on screen what it does not infer.
 
+- **The bulk bar no longer promises exactness it cannot deliver.** The bar
+  counts *exact physical instances*, and directly beneath that sentence the
+  Tags control was writing **logical names**: `/api/catalog/tags` is keyed by
+  name, so selecting one copy of a three-copy skill tagged all three, silently.
+  The REST contract is frozen and the catalog has no per-instance key to
+  address, so the fix is the sentence rather than the request — the tag panel
+  now names every entry it will write and its copy count, counted from the same
+  loaded set the request's `names` are derived from. The same honesty pass
+  covers the other unsaid thing: a target restored from the selection snapshot
+  carries a path and a disabled flag observed at *selection* time, and the
+  review dialog now counts and admits those. `Clear` moved onto the count row —
+  it ends the selection rather than acting on it, and it was 57 of the 373px
+  the verb row needed inside a 362px bar at 390px — taking the bar from 135px to
+  113px at 390 and 105px to 83px at 768, for 10px at 1280 where the count row
+  grows to the button's height. The tag panel was also re-anchored: it centred
+  itself on a summary at the far left of the verb row, which put half of it at
+  negative x at 1280px and rendered its own label as "o apply".
+
 - **The web UI was redesigned.** The visual system is now specified in
   `DESIGN.md` at the repository root — tokens, their measured contrast ratios,
   and the reasoning — and enforced by `check_design_tokens.py`, which
