@@ -3291,9 +3291,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 /* The stale-cache control is a switch on a boundary, not a preference: it
    decides whether a failed network read is allowed to answer at all. It sits
-   on its own row at narrow widths rather than shrinking the query field. */
+   on its own row at narrow widths rather than shrinking the query field.
+
+   5.1c measured what "its own row" actually did NOT do: `flex: 0 0 auto` let the
+   label size to its content and overflow its flex parent by **75px at 768**
+   (box 379 wide inside a 304px parent, text painting to x=819 on a 768px
+   viewport), and the words amputated at the right edge were "could be reached"
+   -- the condition under which the registry is allowed to lie to this page.
+   `flex-basis: 100%` states what the comment always claimed: it takes a full
+   row, and the label wraps inside it. The checkbox itself is `flex: none`
+   (from `.check-row`), so the control stays 18px and only the sentence grows. */
 .install-stale-toggle {
-  flex: 0 0 auto;
+  flex: 0 0 100%;
+  min-width: 0;
+  align-items: flex-start;
 }
 
 /* The panel is focusable (tabindex="0") so the arrow keys have something to
@@ -3306,15 +3317,54 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   margin: 0;
 }
 
+/* 5.1c — the results list had NO RULE AT ALL, and it is the first thing this
+   view renders in its populated state. Three of the four defects below are
+   browser defaults that a list still wears when nobody styles it:
+
+     `ul`  -> list-style: disc + 40px padding-left
+     `li`  -> display: list-item (block), so `.registry-row-state`, written for
+              a flex row's trailing cell, fell to its OWN LINE under the name
+              instead of sitting beside it.
+
+   Measured before this block, at 1280: the marker painted, the name indented
+   40px, and "Listed" at top 607 under a name at top 567. This is the same class
+   as 1.5's `.chip`/`.empty`/`.skeleton` -- a declared-and-never-used selector is
+   not the failure; an UNDECLARED one is quieter still, because nothing greps for
+   a rule that does not exist. `.skilllist` beside it is the shape every other
+   list in the app already has, so this adopts that rather than inventing one. */
+.registry-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--s2) 0;
+}
+
+.registry-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+
+.registry-row:last-child { border-bottom: none; }
+
 /* The row's own trailing mark. "Listed" is the only honest thing it can say:
    a row in a registry catalogue has been listed BY the registry, and nothing
-   here has fetched, reviewed or installed it. */
+   here has fetched, reviewed or installed it. It is a flex child, so `flex:none`
+   now has a subject -- before this block it was a declaration about a container
+   that did not exist. */
 .registry-row-state {
   flex: none;
+  margin-left: auto;
   font-size: var(--t-table);
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+/* The name is the row; it must not be the row's only wrappable part. Same cap
+   `.row-desc` uses, so a long registry slug degrades the way it degrades
+   everywhere else rather than pushing "Listed" off the pane. */
+.registry-row .row-name { min-width: 0; }
 
 .registry-source {
   font-family: var(--mono);
