@@ -342,7 +342,6 @@ def check_type_scale(css: str, root_map: dict, note) -> None:
 # removed, so this cannot quietly become a permanent exemption.
 PRIMITIVE_PENDING_ADOPTION = {
     ".field-input": "4.5 create/edit editor and 5.3 profile dialog",
-    ".choice-box": "4.1 segmented state filter, 5.7 settings",
     ".tooltip": "2.1 icon-only buttons",
     ".table th": "5.5 hygiene findings, 5.6 recovery",
     ".panel": "2.1 status strip, 3.1 overview sections",
@@ -352,6 +351,12 @@ PRIMITIVE_PENDING_ADOPTION = {
     # so the pending-adoption exception was removed rather than left behind.
     # The gate fails when a wired primitive is still listed, which is what
     # caught it here.
+    # 4.7 did the same for `.choice-box`: the remove dialog's two radio
+    # options and the sync dialog's overwrite toggle are now that primitive,
+    # so it is no longer an exception. It sat on this list from 1.5 with
+    # "4.1 segmented state filter, 5.7 settings" as its adopter, and neither
+    # row adopted it; the dialogs that most needed a real choice control were
+    # the ones hand-rolling `accent-color` on a native radio.
     ".step": "5.2 registry stepper",
 }
 # Removed by 2.2, and the removal is the interesting part: `.badge`, `.chip`,

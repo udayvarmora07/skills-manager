@@ -1067,7 +1067,45 @@ const appOptions = {
     activeScopeAvailable() {
       return this.activeScopeOption.exists;
     },
+    /* --- sync facts -------------------------------------------------------
+     *
+     * FIVE getters. They must live in `computed`, not `methods`, and that is
+     * not a style choice: `syncPickedTargets.length` in a template is 0 when
+     * `syncPickedTargets` is a FUNCTION, because a function's `.length` is its
+     * arity. That is the 4.3b `batchStaleTargets` defect, and it renders a
+     * dialog that confidently states nothing is selected.
+     */
+    syncPickedTargets() {
+      const m = this.modals.sync;
+      if (!m || !m.picked) return [];
+      return Object.keys(m.picked).filter((k) => m.picked[k]);
+    },
+    syncPickedCount() { return this.syncPickedTargets.length; },
+    syncPickedLabels() {
+      const m = this.modals.sync;
+      if (!m) return [];
+      return this.syncPickedTargets.map((id) => {
+        const t = (m.targets || []).find((x) => x && x.id === id);
+        return t && t.label ? t.label : id;
+      });
+    },
+    /* The context cost of writing this skill to every picked target. It is an
+     * arithmetic multiple of what one copy already costs, NOT a prediction:
+     * the tool has no resolver and cannot know which of those copies an agent
+     * actually loads. The copy says so on screen. */
+    syncProjectedTokens() {
+      const tokens = (this.selected && this.selected.tokens) || 0;
+      return tokens * this.syncPickedCount;
+    },
+    syncOutcomeSentence() {
+      const n = this.syncPickedCount;
+      if (!n) return "Pick at least one target scope.";
+      return "Writes 1 copy to " + n + (n === 1 ? " scope" : " scopes") + ".";
+    },
+
   },
+
+
 
   watch: {
     theme(v) {
@@ -3841,10 +3879,27 @@ const appOptions = {
       for (const t of targets) this.modals.sync.picked[t.id] = true;
     },
 
+    /* --------------------------------------------------------- sync facts
+     *
+     * The sync dialog used to derive its own facts in the template, in three
+     * separate expressions, and one of them printed a literal "N" where the
+     * target count belongs — "syncing to N agents" — because the sentence was
+     * written before the count existed and never filled the hole in. A number
+     * no reader can see is worse than no number: the sentence still reads like
+     * a measurement.
+     *
+     * So every figure the dialog states is derived HERE, once, from the same
+     * `modals.sync.picked` map `doSync` posts. There is no path by which the
+     * dialog can state one count and send another.
+     */
     async doSync() {
       const m = this.modals.sync;
       if (!m) return;
-      const to = Object.keys(m.picked).filter((k) => m.picked[k]);
+      // The SAME list the dialog states in syncOutcomeSentence. Posting a
+      // separately-derived list is how a confirm starts naming one thing and
+      // doing another, which is the 2.3 lesson (a palette row that ran a
+      // different command than the one it drew).
+      const to = this.syncPickedTargets;
       if (!to.length) { this.toast("Pick at least one target scope.", "err"); return; }
       this.busy = true;
       try {

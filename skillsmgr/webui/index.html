@@ -1630,17 +1630,29 @@
       <h2 id="remove-modal-title" class="sr-only">Remove {{ modals.remove.name }}</h2>
       <div class="modal-head"><h2>Remove {{ modals.remove.name }}</h2></div>
       <div class="modal-body">
-        <p>Move this skill to the trash, or delete it permanently.</p>
-        <div class="form-grid" style="grid-template-columns:1fr;">
-          <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;">
-            <input type="radio" name="remove-mode" v-model="modals.remove.mode" value="trash" style="margin-top:3px;accent-color:var(--accent);">
-            <span><strong>Move to trash</strong><br><span class="hint" style="color:var(--text-muted);font-size:12.5px;">You can restore it later from the Trash tab.</span></span>
-          </label>
-          <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;">
-            <input type="radio" name="remove-mode" v-model="modals.remove.mode" value="purge" style="margin-top:3px;accent-color:var(--err);">
-            <span><strong style="color:var(--err);">Delete permanently</strong><br><span class="hint" style="color:var(--text-muted);font-size:12.5px;">This cannot be undone.</span></span>
-          </label>
-        </div>
+        <p>Choose what to do with <code>{{ modals.remove.name }}</code> in <strong>{{ modals.remove.scope }}</strong>.</p>
+        <ul class="choice-list">
+          <li>
+            <label class="choice choice-block" data-kind="radio">
+              <input type="radio" name="remove-mode" v-model="modals.remove.mode" value="trash">
+              <span class="choice-box" aria-hidden="true"></span>
+              <span class="choice-text">
+                <strong>Move to trash</strong>
+                <span class="hint">Reversible — restore it from Recovery.</span>
+              </span>
+            </label>
+          </li>
+          <li>
+            <label class="choice choice-block" data-kind="radio" data-destructive="true">
+              <input type="radio" name="remove-mode" v-model="modals.remove.mode" value="purge">
+              <span class="choice-box" aria-hidden="true"></span>
+              <span class="choice-text">
+                <strong class="choice-destructive">Delete permanently</strong>
+                <span class="hint">The document is unlinked from disk. There is no restore path for it.</span>
+              </span>
+            </label>
+          </li>
+        </ul>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('remove')">Cancel</button>
@@ -1657,7 +1669,10 @@
       <h2 id="purge-modal-title" class="sr-only">Empty trash permanently</h2>
       <div class="modal-head"><h2>Empty trash permanently</h2></div>
       <div class="modal-body">
-        <p>Permanently delete <strong>{{ formatNumber(trashSkills.length) }}</strong> trashed skill(s)? This cannot be undone.</p>
+        <p>Permanently delete <strong>{{ formatNumber(trashSkills.length) }}</strong> trashed {{ trashSkills.length === 1 ? 'skill' : 'skills' }}? Their documents are unlinked from disk. Nothing here can be restored afterwards.</p>
+        <ul v-if="trashSkills.length" class="purge-list">
+          <li v-for="t in trashSkills" :key="t.name"><code>{{ t.name }}</code></li>
+        </ul>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('purge')">Cancel</button>
@@ -1674,7 +1689,7 @@
       <div class="modal-body">
         <div v-if="modals.validate.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else>
-          <div class="form-field full" style="margin-bottom:12px;">
+          <div class="form-field full validate-name-field">
             <label for="v-name">Skill name</label>
             <input id="v-name" name="validate-skill-name" v-model.trim="modals.validate.name" placeholder="my-skill-name" spellcheck="false">
           </div>
@@ -1685,16 +1700,18 @@
           <div v-if="modals.validate.result">
             <div v-if="modals.validate.result.valid" class="banner banner-ok flush">
               <app-icon name="check"></app-icon>
-              Skill is valid.
+              <span>Valid — no issues found for <code>{{ modals.validate.name }}</code>.</span>
             </div>
             <div v-else class="banner banner-error flush">
               <app-icon name="circle-alert"></app-icon>
-              {{ formatNumber(modals.validate.result.issues.length) }} issue(s) found.
+              <span>{{ formatNumber(modals.validate.result.issues.length) }} {{ modals.validate.result.issues.length === 1 ? 'issue' : 'issues' }} found for <code>{{ modals.validate.name }}</code>.</span>
             </div>
-            <div v-for="(issue, i) in modals.validate.result.issues" :key="i" class="issue">
-              <span class="badge" :class="issue.level === 'error' ? 'badge-warn' : ''">{{ issue.level }}</span>
-              <span>{{ issue.message }} <span v-if="issue.key" class="issue-key">[{{ issue.key }}]</span></span>
-            </div>
+            <ul class="validate-issues">
+              <li v-for="(issue, i) in modals.validate.result.issues" :key="i" class="validate-issue">
+                <span class="badge" :class="issue.level === 'error' ? 'badge-warn' : ''">{{ issue.level }}</span>
+                <span>{{ issue.message }} <span v-if="issue.key" class="issue-key">[{{ issue.key }}]</span></span>
+              </li>
+            </ul>
           </div>
         </template>
       </div>
@@ -2039,22 +2056,23 @@
       <h2 id="sync-modal-title" class="sr-only">Sync skill</h2>
       <div class="modal-head"><h2>Sync “{{ modals.sync.name }}” to agents</h2><button class="modal-close" aria-label="Close" @click="closeModal('sync')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <p>From <strong>{{ modals.sync.from_scope }}</strong>. Pick targets (writable scopes only):</p>
-        <p v-if="selected && selected.tokens" class="hint">This skill is {{ formatTokens(selected.tokens) }} tokens; syncing to N agents ≈ {{ formatTokens((selected.tokens||0) * Object.keys(modals.sync.picked).filter(k=>modals.sync.picked[k]).length) }} total across targets.</p>
-        <div class="preview-panel" role="status" aria-live="polite">
+        <p>Copy this skill from <strong>{{ modals.sync.from_scope }}</strong> to the scopes you pick. Only writable scopes are listed.</p>
+        <p class="hint">{{ syncOutcomeSentence }}</p>
+        <p v-if="selected && selected.tokens" class="hint">This skill is {{ formatTokens(selected.tokens) }} tokens; writing it to every target adds about {{ formatTokens(syncProjectedTokens) }} across them. That is a multiple of one copy's cost, not a prediction of what an agent loads — the tool does not resolve which copies are read.</p>
+        <div class="preview-panel sync-resolution" role="status" aria-live="polite">
           <strong>Resolution preview</strong>
-          <span>Source: {{ modals.sync.from_scope }} · Targets: {{ Object.keys(modals.sync.picked).filter(k=>modals.sync.picked[k]).join(', ') || 'none selected' }}</span>
+          <span>Source: {{ modals.sync.from_scope }} · Targets: {{ syncPickedLabels.length ? syncPickedLabels.join(', ') : 'none selected' }}</span>
           <span v-if="modals.sync.force">Existing target copies will be overwritten; a rollback snapshot is created before commit.</span>
           <span v-else>Existing target copies are skipped; choose overwrite only when the source is authoritative.</span>
         </div>
-        <div v-for="t in (modals.sync.targets || []).filter(Boolean)" :key="t.id" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-          <input type="checkbox" :id="'sync-'+t.id" :name="'sync-target-'+t.id" v-model="modals.sync.picked[t.id]" style="accent-color:var(--accent);">
-          <label :for="'sync-'+t.id" style="flex:1;cursor:pointer;"><strong>{{ t.label }}</strong> <span class="hint">— {{ t.path }}</span></label>
-          <span class="tag">{{ formatNumber(t.count) }} skills · {{ formatTokens(t.tokens) }}</span>
-        </div>
-        <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;cursor:pointer;">
-          <input type="checkbox" name="sync-force" v-model="modals.sync.force" style="accent-color:var(--accent);"> Overwrite if already exists
-        </label>
+        <ul class="sync-targets">
+          <li v-for="t in (modals.sync.targets || []).filter(Boolean)" :key="t.id" class="sync-target">
+            <input class="choice-check" type="checkbox" :id="'sync-'+t.id" :name="'sync-target-'+t.id" v-model="modals.sync.picked[t.id]">
+            <label class="sync-target-label" :for="'sync-'+t.id"><strong>{{ t.label }}</strong> <span class="hint">— {{ t.path }}</span></label>
+            <span class="tag">{{ formatNumber(t.count) }} skills · {{ formatTokens(t.tokens) }}</span>
+          </li>
+        </ul>
+        <label class="choice sync-force"><input type="checkbox" name="sync-force" v-model="modals.sync.force"><span class="choice-box" aria-hidden="true"></span>Overwrite if already exists</label>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('sync')">Cancel</button>

@@ -3001,10 +3001,64 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .kv dt { color: var(--text-muted); font-size: var(--t-table); overflow-wrap: anywhere; }
 .kv dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: var(--t-table); }
 
-.issue { display: flex; gap: var(--s2); align-items: flex-start; padding: var(--s2) 0; border-bottom: 1px solid var(--border); font-size: var(--t-ui); }
-.issue:last-child { border-bottom: none; }
-.issue .badge { flex: none; }
-.issue .issue-key { font-family: var(--mono); font-size: var(--t-meta); color: var(--text-muted); }
+/* 4.7 ACTION DIALOGS — remove, purge, validate, sync.
+ *
+ * These four dialogs were the last places in the app still describing a
+ * layout with inline `style` attributes (31 of them between remove and sync
+ * alone), which is why they looked like a different product from every other
+ * dialog and why the `.choice` primitive 1.5 declared sat unused on the
+ * pending-adoption list. They now speak the shared vocabulary.
+ */
+.choice-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.choice-block { display: flex; width: 100%; align-items: flex-start; gap: var(--s3); padding: var(--s3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.choice-block .choice-box { margin-top: 2px; }
+.choice-block:hover { border-color: var(--border-strong); }
+.choice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.choice-destructive { color: var(--err); }
+.choice[data-destructive="true"]:has(input:checked) { border-color: var(--err); background: var(--err-soft); }
+/* The destructive option's own mark, and only while it is the selection. A
+ * permanently-red dot beside an unselected option would read as "already
+ * broken", which is the 4.2d complaint about `problem` again in a new place. */
+.choice[data-destructive="true"] .choice-box { border-color: var(--err-line); }
+.choice[data-destructive="true"] input:checked + .choice-box { background: var(--err); border-color: var(--err); color: var(--on-accent); }
+
+.purge-list { list-style: none; margin: var(--s3) 0 0; padding: var(--s3) 0 0; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: var(--s2); max-height: 132px; overflow-y: auto; }
+.purge-list code { font-family: var(--mono); font-size: var(--t-meta); color: var(--text-muted); }
+
+.validate-issues { list-style: none; margin: var(--s3) 0 0; padding: 0; }
+.validate-name-field { margin-bottom: var(--s3); }
+.validate-issue { display: flex; gap: var(--s2); align-items: flex-start; padding: var(--s2) 0; border-bottom: 1px solid var(--border); font-size: var(--t-ui); }
+.validate-issue:last-child { border-bottom: none; }
+.validate-issue .badge { flex: none; }
+.validate-issue .issue-key { font-family: var(--mono); font-size: var(--t-meta); color: var(--text-muted); }
+
+.sync-resolution { margin: var(--s3) 0; }
+.sync-targets { list-style: none; margin: 0; padding: 0; }
+.sync-target { display: flex; gap: var(--s3); align-items: center; padding: var(--s2) 0; border-bottom: 1px solid var(--border); }
+.sync-target:last-child { border-bottom: none; }
+.sync-target-label { flex: 1 1 auto; min-width: 0; cursor: pointer; }
+/* The path is the part that can be arbitrarily long; the label and the count
+ * must not be the ones that break. `overflow-wrap: anywhere` rather than an
+ * ellipsis because a truncated host path is not a shorter path (2.1b). */
+.sync-target-label .hint { overflow-wrap: anywhere; }
+/* A measurement may not be the thing that loses. Two facts, and the second is
+ * why the first one does not work on its own:
+ *
+ *   1. `.tag` inherits `text-overflow: ellipsis`, and that only takes effect
+ *      together with `overflow: hidden`.
+ *   2. A flex item's `min-width: auto` resolves to its CONTENT size only when
+ *      its overflow is visible. With `overflow: hidden` it resolves to 0.
+ *
+ * So the `.tag` in this row could shrink below its own text no matter what
+ * `flex` said — `flex: none` measured 4px short at 1280, 768 AND 390 alike,
+ * painting `19 skills · 4…`. `min-width: max-content` states it directly. The
+ * space comes off `.sync-target-label`, which already wraps. */
+.sync-target .tag { flex: 0 0 auto; min-width: max-content; white-space: nowrap; }
+/* The native checkbox, NOT `.choice-box`: this row's box is a control beside a
+ * label that is itself large and clickable, so a 16px custom mark would be
+ * the smallest target on the line. The row's own height is the target. */
+.sync-target .choice-check { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.sync-force { margin-top: var(--s4); }
 
 .template-list { list-style: none; margin: 0; padding: 0; }
 .template-list li {
