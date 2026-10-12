@@ -407,13 +407,27 @@ function inlineMd(s) {
 }
 
 function renderMarkdown(md) {
-  if (!md || !md.trim()) return '<p style="color:var(--text-muted);">No documentation body.</p>';
+  if (!md || !md.trim()) return '<p class="doc-empty">No documentation body.</p>';
   const lines = String(md).replace(/\r\n?/g, "\n").split("\n");
   const out = [];
   let i = 0, inList = null, inCode = false, codeBuf = [], inTable = false;
+  // The `|---|` row is the only evidence that the row ABOVE it is a header, so
+  // the first row of a table is held back until that evidence arrives. 4.6:
+  // every row used to be emitted as a `td`, so `.body th` styled nothing and a
+  // header row was indistinguishable from a data row.
+  let pendingCells = null, sawSeparator = false;
 
   const closeList = () => { if (inList) { out.push("</" + inList + ">"); inList = null; } };
-  const closeTable = () => { if (inTable) { out.push("</table>"); inTable = false; } };
+  const closeTable = () => {
+    if (!inTable) return;
+    // No separator ever arrived, so nothing proved a header: the held row was
+    // an ordinary row and is emitted as one, not lost.
+    if (pendingCells) out.push("<tr>" + pendingCells.map((c) => "<td>" + inlineMd(c) + "</td>").join("") + "</tr>");
+    out.push(sawSeparator ? "</tbody></table>" : "</table>");
+    inTable = false;
+    pendingCells = null;
+    sawSeparator = false;
+  };
 
   while (i < lines.length) {
     const line = lines[i];
@@ -439,10 +453,25 @@ function renderMarkdown(md) {
       closeList();
       const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
       const isSep = cells.every((c) => /^:?-{2,}:?$/.test(c));
-      if (!isSep) {
-        if (!inTable) { out.push("<table>"); inTable = true; }
-        out.push("<tr>" + cells.map((c) => "<td>" + inlineMd(c) + "</td>").join("") + "</tr>");
+      if (isSep) {
+        if (inTable && pendingCells) {
+          out.push("<thead><tr>" + pendingCells.map((c) => "<th>" + inlineMd(c) + "</th>").join("") + "</tr></thead><tbody>");
+          pendingCells = null;
+          sawSeparator = true;
+        }
+        i++; continue;
       }
+      if (!inTable) { out.push("<table>"); inTable = true; }
+      if (!sawSeparator && !pendingCells) { pendingCells = cells; i++; continue; }
+      // A second row arrived with no separator anywhere: nothing proved a
+      // header, so the held row is an ordinary row and is flushed HERE, in its
+      // own position. Flushing it at closeTable instead reorders the table -
+      // measured, because that is what the first version of 4.6 did.
+      if (pendingCells) {
+        out.push("<tr>" + pendingCells.map((c) => "<td>" + inlineMd(c) + "</td>").join("") + "</tr>");
+        pendingCells = null;
+      }
+      out.push("<tr>" + cells.map((c) => "<td>" + inlineMd(c) + "</td>").join("") + "</tr>");
       i++; continue;
     }
     if (h) { closeList(); closeTable(); out.push(`<h${h[1].length}>` + inlineMd(h[2]) + `</h${h[1].length}>`); i++; continue; }

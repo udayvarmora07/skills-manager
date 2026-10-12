@@ -76,9 +76,11 @@
                                 a path you cannot debug */
   --t-table:  0.8125rem;   /* 13px — table rows, dense UI */
   --t-ui:     0.875rem;    /* 14px — body UI, inputs, row primary line */
-  --t-prose:  1rem;        /* 16px — rendered SKILL.md bodies */
-  --t-page:   1.25rem;     /* 20px — page and dialog titles */
-  --t-empty:  1.75rem;     /* 28px — empty-state and first-run titles */
+  --t-prose:  1rem;        /* 16px — rendered SKILL.md bodies: the document
+                                base, the paragraph, the list item, the cell */
+  --t-page:   1.25rem;     /* 20px — page, dialog titles, and the document's
+                                second-level heading */
+  --t-empty:  1.75rem;     /* 28px — empty-state, first-run and document titles */
   --t-num:    500 var(--t-meta)/1 var(--mono); font-variant-numeric: tabular-nums;
   --t-id:     500 var(--t-table)/1.35 var(--mono); letter-spacing: -0.01em;
 
@@ -2310,7 +2312,30 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    `.body`-specific, and it is not document typography.
    `tests/test_redesign_markdown_document.py` asserts the two host lists are
    identical rule-for-rule, so a `.body blockquote` added without its preview
-   twin goes red rather than quietly reintroducing two renderings. */
+   twin goes red rather than quietly reintroducing two renderings.
+
+   4.6 DESIGNED THIS BLOCK, which until now was ~25 rules inherited from the v1
+   stylesheet and never a decision. Four of them were wrong in a way that is
+   only visible when you hold the rendered document next to the rendered
+   application around it:
+
+   * `--t-prose` (16px) carries the comment "rendered SKILL.md bodies" and was
+     declared but UNUSED — the document inherited `--t-ui` (14px) from whatever
+     pane it sat in. The size for the job existed; the job was not using it.
+   * `h4`/`h5`/`h6` were `--t-table` (13px) and `h3` was 16px, so a heading was
+     smaller than the paragraph it introduces. A ladder that descends below its
+     own floor is not a ladder.
+   * `.body h2 { margin-top: 0 }` was aimed at the FIRST heading and hit every
+     one of them, so a long document lost the space above every section it
+     contained. The rule above (`> :first-child`) already does that job.
+   * inline `code` was `--t-table` (13px) inside 14px text. The mono face is
+     already optically larger than the sans it sits in; shrinking it as well is
+     how a code span reads as an aside.
+
+   The ladder is 28 / 20 / 16 / 16 because `--t-*` is SIX steps and no more
+   (see the scale note at the top of this file) and there is no step between
+   16 and 20. Below 16 the distinction is weight and colour, which is what
+   GitHub and Vercel docs do rather than inventing a size the scale forbids. */
 
 .body {
   margin-top: 28px;
@@ -2318,53 +2343,130 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   border-top: 1px solid var(--border);
   max-width: 72ch;
 }
-.body h2, .markdown-preview h2 { margin-top: 0; border: 0; font-size: var(--t-page); }
+
+/* The document's own size, declared on the ELEMENTS rather than on a host.
+   The two hosts sit under different ancestors - a detail pane and a dialog -
+   so a size on one host is a size the other host cannot inherit, and the one
+   rule allowed to name a single host is the pane's own box, above. */
+.body p, .markdown-preview p,
+.body li, .markdown-preview li,
+.body th, .markdown-preview th,
+.body td, .markdown-preview td,
+.body blockquote, .markdown-preview blockquote,
+.body .doc-empty, .markdown-preview .doc-empty { font-size: var(--t-prose); }
 
 .body h1, .body h2, .body h3, .body h4, .body h5, .body h6,
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
 .markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
-  line-height: 1.3;
-  margin: 1.4em 0 0.5em;
-  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text);
+  font-weight: 640;
 }
-.body h1, .markdown-preview h1 { font-size: var(--t-empty); }
-.body h2, .markdown-preview h2 { font-size: var(--t-page); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-.body h3, .markdown-preview h3 { font-size: var(--t-prose); }
+.body h1, .markdown-preview h1 {
+  font-size: var(--t-empty);
+  letter-spacing: -0.022em;
+  margin: 0 0 var(--s4);
+}
+.body h2, .markdown-preview h2 {
+  font-size: var(--t-page);
+  letter-spacing: -0.014em;
+  margin: var(--s7) 0 var(--s3);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--border);
+}
+.body h3, .markdown-preview h3 {
+  font-size: var(--t-prose);
+  margin: var(--s6) 0 var(--s2);
+}
 .body h4, .body h5, .body h6,
-.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 { font-size: var(--t-table); }
-.body > :first-child, .markdown-preview > :first-child { margin-top: 0; }
-
-.body p, .markdown-preview p { margin: 0.7em 0; line-height: 1.65; }
-.body ul, .body ol,
-.markdown-preview ul, .markdown-preview ol { padding-left: 1.4em; margin: 0.7em 0; }
-.body li, .markdown-preview li { margin: 0.25em 0; line-height: 1.6; }
-.body a, .markdown-preview a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
-.body blockquote, .markdown-preview blockquote {
-  /* avoid-ai-design-ignore: K4 — the blockquote rule is the convention itself */
-  margin: 0.9em 0;
-  padding: var(--s2) var(--s4);
-  border-left: 3px solid var(--accent);
-  background: var(--surface-2);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
+  font-size: var(--t-prose);
   color: var(--text-muted);
+  margin: var(--s5) 0 var(--s1);
 }
-.body hr, .markdown-preview hr { border: none; border-top: 1px solid var(--border); margin: var(--s9) 0; }
-.body code, .markdown-preview code { font-family: var(--mono); font-size: var(--t-table); background: var(--code-bg); border-radius: 4px; padding: 1px 6px; }
+.body > :first-child, .markdown-preview > :first-child { margin-top: 0; }
+/* Both hosts end the same way. This rule used to exist for the preview only,
+   600 lines BELOW this block and outside the banner, so the host-agreement
+   suite could not see the divergence: the editor's document finished flush
+   and the Source tab's finished with whatever margin its last element had. */
+.body > :last-child, .markdown-preview > :last-child { margin-bottom: 0; }
+
+.body p, .markdown-preview p { margin: 0 0 var(--s4); line-height: 1.6; }
+.body ul, .body ol,
+.markdown-preview ul, .markdown-preview ol {
+  margin: 0 0 var(--s4);
+  padding-left: 1.5em;
+}
+.body li, .markdown-preview li { margin: var(--s1) 0; line-height: 1.6; }
+.body li > ul, .body li > ol,
+.markdown-preview li > ul, .markdown-preview li > ol { margin: var(--s1) 0 0; }
+.body a, .markdown-preview a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+/* A quote is prose someone else said, so it is set in the reader's own colour
+   and separated by a rule - not by a filled panel. The old rule did both: a
+   grey box, an ACCENT bar, and `--text-muted`, so the accent spent itself on
+   decoration in a document where it is otherwise reserved for things you can
+   act on, and the quoted sentence sat at less contrast than the paragraph
+   above it. */
+.body blockquote, .markdown-preview blockquote {
+  margin: var(--s5) 0;
+  padding: 0 0 0 var(--s5);
+  border-left: 2px solid var(--border-strong);
+}
+.body blockquote > :first-child, .markdown-preview blockquote > :first-child { margin-top: 0; }
+.body blockquote > :last-child, .markdown-preview blockquote > :last-child { margin-bottom: 0; }
+.body hr, .markdown-preview hr { border: none; border-top: 1px solid var(--border); margin: var(--s7) 0; }
+/* No `font-size` here on purpose - see the banner. */
+.body code, .markdown-preview code {
+  font-family: var(--mono);
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
 .body pre, .markdown-preview pre {
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   padding: var(--s4);
   overflow-x: auto;
   line-height: 1.55;
+  tab-size: 2;
 }
-.body pre code, .markdown-preview pre code { background: none; padding: 0; font-size: var(--t-table); }
+.body pre code, .markdown-preview pre code {
+  background: none;
+  padding: 0;
+  font-size: var(--t-table);
+}
 
-.tablewrap { overflow-x: auto; margin: 0.9em 0; }
-.body table, .markdown-preview table { border-collapse: collapse; width: 100%; font-size: var(--t-ui); }
+.body .doc-empty, .markdown-preview .doc-empty { color: var(--text-muted); }
+
+.tablewrap { overflow-x: auto; margin: var(--s5) 0; }
+/* Row rules, not a grid. A 1px box around every cell is a spreadsheet; the
+   rule between rows is what makes a column readable, and it is what GitHub,
+   Stripe and Vercel all do. `thead` is a real element here because the
+   renderer emits one (the `|---|` row is the proof that the row above it is a
+   header); before 4.6 every row was a `td` and `.body th` styled nothing.
+   The last rule below is the generic `tr:last-child` one, not a `tbody` one:
+   a table with no separator row has no header and no `tbody`, and a rule that
+   cannot reach it leaves a trailing rule under the final row. */
+.body table, .markdown-preview table { border-collapse: collapse; width: 100%; }
 .body th, .body td,
-.markdown-preview th, .markdown-preview td { border: 1px solid var(--border); padding: 6px 12px; text-align: start; }
-.body th, .markdown-preview th { background: var(--surface-2); font-weight: 600; }
+.markdown-preview th, .markdown-preview td {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: var(--s2) var(--s3) var(--s2) 0;
+  text-align: start;
+  vertical-align: top;
+}
+.body th, .markdown-preview th { font-weight: 640; }
+.body thead th, .markdown-preview thead th { border-bottom-color: var(--border-strong); }
+.body tbody tr:last-child > *, .markdown-preview tbody tr:last-child > * { border-bottom: 0; }
+/* A table with no header row has no `tbody`. `tr:last-child` on its own is not
+   the fallback - it is ALSO the header row, which is the last child of the
+   `thead`, so the broad version deleted the rule UNDER the column labels.
+   Measured, not argued: `th` came back with `border-bottom-width: 0px` and
+   `td` with 1px, in a document with no other explanation. `> td` is what a
+   headerless table's last row actually contains. */
+.body tr:last-child > td, .markdown-preview tr:last-child > td { border-bottom: 0; }
 
 /* ----------------------------------------------------------- empty/loading */
 
@@ -2827,12 +2929,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   background: var(--surface);
   /* No `font-size` here, deliberately. The preview carries the same document as
      `.body`, so it must resolve its base size the same way `.body` does - by
-     inheriting `--t-ui` from the document. It used to declare `--t-table`,
+     inheriting it, the way `.body` does. It used to declare `--t-table`,
      which made the entire subtree one step smaller than the Source tab for
      every element type at once; measured, not argued, by comparing computed
-     styles between the two live renders. */
+     styles between the two live renders. 4.6 moved the document's own size
+     down onto the text elements, which is where both hosts can agree on it;
+     this host still declares no size of its own. The `:last-child` collapse
+     that used to sit here moved UP into the 4.6 document block, because a
+     rule for one host only and outside that block is a divergence the
+     host-agreement suite cannot see. */
 }
-.markdown-preview > :last-child { margin-bottom: 0; }
 
 @media (min-width: 900px) {
   .form-field .body-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); height: 420px; }
