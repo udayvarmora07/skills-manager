@@ -345,7 +345,6 @@ PRIMITIVE_PENDING_ADOPTION = {
     ".tooltip": "2.1 icon-only buttons",
     ".table th": "5.5 hygiene findings, 5.6 recovery",
     ".panel": "2.1 status strip, 3.1 overview sections",
-    ".stepper": "5.2 registry Fetch -> Review -> Commit",
     ".diff-line": "4.8 update-from-folder review",
     # 4.4 wired the tab primitive: the detail pane's strip is `.tabs`/`.tab`,
     # so the pending-adoption exception was removed rather than left behind.
@@ -357,7 +356,14 @@ PRIMITIVE_PENDING_ADOPTION = {
     # "4.1 segmented state filter, 5.7 settings" as its adopter, and neither
     # row adopted it; the dialogs that most needed a real choice control were
     # the ones hand-rolling `accent-color` on a native radio.
-    ".step": "5.2 registry stepper",
+    #
+    # 5.2 did the same for `.stepper` and `.step`, which sat here from 1.5 with
+    # "5.2 registry Fetch -> Review -> Commit" written on them. The registry
+    # fetch flow is that stepper — the install view's Fetch & trust half. The
+    # primitive's own comment already described this flow before any view used
+    # it, which is how a "declared and never read" rule can look adopted and
+    # be adopted in neither sense; the markup now carries it, and the gate is
+    # what proves it.
 }
 # Removed by 2.2, and the removal is the interesting part: `.badge`, `.chip`,
 # `.empty`, `.skeleton` and `.kbd` were all on this list, and all five are

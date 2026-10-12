@@ -55,19 +55,41 @@ def _install_block():
 
 
 def _install_halves():
-    """The view's two workflows, split where the template splits them.
+    """The view's workflows, split where the markup splits them.
 
     5.1b's whole point is that "does this page write to disk?" has two answers,
-    so the contract has to ask about one half at a time. The split is taken at
-    `<template v-if="install.mode === 'registry'">` and the matching
-    `<template v-else>`, which is the boundary the markup itself declares —
-    slicing on a string that merely LOOKS like a mode name would put a
-    boundary wherever the prose happened to sit.
+    so the contract has to ask about one half at a time. **5.2 added a third**,
+    and this is exactly the helper's failure mode: it took the FIRST
+    `<template v-else>` after the registry half and returned everything from
+    there to the end of the block, so the fetch stepper silently joined the
+    installer half and the runner-half count assertions saw both.
+
+    **The halves are keyed on their MODE, not on the directive that opens
+    them.** They were `v-if` / `v-else` / `v-else`, and with three branches
+    Vue's compiler **silently dropped the middle one** — `mode === "runner"`
+    rendered the FETCH half, with no error and no console message. They are
+    three independent `v-if`s now, and this helper matches on
+    `install.mode === '…'` so it keeps working whichever directive a future
+    edit chooses, and fails loudly if a fourth workflow appears without a
+    case here.
     """
+    # HTML COMMENTS ARE STRIPPED FIRST. 5.2's own comment quotes
+    # `@click="runInstall(` and `#install-source` while explaining why the
+    # halves are three `v-if`s — so a region finder that reads comments
+    # "finds" the runner half's controls inside the registry half and every
+    # per-half assertion inverts. This is 4.7d's lesson, the fifth recorded
+    # instance: a prose comment quoting an example is indistinguishable from
+    # the example until the comments are gone.
     block = _install_block()
-    open_at = block.index("<template v-if=\"install.mode === 'registry'\">")
-    split_at = block.index("<template v-else>", open_at)
-    return block[open_at:split_at], block[split_at:]
+    block = re.sub(r"<!--.*?-->", "", block, flags=re.S)
+    at = [block.index(f"""<template v-if="install.mode === '{m}'">""")
+          for m in ("registry", "runner", "fetch")]
+    if len(re.findall(r"""<template v-if="install\.mode === '""", block)) != 3:
+        raise AssertionError("a fourth workflow appeared; classify it here first")
+    # Slice between the anchors' own indices rather than searching for an
+    # indentation prefix: the halves are separated by HTML comments, and a
+    # prefix search runs straight past a comment to the next template.
+    return tuple(block[at[i]:at[i + 1]] for i in range(2)) + (block[at[2]:],)
 
 
 def _method_body(name):
@@ -205,10 +227,15 @@ class InstallViewContracts(unittest.TestCase):
         so when it does. Asserted per half rather than per page, because "the
         page does not write" and "the page's registry half does not write" are
         different claims and only one of them is still true."""
-        registry, installer = _install_halves()
+        registry, installer, fetch_half = _install_halves()
         for forbidden in ("commitRegistryReview", "prepareSnapshotReview", "doInstall", "runInstall"):
             self.assertNotIn("@click=\"" + forbidden, registry)
         self.assertIn('@click="runInstall(', installer)
+        # 5.2: the fetch half is the ONE half that may commit, and the test has
+        # to say which — otherwise "the registry half does not write" stays
+        # true forever while a third half writes with no owner asserting it.
+        self.assertIn('@click="commitRegistryReview"', fetch_half)
+        self.assertNotIn('@click="runInstall(', fetch_half)
         # The no-write sentence must not be a literal in the markup any more:
         # it is now chosen by mode, and a literal would be a claim the reader
         # could read on the half that DOES write.
@@ -282,7 +309,7 @@ class InstallerWorkflowContracts(unittest.TestCase):
         call SITES, because counting four invocations inside the half was
         counting the wrong thing (the two buttons call `runInstall`, which
         reads the same getter)."""
-        _, installer = _install_halves()
+        _, installer, _ = _install_halves()
         self.assertEqual(installer.count("installPreview()"), 2)  # displayed, copied
         self.assertEqual(installer.count('@click="runInstall('), 2)  # preview, run
         # And it is the SAME expression that assembles the command.

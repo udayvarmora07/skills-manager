@@ -1086,7 +1086,18 @@
              Copy and `runInstall` both read it, so what the reader copies is
              what runs — the 4.7 rule (one sentence must not name one count while
              the request sends another) applied to a command line. -->
-        <template v-else>
+        <!-- Two INDEPENDENT `v-if`s, not `v-if`/`v-else`/`v-else`. Vue's
+             compiler attaches `v-else` to the preceding sibling branch, and
+             with three branches and an HTML comment between two of them it
+             **silently dropped the middle one**: `install.mode === "runner"`
+             rendered the FETCH half. Nothing threw, no console message, and
+             every source-level contract — including 5.1b's, which asserted
+             `@click="runInstall(` inside "the installer half" as text —
+             stayed green. Only `tests/e2e/test_install_view.py`, which clicks
+             the button and asks whether `#install-source` exists, saw it.
+             Three independent conditions cannot be dropped by a rule about
+             sibling adjacency. -->
+        <template v-if="install.mode === 'runner'">
           <div class="install-runner">
             <div class="form-field">
               <label for="install-source">Source</label>
@@ -1132,6 +1143,69 @@
           </div>
 
           <p v-if="installRunnerOutcome" class="install-runner-outcome" role="status">{{ installRunnerOutcome }}</p>
+        </template>
+
+        <template v-if="install.mode === 'fetch'">
+          <!-- 5.2 — the fetch half. It is a WORKFLOW and not a fourth source: it
+               is the only registry operation that writes, so it sits beside the
+               other two rather than inside the read strip. Three steps, and each
+               one is derived from what the last response actually returned
+               (`install.review` / `install.committed`) — no step is a variable a
+               reader or a handler sets by hand. -->
+          <ol class="stepper" aria-label="Fetch, review, install">
+            <template v-for="(step, i) in installFetchSteps" :key="step.id">
+              <li class="step" :aria-current="step.state === 'current' ? 'step' : undefined" :data-done="step.state === 'done' ? 'true' : undefined" :data-step="i + 1">{{ step.label }}</li>
+              <li v-if="i < installFetchSteps.length - 1" class="step-sep" aria-hidden="true"></li>
+            </template>
+          </ol>
+          <p class="fetch-step-detail">{{ installFetchDetail }}</p>
+
+          <div v-if="install.committed" class="banner banner-success install-fetch-banner" role="status">
+            <app-icon name="circle-check" aria-hidden="true"></app-icon>
+            <span><strong>{{ install.committed.name }}</strong> — {{ installFetchOutcome }}</span>
+          </div>
+
+          <div v-else-if="installFetchSteps[0].state === 'current'" class="fetch-form">
+            <div class="form-field">
+              <label for="install-fetch-source">Skill id or skills.sh URL</label>
+              <input id="install-fetch-source" name="install-fetch-source" v-model.trim="install.source" placeholder="owner/repo/skill" spellcheck="false" autocomplete="off">
+              <span class="hint">Fetches one skill and stages it for review under this data directory. Installs nothing on its own.</span>
+            </div>
+            <label class="check-row"><input type="checkbox" name="install-fetch-allow-stale" v-model="install.allowStale"> Serve an expired cache when the registry cannot be reached</label>
+            <div class="install-cmd">
+              <code class="install-cmd-text">{{ installPreview() }}</code>
+              <button class="btn btn-secondary" type="button" @click="copy(installPreview())">Copy</button>
+            </div>
+            <div class="install-runner-actions">
+              <button class="btn btn-primary" type="button" data-fetch-action="fetch" :disabled="busy || !registryReady()" @click="runRegistry">Fetch for review</button>
+            </div>
+          </div>
+
+          <!-- The evidence. It is a table and not a preview panel because every
+               row is an OBSERVED value the reader may need to quote, and the two
+               strings below it (the risk policy, the expiry) are the backend's
+               own words — a summary sentence would be an interpretation. -->
+          <div v-else class="fetch-evidence" aria-labelledby="install-fetch-evidence-title">
+            <h2 id="install-fetch-evidence-title" class="fetch-evidence-title">Evidence <span class="hint">for review <code>{{ install.review.review_id }}</code></span></h2>
+            <dl class="meta compact-meta fetch-facts">
+              <div v-for="fact in installFetchFacts" :key="fact.label"><dt>{{ fact.label }}</dt><dd><code v-if="fact.code">{{ fact.value }}</code><span v-else>{{ fact.value }}</span></dd></div>
+            </dl>
+            <p v-if="installFetchExpiry" class="hint fetch-expiry">This review expires at {{ installFetchExpiry }}. After that the commit fails and the skill must be fetched again.</p>
+            <div v-if="installFetchWarnings.length" class="fetch-section">
+              <h3 class="section-label">Validation warnings ({{ installFetchWarnings.length }})</h3>
+              <ul class="fetch-findings"><li v-for="(w, wi) in installFetchWarnings" :key="'w' + wi" class="fetch-finding"><span class="fetch-finding-severity">{{ w.level }}</span><span>{{ w.message }}</span></li></ul>
+            </div>
+            <div v-if="installFetchRisk" class="fetch-section">
+              <h3 class="section-label">Risk signals</h3>
+              <p class="hint fetch-risk-policy">{{ installFetchRisk.policy }}</p>
+              <ul v-if="installFetchRisk.findings.length" class="fetch-findings"><li v-for="(f, fi) in installFetchRisk.findings" :key="'f' + fi" class="fetch-finding"><span class="fetch-finding-severity">{{ f.severity }}</span><span><strong>{{ f.kind }}</strong> — {{ f.evidence }}<span v-if="f.why" class="hint"> &middot; {{ f.why }}</span></span></li></ul>
+              <p v-else class="hint">The scan returned no findings.</p>
+            </div>
+            <div class="install-runner-actions">
+              <button class="btn btn-primary" type="button" data-fetch-action="commit" :disabled="busy" @click="commitRegistryReview">Trust and install into the global store</button>
+            </div>
+            <p class="hint fetch-commit-note">Confirming installs the snapshot that was reviewed. Trust and hashes stay recorded as evidence; this does not claim the skill is safe.</p>
+          </div>
         </template>
       </div>
       <div v-else-if="view === 'skills'" class="detail-inner">

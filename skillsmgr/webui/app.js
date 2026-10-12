@@ -225,7 +225,7 @@ const appOptions = {
       scopeScanFailed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { mode: "registry", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, error: null },
+      install: { mode: "registry", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, committed: null, error: null },
       theme: ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system",
       resolvedTheme: "light",
       systemTheme: "light",
@@ -983,16 +983,23 @@ const appOptions = {
     installWorkflows() {
       return [
         { id: "registry", label: "Registry" },
+        { id: "fetch", label: "Fetch & trust" },
         { id: "runner", label: "Installer" },
       ];
     },
     /* The sentence under the heading is mode-aware because 5.1a's was scoped to
        the registry half: "nothing on this page writes to disk" is true until the
        Installer button is pressed, and a blanket claim like that is the RULES #12
-       failure this product is built to avoid. */
+       failure this product is built to avoid. The fetch half has a THIRD claim
+       to make: it writes a review under the data dir on the first press and a
+       skill into the global store on the second, and it will not do either until
+       the reader has seen the first one's evidence. */
     installScopeNote() {
       if (this.install.mode === "runner") {
         return "Runs a package runner on this machine and writes into the agent scope roots it reports. This is the half of this page that changes things on disk.";
+      }
+      if (this.install.mode === "fetch") {
+        return "Fetches one skill from skills.sh into a review under this data directory. Nothing is installed until you read that review and confirm it. The commit targets the global store only.";
       }
       return "Reads the skills.sh registry. Nothing on this page writes to disk — fetching a snapshot for review is a separate, deliberate action.";
     },
@@ -1077,6 +1084,122 @@ const appOptions = {
     },
     installResultTruncated() {
       return !!(this.install.lastResult && this.install.lastResult.truncated);
+    },
+    /* --- 5.2 the fetch stepper ---------------------------------------------
+       `fetch` is the one registry operation that WRITES: stage 1 puts a private,
+       expiring review under the data dir and installs nothing; stage 2 is the
+       reader looking at it; stage 3 sends `review_id` + `trust_confirmed` and
+       writes the skill into the global store. The backend enforces the split
+       (webapp.py:128 refuses a commit without `trust_confirmed`, :130 refuses
+       `trust_confirmed` without a `review_id`), so the stepper below is not a
+       UI convention layered over a single call — it is the shape of the route.
+
+       **The three states are derived, never declared.** `review` and
+       `committed` are whatever the last two responses actually returned, so a
+       step cannot advance on a value a reader typed. */
+    installFetchSteps() {
+      const review = this.install.review;
+      const committed = this.install.committed;
+      if (committed) {
+        return [
+          { id: "fetch", label: "Fetched", state: "done", detail: "The snapshot was staged for review." },
+          { id: "review", label: "Reviewed", state: "done", detail: "You read the evidence below and confirmed it." },
+          { id: "commit", label: "Installed", state: "done", detail: `${committed.name} is in the global store.` },
+        ];
+      }
+      if (review) {
+        return [
+          { id: "fetch", label: "Fetched", state: "done", detail: `Review ${review.review_id} is held under this data directory.` },
+          { id: "review", label: "Read the evidence", state: "current", detail: "The validation, risk signals and hashes are below. Nothing is installed until you confirm." },
+          { id: "commit", label: "Trust and install", state: "todo", detail: "Available once you have read the evidence." },
+        ];
+      }
+      return [
+        { id: "fetch", label: "Fetch for review", state: "current", detail: "Fetches one skill and stages it for review. Installs nothing." },
+        { id: "review", label: "Read the evidence", state: "todo", detail: "Validation, risk signals, hashes and expiry." },
+        { id: "commit", label: "Trust and install", state: "todo", detail: "Writes the reviewed snapshot into the global store." },
+      ];
+    },
+    installFetchStepIndex() {
+      const steps = this.installFetchSteps;
+      const at = steps.findIndex((s) => s.state === "current");
+      return at === -1 ? steps.length : at;
+    },
+    /* One sentence, under the strip, for the step the reader is ON. Three
+       sentences competed for one 1280 row, wrapped the strip onto two lines and
+       left a separator stranded at the head of the second — so the strip now
+       carries labels and this carries the one line that does work. The detail
+       of a DONE step is not lost either: the commit outcome banner says it. */
+    installFetchDetail() {
+      const steps = this.installFetchSteps;
+      const current = steps.find((s) => s.state === "current");
+      return (current || steps[steps.length - 1]).detail;
+    },
+    /* `registry` is a dict the backend builds from a snapshot we did not write,
+       and `inspection.findings` is a list of heuristic signals whose own policy
+       string says they are not a verdict. Both are read defensively and BOTH
+       strings are rendered verbatim rather than summarised into a score — the
+       product states observed facts only (RULES #12). */
+    installFetchFacts() {
+      const review = this.install.review || this.install.committed;
+      if (!review) return [];
+      const registry = (review.registry && typeof review.registry === "object") ? review.registry : {};
+      const rows = [
+        { label: "Registry id", value: registry.id || registry.slug || registry.source || "the returned source", code: true },
+        { label: "Source", value: registry.source || "not recorded by the registry" },
+        { label: "Slug", value: registry.slug || "not recorded" },
+        { label: "Snapshot hash", value: registry.snapshot_hash || "not recorded", code: true },
+        { label: "Registry hash", value: registry.registry_hash || registry.remote_registry_hash || "not recorded", code: true },
+        { label: "Hash verified", value: registry.hash_verified === true ? "verified against the registry" : (registry.remote_hash ? "not verified — the registry's own hash is recorded, not confirmed" : "no remote hash was returned") },
+        { label: "Cache", value: String(registry.cache_state || "unknown") },
+        { label: "Files", value: Number.isFinite(registry.file_count) ? String(registry.file_count) : "not counted" },
+      ];
+      if (registry.normalization) rows.push({ label: "Normalization", value: String(registry.normalization) });
+      return rows;
+    },
+    installFetchWarnings() {
+      const inspection = this.install.review && this.install.review.inspection;
+      const list = inspection && inspection.validation && Array.isArray(inspection.validation.warnings) ? inspection.validation.warnings : [];
+      return list.filter((w) => w && typeof w === "object").map((w) => ({
+        level: String(w.level || "warning"),
+        message: String(w.message || "the validator reported a warning with no message"),
+      }));
+    },
+    /* The policy string is the backend's and says out loud that these findings
+       are not a safety or trust verdict (cli_handlers.py:1505). Rendering a
+       count instead would turn a heuristic into a grade, which is the exact
+       failure this product is built not to ship. */
+    installFetchRisk() {
+      const inspection = this.install.review && this.install.review.inspection;
+      const risk = inspection && inspection.risk;
+      if (!risk || typeof risk !== "object") return null;
+      const findings = Array.isArray(risk.findings) ? risk.findings.filter((f) => f && typeof f === "object") : [];
+      return {
+        policy: String(risk.policy || "the scan returned no policy statement"),
+        findings: findings.map((f) => ({
+          kind: String(f.kind || "finding"),
+          severity: String(f.severity || "unknown"),
+          evidence: String(f.evidence || "no evidence text was returned"),
+          why: String(f.why || ""),
+        })),
+      };
+    },
+    /* The expiry is the backend's own 24h window (registry.py:68), not a number
+       typed here, and it matters: after it passes the commit fails with "review
+       is unreadable", so a reader told only "installed" would be told nothing
+       about the window they are acting in. */
+    installFetchExpiry() {
+      const review = this.install.review;
+      const value = (review && (review.review_expires_at || review.expires_at)) || "";
+      if (!value) return "";
+      const when = new Date(value);
+      if (Number.isNaN(when.getTime())) return String(value);
+      return when.toLocaleString();
+    },
+    installFetchOutcome() {
+      const committed = this.install.committed;
+      if (!committed) return "";
+      return `installed into the global store at ${committed.path}.`;
     },
     registryInventory() {
       const source = this.allSkills.length ? this.allSkills : this.skills;
@@ -2334,6 +2457,16 @@ const appOptions = {
         if (this.install.registryOp === "curated") return "skills.sh curated catalog";
         return `skills.sh fetch ${this.install.source || "<owner/repo/skill>"} → global store`;
       }
+      /* 5.2 — the fetch half reads the SOURCE field too, and `install.source`
+         is where the runner form keeps its own source. Falling through to the
+         runner assembler would print `npx skills add <owner/repo/skill>` for a
+         press that does not run npx at all. */
+      if (this.install.mode === "fetch") {
+        const spec = (this.install.source || "").trim() || "<owner/repo/skill>";
+        return this.install.review
+          ? `skills.sh commit ${this.install.review.review_id} → global store`
+          : `skills.sh fetch ${spec} → review (not the global store)`;
+      }
       const r = this.install.runner || "npx";
       const src = (this.install.source || "").trim() || "owner/repo";
       let cmd = r === "npx" ? `npx skills add ${src}` : r === "pnpm" ? `pnpm dlx skills add ${src}` : r === "yarn" ? `yarn dlx skills add ${src}` : `bunx skills add ${src}`;
@@ -2400,6 +2533,7 @@ const appOptions = {
       // the commit action can never be mistaken for the new form values.
       this.install.review_id = null;
       this.install.review = null;
+      this.install.committed = null;
       this.install.lastResult = null;
       this.busy = true;
       this.install.error = null;
@@ -2452,14 +2586,28 @@ const appOptions = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ fetch: true, review_id: review.review_id, trust_confirmed: true }),
         });
-        this.install.lastResult = res;
+        /* The commit response is KEPT, not written into `lastResult` and read
+           back out of it. It has no `exit_code` (so `installRunnerResult` calls
+           it a runner failure), no `data` (so `installRows` calls it an empty
+           listing) and no `_registry` (so `installMeta` calls it un-cached) —
+           three different false readings from one field written by two halves.
+           `committed` is its own state, so "installed" cannot be mistaken for a
+           listing and the stepper can stay on step three. */
+        this.install.committed = res;
         this.install.review_id = null;
         this.install.review = null;
         this.toast(`Installed ${res.name} from the reviewed registry snapshot.`, "ok");
         await this.loadScopes();
         await this.loadSkills();
       } catch (e) {
-        this.toast(e.message, "err");
+        /* A failed commit must NOT be swallowed into the pane. The review is
+           still pending server-side and still committable, so `review` and
+           `committed` are both left exactly as they were — the only thing that
+           changes is that the reader is told, on the pane whose whole content
+           is this transaction, rather than in a toast that is gone in four
+           seconds (5.1's rule). */
+        this.install.error = e && e.message ? e.message : String(e);
+        this.toast(this.install.error, "err");
       } finally {
         this.busy = false;
       }
@@ -2754,11 +2902,16 @@ const appOptions = {
       if (!this.installWorkflows.some((w) => w.id === id)) return;
       if (this.install.mode === id) return;
       this.install.mode = id;
-      /* The dialog's registry form can leave `registryOp` on `fetch`, which is
-         not one of the three READ sources this view's strip owns. Restoring a
-         selection the view can show beats landing on a tablist where no tab is
-         selected — and `fetch` still has its own surface, in the dialog. */
-      if (id === "registry" && !this.installSources.some((s) => s.id === this.install.registryOp)) {
+      /* `fetch` is a registry operation but it is NOT one of the three READ
+         sources the strip owns, so it rides on `registryOp` rather than
+         becoming a fourth tab: `runRegistry` already switches on it and the
+         route already refuses to combine it with another operation
+         (webapp.py:96). Coming back to the read half restores a tab this strip
+         can actually show — landing on a tablist with no tab selected is the
+         state 5.1b was written to avoid. */
+      if (id === "fetch") {
+        this.install.registryOp = "fetch";
+      } else if (id === "registry" && !this.installSources.some((s) => s.id === this.install.registryOp)) {
         this.install.registryOp = this.installSources[0].id;
       }
     },
@@ -2875,9 +3028,11 @@ const appOptions = {
       else if (v === "install") {
         this.loadSkills();
         /* 5.1b: arriving from the dialog can leave the registry operation on
-           `fetch`, which the view's source strip does not own — see
-           `selectInstallWorkflow`. Same reason, different door. */
-        if (!this.installSources.some((s) => s.id === this.install.registryOp)) {
+           `fetch`, which the view's source strip does not own. Same reason,
+           different door. 5.2: `fetch` is now a workflow the view DOES own, so
+           leaving it selected while the read strip is showing would mean a tab
+           list with no tab selected. */
+        if (this.install.mode !== "fetch" && !this.installSources.some((s) => s.id === this.install.registryOp)) {
           this.install.registryOp = this.installSources[0].id;
         }
       }

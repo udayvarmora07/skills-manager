@@ -3464,6 +3464,101 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   overflow-wrap: anywhere;
 }
 
+/* ------------------------------------------------------- 5.2 fetch stepper */
+
+/* The stepper primitive (`styles.css:641`, declared since 1.5 and reserved here
+   since) already owns the vocabulary: a muted marker, `aria-current` for
+   position, `data-done` for what has happened, and NO colour doing work on its
+   own. 5.2 adopts it rather than writing a second one — the `.stepper` and
+   `.step` pending-adoption exemptions come off the token gate with this.
+
+   The primitive assumed a `<div>` flow; this flow is an ordered list, so it
+   needed `list-style: none` — the separators are `<li>` and without it the
+   browser numbered THEM ("1." "2." printed beside the rules). That is the
+   adoption cost of a rule written before its first caller, and it was only
+   visible by looking at the capture, not by any assertion.
+
+   The step labels stay short and one sentence sits UNDER the strip
+   (`.fetch-step-detail`): three sentences in one 1280 row wrapped the strip
+   onto two lines and stranded a separator at the head of the second. */
+.stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fetch-step-detail {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 70ch;
+}
+
+/* The evidence is a definition list because every row is one named, quotable
+   observed value. A long hash is the common case, so the value cell wraps
+   rather than pushing the row wide. */
+.fetch-evidence {
+  display: grid;
+  gap: var(--s3);
+}
+
+.fetch-evidence-title {
+  margin: 0;
+  font-size: var(--t-ui);
+}
+
+.fetch-facts > div {
+  align-items: baseline;
+}
+
+.fetch-facts dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fetch-section {
+  display: grid;
+  gap: var(--s2);
+}
+
+.fetch-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s1);
+}
+
+.fetch-finding {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: var(--s1) var(--s2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.fetch-finding > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Severity is a word, not a colour. The ladder lives on the Quality view and
+   borrowing it here would make a heuristic signal look like the same class of
+   evidence as a validation error — the policy string says it is not. */
+.fetch-finding-severity {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--t-table);
+  color: var(--text-muted);
+}
+
+.fetch-risk-policy,
+.fetch-expiry,
+.fetch-commit-note {
+  margin: 0;
+}
+
 /* -------------------------------------------------------------- statusbar */
 
 .statusbar {
