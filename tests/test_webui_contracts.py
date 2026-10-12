@@ -564,7 +564,16 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertIn('"/api/install"', source)
         self.assertNotIn("review_id: op === \"fetch\" ? this.install.review_id : undefined", source)
         self.assertNotIn("trust_confirmed: op === \"fetch\" ? true : undefined", source)
-        self.assertIn('value="registry"', html)
+        # 5.1b: the `<option value="registry">` this used to assert on was the
+        # dialog's "Workflow" select, which moved onto the Install view as two
+        # pressed buttons and was deleted here. The intent — both workflows are
+        # reachable — is asserted against where the choice now lives, so
+        # deleting the view's toggle fails this too instead of leaving it green
+        # on a control that no longer exists anywhere.
+        self.assertIn("installWorkflows()", source)
+        self.assertIn('{ id: "registry", label: "Registry" }', source)
+        self.assertIn('{ id: "runner", label: "Installer" }', source)
+        self.assertIn('data-install-workflow="w.id"', html)
         self.assertIn('value="fetch"', html)
         self.assertIn("Use an expired cache if the registry is unavailable", html)
         self.assertIn("Fetch review snapshot", html)

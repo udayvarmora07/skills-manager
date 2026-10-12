@@ -992,9 +992,22 @@
             <p class="eyebrow">Registry</p>
             <h1 id="install-view-title" class="install-title">Install</h1>
           </div>
-          <p class="install-scope-note">Reads the skills.sh registry. Nothing on this page writes to disk — fetching a snapshot for review is a separate, deliberate action.</p>
+          <p class="install-scope-note">{{ installScopeNote }}</p>
         </div>
 
+        <!-- Two workflows, not two more sources. The registry half only READS
+             and the installer half only WRITES, so the choice between them is a
+             mode and not a source: it changes which form is on the page and what
+             the sentence above is allowed to claim. `aria-pressed` on two plain
+             buttons rather than roving tabindex, so the arrow keys keep
+             belonging to the source strip below instead of being consumed
+             twice. -->
+        <div class="install-workflow">
+          <span class="install-workflow-label">Workflow</span>
+          <button v-for="w in installWorkflows" :key="w.id" type="button" class="btn install-workflow-btn" :class="{ 'btn-primary': install.mode === w.id }" :data-install-workflow="w.id" :aria-pressed="install.mode === w.id ? 'true' : 'false'" @click="selectInstallWorkflow(w.id)">{{ w.label }}</button>
+        </div>
+
+        <template v-if="install.mode === 'registry'">
         <div class="tabs install-tabs" role="tablist" aria-label="Registry source" @keydown="onInstallTabKey">
           <button v-for="s in installSources" :key="s.id" class="tab" type="button" role="tab" :data-install-tab="s.id" :id="'install-tab-' + s.id" :aria-controls="'install-panel-' + s.id" :aria-selected="install.registryOp === s.id ? 'true' : 'false'" :tabindex="install.registryOp === s.id ? 0 : -1" @click="selectInstallSource(s.id)">
             {{ s.label }}
@@ -1064,6 +1077,62 @@
             <div class="empty-actions"><button class="btn btn-primary" type="button" @click="runRegistry" :disabled="!installCanRead">Read {{ installSource.label }}</button></div>
           </div>
         </div>
+        </template>
+
+        <!-- 5.1b — the installer half. The same fields, the same request and the
+             same command the dialog used to own: this is where they live now, so
+             there is ONE form for one behaviour instead of two that can drift.
+             `installPreview()` is the only place the command is assembled, and
+             Copy and `runInstall` both read it, so what the reader copies is
+             what runs — the 4.7 rule (one sentence must not name one count while
+             the request sends another) applied to a command line. -->
+        <template v-else>
+          <div class="install-runner">
+            <div class="form-field">
+              <label for="install-source">Source</label>
+              <input id="install-source" name="install-source" v-model.trim="install.source" placeholder="vercel-labs/agent-skills" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="form-field">
+              <label for="install-runner">Runner</label>
+              <select id="install-runner" name="install-runner" v-model="install.runner">
+                <option value="npx">npx (npm)</option>
+                <option value="pnpm">pnpm dlx</option>
+                <option value="yarn">yarn dlx</option>
+                <option value="bunx">bunx (bun)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="install-scope">Scope</label>
+              <select id="install-scope" name="install-scope" v-model="install.scope">
+                <option value="global">Global (-g)</option>
+                <option value="project">Project</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="install-agents">Agents (-a)</label>
+              <input id="install-agents" name="install-agents" v-model.trim="install.agentsText" placeholder="Every detected agent" spellcheck="false" autocomplete="off" @change="syncInstallAgents">
+              <span class="hint">Empty means every detected agent. The command below is what actually gets passed.</span>
+            </div>
+            <div class="form-field">
+              <label for="install-filter">Skill filter (-s)</label>
+              <input id="install-filter" name="install-filter" v-model.trim="install.skillsFilter" placeholder="Every skill" spellcheck="false" autocomplete="off">
+            </div>
+            <label class="check-row"><input type="checkbox" name="install-copy" v-model="install.copy"> Copy into each scope instead of symlinking</label>
+            <label class="check-row"><input type="checkbox" name="install-list-only" v-model="install.listOnly"> List only (dry run, -l)</label>
+          </div>
+
+          <div class="install-cmd">
+            <code class="install-cmd-text">{{ installPreview() }}</code>
+            <button class="btn btn-secondary" type="button" @click="copy(installPreview())">Copy</button>
+          </div>
+
+          <div class="install-runner-actions">
+            <button class="btn btn-secondary" type="button" :disabled="busy || !installRunnerReady" @click="runInstall(false)">Preview</button>
+            <button class="btn btn-primary" type="button" :disabled="busy || !installRunnerReady" @click="runInstall(true)">{{ installRunnerActionLabel }}</button>
+          </div>
+
+          <p v-if="installRunnerOutcome" class="install-runner-outcome" role="status">{{ installRunnerOutcome }}</p>
+        </template>
       </div>
       <div v-else-if="view === 'skills'" class="detail-inner">
         <button class="mobile-back" type="button" @click="closeMobileDetail">← Back to Library</button>
@@ -2194,79 +2263,33 @@
       <h2 id="install-modal-title" class="sr-only">Install skills</h2>
       <div class="modal-head"><h2>Install or browse registry</h2><button class="modal-close" aria-label="Close" @click="closeModal('install')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <p class="hint">Use a runner for an ecosystem install, or query skills.sh for a bounded catalog preview and fetch one validated skill into the global store with provenance.</p>
+        <p class="hint">Fetch one validated skill from skills.sh into the global store with provenance, then read the evidence before you trust it. Browsing the catalog and running an ecosystem install live on the Install page.</p>
         <div class="form-grid">
-          <div class="form-field full">
-            <label for="install-mode">Workflow</label>
-            <select id="install-mode" name="install-mode" v-model="install.mode">
-              <option value="runner">Runner install</option>
-              <option value="registry">skills.sh registry</option>
+          <div class="form-field">
+            <label for="registry-op">Registry operation</label>
+            <select id="registry-op" name="install-registry-operation" v-model="install.registryOp">
+              <option value="browse">Browse leaderboard</option>
+              <option value="search">Search catalog</option>
+              <option value="curated">Curated catalog</option>
+              <option value="fetch">Fetch for review</option>
             </select>
           </div>
-          <template v-if="install.mode === 'registry'">
-            <div class="form-field">
-              <label for="registry-op">Registry operation</label>
-              <select id="registry-op" name="install-registry-operation" v-model="install.registryOp">
-                <option value="browse">Browse leaderboard</option>
-                <option value="search">Search catalog</option>
-                <option value="curated">Curated catalog</option>
-                <option value="fetch">Fetch for review</option>
-              </select>
-            </div>
-            <div class="form-field" v-if="install.registryOp === 'browse'">
-              <label for="registry-view">Leaderboard view</label>
-              <select id="registry-view" name="install-registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select>
-            </div>
-            <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'">
-              <label for="registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label>
-              <input id="registry-source" name="install-registry-source" v-model.trim="install.source" :placeholder="install.registryOp === 'search' ? 'react native' : 'owner/repo/skill'" spellcheck="false">
-            </div>
-            <div class="form-field" v-if="install.registryOp === 'browse'">
-              <label for="registry-page">Page size</label>
-              <input id="registry-page" name="install-registry-page-size" v-model.number="install.perPage" type="number" min="1" max="500">
-            </div>
-            <div class="form-field full">
-              <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-registry-allow-stale" v-model="install.allowStale" style="accent-color:var(--accent);"> Use an expired cache if the registry is unavailable</label>
-              <span class="hint">Trust, audit status, and hashes remain explicit evidence; cache state is shown in the result. Fetch requires this explicit action and records provenance.</span>
-            </div>
-          </template>
-          <template v-else>
-          <div class="form-field full">
-            <label for="install-source">Source</label>
-            <input id="install-source" name="install-source" v-model.trim="install.source" placeholder="vercel-labs/agent-skills or https://github.com/owner/repo" spellcheck="false">
+          <div class="form-field" v-if="install.registryOp === 'browse'">
+            <label for="registry-view">Leaderboard view</label>
+            <select id="registry-view" name="install-registry-view" v-model="install.view"><option value="all-time">All time</option><option value="trending">Trending</option><option value="hot">Hot</option></select>
           </div>
-          <div class="form-field">
-            <label for="install-runner">Runner</label>
-            <select id="install-runner" name="install-runner" v-model="install.runner">
-              <option value="npx">npx (npm)</option>
-              <option value="pnpm">pnpm dlx</option>
-              <option value="yarn">yarn dlx</option>
-              <option value="bunx">bunx (bun)</option>
-            </select>
-            <span class="hint">Same package, different runner. Pick what you use.</span>
+          <div class="form-field full" v-if="install.registryOp === 'search' || install.registryOp === 'fetch'">
+            <label for="registry-source">{{ install.registryOp === 'search' ? 'Search query' : 'Skill id or skills.sh URL' }}</label>
+            <input id="registry-source" name="install-registry-source" v-model.trim="install.source" :placeholder="install.registryOp === 'search' ? 'react native' : 'owner/repo/skill'" spellcheck="false">
           </div>
-          <div class="form-field">
-            <label for="install-scope">Scope</label>
-            <select id="install-scope" name="install-scope" v-model="install.scope">
-              <option value="global">Global (-g)</option>
-              <option value="project">Project</option>
-            </select>
+          <div class="form-field" v-if="install.registryOp === 'browse'">
+            <label for="registry-page">Page size</label>
+            <input id="registry-page" name="install-registry-page-size" v-model.number="install.perPage" type="number" min="1" max="500">
           </div>
           <div class="form-field full">
-            <label for="install-agents">Agents (-a, repeatable)</label>
-            <input id="install-agents" name="install-agents" v-model.trim="install.agentsText" placeholder="claude-code, cursor (leave empty for all detected)" spellcheck="false" @change="install.agents = (install.agentsText||'').split(',').map(s=>s.trim()).filter(Boolean)">
-            <span class="hint">Agents table: claude-code → ~/.agent/skills, codex → ~/.codex/skills, cursor → ~/.cursor/skills, etc. Empty = all.</span>
+            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-registry-allow-stale" v-model="install.allowStale" style="accent-color:var(--accent);"> Use an expired cache if the registry is unavailable</label>
+            <span class="hint">Trust, audit status, and hashes remain explicit evidence; cache state is shown in the result. Fetch requires this explicit action and records provenance.</span>
           </div>
-          <div class="form-field">
-            <label for="install-filter">Skill filter (-s)</label>
-            <input id="install-filter" name="install-skill-filter" v-model.trim="install.skillsFilter" placeholder="frontend-design or * for all">
-          </div>
-          <div class="form-field">
-            <label>Options</label>
-            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-copy" v-model="install.copy" style="accent-color:var(--accent);"> Copy instead of symlink</label>
-            <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" name="install-list-only" v-model="install.listOnly" style="accent-color:var(--accent);"> List only (dry-run, -l)</label>
-          </div>
-          </template>
         </div>
         <div style="margin-top:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:13px;display:flex;gap:8px;align-items:center;">
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ installPreview() }}</span>
@@ -2279,18 +2302,16 @@
           <small>This commit uses the returned review above; current form values do not change it.</small>
           <button class="btn btn-primary" :disabled="busy" @click="commitRegistryReview">Trust and install reviewed snapshot {{ install.review.review_id }}</button>
         </div>
-        <div v-if="install.lastResult" style="margin-top:10px;max-height:220px;overflow:auto;background:#111;color:#ddd;border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;">{{ install.mode === 'registry' ? JSON.stringify(install.lastResult, null, 2) : ((install.lastResult.stdout||'') + (install.lastResult.stderr ? '\n' + install.lastResult.stderr : '') || '(no output)') }}</div>
+        <!-- The runner's own output belongs to the Install view now, so this
+             dump shows a registry response or nothing. `installRunnerResult`
+             tells them apart by the `exit_code` the install route returns, not
+             by whichever half asked last. -->
+        <div v-if="install.lastResult && !installRunnerResult" style="margin-top:10px;max-height:220px;overflow:auto;background:#111;color:#ddd;border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;">{{ JSON.stringify(install.lastResult, null, 2) }}</div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('install')">Close</button>
-        <template v-if="install.mode === 'registry'">
-          <button class="btn btn-secondary" :disabled="busy || !registryReady()" @click="runInstall(false)">Preview</button>
-          <button class="btn btn-primary" :disabled="busy || !registryReady()" @click="runInstall(true)">{{ install.registryOp === 'fetch' ? 'Fetch review snapshot' : 'Browse registry' }}</button>
-        </template>
-        <template v-else>
-          <button class="btn btn-secondary" :disabled="busy || !install.source.trim()" @click="runInstall(false)">Preview</button>
-          <button class="btn btn-primary" :disabled="busy || !install.source.trim()" @click="runInstall(true)">Run</button>
-        </template>
+        <button class="btn btn-secondary" :disabled="busy || !registryReady()" @click="runInstall(false)">Preview</button>
+        <button class="btn btn-primary" :disabled="busy || !registryReady()" @click="runInstall(true)">{{ install.registryOp === 'fetch' ? 'Fetch review snapshot' : 'Browse registry' }}</button>
       </div>
     </div>
   </div>

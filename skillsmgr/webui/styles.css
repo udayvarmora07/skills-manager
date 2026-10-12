@@ -3327,6 +3327,93 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   color: var(--text-muted);
 }
 
+/* 5.1b — the two workflows, and the installer form they switch to.
+
+   The choice is two pressed buttons on a baseline, not a fourth source tab:
+   the registry half only reads and this half only writes, and a strip that put
+   them side by side would claim four equivalent ways to get a skill. It is a
+   plain group of buttons (`aria-pressed`), so the arrow keys stay with the
+   source strip underneath instead of being consumed twice. */
+.install-workflow {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.install-workflow-label {
+  font-size: var(--t-table);
+  color: var(--text-muted);
+  margin-right: var(--s1);
+}
+
+/* `min-height` not `height`: a pressed button must not be shorter than the
+   coarse-pointer floor the rest of the app is held to (RULES #13), and a fixed
+   height would be the one place that rule is quietly off. */
+.install-workflow-btn {
+  min-height: 32px;
+}
+
+/* The pressed workflow borrows `.btn-primary` from the template rather than
+   restating `--accent`/`--on-accent` here: a second definition of "on accent"
+   is the class 2.1b caught (`.menu button` silently beating `.scope-option`),
+   and the hover/active pair would have had to be copied with it. */
+
+/* The installer form is one column of fields on purpose — it is a command with
+   seven arguments, not a dashboard. `auto-fit` with a 200px floor is the one
+   responsive statement it needs; two fixed columns leave a 60px second column
+   at 390px, which is what the dialog's `form-grid` did. */
+.install-runner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s4);
+  align-items: start;
+}
+
+.install-runner .check-row {
+  align-self: center;
+}
+
+/* The command is the thing the reader is about to run, so it is the one element
+   in this view set in the mono face and allowed to wrap: `text-overflow:
+   ellipsis` on a command line truncates the part that decides what happens.
+   It wraps and the row grows, which is the honest direction. */
+.install-cmd {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.install-cmd-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--t-table);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.install-runner-actions {
+  display: flex;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+/* Exit 0 and Exit 1 are different facts and this sentence says which, rather
+   than tinting a neutral line: the exit code is the runner's, and nothing here
+   has interpreted it. */
+.install-runner-outcome {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--t-table);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* -------------------------------------------------------------- statusbar */
 
 .statusbar {

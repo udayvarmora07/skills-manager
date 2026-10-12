@@ -54,6 +54,38 @@ def _install_block():
     return HTML[start:end]
 
 
+def _install_halves():
+    """The view's two workflows, split where the template splits them.
+
+    5.1b's whole point is that "does this page write to disk?" has two answers,
+    so the contract has to ask about one half at a time. The split is taken at
+    `<template v-if="install.mode === 'registry'">` and the matching
+    `<template v-else>`, which is the boundary the markup itself declares —
+    slicing on a string that merely LOOKS like a mode name would put a
+    boundary wherever the prose happened to sit.
+    """
+    block = _install_block()
+    open_at = block.index("<template v-if=\"install.mode === 'registry'\">")
+    split_at = block.index("<template v-else>", open_at)
+    return block[open_at:split_at], block[split_at:]
+
+
+def _method_body(name):
+    """As `_computed_body`, for a `methods:` entry — same reason, same trap."""
+    match = re.search(r"\n    " + re.escape(name) + r"\(", APP)
+    assert match, "no top-level method named " + name
+    start = match.start()
+    depth = 0
+    for index in range(start, len(APP)):
+        if APP[index] == "{":
+            depth += 1
+        elif APP[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return APP[start:index + 1]
+    raise AssertionError("unbalanced braces for " + name)
+
+
 class InstallViewContracts(unittest.TestCase):
     def test_the_install_navigation_target_renders_a_view(self):
         """The defect: a rail button that switched to a destination with no
@@ -166,14 +198,136 @@ class InstallViewContracts(unittest.TestCase):
         self.assertIn("max-width:", block)
         self.assertNotIn("box-shadow:", block)
 
-    def test_nothing_on_the_view_sends_an_install(self):
-        """The page's promise is in its first sentence. A control that broke it
-        would make every other sentence on the page false."""
+    def test_nothing_on_the_registry_half_sends_an_install(self):
+        """The page's promise is in its first sentence, so the test now asks
+        the question 5.1b actually posed: WHICH half. The registry half still
+        cannot write — the runner may, and the sentence under the heading says
+        so when it does. Asserted per half rather than per page, because "the
+        page does not write" and "the page's registry half does not write" are
+        different claims and only one of them is still true."""
+        registry, installer = _install_halves()
+        for forbidden in ("commitRegistryReview", "prepareSnapshotReview", "doInstall", "runInstall"):
+            self.assertNotIn("@click=\"" + forbidden, registry)
+        self.assertIn('@click="runInstall(', installer)
+        # The no-write sentence must not be a literal in the markup any more:
+        # it is now chosen by mode, and a literal would be a claim the reader
+        # could read on the half that DOES write.
+        self.assertNotIn("Nothing on this page writes to disk", HTML)
+
+    def test_the_write_claim_is_chosen_by_mode_not_asserted_once(self):
+        """Both halves of the sentence, from the getter itself — a test that
+        only grepped the stylesheet would pass while the template rendered a
+        stale literal, which is the defect 5.1a shipped once already."""
+        getter = _computed_body("installScopeNote")
+        self.assertIn('this.install.mode === "runner"', getter)
+        self.assertIn("writes into the agent scope roots", getter)
+        self.assertIn("Nothing on this page writes to disk", getter)
+
+
+class InstallerWorkflowContracts(unittest.TestCase):
+    """5.1b — the installer half of the Install view.
+
+    The form used to live only in the `install` dialog, behind a "Workflow"
+    select whose default was `runner` — so the surface the rail button named
+    offered no installer at all, and the dialog was the second, older copy of
+    the three registry controls the view already owned.
+    """
+
+    def test_the_workflow_choice_is_two_pressed_buttons_and_not_a_source_tab(self):
         block = _install_block()
-        self.assertIn("Nothing on this page writes to disk", block)
-        for forbidden in ("commitRegistryReview", "prepareSnapshotReview", "doInstall"):
-            self.assertNotIn("@click=\"" + forbidden, block)
-            self.assertNotIn('"fetch"', block.replace("Search", ""))
+        self.assertIn('class="install-workflow"', block)
+        self.assertIn('v-for="w in installWorkflows"', block)
+        self.assertIn(":aria-pressed=", block)
+        # It must not join the source tablist: a strip that put `npx` beside
+        # `Search` claims four equivalent ways to get a skill, and they are not.
+        self.assertNotIn('data-install-tab="w.id"', block)
+        self.assertIn("installWorkflows()", APP)
+        self.assertIn('{ id: "registry", label: "Registry" }', APP)
+        self.assertIn('{ id: "runner", label: "Installer" }', APP)
+
+    def test_the_registry_source_strip_still_owns_exactly_the_three_reads(self):
+        """Control for the row above: the mode toggle must not have replaced
+        the strip, only sat above it."""
+        sources = _computed_body("installSources")
+        for op in ("curated", "browse", "search"):
+            self.assertIn(f'{{ id: "{op}"', sources)
+        self.assertNotIn('"runner"', sources)
+
+    def test_the_dialog_no_longer_owns_a_second_installer_form(self):
+        """Two forms for one behaviour drift, and the drift is invisible until
+        a request sends `-a claude-code` twice. The dialog keeps the registry
+        half (5.2 owns whether it is retired); it must not keep the runner."""
+        # Scoped to the DIALOG, not to index.html: the view now carries these
+        # ids, so an unscoped assertion would fail on the very form that
+        # replaced the one it was written to police.
+        dialog = HTML[HTML.index('data-modal="install"'):]
+        self.assertNotIn('id="install-mode"', dialog)
+        self.assertNotIn('id="install-runner"', dialog)
+        self.assertNotIn('id="install-agents"', dialog)
+        self.assertNotIn('name="install-copy"', dialog)
+        self.assertNotIn("install.mode === 'runner'", dialog)
+        self.assertEqual(HTML.count('id="install-runner"'), 1)  # the view's, only
+
+    def test_the_agents_field_parses_in_one_place_and_both_sites_use_it(self):
+        """The comma split was an inline `@change` expression. It is a method
+        now, so a second form cannot ship a different parser."""
+        self.assertIn("syncInstallAgents()", APP)
+        self.assertNotIn("split(',').map(s=>s.trim())", HTML)
+        self.assertEqual(HTML.count("@change=\"syncInstallAgents\""), 1)
+
+    def test_the_command_shown_is_the_command_that_runs(self):
+        """4.7's rule: one sentence must not name one thing while the request
+        sends another. The shown command, the copied command, the previewed
+        command and the executed command are one expression — asserted as four
+        call SITES, because counting four invocations inside the half was
+        counting the wrong thing (the two buttons call `runInstall`, which
+        reads the same getter)."""
+        _, installer = _install_halves()
+        self.assertEqual(installer.count("installPreview()"), 2)  # displayed, copied
+        self.assertEqual(installer.count('@click="runInstall('), 2)  # preview, run
+        # And it is the SAME expression that assembles the command.
+        preview = _method_body("installPreview")
+        self.assertIn('this.install.mode === "registry"', preview)
+        self.assertIn("npx skills add", preview)
+
+    def test_the_primary_button_does_not_say_run_during_a_dry_run(self):
+        """`-l` makes the press a listing and nothing else. The label said
+        "Run" with the dry-run box already ticked, which is the one claim on
+        this view that could overstate what a press would do."""
+        self.assertIn("this.install.listOnly", _computed_body("installRunnerActionLabel"))
+        self.assertIn("{{ installRunnerActionLabel }}", _install_halves()[1])
+
+    def test_a_runner_result_is_told_apart_from_a_listing_by_its_exit_code(self):
+        """Both halves write `install.lastResult`. Deriving "which half is
+        this" from whichever one asked last would put a listing under
+        "Exit 0", and an install route response has an `exit_code` a listing
+        never carries."""
+        getter = _computed_body("installRunnerResult")
+        self.assertIn('typeof result.exit_code === "number"', getter)
+        self.assertIn("!installRunnerResult", HTML)
+
+    def test_the_outcome_names_the_exit_code_and_never_interprets_it(self):
+        outcome = _computed_body("installRunnerOutcome")
+        self.assertIn("Exit ${result.exit_code}", outcome)
+        self.assertIn("result.exit_code === 0", outcome)
+
+    def test_arriving_with_fetch_selected_leaves_no_tablist_without_a_selection(self):
+        """`fetch` is not one of the three READ sources the strip owns, and the
+        dialog still sets it. A tablist where no tab is selected is an ARIA
+        failure, so both the toggle and `switchView` restore a source."""
+        select = _method_body("selectInstallWorkflow")
+        self.assertIn("installSources.some", select)
+        view = APP[APP.index("switchView(v) {"):]
+        view = view[:view.index("\n    },")]
+        self.assertIn("installSources.some", view)
+
+    def test_the_install_default_workflow_is_the_one_that_cannot_write(self):
+        """`install.mode` defaulted to `runner`, which 5.1a's view ignored and
+        the dialog's select showed first. It is `registry` now: the first paint
+        of a destination that can install software should be the half that
+        cannot."""
+        line = APP[APP.index("install: {"):APP.index("\n") if False else APP.index("install: {") + 200]
+        self.assertIn('mode: "registry"', line.split("},")[0])
 
 
 if __name__ == "__main__":

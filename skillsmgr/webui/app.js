@@ -225,7 +225,7 @@ const appOptions = {
       scopeScanFailed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, error: null },
+      install: { mode: "registry", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, error: null },
       theme: ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system",
       resolvedTheme: "light",
       systemTheme: "light",
@@ -973,6 +973,53 @@ const appOptions = {
         { id: "browse", label: "Browse" },
         { id: "search", label: "Search" },
       ];
+    },
+    /* 5.1b — the two workflows, which are NOT two more sources. The registry
+       half only reads; the installer half only writes. Putting them in one
+       source strip would put "Search" and "npx" on the same row, which reads as
+       four equivalent ways to get a skill and is not what they are. `mode` is
+       the field the dialog's "Workflow" select already wrote — this moves the
+       choice to the surface it describes, and deletes that select. */
+    installWorkflows() {
+      return [
+        { id: "registry", label: "Registry" },
+        { id: "runner", label: "Installer" },
+      ];
+    },
+    /* The sentence under the heading is mode-aware because 5.1a's was scoped to
+       the registry half: "nothing on this page writes to disk" is true until the
+       Installer button is pressed, and a blanket claim like that is the RULES #12
+       failure this product is built to avoid. */
+    installScopeNote() {
+      if (this.install.mode === "runner") {
+        return "Runs a package runner on this machine and writes into the agent scope roots it reports. This is the half of this page that changes things on disk.";
+      }
+      return "Reads the skills.sh registry. Nothing on this page writes to disk — fetching a snapshot for review is a separate, deliberate action.";
+    },
+    installRunnerReady() {
+      return !!(this.install.source && this.install.source.trim());
+    },
+    /* `runInstall` reads `install.lastResult` for its exit code, and so does the
+       outcome sentence — but the REGISTRY half writes the same field, and its
+       payload is a listing. `exit_code` is what the install route returns and a
+       listing never carries one, so this distinguishes the two by a field the
+       response actually has rather than by whichever half asked last. */
+    installRunnerResult() {
+      const result = this.install.lastResult;
+      return result && typeof result.exit_code === "number" ? result : null;
+    },
+    /* A dry run is not a run. The primary button said "Run" with `-l` already
+       ticked, which is the one label in this view that could overstate what the
+       press would do. */
+    installRunnerActionLabel() {
+      return this.install.listOnly ? "List only" : "Run";
+    },
+    installRunnerOutcome() {
+      const result = this.installRunnerResult;
+      if (!result) return "";
+      if (result.exit_code === 0) return `Exit 0. ${result.runner || this.install.runner || "the runner"} reported success for ${result.source || this.install.source}.`;
+      const detail = String(result.stderr || result.stdout || "").trim().split("\n").filter(Boolean).pop() || "The runner printed nothing to explain the exit code.";
+      return `Exit ${result.exit_code}. ${detail}`;
     },
     installSource() {
       return this.installSources.find((s) => s.id === this.install.registryOp) || this.installSources[0];
@@ -2703,6 +2750,25 @@ const appOptions = {
          to reject, and a page that fires them to find out is a page that
          produces a red banner for doing nothing. */
     },
+    selectInstallWorkflow(id) {
+      if (!this.installWorkflows.some((w) => w.id === id)) return;
+      if (this.install.mode === id) return;
+      this.install.mode = id;
+      /* The dialog's registry form can leave `registryOp` on `fetch`, which is
+         not one of the three READ sources this view's strip owns. Restoring a
+         selection the view can show beats landing on a tablist where no tab is
+         selected — and `fetch` still has its own surface, in the dialog. */
+      if (id === "registry" && !this.installSources.some((s) => s.id === this.install.registryOp)) {
+        this.install.registryOp = this.installSources[0].id;
+      }
+    },
+    /* The agents list was parsed by an inline `@change` expression in the dialog.
+       Two forms cannot each carry their own copy of a comma split — they drift,
+       and the drift is invisible until a request sends `-a claude-code` twice.
+       One parser, both call sites. */
+    syncInstallAgents() {
+      this.install.agents = String(this.install.agentsText || "").split(",").map((s) => s.trim()).filter(Boolean);
+    },
     onInstallTabKey(event) {
       const ids = this.installSources.map((s) => s.id);
       const at = ids.indexOf(this.install.registryOp);
@@ -2806,7 +2872,15 @@ const appOptions = {
       if (this.drawerOpen) this.closeDrawer();
       if (v === "trash" || v === "recovery") this.loadTrash();
       if (v === "recovery") this.loadRecoverySnapshots();
-      else if (v === "install") this.loadSkills();
+      else if (v === "install") {
+        this.loadSkills();
+        /* 5.1b: arriving from the dialog can leave the registry operation on
+           `fetch`, which the view's source strip does not own — see
+           `selectInstallWorkflow`. Same reason, different door. */
+        if (!this.installSources.some((s) => s.id === this.install.registryOp)) {
+          this.install.registryOp = this.installSources[0].id;
+        }
+      }
       else if (v === "workspaces") this.loadWorkspaces();
       else if (v === "quality") this.loadQualityHygiene();
       // BUG-4: entering the skills view with a live query must re-apply it, or
