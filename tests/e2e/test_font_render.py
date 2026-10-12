@@ -104,6 +104,38 @@ def _declared_families() -> list[str]:
     return out
 
 
+#: The frontend sources whose *text* the user actually sees. The sprite is SVG
+#: ``<path>`` geometry and carries no glyphs, so it is deliberately absent from
+#: this list — a claim that the sprite needed font coverage would be a fiction.
+TEXT_SOURCES = ("index.html", "styles.css", "app.js", "domain.js", "preferences.js")
+
+#: A Private Use Area codepoint. No font — vendored or system — carries a glyph
+#: for one, so it is the reference for "this browser painted nothing real".
+NOTDEF = ""
+
+
+def shipped_glyphs() -> list[str]:
+    """Every non-ASCII codepoint the shipped frontend can put on screen.
+
+    Derived from the sources rather than listed here, because a hand-kept list
+    is a claim about the past: it cannot notice the glyph someone added
+    yesterday, and it silently keeps passing after that glyph ships broken. This
+    is the whole point of the row that produced it — a test that reads the
+    ``@font-face`` block proves a file exists, not that a glyph painted, and a
+    test that reads a hardcoded inventory proves the inventory was correct when
+    it was written.
+    """
+    found: set[str] = set()
+    for name in TEXT_SOURCES:
+        path = ROOT / "skillsmgr" / "webui" / name
+        if not path.exists():
+            continue
+        for ch in path.read_text(encoding="utf-8"):
+            if ord(ch) > 127 and ch != NOTDEF:
+                found.add(ch)
+    return sorted(found)
+
+
 def _base_url() -> str:
     """The live app, from the isolated dev server (never the real HOME)."""
     return os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
@@ -312,6 +344,221 @@ class FontRendersInABrowserTests(unittest.TestCase):
                 lead, declared,
                 f"{token} leads with {lead!r}, which no shipped @font-face "
                 f"declares — the page renders in the fallback")
+
+
+class ShippedGlyphsRenderTests(unittest.TestCase):
+    """Every character the interface can display must actually paint.
+
+    The gap this closes
+    -------------------
+    The probes above are English prose. Every one of them is ASCII, and ASCII is
+    the part of a font nobody has ever had to think about. This repository ships
+    **21 distinct non-ASCII codepoints** — an em dash (144 uses), a middot, an
+    ellipsis, arrows, a checkmark — and not one of them was asserted to render
+    anywhere. `document.fonts.check()` returns ``True`` for a codepoint the face
+    does not carry, and every other probe in this file asked about ASCII, so a
+    shipped `✓` that painted as a tofu box would have passed the whole suite.
+
+    Why pixels and not widths
+    -------------------------
+    The obvious method — measure the advance width and compare against a family
+    that does not exist — does not work, and measured twice on this tree it is
+    worth recording why. In ``"Geist Mono"`` the advance width is a constant for
+    *every* codepoint including ``.notdef``, because a monospaced face gives an
+    absent glyph the same cell as a present one: the width probe could not tell
+    a tofu box from a letter. And across faces the widths collide by
+    coincidence — `–`, `§` and `↑` all measured 31.8px in one pass. So this
+    rasterises to a canvas and compares an ink signature, which distinguishes
+    "drew something shaped like a checkmark" from "drew the same rectangle
+    nothing draws", which is the actual question.
+    """
+
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:  # pragma: no cover - environment dependent
+            raise unittest.SkipTest(
+                f"Playwright is not importable ({exc}). Coverage of the shipped "
+                f"glyphs needs a real font engine and is NOT silently passed.")
+        cls._glyphs = shipped_glyphs()
+        cls._families = _declared_families()
+        cls._pw = sync_playwright()
+        cls._pw_cm = cls._pw.start()
+        cls._browser = cls._pw_cm.chromium.launch(args=["--no-sandbox"])
+        cls._page = cls._browser.new_page()
+        try:
+            cls._page.goto(_base_url(), wait_until="networkidle", timeout=20000)
+        except Exception as exc:
+            cls._browser.close()
+            cls._pw_cm.stop()
+            raise unittest.SkipTest(
+                f"the dev server at {_base_url()} is not reachable ({exc}). "
+                f"Start it with `.redesign/dev.sh start`.")
+        cls._page.wait_for_function("() => document.fonts.ready.then(() => true)")
+
+        # One round trip for the whole inventory: per-glyph `evaluate` calls over
+        # ~21 codepoints cost more than the assertions they feed.
+        css = CSS.read_text(encoding="utf-8")
+        tokens = dict(re.findall(r"(--(?:font|mono)):\s*([^;]+);", css))
+        cls._stacks = {k: v.strip() for k, v in tokens.items()}
+        # The honest baseline: the shipped stack with ONLY the vendored families
+        # removed. Comparing against bare `sans-serif` instead — the obvious
+        # shortcut — measures a different face from the one the token actually
+        # falls back to (`system-ui` wins before the generic is reached), so it
+        # reports "vendored" for a glyph that came from the system. Mutation-
+        # proved: with `unicode-range` banning U+2014 on Geist Sans 400, the em
+        # dash demonstrably fell out of the vendored face, and a `sans-serif`
+        # baseline still disagreed with it, so the test passed over the exact
+        # defect it exists to catch.
+        cls._without = {
+            tok: ", ".join(
+                part for part in
+                (p.strip() for p in stack.split(","))
+                if not any(fam.strip("'\" ") in part for fam in cls._families)
+            )
+            for tok, stack in cls._stacks.items()
+        }
+        cls._rendered = cls._page.evaluate(
+            """([glyphs, stacks, without]) => {
+                const cv = document.createElement('canvas');
+                cv.width = 96; cv.height = 96;
+                const g = cv.getContext('2d', {willReadFrequently: true});
+                const sig = (ch, stack) => {
+                    g.clearRect(0, 0, 96, 96);
+                    g.fillStyle = '#000'; g.textBaseline = 'top';
+                    g.font = '64px ' + stack;
+                    g.fillText(ch, 4, 4);
+                    const d = g.getImageData(0, 0, 96, 96).data;
+                    let ink = 0, h = 2166136261 >>> 0;
+                    for (let i = 3; i < d.length; i += 4) {
+                        if (d[i] > 8) { ink++;
+                            h = (h ^ d[i]) >>> 0; h = Math.imul(h, 16777619) >>> 0; }
+                    }
+                    return {ink: ink, hash: h >>> 0};
+                };
+                const NOTDEF = '\\uE000';
+                return glyphs.map(ch => ({
+                    ch: ch,
+                    sans: sig(ch, stacks['--font']),
+                    mono: sig(ch, stacks['--mono']),
+                    notdefSans: sig(NOTDEF, stacks['--font']),
+                    notdefMono: sig(NOTDEF, stacks['--mono']),
+                    // The same glyph in the same stack with the vendored
+                    // families stripped: identical output means the vendored
+                    // face had nothing to say and a system face drew it.
+                    sansNoVendored: sig(ch, without['--font']),
+                }));
+            }""",
+            [cls._glyphs, cls._stacks, cls._without])
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        page = getattr(cls, "_page", None)
+        if page is not None:
+            page.close()
+        browser = getattr(cls, "_browser", None)
+        if browser is not None:
+            browser.close()
+        cm = getattr(cls, "_pw_cm", None)
+        if cm is not None:
+            cm.stop()
+
+    def test_the_inventory_is_not_empty(self):
+        """Guards the assertion below against silently testing nothing.
+
+        If the sources ever moved out of ``TEXT_SOURCES`` this file would report
+        a clean bill of health for a set of glyphs it never looked at. The list
+        is derived, so this is the only thing standing between a refactor and a
+        vacuous pass.
+        """
+        self.assertGreaterEqual(
+            len(self._glyphs), 15,
+            f"only {len(self._glyphs)} non-ASCII codepoints were found in "
+            f"{TEXT_SOURCES}; the inventory is derived, so this usually means "
+            f"the sources moved rather than that the UI lost its punctuation")
+
+    def test_every_shipped_glyph_paints_something_other_than_notdef(self):
+        """The contract: no character the UI can display renders as tofu.
+
+        Compared in BOTH shipped stacks. A glyph absent from Geist Sans but
+        present in Geist Mono is still a defect in the prose column — the em
+        dash is the most-used non-ASCII character in this codebase, at 144
+        uses, and it renders in the running column on every screen.
+        """
+        for row in self._rendered:
+            ch = row["ch"]
+            with self.subTest(glyph=ch, codepoint=f"U+{ord(ch):04X}"):
+                for token, key, notdef in (
+                    ("--font", "sans", "notdefSans"),
+                    ("--mono", "mono", "notdefMono"),
+                ):
+                    painted = row[key]
+                    blank = row[notdef]
+                    self.assertGreater(
+                        painted["ink"], 0,
+                        f"{ch!r} painted no ink at all in {token} — the "
+                        f"browser has no glyph and no fallback for it")
+                    self.assertNotEqual(
+                        painted["hash"], blank["hash"],
+                        f"{ch!r} paints the .notdef box in {token} (identical to "
+                        f"a Private Use codepoint) — the user sees a blank "
+                        f"rectangle where {ch!r} should be")
+
+    def test_prose_glyphs_come_from_the_vendored_face_not_the_system(self):
+        """Characters in running text must be the face the design chose.
+
+        ``.notdef`` only catches a glyph nobody has. The quieter failure is a
+        glyph the *system* happens to carry, rendering in a face nobody chose:
+        the em dash and the middot would silently be the host's font at the
+        host's weight, mixed into vendored text, and it would look fine on the
+        machine that built it.
+
+        This is deliberately a **narrow** assertion over an explicit set, not a
+        blanket "every glyph must be vendored" rule. Measured on this tree, five
+        of the twenty-one shipped codepoints — ``↻ ⌘ ▸ ▾ ✓`` — are genuinely
+        absent from Geist Sans and resolve to a system face, and the vendoring
+        note in ``geist.css`` says per-glyph fallback is intended for skill
+        bodies. Those five are UI furniture (a disclosure triangle, a refresh
+        glyph) rather than prose, and changing them is a design decision, not a
+        test failure. So the rule covers the characters that carry meaning in
+        sentences, and the measured fallback set is asserted as a known, named
+        quantity below so it cannot grow unnoticed.
+        """
+        prose = set("—–·…’“”§©−")
+        for row in self._rendered:
+            ch = row["ch"]
+            if ch not in prose:
+                continue
+            with self.subTest(glyph=ch, codepoint=f"U+{ord(ch):04X}"):
+                self.assertNotEqual(
+                    row["sans"]["hash"], row["sansNoVendored"]["hash"],
+                    f"{ch!r} renders identically with and without the vendored "
+                    f"face — it is coming from the system font, so the vendored "
+                    f"typeface is not what the reader is looking at")
+
+    def test_the_set_of_glyphs_the_vendored_face_lacks_is_known_and_small(self):
+        """Pin the measured fallback set, so it cannot grow in silence.
+
+        Not a design assertion — a tripwire. If someone adds a glyph that the
+        vendored face does not carry, this fails and the decision becomes
+        explicit: vendor it, accept the fallback in writing, or draw it as SVG
+        from the sprite the interface already ships.
+        """
+        known = set("↻⌘▸▾✓")
+        unvendored = {
+            row["ch"] for row in self._rendered
+            if row["sans"]["hash"] == row["sansNoVendored"]["hash"]
+        }
+        self.assertEqual(
+            unvendored, known,
+            f"the set of shipped glyphs the vendored face does not carry "
+            f"changed: was {''.join(sorted(known))}, now "
+            f"{''.join(sorted(unvendored))}. A new entry means a character is "
+            f"rendering in the system font — accept it deliberately and update "
+            f"this set, or draw it from the vendored sprite instead.")
 
 
 if __name__ == "__main__":

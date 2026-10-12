@@ -23,6 +23,34 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
   measured size and token counts, provenance when the server returns it — and
   says on screen what it does not infer.
 
+- **The font test asserted the wrong thing, twice.** It probed English prose and
+  called that coverage of the typeface. The interface ships **21 non-ASCII
+  codepoints** — an em dash at 144 uses, a middot, an ellipsis, arrows, a
+  checkmark — and not one was asserted to render anywhere, while
+  `document.fonts.check()` returns `True` for a glyph the face does not carry.
+  The inventory is now derived from the shipped sources, so a character added
+  yesterday is covered today rather than whenever someone remembers. Every one
+  is rasterised and compared against a Private Use codepoint: a `.notdef` box
+  is a real failure, and nothing else is.
+
+  The method is pixels, not advance width, and the reason is measured rather
+  than assumed: in a monospaced face the advance is constant for *every*
+  codepoint including `.notdef`, so a width probe cannot tell a tofu box from a
+  letter — and across faces the widths collide by coincidence, with `–`, `§` and
+  `↑` all measuring 31.8px in one pass. The first version of this test then
+  compared against bare `sans-serif`, which is not what the token falls back to
+  (`system-ui` wins first), so it reported "vendored" for a glyph that had left
+  the vendored face — caught by injecting `unicode-range` onto Geist Sans 400
+  and watching the suite stay green over the exact defect it exists to find. The
+  baseline is now the shipped stack with *only* the vendored families removed,
+  and that mutation is caught by name.
+
+  Measured on this tree, all 21 paint, and **five** (`↻ ⌘ ▸ ▾ ✓`) come from a
+  system face rather than Geist. Those are UI furniture rather than prose and
+  per-glyph fallback is intended for skill bodies, so the prose set is asserted
+  and the fallback set is pinned by name — a tripwire, not a design ruling, so
+  it cannot grow in silence.
+
 - **The bulk bar no longer promises exactness it cannot deliver.** The bar
   counts *exact physical instances*, and directly beneath that sentence the
   Tags control was writing **logical names**: `/api/catalog/tags` is keyed by
