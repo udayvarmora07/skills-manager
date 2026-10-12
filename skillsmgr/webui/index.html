@@ -1903,8 +1903,13 @@
           </label>
         </template>
 
-        <section v-if="modals.update.success" class="banner banner-ok update-success" role="status" aria-live="polite">
-          <strong>Update applied successfully.</strong>
+        <!-- 4.8b — the verdict is `updateApplyOutcome`'s, not a literal. It said
+             "Update applied successfully." for a `committed_with_warning`
+             response too, dropping the only sentence in the payload naming the
+             step that did not complete. -->
+        <section v-if="modals.update.success && updateApplyOutcome" class="banner update-success" :class="updateApplyOutcome.ok ? 'banner-ok' : 'banner-warn'" role="status" aria-live="polite">
+          <strong>{{ updateApplyOutcome.title }}</strong>
+          <span v-if="updateApplyOutcome.outstanding">Outstanding: {{ updateApplyOutcome.outstanding }}</span>
           <span>Target: {{ modals.update.success.target && modals.update.success.target.physical_path }}</span>
           <span>Source-lock state: {{ (modals.update.success.source_lock || {}).state || (modals.update.success.source_lock ? 'recorded' : 'not returned') }}</span>
           <span>Recovery snapshot: <code>{{ modals.update.snapshotId || 'created' }}</code></span>

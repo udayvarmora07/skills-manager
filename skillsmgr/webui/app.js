@@ -1187,6 +1187,38 @@ const appOptions = {
       return "Close";
     },
 
+    /* 4.8b — the commit endpoint answers `committed_with_warning` when the
+     * BYTES were replaced but index reconciliation or snapshot pruning failed
+     * (`_reconcile_after_commit` in source_update.py). The banner said
+     * "Update applied successfully." for that payload too, so the one sentence
+     * in the response naming what is still outstanding was dropped on the floor
+     * and a reader was told a clean success while the counts in the Overview
+     * and the rows in the Library were stale. RULES #12: the UI states only
+     * observed facts, and "successfully" was an invented one.
+     *
+     * Both failure modes are covered because the payload states only one of
+     * them: `result` can say committed-with-warning with no `warning` string,
+     * and `warning` can arrive without `result` saying so. When neither names
+     * the outstanding step, the copy says THAT rather than guessing at it.
+     *
+     * `computed`, not `methods` — the template reads the property, and a
+     * function's `.length` is its arity (2.1, 4.3b, 4.7).
+     */
+    updateApplyOutcome() {
+      const success = this.modals.update && this.modals.update.success;
+      if (!success) return null;
+      const outstanding = success.result === "committed_with_warning" || !!success.warning;
+      if (!outstanding) {
+        return { ok: true, outstanding: "", title: "Update applied successfully." };
+      }
+      return {
+        ok: false,
+        outstanding: success.warning
+          || "the response named no outstanding step, so ask before trusting the counts above it.",
+        title: "Update applied, with an outstanding step.",
+      };
+    },
+
   },
 
 
@@ -1990,6 +2022,17 @@ const appOptions = {
       if (!modal || !snapshot || !snapshot.snapshot_id) return;
       modal.loading = true;
       modal.error = null;
+      /* 4.8b — the local path (`prepareUpdateReview`) clears both of these
+       * before its await and the snapshot path cleared neither. Measured, not
+       * assumed: `openRollbackReview` builds a FRESH modal with
+       * `confirmed: false` and prepares once, so the carried-over `true` is
+       * unreachable today — this is defence in depth, exactly like the
+       * `!scopeMenuOpen` guard 4.2 slice A kept for the same reason. The
+       * review IS cleared, though, and that one is not defence: a retry that
+       * left a stale review on screen would let `updateReviewCanApply` read
+       * changed files and a review_id belonging to the previous candidate. */
+      modal.review = null;
+      modal.confirmed = false;
       try {
         modal.review = await api("/api/source-updates/reviews/from-snapshot", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -2031,7 +2074,21 @@ const appOptions = {
         });
         modal.success = result;
         modal.snapshotId = result.snapshot_id || null;
-        this.toast(`Update applied to ${modal.target.name}; recovery snapshot ${modal.snapshotId || "created"}.`, "ok");
+        /* 4.8b — the toast read "Update applied to X; recovery snapshot Y."
+         * for every response, including `committed_with_warning`, where the
+         * bytes landed and the index reconciliation did not. Same failure as
+         * the banner, in the place a reader sees for eight seconds. The verdict
+         * comes from `updateApplyOutcome`, the same computed the banner reads,
+         * so the two cannot disagree. */
+        const outcome = this.updateApplyOutcome;
+        this.toast(outcome.ok
+          ? `Update applied to ${modal.target.name}; recovery snapshot ${modal.snapshotId || "created"}.`
+          : `Update applied to ${modal.target.name}, with an outstanding step: ${outcome.outstanding}`,
+          /* `info`, not `err`: the bytes WERE replaced, so an error tone is a
+           * lie in the other direction, and `ok` is the lie being fixed. It is
+           * the neutral type this app already ships (`.toast-info`, the `circle`
+           * glyph) and it is already read by three other call sites. */
+          outcome.ok ? "ok" : "info");
         await Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash(), this.loadRecoverySnapshots()]);
       } catch (e) {
         modal.error = e.message;
@@ -2061,6 +2118,29 @@ const appOptions = {
         return;
       }
       this.closeModal("update");
+    },
+
+    /* 4.8b — the DECISION the row asked for, and it is the editor's rule, not
+     * this dialog's.
+     *
+     * `requestCloseUpdate` re-raised the question on every Escape, while the
+     * skill editor's `skillEscape` clears it and Escape again re-asks (4.5
+     * slice A). The update dialog was wrong about its own affordance, for a
+     * reason worth stating: its case for forcing a decision is that a pending
+     * review is server-side and expires. That case does not apply to CLEARING
+     * the question, because clearing it leaves the reader inside the dialog
+     * with the review exactly as pending as it was — nothing is dropped and
+     * nothing is decided. What it buys is that Escape means "step back one
+     * level" everywhere, and the band IS a level.
+     *
+     * No exit is lost: Escape again re-asks, and the foot button, the close
+     * glyph and the scrim all still go through `requestCloseUpdate`.
+     */
+    updateEscape() {
+      const modal = this.modals.update;
+      if (!modal) return;
+      if (modal.confirmingClose) { modal.confirmingClose = false; return; }
+      this.requestCloseUpdate();
     },
 
     async cancelUpdateReview() {
@@ -3288,7 +3368,7 @@ const appOptions = {
         // last — not because it is unimportant, but because it is the deepest.
         if (this.scopeMenuOpen) this.closeScopeMenu(true);
         else if (this.menuOpen) this.closeActionsMenu(true);
-        else if (this.activeModal === "update") this.requestCloseUpdate();
+        else if (this.activeModal === "update") this.updateEscape();
         else if (this.activeModal === "skill") this.skillEscape();
         else if (this.activeModal) this.closeModal(this.activeModal);
         else if (this.drawerOpen) this.closeDrawer();
