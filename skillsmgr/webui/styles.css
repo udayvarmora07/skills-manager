@@ -2087,8 +2087,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    single surface with no elevation: this is a readout, not a set of cards. */
 .overview-summary { margin-top: 28px; }
 .overview-summary > h2 { margin: 0 0 10px; font-size: var(--t-prose); }
-.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; align-content: stretch; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--border); }
-.overview-metrics > div { min-width: 0; padding: 14px 16px; background: var(--surface); }
+/* 6.1b — an empty slot must not paint. `background: var(--border)` on the
+   container did two jobs: it WAS the hairline between cells, and it is also
+   the colour of every slot the children do not fill. Seven children on three
+   columns leaves two, and in dark --surface-2 showing through a --surface
+   panel drew them as a lighter slab that read like a selected cell. In light
+   the same hole is white on white and reads as an ordinary gap, which is why
+   every capture taken until now missed it — and why the contrast sweep of
+   1,777 rendered pairs could not see it either: there is no text in it.
+   The line now belongs to the cells, so the container can carry the panel
+   colour and a hole is simply the panel. `overflow: hidden` clips each cell's
+   spread to the padding edge, so the outer edge is still the container's own
+   border and the hairline weight is unchanged. */
+.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; align-content: stretch; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.overview-metrics > div { min-width: 0; padding: 14px 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--border); }
 .overview-metrics dt { color: var(--text-muted); font-size: var(--t-meta); }
 .overview-metrics dd { margin: 4px 0 1px; font-size: var(--t-empty); font-weight: 600; font-variant-numeric: tabular-nums; }
 .overview-metrics small { display: block; margin-top: 4px; color: var(--text-muted); font-size: var(--t-meta); font-weight: 400; }
