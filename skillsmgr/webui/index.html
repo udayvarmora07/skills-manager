@@ -701,9 +701,24 @@
         </button>
       </div>
 
-      <div v-else-if="view === 'settings'" class="sidepanel" aria-label="Settings">
+      <!-- 5.7b: this column used to hold a title and one sentence in a 379x828
+           box, restating the detail pane's own lead. It is a settings view, so
+           the column earns its width by listing the four subjects a reader is
+           actually looking for, and moving focus there — the way every other
+           wide-column view in this shell uses it. The current subject is the
+           one the reader chose; nothing here claims to observe scrolling, so
+           the marker can never drift into saying something untrue. -->
+      <div v-else-if="view === 'settings'" class="sidepanel sidepanel-settings" aria-label="Settings">
         <div class="sidepanel-intro"><strong>Settings</strong><span class="hint">Local preferences</span></div>
-        <div class="settings-side-note">Theme, text size, and regional formats are stored only in this browser. Operating-system settings remain unchanged.</div>
+        <nav class="settings-rail" aria-label="Settings sections">
+          <button v-for="entry in settingsSections" :key="entry.id" type="button" class="settings-rail-item"
+                  :class="{ 'is-current': settingsSection === entry.id }"
+                  :aria-current="settingsSection === entry.id ? 'true' : null"
+                  @click="jumpToSetting(entry.id)">
+            <strong>{{ entry.label }}</strong><span>{{ entry.hint }}</span>
+          </button>
+        </nav>
+        <p class="settings-side-note">Theme, text size, and regional formats are stored only in this browser. Operating-system settings remain unchanged.</p>
       </div>
 
       <div v-else-if="view === 'trash'" class="skilllist" aria-label="Trash">
@@ -1794,43 +1809,67 @@
         <div class="detail-head">
           <div><h1 id="view-title" tabindex="-1">Settings</h1><p class="lead">Tune this local workspace for comfortable reading. These controls affect the web UI only and are saved on this device.</p></div>
         </div>
-        <section class="profile-editor settings-section" aria-labelledby="settings-theme-title">
-          <h2 id="settings-theme-title">Theme</h2>
-          <p id="settings-theme-hint" class="hint">System follows your operating system’s dark-mode preference live. Light and dark are explicit app choices.</p>
-          <fieldset class="settings-options" aria-describedby="settings-theme-hint">
-            <legend class="sr-only">Theme preference</legend>
-            <label class="settings-option"><input type="radio" name="theme-preference" value="system" v-model="theme"><span><strong>System</strong><small>Follow the current OS preference ({{ systemThemeLabel }} now).</small></span></label>
-            <label class="settings-option"><input type="radio" name="theme-preference" value="light" v-model="theme"><span><strong>Light</strong><small>Always use the light workspace.</small></span></label>
-            <label class="settings-option"><input type="radio" name="theme-preference" value="dark" v-model="theme"><span><strong>Dark</strong><small>Always use the dark workspace.</small></span></label>
-          </fieldset>
-          <div class="settings-preview" :data-preview-theme="resolvedTheme"><span class="settings-preview-swatch" aria-hidden="true"></span><span><strong>Preview</strong> This is the current {{ resolvedTheme }} surface.</span></div>
+        <!-- 5.7b: the four subjects used to be `profile-editor settings-section` —
+             Profiles' editor class borrowed, which made all four read as the
+             same 748px bordered box and made the pane 1309px tall in an 828px
+             viewport (a screen and a half to change a radio). Each subject is
+             now its own labelled section on a label/control row, the theme and
+             text-size choices are one segmented row instead of a stack of
+             identical full-width cards, and the class that belongs to Profiles
+             is gone from this view. -->
+        <section id="settings-appearance" class="settings-section" aria-labelledby="settings-theme-title" tabindex="-1">
+          <div class="settings-section-label">
+            <h2 id="settings-theme-title">Theme</h2>
+            <p id="settings-theme-hint" class="hint">System follows your operating system’s dark-mode preference live. Light and dark are explicit app choices.</p>
+          </div>
+          <div class="settings-section-control">
+            <fieldset class="settings-options settings-segmented" aria-describedby="settings-theme-hint">
+              <legend class="sr-only">Theme preference</legend>
+              <label class="settings-option"><input type="radio" name="theme-preference" value="system" v-model="theme"><span><strong>System</strong><small>Follows the OS ({{ systemThemeLabel }} now)</small></span></label>
+              <label class="settings-option"><input type="radio" name="theme-preference" value="light" v-model="theme"><span><strong>Light</strong><small>Always light</small></span></label>
+              <label class="settings-option"><input type="radio" name="theme-preference" value="dark" v-model="theme"><span><strong>Dark</strong><small>Always dark</small></span></label>
+            </fieldset>
+            <div class="settings-preview" :data-preview-theme="resolvedTheme"><span class="settings-preview-swatch" aria-hidden="true"></span><span><strong>Preview</strong> This is the current {{ resolvedTheme }} surface.</span></div>
+          </div>
         </section>
-        <section class="profile-editor settings-section" aria-labelledby="settings-text-size-title">
-          <h2 id="settings-text-size-title">Text size</h2>
-          <p id="settings-text-size-hint" class="hint">Choose a fixed reading scale. Your browser zoom remains available and is not overridden.</p>
-          <fieldset class="settings-options" aria-describedby="settings-text-size-hint">
-            <legend class="sr-only">Text size preference</legend>
-            <label class="settings-option"><input type="radio" name="text-size" value="standard" v-model="textSize"><span><strong>Standard</strong><small>Default workspace type.</small></span></label>
-            <label class="settings-option"><input type="radio" name="text-size" value="large" v-model="textSize"><span><strong>Large</strong><small>More generous reading type and controls.</small></span></label>
-          </fieldset>
-          <div class="settings-type-preview"><span class="settings-type-sample">Aa</span><span>Skill names and descriptions stay readable at 200% browser zoom.</span></div>
+        <section id="settings-reading" class="settings-section" aria-labelledby="settings-text-size-title" tabindex="-1">
+          <div class="settings-section-label">
+            <h2 id="settings-text-size-title">Text size</h2>
+            <p id="settings-text-size-hint" class="hint">Choose a fixed reading scale. Your browser zoom remains available and is not overridden.</p>
+          </div>
+          <div class="settings-section-control">
+            <fieldset class="settings-options settings-segmented" aria-describedby="settings-text-size-hint">
+              <legend class="sr-only">Text size preference</legend>
+              <label class="settings-option"><input type="radio" name="text-size" value="standard" v-model="textSize"><span><strong>Standard</strong><small>Default workspace type</small></span></label>
+              <label class="settings-option"><input type="radio" name="text-size" value="large" v-model="textSize"><span><strong>Large</strong><small>More generous type and controls</small></span></label>
+            </fieldset>
+            <div class="settings-type-preview"><span class="settings-type-sample">Aa</span><span>Skill names and descriptions stay readable at 200% browser zoom.</span></div>
+          </div>
         </section>
-        <section class="profile-editor settings-section" aria-labelledby="settings-locale-title">
-          <h2 id="settings-locale-title">Regional formats</h2>
-          <p id="settings-locale-hint" class="hint">Counts, file sizes, and timestamps follow the selected format. Interface copy remains English until translated resources are available.</p>
-          <label class="settings-select-option" for="settings-locale">
-            <span><strong>Format locale</strong><small>Use system defaults or a familiar regional convention.</small></span>
-            <select id="settings-locale" v-model="locale" aria-describedby="settings-locale-hint">
-              <option value="system">System default ({{ resolvedLocale }})</option>
-              <option v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-          </label>
-          <div class="settings-locale-preview" aria-live="polite"><strong>Preview</strong><span>{{ formatNumber(1234567) }} · {{ formatDate("2026-09-22T13:45:00Z") }}</span></div>
+        <section id="settings-formats" class="settings-section" aria-labelledby="settings-locale-title" tabindex="-1">
+          <div class="settings-section-label">
+            <h2 id="settings-locale-title">Regional formats</h2>
+            <p id="settings-locale-hint" class="hint">Counts, file sizes, and timestamps follow the selected format. Interface copy remains English until translated resources are available.</p>
+          </div>
+          <div class="settings-section-control">
+            <label class="settings-select-option" for="settings-locale">
+              <span class="sr-only">Format locale</span>
+              <select id="settings-locale" v-model="locale" aria-describedby="settings-locale-hint">
+                <option value="system">System default ({{ resolvedLocale }})</option>
+                <option v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <div class="settings-locale-preview" aria-live="polite"><strong>Preview</strong><span>{{ formatNumber(1234567) }} · {{ formatDate("2026-09-22T13:45:00Z") }}</span></div>
+          </div>
         </section>
-        <section class="profile-editor settings-section" aria-labelledby="settings-evidence-title">
-          <h2 id="settings-evidence-title">Accessibility evidence</h2>
-          <dl class="meta compact-meta"><div><dt>App theme</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }} rendered</dd></div><div><dt>System preference</dt><dd>{{ systemThemeLabel }} dark-mode preference</dd></div><div><dt>Reduced motion</dt><dd>{{ prefersReducedMotion ? 'OS requests reduced motion' : 'OS has not requested reduced motion' }}</dd></div><div><dt>Format locale</dt><dd>{{ resolvedLocale }} · regional formats only</dd></div></dl>
-          <p class="hint">The app honors the current OS signals; it cannot change OS accessibility settings.</p>
+        <section id="settings-accessibility" class="settings-section" aria-labelledby="settings-evidence-title" tabindex="-1">
+          <div class="settings-section-label">
+            <h2 id="settings-evidence-title">Accessibility evidence</h2>
+            <p class="hint">The app honors the current OS signals; it cannot change OS accessibility settings.</p>
+          </div>
+          <div class="settings-section-control">
+            <dl class="meta compact-meta settings-evidence"><div><dt>App theme</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }} rendered</dd></div><div><dt>System preference</dt><dd>{{ systemThemeLabel }} dark-mode preference</dd></div><div><dt>Reduced motion</dt><dd>{{ prefersReducedMotion ? 'OS requests reduced motion' : 'OS has not requested reduced motion' }}</dd></div><div><dt>Format locale</dt><dd>{{ resolvedLocale }} · regional formats only</dd></div></dl>
+          </div>
         </section>
       </div>
 
@@ -2606,7 +2645,14 @@
             <div class="shortcuts-row"><dt><span class="kbd">Esc</span></dt><dd>Close the dialog and return focus to what opened it</dd></div>
           </dl>
         </section>
-        <p class="shortcuts-foot-note">This page lists only shortcuts that work in this build. Row-by-row navigation in the Library list is not here yet.</p>
+        <section class="shortcuts-section">
+          <h3 class="shortcuts-section-title">Library list</h3>
+          <dl class="shortcuts-list">
+            <div class="shortcuts-row"><dt><span class="kbd">J</span><span class="kbd">K</span></dt><dd>Move down or up one row</dd></div>
+            <div class="shortcuts-row"><dt><span class="kbd">&darr;</span><span class="kbd">&uarr;</span></dt><dd>Move between rows once a row has focus</dd></div>
+          </dl>
+        </section>
+        <p class="shortcuts-foot-note">This page lists only shortcuts that work in this build.</p>
       </div>
       <div class="modal-foot"><button class="btn btn-secondary" @click="closeModal('help')">Close</button></div>
     </div>

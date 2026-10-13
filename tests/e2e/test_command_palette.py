@@ -384,9 +384,17 @@ class PaletteTests(unittest.TestCase):
     def test_the_reference_opens_from_the_palette_and_lists_live_keys_only(self) -> None:
         """A shortcut reference that lists a key that does nothing is a false claim.
 
-        Row-by-row Library navigation is backlog 4.2; listing it today would
-        teach a reader to press keys this build ignores. The reference says so
-        explicitly rather than being silent about the omission.
+        Rewritten in 5.7b. The old assertion required the reference to SAY
+        "Row-by-row navigation in the Library list is not here yet" — it
+        encoded the omission as a requirement. But the binding exists: `j`/`k`
+        and, once a row has focus, the arrows, in `onKeydown`, guarded on the
+        Library view and inert everywhere else. The reference was understating
+        what the build does, which is the same honesty defect as claiming a
+        view `/` does not work on (5.7a), pointed the other way.
+
+        The intent is unchanged and stronger: the reference lists what is
+        bound, files the view-scoped keys under the view, and claims nothing
+        that is not there.
         """
         self.app.open_palette("shortcuts")
         self.app.page.keyboard.press("Enter")
@@ -394,10 +402,15 @@ class PaletteTests(unittest.TestCase):
         text = self.app.page.inner_text('[data-modal="help"] .modal-body')
         for key in ("Ctrl", "K", "/", "?", "Esc"):
             self.assertIn(key, text, f"{key!r} is missing from the reference")
-        self.assertNotIn("Press j", text,
-                         "j/k navigation ships in 4.2 and must not be claimed yet")
-        self.assertIn("not here yet", text,
-                      "the reference must state the omission rather than hide it")
+        titles = self.app.page.eval_on_selector_all(
+            '[data-modal="help"] .shortcuts-section-title', "els => els.map(e => e.textContent.trim())"
+        )
+        self.assertIn("Library list", titles,
+                      "j/k and the arrows are bound on the Library view and must be documented")
+        for key in ("J", "K"):
+            self.assertIn(key, text, f"{key!r} is bound and must be in the reference")
+        self.assertNotIn("not here yet", text,
+                         "nothing is left out of this reference; do not claim an omission that is not one")
 
     def test_the_reference_is_grouped_by_context(self) -> None:
         """One flat table hides the fact a reader needs: which keys are live now."""

@@ -128,6 +128,17 @@ const SEARCH_VIEWS = Object.freeze([
 ]);
 const SEARCH_VIEW_IDS = Object.freeze(SEARCH_VIEWS.map((view) => view.id));
 
+/* 5.7b — the subjects on the Settings view, in the order they are shown.
+   The side column lists these; each id is the id of the section it jumps to.
+   Frozen because it is a constant dressed as component state only so the
+   template can `v-for` it. */
+const SETTINGS_SECTIONS = Object.freeze([
+  { id: "settings-appearance", label: "Theme", hint: "Light, dark, or follow the system" },
+  { id: "settings-reading", label: "Text size", hint: "The fixed reading scale" },
+  { id: "settings-formats", label: "Regional formats", hint: "Counts, sizes, timestamps" },
+  { id: "settings-accessibility", label: "Accessibility", hint: "The OS signals this app honors" },
+]);
+
 /* An unlisted category sorts after every listed one and ALPHABETICALLY among
    its own kind, so a new command can never fall off the end of the palette
    without a heading. The first version of this returned a numeric rank derived
@@ -274,6 +285,14 @@ const appOptions = {
       textSize: localStorage.getItem("skillsmgr-text-size") === "large" ? "large" : "standard",
       localeOptions,
       locale: localeValues.includes(savedLocale) ? savedLocale : "system",
+      /* 5.7b — the settings rail in the side column and the sections it jumps
+         to read one list, so a subject cannot be listed and not exist. The
+         ids are the section ids in index.html; `jumpToSetting` is the only
+         thing that moves focus, and it records the reader's choice in
+         `settingsSection` — never a scroll position, which this build cannot
+         observe honestly. */
+      settingsSections: SETTINGS_SECTIONS,
+      settingsSection: SETTINGS_SECTIONS[0].id,
       resolvedLocale: "en-US",
       prefersReducedMotion: false,
       themeMediaQuery: null,
@@ -3107,6 +3126,32 @@ const appOptions = {
         row.scrollIntoView({ block: "nearest", inline: "nearest" });
       }
       return true;
+    },
+
+    /* ------------------------------------------------------- 5.7b settings rail
+       Moves focus to the section the reader chose from the side column. The
+       section carries `tabindex="-1"` for exactly this: a keyboard reader who
+       presses it lands on the subject instead of being left at the top of the
+       document with the screen reader still announcing the side column.
+
+       `settingsSection` is set first and unconditionally, so the marker in the
+       rail is true even if the section is missing from the DOM (it cannot be
+       — `SETTINGS_SECTIONS` is the list the template renders from — but a
+       marker that depends on a successful lookup is a marker that can go
+       stale). Focus is guarded because `focus()` throws on some engines when
+       the node is not focusable, and a broken rail must not take the view
+       down with it. */
+    jumpToSetting(id) {
+      if (!SETTINGS_SECTIONS.some((entry) => entry.id === id)) return;
+      this.settingsSection = id;
+      this.$nextTick(() => {
+        const target = document.getElementById(id);
+        if (!target) return;
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ block: "nearest" });
+        }
+        try { target.focus({ preventScroll: true }); } catch (err) { target.focus(); }
+      });
     },
 
     selectSkill(s) {

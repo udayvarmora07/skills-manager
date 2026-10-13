@@ -2102,7 +2102,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-load-error p:not(.eyebrow) { max-width: 62ch; margin: 9px 0 18px; color: var(--text-muted); }
 
 .detail-inner { max-width: 82ch; margin: 0; min-width: 0; }
-.settings-center { max-width: 760px; }
+/* 5.7b: `.settings-center` moved to the 5.7b block below with the rest of the
+   Settings layout; it is wider than `detail-inner`'s measure because a
+   label/control row needs the room, and it is still a settings list, not prose. */
 .quality-center { max-width: 920px; }
 .quality-actions { align-items: flex-start; }
 .quality-center .btn { min-height: 44px; }
@@ -2195,25 +2197,53 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .recovery-section:first-of-type { margin-top: var(--s4); }
 .recovery-section h2 { margin-bottom: 4px; }
 .recovery-filter-note { max-width: 72ch; margin: var(--s2) 0 0; }
-.settings-section { margin-top: 18px; }
-.settings-section h2 { margin-bottom: 4px; }
-.settings-options { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; border: 0; }
-.settings-option { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
-.settings-option:hover { border-color: var(--border-strong); background: var(--surface-2); }
+/* 5.7b — Settings layout.
+   The four subjects are a label/control row, not four bordered boxes. They
+   used to be `profile-editor settings-section`: Profiles' editor class
+   borrowed, which made every subject the same 748px card and made the pane
+   1309px tall in an 828px viewport. One vertical hairline instead of four
+   boxes: a settings page is a list of preferences, and a list reads as a
+   list. */
+.settings-center { max-width: 900px; }
+.settings-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: var(--s3) var(--s6); align-items: start; padding: 14px 0; border-top: 1px solid var(--border); }
+.settings-section:first-of-type { border-top: 0; padding-top: var(--s2); }
+.settings-section:focus { outline: none; }
+.settings-section:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-sm); }
+.settings-section-label { display: grid; gap: var(--s1); min-width: 0; }
+.settings-section-label h2 { margin: 0; font-size: var(--t-prose); }
+.settings-section-label .hint { max-width: 56ch; }
+.settings-section-control { display: grid; gap: var(--s2); min-width: 0; }
+.settings-options { display: grid; gap: var(--s2); margin: 0; padding: 0; border: 0; }
+/* The segmented row: one choice out of a small set, read left to right, the
+   way a toolbar reads. It replaces a 1-column stack of three identical
+   714x58 cards, which spent a screen of height to say "pick one of three". */
+.settings-segmented { grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.settings-segmented .settings-option { justify-content: flex-start; border: 0; border-radius: 0; background: var(--surface); }
+.settings-segmented .settings-option + .settings-option { border-left: 1px solid var(--border); }
+.settings-segmented .settings-option:hover { background: var(--surface-2); }
+.settings-option { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
 .settings-option input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
-.settings-option span { display: grid; gap: 1px; }
-.settings-option small { color: var(--text-muted); font-size: var(--t-meta); }
-.settings-select-option { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px); gap: 12px; align-items: center; min-height: 44px; margin-top: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
-.settings-select-option > span { display: grid; gap: 1px; min-width: 0; }
-.settings-select-option small { color: var(--text-muted); font-size: var(--t-meta); }
+.settings-option span { display: grid; gap: 1px; min-width: 0; }
+.settings-option small { color: var(--text-muted); font-size: var(--t-meta); overflow-wrap: anywhere; }
+.settings-option:has(input:checked) { background: var(--accent-soft); }
+.settings-select-option { display: block; min-width: 0; }
 .settings-select-option select { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; }
 .settings-select-option select:focus { border-color: var(--accent); background: var(--surface); }
-.settings-locale-preview { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.settings-locale-preview { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
 .settings-locale-preview span { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: end; }
-.settings-preview, .settings-type-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.settings-preview, .settings-type-preview { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
 .settings-preview-swatch { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 .settings-type-sample { font-size: var(--t-empty); line-height: 1; font-weight: 600; color: var(--accent-text); }
-.settings-side-note { margin: 10px 4px; color: var(--text-muted); font-size: var(--t-table); line-height: 1.45; }
+.settings-evidence { margin: 0; }
+/* The rail in the side column. It replaces a 379x828 box that held a title
+   and one sentence restating the lead. `is-current` marks what the reader
+   chose — never a scroll position, which this build cannot observe. */
+.settings-rail { display: grid; gap: 1px; padding: var(--s2) 0; }
+.settings-rail-item { display: grid; gap: 2px; width: 100%; min-height: 44px; padding: 9px 10px; border: 0; border-left: 2px solid transparent; background: none; color: var(--text); text-align: start; cursor: pointer; }
+.settings-rail-item:hover { background: var(--surface-2); }
+.settings-rail-item span { color: var(--text-muted); font-size: var(--t-meta); }
+.settings-rail-item.is-current { border-left-color: var(--accent); background: var(--surface-2); }
+.settings-side-note { margin: var(--s3) 4px; color: var(--text-muted); font-size: var(--t-meta); line-height: 1.45; }
 
 .detail-head { display: flex; align-items: flex-start; gap: var(--s4); justify-content: space-between; flex-wrap: wrap; }
 .detail-head h1 { margin: 0; font-size: var(--t-empty); font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
@@ -3810,6 +3840,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .navigation-rail .viewtabs button { padding-inline: 8px; font-size: var(--t-table); }
   .detail { padding: 24px; }
   .rail-quick-actions { margin-inline: 8px; }
+  /* 5.7b: in the shrunk-laptop band the detail column is ~600px, and a
+     label/control row with a 340px control leaves the label ~240px — enough
+     for "Regional formats" and not enough for its sentence. The row stacks
+     here and the segmented control returns to a column, which is the same
+     layout the <760 drawer gets, reached at the width where it is actually
+     needed rather than at a phone breakpoint. */
+  .settings-section { grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
+  .settings-segmented { grid-auto-flow: row; grid-auto-columns: auto; }
+  .settings-segmented .settings-option + .settings-option { border-left: 0; border-top: 1px solid var(--border); }
 }
 
 /* The topbar's one-row layout needs 804px before it gives up anything, and the
@@ -4029,9 +4068,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .overview-empty-actions { justify-content: flex-start; max-width: none; }
   .attention-item, .queue-clear { grid-template-columns: 28px minmax(0, 1fr); align-items: start; padding: 13px; }
   .attention-item .btn, .queue-clear .btn { grid-column: 2; justify-self: start; }
-  .settings-select-option { grid-template-columns: 1fr; align-items: stretch; }
   .settings-locale-preview { align-items: flex-start; flex-direction: column; }
   .settings-locale-preview span { text-align: start; }
+  .settings-section { grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
+  .settings-segmented { grid-auto-flow: row; grid-auto-columns: auto; }
+  .settings-segmented .settings-option + .settings-option { border-left: 0; border-top: 1px solid var(--border); }
   .detail-head { display: block; }
   .detail-actions { margin-top: 16px; }
   /* `flex: 1` here is what made Remove the widest thing on the pane. Measured
