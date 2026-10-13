@@ -4,6 +4,38 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **`site/` — a static landing page that cannot state an unsupported fact.**
+  One HTML file, one stylesheet, six vendored woff2 and one screenshot captured
+  from the running app: hero, install band, a six-row capability ledger, the
+  scope table, the CLI reference and a closer. It is a repository artefact and
+  is **not** in the wheel; a contract asserts that in that direction, so a
+  packaging line that shipped it would fail the suite.
+
+  The reason it is gated the way it is: a landing page is prose, and prose is
+  where a claim survives code review, because nothing in this repository had
+  ever checked a sentence. `tests/test_redesign_site.py` therefore derives
+  every fact the page states out of the file that owns it — both palettes and
+  the type families from `skillsmgr/webui/styles.css`, the command list and its
+  headline count from `docs/03-cli-surface.md`, the scope ids, labels and
+  directory spellings from `skillsmgr/scopes.py`, the global scope's path from
+  `skillsmgr/paths.py`, and the distribution name, Python floor and licence
+  from `pyproject.toml` — and fails when they disagree. It caught a real error
+  in the page it was written for: the global scope row named
+  `$SKILLS_MANAGER_DATA/skills`, one path component short of the directory the
+  tool actually creates.
+
+- **A contract that read the next view's comment.**
+  `settings_sidepanel_block()` in `tests/test_redesign_settings_layout.py`
+  sliced a fixed 3,000 characters from a block about 1,100 characters long, so
+  it swallowed the whole next branch of the view chain. The assertion that the
+  Settings rail's current marker follows the reader's choice rather than a
+  scroll-spy therefore failed on the word "scrolls" inside a comment
+  documenting a different view. It now slices to the next `v-else-if` and
+  strips comments — the end condition the chain itself defines. The claim is
+  unchanged and strictly narrower: a comment is not copy a reader can see.
+
 ### Changed
 
 - **The editor waits for Save to tell you a field is empty, and never told you

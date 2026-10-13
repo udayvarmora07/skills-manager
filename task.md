@@ -28,6 +28,14 @@ The maintainer selected **Prototype A — Warm Instrument** from
 - [x] **Observed state `linked`** added, distinct from `malformed`. On this
   machine 301 of 1,962 instances were being labelled "Malformed" when they are
   symlinks the tool deliberately refuses to follow. No security change.
+- [x] **`site/` — a static landing page, gated on derivation rather than
+  review.** One HTML file, one stylesheet, six vendored woff2 and one capture of
+  the running app. Not packaged. Its facts are re-derived out of
+  `styles.css`, `docs/03-cli-surface.md`, `scopes.py`, `paths.py` and
+  `pyproject.toml` by `tests/test_redesign_site.py`, which is the honesty rule
+  above applied to prose — the one layer of this project that previously had no
+  check at all. 22 stdlib + 10 e2e, 5 mutations caught. See @CHANGELOG.md and
+  @docs/06-progress-log.md (2026-10-13).
 - [x] **Rows group identities by state, problems first**, so the scopes that
   disagree are the thing the eye lands on.
 - [x] **A uniform row state is stated once**, in the pane header, instead of

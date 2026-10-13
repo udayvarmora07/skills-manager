@@ -53,6 +53,49 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
+## 2026-10-13 — A landing page arrived, and the gate caught the page, not the gate
+
+**[SPEC]** `site/` is a static product/docs page (see @docs/08-web-ui.md). It is
+a repository artefact and is not packaged.
+
+**The decision that is worth keeping.** A landing page is prose, and prose is
+where an unsupported claim survives code review, because nothing in this
+repository had ever checked a sentence. So `tests/test_redesign_site.py`
+derives every fact the page states out of the file that owns it — both palettes
+and the type families from `skillsmgr/webui/styles.css`, the command list and
+its headline count from @docs/03-cli-surface.md, the scope ids, labels and
+directory spellings from `skillsmgr/scopes.py`, the global scope's path from
+`skillsmgr/paths.py`, the distribution name, Python floor and licence from
+`pyproject.toml` — and fails on disagreement. Five mutations, five failures.
+
+**It found a real error in the page it was written for.** The global scope row
+read `$SKILLS_MANAGER_DATA/skills`. `data_dir()` appends `skills-manager` and
+`skills_dir()` appends `skills`, so the row named a directory the tool never
+creates. Nothing but the derivation would have caught it.
+
+**Two defects that only looking could find, because no gate on this branch
+looks at a page's contents:**
+
+1. The hero screenshot was scaled to fill its column. A 1440-wide capture in
+   ~700px of column put the product's own 12px floor at ~7px on screen — not a
+   smaller picture of the app, a picture of the idea of an app. Capped, cropped
+   from the top, and the caption now says the image is cropped.
+2. `.hero` carries `.shell` and declared `padding: … 0`, so its shorthand reset
+   the shell's horizontal gutter. **Invisible at 1440**, where the 1320px
+   shell's centring margin covers it; at 1100 the hero text sat on the window
+   edge. `.closer` had the same rule. Both use `padding-block` now, and the e2e
+   asserts a CHILD's `left >= 16` at four widths — measuring the section's own
+   box measures its margin edge, which is the window edge at every width and
+   would have passed on the broken tree too.
+
+**The branch was red on arrival and the red was not 7.4g's.**
+`test_redesign_settings_layout.py`'s `settings_sidepanel_block()` sliced a
+fixed 3,000 characters from a ~1,100-character block, so it swallowed the next
+view chain member; when that branch's comment mentioned "scrolls", the
+"marker follows the choice, not a scroll" assertion failed on **a different
+view's comment**. Four interpreters, one failure each. The previous run's
+`verify.sh` was cut off before it finished, which is why nobody had seen it.
+
 ## Current state (measured 2026-10-08 on the UI redesign pass)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.

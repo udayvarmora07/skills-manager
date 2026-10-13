@@ -635,6 +635,34 @@ claim, and a claim nobody re-checks decays.
 
 - `python3 smoke_web.py` — starts the server on an ephemeral port and hits every endpoint above (static, CRUD, search, validate, toggle, stats/doctor/history, templates, export→import round-trip, trash/restore/purge, rebuild/resync, multipart folder upload, error paths). Must pass after any change to `webapp.py`.
 
+## The landing page (`site/`)
+
+**[SPEC]** `site/` is a static product/docs page for this project. It is served
+by nothing in this repository: `webui` serves `skillsmgr/webui/static/` only, so
+`site/` is opened from a file server rooted at `site/` or served by whatever
+hosts the project's documentation.
+
+- **It is not packaged.** No `pyproject.toml` `package-data` entry, no
+  `MANIFEST.in` include. `tests/test_redesign_site.py` asserts this *in that
+  direction*: a packaging line naming `site` fails the suite, so a wheel cannot
+  quietly acquire it.
+- **It loads nothing off-origin** — no CDN, no remote font, no remote image, no
+  script at all. The six woff2 faces are a copy of
+  `skillsmgr/webui/static/fonts/`, because `site/` cannot reach that directory;
+  the OFL licence travels with them.
+- **Every fact it states is derived, not written.** The two palettes and the
+  type families come from `skillsmgr/webui/styles.css`; the command list and
+  its headline count from @docs/03-cli-surface.md; the scope ids, labels and
+  directory spellings from `skillsmgr/scopes.py`; the global scope's path from
+  `skillsmgr/paths.py`; the distribution name, Python floor and licence from
+  `pyproject.toml`. `tests/test_redesign_site.py` re-derives each and fails on
+  disagreement, which is the honesty rule of @DESIGN.md applied to prose.
+- **In the browser:** `tests/e2e/test_site.py` asserts zero console errors,
+  zero failed requests, zero responses >= 400, same-origin requests only, zero
+  horizontal overflow at 1100/1280/1440/1920 in both themes, measured AA
+  contrast on four text roles, a hero image that actually painted, and a skip
+  link reachable by keyboard.
+
 ## Locked rules
 
 1. Backend uses the **Store public API only** — no direct sqlite3 access. Reading `SKILL.md`/`SKILL.md.disabled` files for the `raw` endpoint and token enrichment is allowed (filesystem is the source of truth); never hand-edit the DB. (Agent scopes go through the `scopes` layer, which is the same rule for those dirs.)
