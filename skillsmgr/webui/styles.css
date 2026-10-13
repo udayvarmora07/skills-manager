@@ -4140,12 +4140,28 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   /* 5.7b: in the shrunk-laptop band the detail column is ~600px, and a
      label/control row with a 340px control leaves the label ~240px — enough
      for "Regional formats" and not enough for its sentence. The row stacks
-     here and the segmented control returns to a column, which is the same
-     layout the <760 drawer gets, reached at the width where it is actually
-     needed rather than at a phone breakpoint. */
+     here, reached at the width where it is actually needed rather than at a
+     phone breakpoint.
+
+     5.7e: the band ALSO returned the segmented control to a COLUMN, which is
+     the half 5.7b's comment never claimed. Measured at 1100: Theme rendered as
+     three 636px rows for three one-word choices (+88px) and Text size as two
+     (+52px) — a checklist wearing a control's border, and 28% of the page
+     height, bought by having 49% MORE room than at 1280. A three-way choice is
+     still a row at any width; only the label/control pair needed to stack.
+     `.settings-segmented` therefore keeps its row here, the cells take
+     `min-content` instead of `1fr` (a 5-character label does not need 212px,
+     and three unequal cells read as a control where three equal ones read as
+     a form) and the field itself is `fit-content`, because a bordered box with
+     110px of empty tail inside it reads as a fourth, blank choice. The
+     controls get a declared measure (`.settings-section-control`) so a
+     three-way choice and a locale <select> stop stretching edge to edge in a
+     636px column — the same reason `.lead` has a measure. */
   .settings-section { grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
-  .settings-segmented { grid-auto-flow: row; grid-auto-columns: auto; }
-  .settings-segmented .settings-option + .settings-option { border-left: 0; border-top: 1px solid var(--border); }
+  .settings-section-control { max-width: 460px; }
+  .settings-segmented { grid-auto-flow: column; grid-auto-columns: minmax(0, auto); justify-content: start; width: fit-content; max-width: 100%; }
+  .settings-segmented .settings-option { padding-inline: 14px; }
+  .settings-segmented .settings-option + .settings-option { border-left: 1px solid var(--border); border-top: 0; }
 }
 
 /* The topbar's one-row layout needs 804px before it gives up anything, and the
@@ -4393,9 +4409,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .attention-item .btn, .queue-clear .btn { grid-column: 2; justify-self: start; }
   .settings-locale-preview { align-items: flex-start; flex-direction: column; }
   .settings-locale-preview span { text-align: start; }
+  /* 5.7e: the stacked label/control pair is right here, and the segmented
+     control is still a ROW. Below this band the column form is the correct
+     one, because a two-or-three cell segmented control has to share a line
+     with something else on a phone — which is the reason 5.7b reached for it
+     at 1199px and the reason it does not belong there. */
   .settings-section { grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
-  .settings-segmented { grid-auto-flow: row; grid-auto-columns: auto; }
-  .settings-segmented .settings-option + .settings-option { border-left: 0; border-top: 1px solid var(--border); }
+  .settings-segmented { grid-auto-flow: column; grid-auto-columns: minmax(0, auto); justify-content: start; width: fit-content; max-width: 100%; }
+  .settings-segmented .settings-option { padding-inline: 14px; }
+  .settings-segmented .settings-option + .settings-option { border-left: 1px solid var(--border); border-top: 0; }
   .detail-head { display: block; }
   .detail-actions { margin-top: 16px; }
   /* `flex: 1` here is what made Remove the widest thing on the pane. Measured

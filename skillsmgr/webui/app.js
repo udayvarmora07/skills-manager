@@ -136,7 +136,12 @@ const SETTINGS_SECTIONS = Object.freeze([
   { id: "settings-appearance", label: "Theme", hint: "Light, dark, or follow the system" },
   { id: "settings-reading", label: "Text size", hint: "The fixed reading scale" },
   { id: "settings-formats", label: "Regional formats", hint: "Counts, sizes, timestamps" },
-  { id: "settings-accessibility", label: "Accessibility", hint: "The OS signals this app honors" },
+  /* 5.7e: the blurb said "The OS signals this app honors", which 5.7c's own
+     finding made false — the row below it says the app FOLLOWS the OS and
+     cannot change it, and an explicit Light/Dark choice deliberately does not
+     honor the OS at all. The blurb now describes the section rather than
+     promising the product's behaviour. */
+  { id: "settings-accessibility", label: "Accessibility", hint: "The OS settings this app reads" },
   { id: "settings-about", label: "About", hint: "What this app reads, and what it reaches" },
 ]);
 

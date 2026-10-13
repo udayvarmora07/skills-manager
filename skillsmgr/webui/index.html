@@ -727,6 +727,7 @@
         <div class="sidepanel-intro"><strong>Settings</strong><span class="hint">Local preferences</span></div>
         <nav class="settings-rail" aria-label="Settings sections">
           <button v-for="entry in settingsSections" :key="entry.id" type="button" class="settings-rail-item"
+                  :data-settings-section="entry.id"
                   :class="{ 'is-current': settingsSection === entry.id }"
                   :aria-current="settingsSection === entry.id ? 'true' : null"
                   @click="jumpToSetting(entry.id)">
