@@ -334,7 +334,20 @@ for (const key of keys) {
 console.log(JSON.stringify({keys, closed}));
 """
         out = _node(script)
-        self.assertEqual(len(out["keys"]), 15, "expected the 15 declared dialogs")
+        # 7.1: the control used to be a LITERAL ("expected the 15 declared
+        # dialogs") and 5.3c added the 16th — `deleteProfile` — without
+        # touching it. A counting assertion pinned against a number cannot
+        # notice a dialog being added, which is the eighth recorded case of
+        # "a right fix and a counting assertion". It is now DERIVED from the
+        # markup: every `data-modal` attribute must be a key the app really
+        # declares, and no key may exist without one. That is the property
+        # this whole suite exists for, and it fails in BOTH directions.
+        declared_in_markup = set(re.findall(r'data-modal="([A-Za-z]+)"', _read(INDEX_HTML)))
+        self.assertEqual(
+            sorted(set(out["keys"])), sorted(declared_in_markup),
+            "every declared dialog needs a data-modal attribute and vice versa",
+        )
+        self.assertGreater(len(out["keys"]), 15, "the control lost its meaning")
         closed_keys = [entry.split(":")[0] for entry in out["closed"]]
         for key in out["keys"]:
             self.assertIn(key, closed_keys, f"{key} is not Escape-closable")

@@ -39,6 +39,29 @@ HTML = (ROOT / "skillsmgr" / "webui" / "index.html").read_text(encoding="utf-8")
 CSS = (ROOT / "skillsmgr" / "webui" / "styles.css").read_text(encoding="utf-8")
 
 
+# Runs the WHOLE of app.js in a VM. The stubs are the minimum a first-load
+# browser provides; everything the module's own top level needs is its own.
+_APP_HARNESS = r'''
+const fs = require('fs'), vm = require('vm');
+const sandbox = {
+  window: {SkillManagerDomain: {
+    api: async () => ({}),
+    formatBytes(){}, formatTokens(){}, tokenPctClass(){}, tokenBarWidth(){},
+    renderMarkdown(){}, parseFrontmatter(){}, formatCompat(){}, formatTools(){},
+    groupLogicalSkills(){}, deriveLogicalSkillIdentity(){}, observedIdentity(){}
+  }},
+  Vue: {createApp(app){ sandbox.app = app; return {mount(){}}; }, nextTick(){}},
+  localStorage: {getItem(){return null;}, setItem(){}},
+  document: {addEventListener(){}, documentElement:{dataset:{}}, querySelectorAll(){return [];}},
+  setTimeout, clearTimeout
+};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+// `sandbox.app` IS the options object - it is what was handed to createApp.
+const __opts = sandbox.app;
+const __data = __opts.data();
+'''
+
+
 def _app_options():
     """Load the real options object in Node and report where each name lives.
 
@@ -48,49 +71,23 @@ def _app_options():
     node = shutil.which("node")
     if not node:
         raise unittest.SkipTest("node is not on PATH")
-    decl = APP.index("const appOptions = {")
-    open_brace = APP.index("{", decl)
-    depth = 0
-    i = open_brace
-    while True:
-        if APP[i] == "{":
-            depth += 1
-        elif APP[i] == "}":
-            depth -= 1
-            if depth == 0:
-                break
-        i += 1
-    literal = APP[open_brace:i + 1]
     names = [
         "data", "computed", "methods",
         "profileFormTitle", "profileSaveLabel", "profileSaveOutcome",
         "editProfile", "cancelProfileEdit", "profileEditing",
     ]
-    prelude = (
-        "const __own = { Object: Object, JSON: JSON, console: console,\n"
-        # data() reads the stored theme through localStorage; a stub that
-        # answers null is the same answer a first-run browser gives.
-        "  localStorage: { getItem: function () { return null; }, setItem: function () {} } };\n"
-        "let __captured = null;\n"
-        "const __scope = new Proxy(__own, {\n"
-        "  has: (t, k) => !(k in t),\n"
-        "  get: (t, k) => (k in t ? t[k] : function () {}),\n"
-        "  set: (t, k, v) => { __captured = v; return true; },\n"
-        "});\n"
-        "with (__scope) { __opts = " + literal + "; }\n"
-        # `data` is a FUNCTION, so it has to be called to see its keys — and it
-        # must be called after the `with` block, because inside it the name
-        # `__opts` is still intercepted by the proxy's getter and resolves to a
-        # stub rather than to the object.
-        "const __opts = __captured;\n"
-    )
+    # 7.1: this harness used to slice the options LITERAL out of app.js and
+    # evaluate it behind a Proxy whose unknown names resolved to `function(){}`.
+    # That broke the moment `data()` started reading a module-scope constant —
+    # 5.7b's `settingsSection: SETTINGS_SECTIONS[0].id` — so the stub answered
+    # a function, `[0]` was `undefined`, and three tests failed with
+    # `Cannot read properties of undefined (reading 'id')` while asserting
+    # about a completely different subject. The repo already has the harness
+    # that cannot have this failure: run the WHOLE file in a VM and let the
+    # module's own top level resolve its own names (test_redesign_doctor_
+    # ledger.py). A slice can be missing a closing scope; a whole file cannot.
+    prelude = _APP_HARNESS
     script = prelude + (
-        # data() is CALLED outside the `with`, so its free names need real
-        # globals rather than proxy interception. `localStorage` answers null —
-        # the same answer a first-run browser gives.
-        "globalThis.localStorage = { getItem: function () { return null; }, setItem: function () {} };\n"
-        "if (typeof globalThis.window === 'undefined') globalThis.window = globalThis;\n"
-        "const __data = __opts.data();\n"
         "const where = {};\n"
         "for (const name of " + json.dumps(names) + ") {\n"
         "  const spots = [];\n"
@@ -118,7 +115,9 @@ def _app_options():
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "opts.js"
         p.write_text(script, encoding="utf-8")
-        res = subprocess.run([node, str(p)], capture_output=True, text=True, timeout=60)
+        res = subprocess.run(
+            [node, str(p)], capture_output=True, text=True, timeout=60, cwd=str(ROOT)
+        )
     if res.returncode != 0:
         raise AssertionError("loading app.js options failed:\n" + res.stderr[-2000:])
     return json.loads(res.stdout.strip().splitlines()[-1])
@@ -183,7 +182,16 @@ class ProfileEditorMarkup(unittest.TestCase):
         block = HTML[start:end]
         self.assertIn('@click="previewProfile(name)"', block)
         self.assertIn('@click="editProfile(name)"', block)
-        self.assertIn('@click="deleteProfile(name)"', block)
+        # 7.1: this pinned `@click="deleteProfile(name)"`, which 5.3c
+        # deliberately stopped shipping - deleting a profile on one click is
+        # the defect 4.7b names, and four typed fields are the only copy that
+        # exists. Keeping the old assertion would have pinned the fix undone.
+        # The intent is "the row offers a Delete control, and it is a CONFIRM
+        # door", so that is what is asserted, plus the direct deleter's
+        # absence - the same shape 5.3c's own e2e uses.
+        self.assertIn('@click="confirmDeleteProfile(name)"', block)
+        self.assertNotIn('@click="deleteProfile(name)"', block)
+        self.assertIn('class="btn btn-danger-ghost"', block)
         self.assertIn(':aria-pressed="profileEditing === name', block)
 
     def test_the_detail_pane_is_not_a_second_copy_of_the_master_list(self):
@@ -246,9 +254,18 @@ class ProfileEditorGuard(unittest.TestCase):
         self.assertLess(body.index("!== editing"), body.index('await api("/api/catalog/profiles"'))
 
     def test_delete_of_the_profile_being_edited_leaves_the_editor(self):
-        start = APP.index("async deleteProfile(name)")
+        # 7.1: the deleter was RENAMED by 5.3c - `deleteProfile` now opens the
+        # confirm dialog and `doDeleteProfile` is what performs the DELETE.
+        # The guard did not move with it and this test raised
+        # `ValueError: substring not found` rather than reporting a defect,
+        # which is the same failure 2.1's placement test made: a marker-sliced
+        # test that cannot find its marker reads as a product failure. It
+        # now slices the function that really deletes, and asserts that the
+        # one-click entry point no longer exists at all.
+        start = APP.index("async doDeleteProfile()")
         body = APP[start:APP.index("/* ---------------------------------------------------------- helpers */", start)]
         self.assertIn("if (this.profileEditing === name) this.cancelProfileEdit();", body)
+        self.assertNotIn("async deleteProfile(name)", APP)
 
     def test_the_toast_is_derived_not_a_literal_pair(self):
         start = APP.index("async saveProfile()")

@@ -236,10 +236,22 @@ class InstallViewContracts(unittest.TestCase):
         # true forever while a third half writes with no owner asserting it.
         self.assertIn('@click="commitRegistryReview"', fetch_half)
         self.assertNotIn('@click="runInstall(', fetch_half)
-        # The no-write sentence must not be a literal in the markup any more:
+        # The no-write sentence must not be a literal in the INSTALL markup:
         # it is now chosen by mode, and a literal would be a claim the reader
         # could read on the half that DOES write.
-        self.assertNotIn("Nothing on this page writes to disk", HTML)
+        # 7.1: this was `assertNotIn(..., HTML)` — a grep of the WHOLE page.
+        # 5.4 then legitimately gave the Workspaces sidepanel its own copy of
+        # the sentence ("Read-only evidence / Nothing on this page writes to
+        # disk"), and this contract went red about a dialog it never read.
+        # Scoping it to the three halves is what the test was named for and
+        # is strictly stronger where it matters: the Install page still may
+        # not carry the literal anywhere.
+        for half_name, half in (("registry", registry), ("installer", installer),
+                                ("fetch", fetch_half)):
+            self.assertNotIn(
+                "Nothing on this page writes to disk", half,
+                f"the install {half_name} half carries the no-write claim as a literal",
+            )
 
     def test_the_write_claim_is_chosen_by_mode_not_asserted_once(self):
         """Both halves of the sentence, from the getter itself — a test that
