@@ -2061,6 +2061,31 @@
           </div>
         </div>
         <p class="lead">Skills you removed from the global scope. Restore one, or empty the trash forever.</p>
+        <!-- 7.4e2 — this pane is the widest surface on this view and was a
+             heading, a lead, a note and then ~700px of nothing. 2.1c solved
+             exactly this for the Library and the vocabulary is declared:
+             `.pane-blank` at styles.css:2789. REUSED, not redeclared — a second
+             blank state is 5.3b's "it existed twice" in a new place. The facts
+             are the ones the reader already holds: what the filter left, how
+             many bytes, and when the oldest and newest were removed. Nothing is
+             said about agent-scope copies; the note above says why they are
+             not counted here. The action is the one that RESOLVES the state —
+             `query` is the only thing here a button can undo. -->
+        <div v-if="!selectedTrash" class="empty detail-empty pane-blank">
+          <p class="pane-blank-eyebrow">Nothing selected</p>
+          <h2 id="trash-blank-title" class="pane-blank-title" tabindex="-1">No trashed skill selected</h2>
+          <p class="pane-blank-lede">{{ trashBlankLede }}</p>
+          <dl class="pane-blank-facts">
+            <div><dt>In the trash</dt><dd>{{ formatNumber(trashCount) }} skill{{ trashCount === 1 ? '' : 's' }}</dd></div>
+            <div><dt>Showing</dt><dd>{{ formatNumber(filteredTrash.length) }} of {{ formatNumber(trashCount) }} observed</dd></div>
+            <div><dt>Total size</dt><dd>{{ formatBytes(trashTotalBytes) }}</dd></div>
+            <div><dt>Removed</dt><dd>{{ trashRemovedRange }}</dd></div>
+            <div v-if="query"><dt>Search</dt><dd class="num">&ldquo;{{ query }}&rdquo;</dd></div>
+          </dl>
+          <div class="empty-actions">
+            <button v-if="query" class="btn btn-secondary" type="button" @click="query = ''">Reset search</button>
+          </div>
+        </div>
         <p class="scope-note scope-note-inline">{{ purgeScopeNote }}</p>
         <div v-if="selectedTrash" class="meta meta-below-note">
           <div><dt>Trashed as</dt><dd><code>{{ selectedTrash.trash_path }}</code></dd></div>

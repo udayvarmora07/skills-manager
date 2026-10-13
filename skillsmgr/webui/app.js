@@ -986,6 +986,40 @@ const appOptions = {
         (c) => c.action === "switchView" && c.args && c.args[0] === this.view);
       return row ? "Back to " + row.label : "Back";
     },
+    /* 7.4e2 — the facts the blank pane states, all derived from the records
+     * `/api/trash` returned. `trashSkills` is [] both when the trash is empty
+     * and when a read failed, and the error branch in the pane OUTRANKS the
+     * empty claim (6.3), so a failed read cannot reach this copy asserting
+     * there is nothing to restore. Nothing here is claimed about agent-scope
+     * copies: there is no endpoint for them, and `.scope-note` beside this
+     * block already says they are not counted. */
+    trashBlankLede() {
+      if (!this.trashSkills.length) {
+        return "Nothing is in the global trash on this machine.";
+      }
+      if (this.query && !this.filteredTrash.length) {
+        return "No trashed skill matches this search, and nothing has been removed. "
+          + "Clear it to see all " + this.trashCount + ".";
+      }
+      if (!this.trashSkills.length) return "";
+      return "Choose a trashed skill in the list to see where it was removed to, "
+        + "and to restore it.";
+    },
+    trashTotalBytes() {
+      return this.trashSkills.reduce((sum, t) => sum + (Number(t.size_bytes) || 0), 0);
+    },
+    trashRemovedRange() {
+      const times = this.trashSkills
+        .map((t) => new Date(t.modified).getTime())
+        .filter((n) => Number.isFinite(n));
+      if (!times.length) return "";
+      const first = this.formatDate(new Date(Math.min(...times)));
+      const last = this.formatDate(new Date(Math.max(...times)));
+      /* Every removal can share one timestamp -- the seed's do -- and "X \u2013 X"
+       * is noise the reader has to decode. A range that spans nothing is one
+       * date. 2.1c's rule: a value shared by every row is stated once. */
+      return first === last ? first : first + " \u2013 " + last;
+    },
     /**
      * 5.6a — `query` is NOT cleared by `switchView` and the search field does
      * not render on this view (`searchAppliesHere` excludes recovery), so a
