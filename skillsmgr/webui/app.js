@@ -109,6 +109,25 @@ const COMMAND_GROUP_ORDER = Object.freeze([
   "Navigation",
 ]);
 
+/* 5.7a — the ONE list of views that render the search field.
+   `searchAppliesHere` gates the `/` shortcut AND the keyboard-shortcut
+   reference in the help dialog used to hard-code its own four view names.
+   Two lists meant the reference could be wrong without anything failing: it
+   claimed `/` works "Anywhere" while the key handler deliberately does
+   nothing on the five views without a search field (`onKeydown`, below,
+   which already said so in a comment nobody reading the dialog would see).
+
+   The guard reads this list and the dialog reads the same list, so adding a
+   view to one without the other is now impossible rather than merely
+   untested. `searchAppliesHere` keeps its name and its meaning. */
+const SEARCH_VIEWS = Object.freeze([
+  { id: "skills", label: "Library" },
+  { id: "install", label: "Install" },
+  { id: "quality", label: "Quality" },
+  { id: "trash", label: "Trash" },
+]);
+const SEARCH_VIEW_IDS = Object.freeze(SEARCH_VIEWS.map((view) => view.id));
+
 /* An unlisted category sorts after every listed one and ALPHABETICALLY among
    its own kind, so a new command can never fall off the end of the palette
    without a heading. The first version of this returned a numeric rank derived
@@ -1428,7 +1447,17 @@ const appOptions = {
      * a promise — and `/` must then stop being a promise too, which is why the
      * key handler consults this same list rather than the element. */
     searchAppliesHere() {
-      return ["skills", "trash", "quality", "install"].includes(this.view);
+      return SEARCH_VIEW_IDS.includes(this.view);
+    },
+    /* The help dialog's `/` row names these views in prose. Derived from
+       SEARCH_VIEWS so the sentence and the guard cannot disagree — this is
+       the "one definition, two hosts" shape 5.6a used for the trash ledger.
+       "and" before the last item, because a settings page that says
+       "Library, Install, Quality, Trash" reads as a list, not a sentence. */
+    searchShortcutScope() {
+      const labels = SEARCH_VIEWS.map((view) => view.label);
+      if (labels.length < 2) return labels.join("");
+      return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
     },
     registryInventoryCount() {
       return this.filteredRegistryInventory.length;

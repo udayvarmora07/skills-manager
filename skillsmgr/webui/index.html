@@ -2575,9 +2575,20 @@
           <h3 class="shortcuts-section-title">Anywhere</h3>
           <dl class="shortcuts-list">
             <div class="shortcuts-row"><dt><span class="kbd">Ctrl</span><span class="kbd">K</span></dt><dd>Open or close the command palette</dd></div>
-            <div class="shortcuts-row"><dt><span class="kbd">/</span></dt><dd>Focus skill search</dd></div>
             <div class="shortcuts-row"><dt><span class="kbd">?</span></dt><dd>Open this reference</dd></div>
             <div class="shortcuts-row"><dt><span class="kbd">Esc</span></dt><dd>Close the open menu or dialog</dd></div>
+          </dl>
+        </section>
+        <!-- 5.7a: `/` used to sit in "Anywhere" above. It is bound on four
+             views and not on five, because the handler deliberately does
+             nothing where there is no field to focus — the same reason the
+             other views do not render one. The reference and the guard now
+             read one list (SEARCH_VIEWS), so this sentence cannot claim a
+             view the key does not work on. -->
+        <section class="shortcuts-section">
+          <h3 class="shortcuts-section-title">Views with a search field</h3>
+          <dl class="shortcuts-list">
+            <div class="shortcuts-row"><dt><span class="kbd">/</span></dt><dd>Focus the search field &mdash; {{ searchShortcutScope }}</dd></div>
           </dl>
         </section>
         <section class="shortcuts-section">
