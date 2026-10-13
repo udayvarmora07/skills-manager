@@ -2269,8 +2269,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .adapter-row > th, .adapter-row > td { min-width: 0; padding: var(--s3); border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; font-weight: 400; }
 .adapter-row:last-child > th, .adapter-row:last-child > td { border-bottom: 0; }
 .adapter-consumer { font-weight: 400; }
-.adapter-consumer-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); min-width: 0; }
-.adapter-label { font-size: var(--t-ui); font-weight: 600; color: var(--text); }
+/* 5.4b — the head was a ROW: label left, badge right, `justify-content:
+ * space-between`. The badge is `flex: none` and carries two words ("unknown
+ * precedence"), so in a 27% column it took what it wanted and flex shrink —
+ * which is proportional to base size — handed the label the remainder. Measured
+ * at 1280: "Claude Code" wrapped mid-name. The name is the row's identity, so it
+ * now owns a line of its own and the badge sits under it, starting at the same
+ * x as the facts <dl> below. Everything in a row-header cell shares one left
+ * edge; the old row had two, and the second one was inside 300px. */
+.adapter-consumer-head { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s1); min-width: 0; }
+.adapter-label { font-size: var(--t-ui); font-weight: 600; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .adapter-consumer-head .badge { flex: none; }
 .adapter-facts { grid-template-columns: 84px 1fr; }
 .adapter-facts dd, .adapter-note { overflow-wrap: anywhere; }
