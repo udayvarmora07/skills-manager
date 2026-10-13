@@ -777,7 +777,13 @@
 
     <!-- ------------------------------------------------------------ detail -->
     <section class="detail" :inert="drawerOpen">
-      <button v-if="view !== 'skills' && mobileDetailOpen" class="mobile-back" type="button" @click="closeMobileView">← {{ view === 'quality' ? 'Back to Quality' : 'Back to Library' }}</button>
+      <!-- 7.4e1 — the label is derived from the palette's own navigation rows
+           (app.js `mobileBackLabel`). The two-case ternary this replaced said
+           "Back to Library" on every view except Quality, including the seven
+           where the button returns the reader to that view's OWN list. The
+           Library's own detail back button below keeps its literal: it is
+           correct there. -->
+      <button v-if="view !== 'skills' && mobileDetailOpen" class="mobile-back" type="button" @click="closeMobileView">← {{ mobileBackLabel }}</button>
       <div v-if="view === 'overview'" class="overview-shell" :data-overview-ready="!loadingList && !loadingHistory ? 'true' : null" aria-labelledby="overview-title">
         <div v-if="banner" :class="'banner banner-' + banner.type" role="alert">
         <app-icon :name="banner.type === 'error' ? 'circle-alert' : (banner.type === 'warn' ? 'circle-alert' : (banner.type === 'ok' ? 'circle-check' : 'circle'))" :class="'banner-icon-' + banner.type"></app-icon>

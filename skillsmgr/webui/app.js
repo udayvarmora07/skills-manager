@@ -967,6 +967,25 @@ const appOptions = {
     activeCount() { return this.skills.filter((s) => !s.disabled).length; },
     disabledCount() { return this.skills.filter((s) => s.disabled).length; },
     trashCount() { return this.trashSkills.length; },
+    /* 7.4e1 — the view-level back button picked its label from a two-case
+     * ternary (`view === 'quality' ? 'Back to Quality' : 'Back to Library'`),
+     * and it renders on every view EXCEPT the Library — so on Trash, Recovery,
+     * Profiles, Install, Workspaces and Settings, the control that returns the
+     * reader to that view's own list claimed to return them to the Library.
+     * Below 760px the list and the detail are one screen at a time, so it is
+     * the only way back and a wrong label is the whole affordance.
+     *
+     * The view NAME list already exists: the palette's navigation rows. 5.7a
+     * established `SEARCH_VIEWS` as the single list behind the `/` claim for
+     * the same reason — the guard and the prose cannot drift. Deriving from the
+     * rows means a tenth view cannot arrive with a wrong label by omission.
+     * No matching row means we do not invent a destination: "Back", and the
+     * stdlib suite fails because a rendered view has no palette row. */
+    mobileBackLabel() {
+      const row = this.commandPaletteCommands.find(
+        (c) => c.action === "switchView" && c.args && c.args[0] === this.view);
+      return row ? "Back to " + row.label : "Back";
+    },
     /**
      * 5.6a — `query` is NOT cleared by `switchView` and the search field does
      * not render on this view (`searchAppliesHere` excludes recovery), so a
