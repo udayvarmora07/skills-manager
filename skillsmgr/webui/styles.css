@@ -2168,7 +2168,10 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .quality-unavailable span { color: var(--text-muted); }
 .quality-overview { max-width: 920px; }
 .quality-overview > .hint { max-width: 72ch; margin-top: var(--s3); }
-.quality-metrics { margin-top: var(--s4); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* 5.5b deleted `.quality-metrics`. Seven cells on `repeat(3, 1fr)` left the
+   last row holding ONE cell and two empty slots, which the grid background
+   painted as a hole; the summary is now the `.quality-ledger` table this view
+   already uses. A class with no host is dead CSS that reads as coverage. */
 .quality-side-status { margin: var(--s3) 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); font-size: var(--t-ui); overflow-wrap: anywhere; }
 .quality-side-error { border-color: var(--warn); color: var(--text); background: var(--warn-soft); }
 .quality-hygiene { max-width: none; }
@@ -4286,7 +4289,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-breakdown { gap: 0 14px; }
   .overview-breakdown li + li { padding-left: 14px; }
-  .quality-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quality-observations li, .quality-unavailable li, .quality-finding-instances li { grid-template-columns: 1fr; gap: 2px; padding: 10px 0; }
   .overview-empty { grid-template-columns: 1fr; gap: 18px; margin-top: 18px; padding: 18px; }
   .overview-empty-actions { justify-content: flex-start; max-width: none; }

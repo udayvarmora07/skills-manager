@@ -329,7 +329,12 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         self.assertNotIn('class="brand" type="button" @click="switchView(\'overview\')" aria-label=', html)
         self.assertNotIn('class="btn btn-secondary command-trigger" type="button" @click="toggleCommandPalette" aria-label=', html)
         self.assertIn('<dd>{{ formatNumber(overviewLogicalCount) }}<small>deduplicated names</small></dd>', html)
-        self.assertIn('<dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd>', html)
+        # 5.5b moved this hedge out of a `<small>` under a number and into the
+        # ledger's own "What that count means" cell. The intent of the original
+        # assertion — that "present when returned" is rendered at all, because
+        # a bare 0 there would read as "checked and clean" — is unchanged; only
+        # the structure it looks for is.
+        self.assertIn('<th scope="row">Provenance records</th><td class="num">{{ formatNumber(qualitySummary.provenance) }}</td><td>present when returned</td>', html)
         self.assertIn('.overview-metrics small { display: block;', css)
 
     def test_chrome_launch_retries_before_giving_up(self):

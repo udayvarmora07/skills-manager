@@ -243,16 +243,39 @@ class RenderedDarkPassTests(unittest.TestCase):
                            "no grid on any view has an unfilled slot, so this "
                            "test asserted nothing")
 
-    def test_the_dangling_slot_is_the_quality_summary_and_is_still_reached(self):
-        """Names the defect so a later change cannot delete the grid, drop the
-        cell that leaves the hole, or move the view out of the sweep, and still
-        pass a suite whose other assertions are all conditional."""
+    def test_the_dangling_slot_is_no_longer_the_quality_summary(self):
+        """Same intent, opposite sign — 5.5b fixed it, so this now says so.
+
+        6.1b wrote this test to NAME the defect: it proved the dark sweep could
+        see a grid with an unfilled slot by requiring one to exist, because a
+        sweep that cannot see a defect is a sweep that reports nothing. The
+        Quality summary was the one grid on any view that had one (7 cells on
+        `repeat(3, 1fr)`), and 5.5b replaced it with a `.quality-ledger` table,
+        which cannot leave a dangling cell by construction.
+
+        So the assertion is inverted, deliberately. Deleting this test would
+        hand the next pass the old defect back with nothing watching, and that
+        is the half of the "a test nobody runs" problem that outlives the fix:
+        the sweep still proves it SEES an unfilled slot, and now a second
+        assertion proves this view has none.
+        """
         sweep = self._sweep("Quality")
         hits = [g for g in sweep["grids"]
                 if "quality-metrics" in g["sel"] and g["filled"] < g["slots"]]
-        self.assertTrue(hits, "the Quality summary no longer leaves an empty "
-                              "slot; the defect is gone or the view moved, and "
-                              "only one of those is good news")
-        # 7 observed cells on 3 columns, per the seeded payload.
-        self.assertGreaterEqual(hits[0]["filled"], 6)
-        self.assertGreater(hits[0]["slots"], hits[0]["filled"])
+        self.assertEqual(hits, [],
+                         "the Quality summary is a grid with an empty slot again "
+                         "(%s): 5.5b replaced it with a ledger table" % (hits,))
+        # The ledger itself: seven counts, seven rows, none of them a filler.
+        rows = self._page.query_selector_all(
+            'table[aria-label="Observed quality evidence summary"] tbody tr')
+        self.assertEqual(len(rows), 7,
+                         "the summary ledger must carry all seven counts; "
+                         "found %d rows" % len(rows))
+        for row in rows:
+            cells = row.query_selector_all("th, td")
+            self.assertEqual(len(cells), 3,
+                             "a summary row is not label/count/meaning: %r"
+                             % row.inner_text().strip())
+            self.assertTrue(row.query_selector("td.num").inner_text().strip(),
+                            "a summary row has an empty count cell: %r"
+                            % row.inner_text().strip())

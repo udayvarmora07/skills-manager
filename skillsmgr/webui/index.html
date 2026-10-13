@@ -1593,7 +1593,39 @@
         <section v-else class="quality-overview" aria-labelledby="quality-title">
           <div class="detail-head"><div><h1 id="view-title" tabindex="-1">Quality</h1><p class="lead">Review validity, physical state, provenance, and size without collapsing independent evidence into a score.</p></div><div class="detail-actions quality-actions"><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="switchView('skills')">Inspect in Library</button></div></div>
           <p id="quality-title" class="hint">Select a skill to inspect its exact physical copy. Risk, eval, usefulness, trust, and effective-load signals remain explicitly unavailable unless an existing API provides them.</p>
-          <dl class="overview-metrics quality-metrics" aria-label="Observed quality evidence summary"><div><dt>Observed copies</dt><dd>{{ formatNumber(qualitySummary.observed) }}<small>filesystem records</small></dd></div><div><dt>Observed active</dt><dd>{{ formatNumber(qualitySummary.active) }}<small>not a validation verdict</small></dd></div><div><dt>Disabled</dt><dd>{{ formatNumber(qualitySummary.disabled) }}<small>physical state</small></dd></div><div><dt>Validity flagged</dt><dd>{{ formatNumber(qualitySummary.validityFlagged) }}<small>invalid/malformed/unaddressable</small></dd></div><div><dt>Linked outside root</dt><dd>{{ formatNumber(qualitySummary.linked) }}<small>symlink the tool refuses to follow</small></dd></div><div><dt>Divergent groups</dt><dd>{{ formatNumber(qualitySummary.divergent) }}<small>copy comparison</small></dd></div><div><dt>Provenance records</dt><dd>{{ formatNumber(qualitySummary.provenance) }}<small>present when returned</small></dd></div></dl>
+          <!-- 5.5b — the seven-cell summary, as the ledger this view already uses.
+
+               It was `.overview-metrics quality-metrics`: seven cells on a
+               `repeat(3, 1fr)` grid, so the last row held ONE cell and two
+               empty slots the grid background painted as a hole, and three of
+               the seven were the §B equal-tile shape. It is now the
+               `.quality-ledger` table `qualityCategoryLedger` below already
+               uses — the SAME primitive with a second host, not a second
+               definition — because seven counts each carrying its own sentence
+               is a two-column ledger, and a ledger cannot leave a dangling
+               cell by construction.
+
+               The "what that count means" column is the honesty work: a tile
+               put "present when returned" in muted text UNDER the number,
+               where it reads as a caption for a figure that may never have
+               been counted at all. In its own column it is plainly the
+               reading of the number beside it. No claim is added: every
+               sentence below is the one the tile already carried. -->
+              <div class="quality-ledger-block">
+                <div class="section-label-row"><h3>What was observed</h3><span class="hint">{{ formatNumber(qualitySummary.observed) }} records in this scope</span></div>
+                <table class="quality-ledger" aria-label="Observed quality evidence summary">
+                  <thead><tr><th scope="col">Count</th><th scope="col" class="num">Observed</th><th scope="col">What that count means</th></tr></thead>
+                  <tbody>
+                    <tr><th scope="row">Observed copies</th><td class="num">{{ formatNumber(qualitySummary.observed) }}</td><td>filesystem records</td></tr>
+                    <tr><th scope="row">Observed active</th><td class="num">{{ formatNumber(qualitySummary.active) }}</td><td>not a validation verdict</td></tr>
+                    <tr><th scope="row">Disabled</th><td class="num">{{ formatNumber(qualitySummary.disabled) }}</td><td>physical state</td></tr>
+                    <tr><th scope="row">Validity flagged</th><td class="num">{{ formatNumber(qualitySummary.validityFlagged) }}</td><td>invalid, malformed or unaddressable</td></tr>
+                    <tr><th scope="row">Linked outside root</th><td class="num">{{ formatNumber(qualitySummary.linked) }}</td><td>symlink the tool refuses to follow</td></tr>
+                    <tr><th scope="row">Divergent groups</th><td class="num">{{ formatNumber(qualitySummary.divergent) }}</td><td>copy comparison</td></tr>
+                    <tr><th scope="row">Provenance records</th><td class="num">{{ formatNumber(qualitySummary.provenance) }}</td><td>present when returned</td></tr>
+                  </tbody>
+                </table>
+              </div>
           <section class="quality-section"><h2>What this center can and cannot show</h2><ul class="quality-unavailable"><li><strong>Available</strong><span>Observed parser/addressability flags, physical copies and state, provenance fields when present, and token/size estimates.</span></li><li><strong>Not inferred</strong><span>No single quality score, safety/trust verdict, usefulness claim, or effective consumer load.</span></li></ul></section>
           <p v-if="!qualityRecords.length" class="empty compact-empty">No observed skills yet. Add or create a skill, then return here for independent evidence.</p>
           <section class="quality-section quality-hygiene" aria-labelledby="quality-hygiene-title">
