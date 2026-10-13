@@ -2235,6 +2235,23 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .settings-preview-swatch { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 .settings-type-sample { font-size: var(--t-empty); line-height: 1; font-weight: 600; color: var(--accent-text); }
 .settings-evidence { margin: 0; }
+/* 5.9a — About. The roots are a LEDGER, one row each, sharing the hairline
+   vocabulary of every other table on this branch (5.5 ledger, 5.6a recovery
+   ledger, 5.4 catalogue). Not cards: eight equal bordered boxes is the shape
+   DESIGN-V2 §B refuses, and the rows differ in kind (label, path, count), so
+   one column each is what makes them comparable.
+   `minmax(0, 1fr)` on the path is load-bearing — a filesystem path is the
+   longest string this section can print, and `.tag`'s `max-width: 90px` is
+   what amputated the same fact in 5.4. It ellipsises here instead of
+   truncating to nothing. */
+.about-roots { list-style: none; margin: 0; padding: 0; display: grid; }
+.about-roots > li { display: grid; grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto; align-items: center; gap: 2px var(--s2); padding: 7px 0; border-bottom: 1px solid var(--border); }
+.about-roots > li:last-child { border-bottom: 0; }
+.about-roots .dot { width: 7px; height: 7px; }
+.about-root-label { color: var(--text); font-weight: 500; }
+.about-root-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--t-table); color: var(--text-muted); }
+.about-root-state { font-size: var(--t-table); color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
+.about-note { margin: var(--s3) 0 0; }
 /* The rail in the side column. It replaces a 379x828 box that held a title
    and one sentence restating the lead. `is-current` marks what the reader
    chose — never a scroll position, which this build cannot observe. */

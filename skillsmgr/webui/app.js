@@ -137,6 +137,7 @@ const SETTINGS_SECTIONS = Object.freeze([
   { id: "settings-reading", label: "Text size", hint: "The fixed reading scale" },
   { id: "settings-formats", label: "Regional formats", hint: "Counts, sizes, timestamps" },
   { id: "settings-accessibility", label: "Accessibility", hint: "The OS signals this app honors" },
+  { id: "settings-about", label: "About", hint: "What this app reads, and what it reaches" },
 ]);
 
 /* 5.8a — every finding `/api/doctor` can report, in one list.
@@ -158,6 +159,30 @@ const SETTINGS_SECTIONS = Object.freeze([
  * shape, and rendering a guessed row for it would be inventing a capability
  * (API gap, logged in STATE.md).
  */
+/* 5.9a — keep the TAIL of a filesystem path, drop the head.
+ *
+ * A CSS ellipsis keeps the head, which is the half every root on one machine
+ * shares: `/tmp/skillsmgr-v2-sandbox/.claude/skills` and
+ * `/tmp/skillsmgr-v2-sandbox/.codex/skills` render as the SAME prefix and
+ * differ only where the ellipsis eats. The reader is left comparing eight
+ * identical strings.
+ *
+ * A budget, not a segment count: how many characters fit is a fact about the
+ * column's width in mono, and `text-overflow: ellipsis` is still there for
+ * the case where the tail is too long for whatever width we ended up at. The
+ * full value stays on the row's `title`, so nothing is lost - it is moved,
+ * not dropped (4.1c's precedent).
+ *
+ * Returns the input UNCHANGED when it already fits, so a short path is never
+ * given an ellipsis it did not need.
+ */
+const ABOUT_PATH_TAIL_CHARS = 34;
+function frontTruncatePath(path) {
+  const text = typeof path === "string" ? path : "";
+  if (text.length <= ABOUT_PATH_TAIL_CHARS) return text;
+  return "…/" + text.slice(-(ABOUT_PATH_TAIL_CHARS - 2));
+}
+
 const DOCTOR_FINDINGS = Object.freeze([
   { key: "undecodable_documents", label: "Documents that could not be read", hint: "Skipped when the library is listed" },
   { key: "conflicting_documents", label: "Names claimed by more than one document", hint: "Only the first is indexed" },
@@ -1626,6 +1651,28 @@ const appOptions = {
         };
       });
       return [all].concat(rows);
+    },
+
+    /* 5.9a — the roots the About section lists, taken from the SAME
+     * `scopeOptions` the rail's switcher renders rather than derived a
+     * second time. Two derivations of "which directories is this machine
+     * pointed at" would be free to disagree, and the About section's whole
+     * claim is that it names what the app actually reads.
+     *
+     * Element 0 is the synthetic `All scopes` row — `every detected root` is
+     * not a directory, so it is dropped rather than rendered as one. Slice,
+     * do not filter on `id`: a real scope's id is whatever the backend sent.
+     */
+    observedRoots() {
+      return this.scopeOptions.slice(1).map((root) => Object.assign({}, root, {
+        // 2.1b recorded this exact finding on the scope popover and left it as
+        // a note: "a front-truncated path computed in JS would be cleaner".
+        // This is that. CSS `text-overflow` keeps the HEAD, and on this
+        // machine every root shares a head — eight rows rendered
+        // `/tmp/skillsmgr-v2-sandbox/…` and the one column that exists to
+        // tell them apart was amputated for all eight.
+        short: frontTruncatePath(root.path),
+      }));
     },
 
     activeScopeOption() {

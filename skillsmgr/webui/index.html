@@ -1871,6 +1871,48 @@
             <dl class="meta compact-meta settings-evidence"><div><dt>App theme</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }} rendered</dd></div><div><dt>System preference</dt><dd>{{ systemThemeLabel }} dark-mode preference</dd></div><div><dt>Reduced motion</dt><dd>{{ prefersReducedMotion ? 'OS requests reduced motion' : 'OS has not requested reduced motion' }}</dd></div><div><dt>Format locale</dt><dd>{{ resolvedLocale }} · regional formats only</dd></div></dl>
           </div>
         </section>
+        <!-- 5.9a — About. DESIGN-V2 §8 names "About/data location" and 5.7a
+             filed it here; the pane could not have shipped it before, because
+             the only place a data path was going to come from is
+             `/api/scopes`, and 5.7b's rail measurement is what established
+             that reading.
+
+             Every line below is OBSERVED. Nothing here is configured, and
+             nothing here is invented:
+               - `serverHost` is `location.host` — where this page came from.
+               - the roots are `observedRoots`, which SLICES the switcher's own
+                 `scopeOptions`; a second derivation could disagree with the
+                 control that actually changes which root is loaded.
+               - the one host the app can reach is a literal read out of the
+                 product, not a promise: `skills.sh` is `REGISTRY_BASE_URL`
+                 and nothing else in `skillsmgr/` opens a socket.
+
+             Deliberately NOT stated: a version number. No route carries one,
+             and RULES #1 freezes the REST contract, so an About section that
+             printed a version would be printing a constant from a file the
+             reader cannot see. Logged as an API gap in STATE.md. -->
+        <section id="settings-about" class="settings-section" aria-labelledby="settings-about-title" tabindex="-1">
+          <div class="settings-section-label">
+            <h2 id="settings-about-title">About</h2>
+            <p id="settings-about-hint" class="hint">What this app reads on this machine, and the one place it can reach outside it.</p>
+          </div>
+          <div class="settings-section-control">
+            <dl class="meta compact-meta settings-evidence">
+              <div><dt>Served from</dt><dd>{{ serverHost }}</dd></div>
+              <div><dt>Skill roots observed</dt><dd>{{ formatNumber(observedRoots.length) }} directories, listed below</dd></div>
+              <div><dt>Reaches outside this machine</dt><dd>skills.sh, only from the Install center’s source buttons</dd></div>
+            </dl>
+            <ul class="about-roots" aria-labelledby="settings-about-hint">
+              <li v-for="root in observedRoots" :key="root.id">
+                <span class="dot" :class="root.exists ? 'dot-ok' : 'dot-muted'" aria-hidden="true"></span>
+                <span class="about-root-label">{{ root.label }}</span>
+                <span class="about-root-path" :title="root.path">{{ root.short || 'no path reported' }}</span>
+                <span class="about-root-state">{{ root.exists ? (root.count ? formatNumber(root.count) + ' skills' : 'no skills') : 'not detected' }}</span>
+              </li>
+            </ul>
+            <p class="hint about-note">Reads and writes stay inside these roots and this app’s own data directory. A registry read may answer from a cached copy — the Install center says so when it does.</p>
+          </div>
+        </section>
       </div>
 
       <div v-else-if="view === 'recovery'" class="detail-inner">
