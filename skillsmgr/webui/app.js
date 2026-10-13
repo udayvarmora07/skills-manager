@@ -395,10 +395,21 @@ const appOptions = {
       loadingList: true,
       loadingDetail: false,
       loadingTrash: false,
+      /* 6.3 — a read that FAILED is not a read that found nothing. Each of
+       * these four used to clear its list in the catch and toast, so the view
+       * that owns the list rendered an empty-state sentence making a claim
+       * about the disk ("The global trash is empty") that a transport failure
+       * cannot support. The error is state, not a transient: it survives until
+       * a read actually succeeds, so a reader who looks away does not come
+       * back to a page asserting something nobody observed. Same shape
+       * `qualityHygieneError` already had. */
+      trashError: null,
       loadingRecoverySnapshots: false,
       recoverySnapshots: [],
+      recoverySnapshotsError: null,
       loadingHistory: true,
       overviewHistory: [],
+      overviewHistoryError: null,
       /* Wall-clock stamp of THIS page's own last settled successful list read.
        * The aggregate /api/skills route carries no server-side observation
        * timestamp (it is stamped per record by Store.get, not by the list), so
@@ -409,6 +420,7 @@ const appOptions = {
       rescanBusy: false,
       loadingWorkspaces: false,
       workspaces: null,
+      workspacesError: null,
       workspaceProject: "",
       qualityHygiene: null,
       qualityHygieneLoading: false,
@@ -2828,9 +2840,14 @@ const appOptions = {
           + "&target_path=" + encodeURIComponent(target.physical_path);
         const result = await api("/api/source-updates/snapshots" + query);
         this.recoverySnapshots = Array.isArray(result) ? result : (result.snapshots || []);
+        this.recoverySnapshotsError = null;
       } catch (e) {
         this.recoverySnapshots = [];
-        this.toast("Could not load source snapshots: " + e.message, "err");
+        /* 6.3 — the two panes that read this both said "No retained source
+         * snapshots for this exact target." after a failure, which is a claim
+         * about what is on disk made by a request that never arrived. */
+        this.recoverySnapshotsError = "Could not read source snapshots: " + e.message;
+        this.toast(this.recoverySnapshotsError, "err");
       } finally {
         this.loadingRecoverySnapshots = false;
       }
@@ -2841,8 +2858,15 @@ const appOptions = {
       try {
         const suffix = this.workspaceProject.trim() ? "?project=" + encodeURIComponent(this.workspaceProject.trim()) : "";
         this.workspaces = await api("/api/workspaces" + suffix);
+        this.workspacesError = null;
       } catch (e) {
-        this.toast("Could not load workspace evidence: " + e.message, "err");
+        /* 6.3 — `workspaces` stays `null` on purpose (never set to `{}`), so
+         * `workspaceIdleSentence`'s "could not be read" branch is reachable.
+         * What was missing is that the catalogue BELOW it rendered "No adapter
+         * evidence is available on this machine." — `!loadingWorkspaces` is
+         * true after a failure as well as after an honest empty. */
+        this.workspacesError = "Could not read adapter evidence: " + e.message;
+        this.toast(this.workspacesError, "err");
       } finally {
         this.loadingWorkspaces = false;
       }
@@ -3164,8 +3188,12 @@ const appOptions = {
       this.loadingTrash = true;
       try {
         this.trashSkills = await api("/api/trash");
+        /* 6.3 — cleared on the SUCCESS path only, never on a timer: a flapping
+         * connection must keep saying what it last failed to do. */
+        this.trashError = null;
       } catch (e) {
-        this.toast("Could not load trash: " + e.message, "err");
+        this.trashError = "Could not read the global trash: " + e.message;
+        this.toast(this.trashError, "err");
       } finally {
         this.loadingTrash = false;
       }
@@ -3175,8 +3203,14 @@ const appOptions = {
       this.loadingHistory = true;
       try {
         this.overviewHistory = await api("/api/history?limit=8");
+        this.overviewHistoryError = null;
       } catch (e) {
+        /* 6.3 — this catch was completely silent: no toast, no state, and the
+         * Overview then said "No history entries yet." about a store it had
+         * never successfully read. */
         this.overviewHistory = [];
+        this.overviewHistoryError = "Could not read recent activity: " + e.message;
+        this.toast(this.overviewHistoryError, "err");
       } finally {
         this.loadingHistory = false;
       }
@@ -3605,6 +3639,15 @@ const appOptions = {
     retryQualityHygiene() {
       return this.loadQualityHygiene();
     },
+
+    /* 6.3 — one retry for every read whose failure is now state. Each one
+     * re-runs the loader that failed, so the error clears only when the same
+     * request actually succeeds. A retry control that hid the error without
+     * re-reading would be the defect wearing a fix's clothes. */
+    retryTrash() { return this.loadTrash(); },
+    retryOverviewHistory() { return this.loadOverviewHistory(); },
+    retryRecoverySnapshots() { return this.loadRecoverySnapshots(); },
+    retryWorkspaces() { return this.loadWorkspaces(); },
 
     onSearchKeydown(e) {
       // Keep the native select-all shortcut reliable for keyboard and browser
@@ -4936,7 +4979,7 @@ const appOptions = {
 
     openHistory(scopeOverride = null) {
       if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
-      this.modals.history = { name: "", loaded: "", rows: [], snapshots: [], loading: false, scope: scopeOverride || "" };
+      this.modals.history = { name: "", loaded: "", rows: [], snapshots: [], loading: false, scope: scopeOverride || "", error: null };
       this.loadHistory();
     },
 
@@ -4961,8 +5004,14 @@ const appOptions = {
           m.snapshots = snapshotResult.snapshots || [];
         }
         m.loaded = asked;
+        m.error = null;
       } catch (e) {
-        this.toast(e.message, "err");
+        /* 6.3 — was `this.toast(e.message, "err")` alone, leaving `rows` at
+         * whatever it was and rendering "No history records." under it. */
+        m.rows = [];
+        m.snapshots = [];
+        m.error = "Could not read history: " + e.message;
+        this.toast(m.error, "err");
       } finally {
         m.loading = false;
       }

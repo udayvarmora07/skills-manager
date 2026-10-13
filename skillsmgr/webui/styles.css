@@ -2936,6 +2936,27 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .banner-warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
 .banner-info { background: var(--accent-soft); border-color: var(--accent-text); color: var(--accent-text); }
 
+/* 6.3 — the shape a FAILED READ takes. It is not a toast, and it is not the
+   empty state: a toast is gone in four seconds and the empty state is a claim
+   about the disk that a transport failure cannot support. This paints in
+   `warn`, not `err` — nothing is wrong with the reader's data, the app could
+   not go and look at it — and it is a BAND in the pane whose whole content is
+   the read, so it cannot be missed by scrolling past a dialog.
+   `.quality-side-error` above is the same idea at one host; this is the shared
+   vocabulary the four other reads now use. */
+.read-failed {
+  margin: var(--s3) 0;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: var(--t-ui);
+  overflow-wrap: anywhere;
+}
+.read-failed p { margin: 0; }
+.read-failed .empty-actions { margin-top: var(--s2); }
+
 /* Status is never colour-only. The glyph is the label, so a level survives
    greyscale, forced-colors and every form of colour-vision deficiency. */
 .banner-icon-ok { color: var(--ok); }

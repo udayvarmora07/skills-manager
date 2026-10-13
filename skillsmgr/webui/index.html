@@ -657,11 +657,16 @@
              that has moved into the row. Same defect 5.3b removed from
              Profiles. The pane keeps what only it carries: source snapshots
              for the selected Library target. -->
-        <div v-if="!trashSkills.length" class="empty compact-empty"><h3>Trash is empty</h3><p>History and full migration tools remain available in this center.</p></div>
+        <div v-if="trashError" class="read-failed" role="alert">
+          <p>{{ trashError }}</p>
+          <div class="empty-actions"><button class="btn btn-secondary" type="button" @click="retryTrash" :disabled="loadingTrash">Try again</button></div>
+        </div>
+        <div v-else-if="!trashSkills.length" class="empty compact-empty"><h3>Trash is empty</h3><p>History and full migration tools remain available in this center.</p></div>
         <section class="recovery-snapshot-list" aria-labelledby="recovery-snapshots-title">
           <div class="sidepanel-intro"><strong id="recovery-snapshots-title">Source snapshots</strong><span class="hint">{{ selected ? selected.name : 'Select a Library target' }}</span></div>
           <p v-if="!selected || !updateTargetAvailable" class="hint">Select an exact writable skill instance in Library to inspect its retained source snapshots.</p>
           <p v-else-if="loadingRecoverySnapshots" class="hint">Loading source snapshots…</p>
+          <p v-else-if="recoverySnapshotsError" class="read-failed" role="alert">{{ recoverySnapshotsError }} <button class="text-button" type="button" @click="retryRecoverySnapshots">Retry</button></p>
           <p v-else-if="!recoverySnapshots.length" class="hint">No retained source snapshots for this exact target.</p>
           <ul v-else class="recovery-snapshot-items">
             <li v-for="snapshot in recoverySnapshots" :key="snapshot.snapshot_id">
@@ -723,6 +728,15 @@
 
       <div v-else-if="view === 'trash'" class="skilllist" aria-label="Trash">
         <div v-if="loadingTrash" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <!-- 6.3 — a failed read is not an empty one. This used to fall
+             through to "The global trash is empty", a sentence about the
+             DISK produced by a request that never arrived. `trashError`
+             survives until a read succeeds, so it outranks both empty
+             sentences, which then describe only what was really observed. -->
+        <div v-else-if="trashError" class="read-failed" role="alert">
+          <p>{{ trashError }}</p>
+          <div class="empty-actions"><button class="btn btn-secondary" type="button" @click="retryTrash" :disabled="loadingTrash">Try again</button></div>
+        </div>
         <div v-else-if="filteredTrash.length === 0" class="empty">
           <div class="empty-icon"><app-icon name="archive"></app-icon></div>
           <h3>{{ trashSkills.length ? 'No matching trashed skills' : 'The global trash is empty' }}</h3>
@@ -998,6 +1012,10 @@
           <section class="overview-activity" aria-labelledby="activity-title">
             <div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div>
             <p v-if="loadingHistory" class="hint">Loading recent activity…</p>
+            <!-- 6.3 — `loadOverviewHistory`'s catch was completely silent: no
+                 toast, no state. The Overview then said "No history entries
+                 yet." about a store it had never read. -->
+            <p v-else-if="overviewHistoryError" class="read-failed" role="alert">{{ overviewHistoryError }} <button class="text-button" type="button" @click="retryOverviewHistory">Retry</button></p>
             <p v-else-if="!overviewHistory.length" class="hint">No history entries yet.</p>
             <ul v-else class="activity-list"><li v-for="entry in overviewHistory" :key="entry.id"><span class="activity-mark" aria-hidden="true">↻</span><div><strong>{{ entry.name }}</strong><span>{{ entry.action }} · <time :datetime="entry.at" :title="formatDate(entry.at)">{{ formatRelative(entry.at) }}</time></span></div></li></ul>
           </section>
@@ -1753,6 +1771,12 @@
             <tbody><tr v-for="item in filteredTrash" :key="item.trash_path"><th scope="row">{{ item.name }}<code class="recovery-trash-path">{{ item.trash_path }}</code></th><td>{{ formatDate(item.modified) }}</td><td class="num">{{ formatBytes(item.size_bytes) }}</td><td class="recovery-ledger-action"><button class="btn btn-secondary" type="button" @click="restoreTrash(item)" :disabled="busy">Restore</button></td></tr></tbody>
           </table>
           <p v-else-if="trashSkills.length" class="hint">Nothing in the global trash matches this filter. The {{ formatNumber(trashCount) }} trashed item{{ trashCount === 1 ? '' : 's' }} are still on disk.</p>
+          <!-- 6.3 — 5.6a fixed this sentence making a claim about the disk
+               from a FILTER; it was still making one from a FAILED read.
+               `trashError` is checked before the emptiness sentence, not
+               after, because a reader who cannot read the trash must not be
+               told the trash is empty. -->
+          <p v-else-if="trashError" class="read-failed" role="alert">{{ trashError }} <button class="text-button" type="button" @click="retryTrash">Retry</button></p>
           <p v-else class="hint">Global trash is empty. Existing history and archive transfer actions remain available above.</p>
           <div v-if="trashSkills.length" class="detail-actions notice-list"><button class="btn btn-danger-ghost" type="button" @click="confirmPurge" :disabled="busy">Purge all {{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }} permanently</button></div>
         </section>
@@ -1795,6 +1819,12 @@
             <span class="hint">{{ workspaceAdapters.length ? formatNumber(workspaceAdapters.length) + (workspaceAdapters.length === 1 ? ' consumer' : ' consumers') : '' }}</span>
           </div>
           <p v-if="loadingWorkspaces && !workspaces" class="hint workspace-idle" role="status">Loading adapter evidence…</p>
+          <!-- 6.3 — `!loadingWorkspaces` is true after a FAILURE too, so this
+               table's own empty branch printed "No adapter evidence is
+               available on this machine." — a claim about the machine made by
+               a request that never arrived. `workspacesError` is checked first
+               for the same reason `workspaces` is left `null` on failure. -->
+          <p v-else-if="workspacesError" class="read-failed" role="alert">{{ workspacesError }} <button class="text-button" type="button" @click="retryWorkspaces">Retry</button></p>
           <!-- 5.4 — was a 3-up grid of six equal cards, which flattened `tiers`
                away: the roots lost the tier that gives them meaning, `.tag`'s
                90px ceiling amputated every path ("path unkno…", ".claude/sk…"),
@@ -1965,6 +1995,7 @@
           <div class="section-label-row"><h2 id="recovery-snapshot-panel-title">Retained snapshots</h2><span class="hint">{{ selected ? selected.name : 'No exact target selected' }}</span></div>
           <p v-if="!selected || !updateTargetAvailable" class="hint">Choose an exact writable instance in Library first. Recovery never guesses which physical copy a snapshot belongs to.</p>
           <p v-else-if="loadingRecoverySnapshots" class="hint">Loading source snapshots…</p>
+          <p v-else-if="recoverySnapshotsError" class="read-failed" role="alert">{{ recoverySnapshotsError }} <button class="text-button" type="button" @click="retryRecoverySnapshots">Retry</button></p>
           <p v-else-if="!recoverySnapshots.length" class="empty compact-empty">No retained source snapshots for this exact target.</p>
           <ul v-else class="recovery-snapshot-items recovery-snapshot-items-wide">
             <li v-for="snapshot in recoverySnapshots" :key="snapshot.snapshot_id">
@@ -2456,6 +2487,14 @@
           <button class="btn btn-primary" :disabled="busy" @click="loadHistory">Show</button>
         </div>
         <div v-if="modals.history.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <!-- 6.3 — found by this task's own property assertion, not by reading:
+             `loadHistory` toasted and left `rows` empty, so the dialog said
+             "No history records." — a claim about the store made by a request
+             that never arrived. The fifth instance of this class. -->
+        <div v-else-if="modals.history.error" class="read-failed" role="alert">
+          <p>{{ modals.history.error }}</p>
+          <div class="empty-actions"><button class="btn btn-secondary" type="button" @click="loadHistory" :disabled="modals.history.loading">Try again</button></div>
+        </div>
         <div v-else-if="modals.history.rows.length === 0" class="empty"><p class="empty-note">No history records.</p></div>
         <div v-else class="tablewrap">
           <table class="history-table">
