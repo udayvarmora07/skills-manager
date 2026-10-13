@@ -4,12 +4,15 @@ painting anything new.
 **What arrived here, measured (re-verify, do not re-derive):**
 
   * `prefersReducedMotion` was declared in `data()` (app.js) and assigned once in
-    `mounted()` from `readReducedMotion()`, and had **no reader anywhere** in
-    `skillsmgr/` or `tests/`. `readReducedMotion()` existed only to feed it. That
-    is this repository's recurring "declared and never read" class, and it was
-    the ninth instance. **Deleted**, with
-    `test_the_reduced_motion_token_cannot_come_back_green_looking` so it cannot
-    be re-added silently.
+    `mounted()` from `readReducedMotion()`, and this test claimed it had **no
+    reader anywhere**. That was true of `app.js` and false of the product:
+    `index.html`'s Accessibility-evidence row was bound to the field all along,
+    so deleting it made that row print "OS has not requested reduced motion" on
+    every machine. **5.7c found it** (the row printed the same sentence with
+    `prefers-reduced-motion: reduce` forced on in Chromium) and restored the
+    field WITH a reader, plus `reducedMotionLabel` and a live subscription. The
+    test below was rewritten with the same intent — a motion state may exist
+    only while something reads it — and the rest of this docstring is 6.4c's.
   * `.btn.is-busy` existed as exactly ONE rule in the cascade (styles.css) with
     **zero** users in any markup, so its only `animation: spin` never played.
     Under `prefers-reduced-motion: reduce` it would have frozen on the first
@@ -43,23 +46,45 @@ def read(path):
 
 
 class BusyStateToken(unittest.TestCase):
-    """The dead reduced-motion token is gone and stays gone."""
+    """The reduced-motion state is only here because something reads it."""
 
-    def test_the_reduced_motion_token_cannot_come_back_green_looking(self):
-        """`prefersReducedMotion` and the method that fed it.
+    def test_the_reduced_motion_state_has_a_reader_or_it_does_not_exist(self):
+        """**REWRITTEN by 5.7c — see TEST-CHANGES.md.**
 
-        Asserted by name rather than by count, so re-adding the field fails this
-        test even if a reader appears to justify it. If a future feature really
-        needs the preference, the honest change is to give it a reader in the
-        same commit — not to let the declaration back in on its own.
+        This used to assert that `prefersReducedMotion` and
+        `readReducedMotion` appear nowhere in `app.js`. It passed, and the
+        product broke: `index.html`'s Accessibility-evidence row was bound to
+        the field, so deleting it made that row print "OS has not requested
+        reduced motion" on **every** machine, including the ones that had asked
+        for it. The gate read one file and the reader was in another — the
+        repository's tenth recorded "a check about a path it cannot see".
+
+        The intent was never "this name must not exist". It was "no motion
+        state without a reader", and this asserts that: the field, the computed
+        it feeds and the markup that binds the computed are all checked, so the
+        chain can never be broken at any link. The one-shot `readReducedMotion`
+        is still banned by name — a sampled value is a claim about the machine
+        at load, not about the machine now.
         """
         app = read(APP_JS)
-        for name in ("prefersReducedMotion", "readReducedMotion"):
-            self.assertNotIn(
-                name, app,
-                "%s is declared again with no reader. Add the reader in the "
-                "same commit, or this token is a third green-looking "
-                "declaration." % name)
+        if "prefersReducedMotion" not in app:
+            self.skipTest(
+                "the field is gone and nothing reads it, which is the state "
+                "this suite recorded. If it comes back, it must come back with "
+                "its reader; tests/test_redesign_settings_evidence.py asserts "
+                "the chain when it exists.")
+        self.assertIn(
+            "reducedMotionLabel", app,
+            "the field is back with no computed reading it — that is the "
+            "orphan this suite exists to prevent.")
+        html = read(INDEX_HTML)
+        self.assertIn(
+            "reducedMotionLabel", html,
+            "the field and its computed exist but nothing renders them")
+        self.assertNotIn(
+            "readReducedMotion", app,
+            "the one-shot reader is back. The signal must be SUBSCRIBED: a "
+            "value sampled at mount is a claim about the machine at load.")
 
 
 class BusyIsPerceivable(unittest.TestCase):

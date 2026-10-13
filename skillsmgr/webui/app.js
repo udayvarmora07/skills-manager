@@ -335,6 +335,21 @@ const appOptions = {
       view: "overview",
       filter: "",
       query: "",
+      /* 5.7c — the OS reduced-motion signal, observed and kept LIVE.
+         6.4c deleted this field as a "declared and never read" token. Its test
+         grepped `app.js` for the name and did not look at the markup, so it
+         deleted the only reader: `index.html`'s Accessibility-evidence row was
+         still bound to `prefersReducedMotion`, which then resolved to
+         `undefined` and printed "OS has not requested reduced motion" on every
+         machine, including the ones that had asked for it. That is RULES #12's
+         "a claim about the reader stated as observed", and it survived a green
+         gate because no stdlib test renders the template.
+
+         `motionMediaQuery`/`motionMediaHandler` are NOT in `data()` on purpose:
+         a MediaQueryList is not reactive state and putting it there would make
+         Vue walk it. They are instance fields assigned in `mounted()` and
+         cleared in `beforeUnmount()`, mirroring `themeMediaQuery`. */
+      prefersReducedMotion: false,
       skills: [],
       allSkills: [],
       trashSkills: [],
@@ -1347,6 +1362,18 @@ const appOptions = {
     systemThemeLabel() {
       return this.systemTheme === "dark" ? "dark" : "light";
     },
+    /* 5.7c. The two evidence rows used to be pasted into the template:
+       `{{ systemThemeLabel }} dark-mode preference` renders "light
+       dark-mode preference", which is a label glued to a noun rather than a
+       sentence. The value is an OBSERVED OS preference, so the `<dt>` names
+       what the value IS and the `<dd>` is the value — the same shape every
+       other fact on this branch uses (4.4's `.detail-facts`, 5.9a's About).
+       Same reason `prefersReducedMotion` gets a computed of its own: it is
+       one OS signal and it now has two readers (the evidence row, and the
+       sentence below it that says what the app does about it). */
+    reducedMotionLabel() {
+      return this.prefersReducedMotion ? "Reduced, honored" : "Off, not requested";
+    },
     /* --- 5.1 Install center -------------------------------------------------
        Three READ sources over one `POST /api/install` route. All the machinery
        existed before this view — `install.registryOp`, `runRegistry`,
@@ -2074,6 +2101,7 @@ const appOptions = {
     this.applyTextSize(this.textSize);
     this.applyLocale(this.locale);
     this.setupThemeListener();
+    this.setupMotionListener();
     document.addEventListener("keydown", this.onKeydown);
     document.addEventListener("mousedown", this.onDocMousedown);
       this.loadInitialData();
@@ -2085,6 +2113,7 @@ const appOptions = {
     Object.values(this.toastTimers || {}).forEach((handle) => clearTimeout(handle));
     this.toastTimers = {};
     this.removeThemeListener();
+    this.removeMotionListener();
     document.removeEventListener("keydown", this.onKeydown);
     document.removeEventListener("mousedown", this.onDocMousedown);
   },
@@ -4290,6 +4319,41 @@ const appOptions = {
       }
       this.themeMediaQuery = null;
       this.themeMediaHandler = null;
+    },
+
+    /* 5.7c — the reduced-motion signal, subscribed rather than sampled once.
+       Sampled once in `mounted()` would be a fact about the machine at load;
+       a reader who turns reduced motion on while the app is open would still
+       be told the OS has not asked for it. Same shape as the theme pair
+       above, deliberately, so there is ONE listener idiom in this file. */
+    setupMotionListener() {
+      this.removeMotionListener();
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+      this.motionMediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+      this.prefersReducedMotion = this.motionMediaQuery.matches;
+      this.motionMediaHandler = (event) => {
+        this.prefersReducedMotion = event.matches;
+      };
+      if (typeof this.motionMediaQuery.addEventListener === "function") {
+        this.motionMediaQuery.addEventListener("change", this.motionMediaHandler);
+      } else if (typeof this.motionMediaQuery.addListener === "function") {
+        this.motionMediaQuery.addListener(this.motionMediaHandler);
+      }
+    },
+
+    removeMotionListener() {
+      if (!this.motionMediaQuery || !this.motionMediaHandler) {
+        this.motionMediaQuery = null;
+        this.motionMediaHandler = null;
+        return;
+      }
+      if (typeof this.motionMediaQuery.removeEventListener === "function") {
+        this.motionMediaQuery.removeEventListener("change", this.motionMediaHandler);
+      } else if (typeof this.motionMediaQuery.removeListener === "function") {
+        this.motionMediaQuery.removeListener(this.motionMediaHandler);
+      }
+      this.motionMediaQuery = null;
+      this.motionMediaHandler = null;
     },
 
     setThemePreference(value) {

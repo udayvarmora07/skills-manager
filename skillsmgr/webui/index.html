@@ -1997,10 +1997,19 @@
         <section id="settings-accessibility" class="settings-section" aria-labelledby="settings-evidence-title" tabindex="-1">
           <div class="settings-section-label">
             <h2 id="settings-evidence-title">Accessibility evidence</h2>
-            <p class="hint">The app honors the current OS signals; it cannot change OS accessibility settings.</p>
+            <p class="hint">Read from the operating system, and updated if the reader changes them there. The app follows these signals; it cannot change them.</p>
           </div>
           <div class="settings-section-control">
-            <dl class="meta compact-meta settings-evidence"><div><dt>App theme</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }} rendered</dd></div><div><dt>System preference</dt><dd>{{ systemThemeLabel }} dark-mode preference</dd></div><div><dt>Reduced motion</dt><dd>{{ prefersReducedMotion ? 'OS requests reduced motion' : 'OS has not requested reduced motion' }}</dd></div><div><dt>Format locale</dt><dd>{{ resolvedLocale }} · regional formats only</dd></div></dl>
+            <!-- 5.7c. Every `<dd>` here is a VALUE and every `<dt>` is its subject.
+                 Two of the four used to glue prose onto the value
+                 ("{{ resolvedTheme }} rendered", "{{ resolvedLocale }} ·
+                 regional formats only"), which is how `System preference`
+                 came to read "light dark-mode preference". "regional formats
+                 only" is not lost: the Regional formats section's own hint
+                 above already says interface copy stays English until
+                 translated resources exist, so the row was restating its
+                 section rather than adding to it. -->
+            <dl class="meta compact-meta settings-evidence"><div><dt>App theme in effect</dt><dd>{{ themeModeLabel }} · {{ resolvedTheme }}</dd></div><div><dt>OS dark-mode setting</dt><dd>{{ systemThemeLabel }}</dd></div><div><dt>OS reduced-motion setting</dt><dd>{{ reducedMotionLabel }}</dd></div><div><dt>Format locale in effect</dt><dd>{{ resolvedLocale }}</dd></div></dl>
           </div>
         </section>
         <!-- 5.9a — About. DESIGN-V2 §8 names "About/data location" and 5.7a
