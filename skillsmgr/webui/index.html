@@ -635,7 +635,7 @@
           </button>
           <div class="profile-master-actions">
             <button class="btn btn-secondary" type="button" @click="editProfile(name)" :disabled="busy" :aria-pressed="profileEditing === name ? 'true' : 'false'">Edit</button>
-            <button class="btn btn-danger-ghost" type="button" @click="deleteProfile(name)" :disabled="busy">Delete</button>
+            <button class="btn btn-danger-ghost" type="button" @click="confirmDeleteProfile(name)" :disabled="busy" :aria-label="'Delete profile ' + name">Delete</button>
           </div>
         </div>
       </div>
@@ -2359,6 +2359,28 @@
        routes to the view, and since 5.2d the palette has ONE row for it. -->
 
   <!-- Previewable batch plan -->
+  <!-- Delete a saved profile. 5.3c: this fired on a single click, with no
+       dialog and a toast that read "Profile deleted." — the same constant
+       string 4.2b removed from the Library's rows. Four typed fields are the
+       only way back and there is no profile trash, so it is the destructive
+       half of the 4.7b principle: reversible gets an Undo toast, destructive
+       gets a confirm. Shaped like `data-modal="remove"`, deliberately, so
+       there is one way of asking in this product rather than two. -->
+  <div v-if="modals.deleteProfile" class="overlay" data-modal="deleteProfile" @mousedown.self="closeModal('deleteProfile')">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-profile-modal-title" tabindex="-1">
+      <h2 id="delete-profile-modal-title" class="sr-only">Delete profile {{ modals.deleteProfile.name }}</h2>
+      <div class="modal-head"><h2>Delete profile “{{ modals.deleteProfile.name }}”?</h2><button class="modal-close" type="button" aria-label="Close" @click="closeModal('deleteProfile')"><app-icon name="x"></app-icon></button></div>
+      <div class="modal-body">
+        <p>This deletes the profile’s desired set of skills and targets. No skill is changed on disk.</p>
+        <p class="hint">Nothing is written to the trash, and there is no profile history to restore from. The four fields in the editor are the only record of what this profile contained, so copy the names elsewhere first if you need them.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" type="button" @click="closeModal('deleteProfile')">Cancel</button>
+        <button class="btn btn-danger" type="button" :disabled="busy" @click="doDeleteProfile" :aria-label="'Delete profile ' + modals.deleteProfile.name + ' permanently'">Delete profile</button>
+      </div>
+    </div>
+  </div>
+
   <div v-if="modals.batch" class="overlay" data-modal="batch" @mousedown.self="closeModal('batch')">
     <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="batch-modal-title" tabindex="-1">
       <h2 id="batch-modal-title" class="sr-only">Review batch action</h2>

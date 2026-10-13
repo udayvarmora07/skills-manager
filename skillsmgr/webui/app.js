@@ -326,6 +326,20 @@ const appOptions = {
         update: null,
         help: null,
         commands: null,
+        // 5.3c. Deleting a profile is destructive and irreversible: the four
+        // typed fields are the only way back and there is no profile trash.
+        // It gets a confirm in the EXISTING vocabulary — the same shape as
+        // `modals.remove`, not an `inline confirm()` (RULES #5 bans inline
+        // script) and not a second way of asking.
+        //
+        // The KEY and the `data-modal` attribute must be the SAME STRING.
+        // `modalElement()` builds its selector as
+        // `[data-modal="' + activeModal + '"]`, and `activeModal` is the key.
+        // Naming the attribute `delete-profile` left the dialog fully visible
+        // and fully inert: no focus trap, no Escape, focus still on the body.
+        // Every other modal in this file has always matched; this one was
+        // written by hand and did not, and nothing failed loudly.
+        deleteProfile: null,
       },
     };
   },
@@ -3572,13 +3586,27 @@ const appOptions = {
       });
     },
 
-    async deleteProfile(name) {
+    confirmDeleteProfile(name) {
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
+      if (!name) return;
+      this.modals.deleteProfile = { name };
+    },
+
+    async doDeleteProfile() {
+      const m = this.modals.deleteProfile;
+      if (!m) return;
+      const name = m.name;
       this.busy = true;
       try {
         this.catalog = await api("/api/catalog/profiles/" + encodeURIComponent(name), { method: "DELETE" });
         if (this.profileEditing === name) this.cancelProfileEdit();
         if (this.profilePreview && this.profilePreview.name === name) this.profilePreview = null;
-        this.toast("Profile deleted.");
+        this.closeModal("deleteProfile");
+        // The old toast was the constant string "Profile deleted." — the same
+        // shape 4.2b removed from the Library's rows: a message that carries no
+        // information about WHICH profile is gone, delivered next to a list
+        // that may hold several. Naming it is the whole difference.
+        this.toast('Profile "' + name + '" deleted. It is not in the trash.');
       } catch (e) { this.toast(e.message, "err"); }
       finally { this.busy = false; }
     },
