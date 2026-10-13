@@ -4082,8 +4082,14 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    below ~1000px (126px at 900, 113px at 800) and deliberately left there: that
    belongs to the <760px drawer band, not to a pass scoped to laptop windows.
    The measurement did find something else - `.searchwrap` is pinned at
-   `max-width: 420px` and does not grow with the window, which is 6.2b's
-   decision to make rather than this comment's.
+   `max-width: 420px` and is the same 420px at 2560 as at 1100, which is 17%
+   of a 2560 topbar. DECIDED 2026-10-13 (6.2c), against making it fluid: the
+   surplus collects between the field and the right-aligned actions, which is
+   what a fixed affordance in a top bar is supposed to look like at a large
+   width, and a field that stretches with the window stops reading as a
+   control and starts reading as a stretched layout. So the cap stays, and
+   `tests/e2e/test_width_gate.py::test_the_search_field_keeps_its_declared_cap`
+   is what stops the next pass "fixing" it into fluid without deciding to.
 
    `.searchwrap`'s `min-width: 0` is declared in the base rule above, not here:
    the field yields before anything else at *every* width, so this band only has
