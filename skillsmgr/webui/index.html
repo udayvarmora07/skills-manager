@@ -650,10 +650,14 @@
 
       <div v-else-if="view === 'recovery'" class="sidepanel" aria-label="Recovery and backups">
         <div class="sidepanel-intro"><strong>Recovery / backups</strong><span class="hint">Global store only</span></div>
+        <!-- 5.6a — this sidepanel listed the same trashed skills, with the
+             same names and the same date/size, one band above the ledger that
+             now owns them. Two lists of one set of facts, and the sidepanel
+             copy's only effect was to set `selectedTrash` for a Restore button
+             that has moved into the row. Same defect 5.3b removed from
+             Profiles. The pane keeps what only it carries: source snapshots
+             for the selected Library target. -->
         <div v-if="!trashSkills.length" class="empty compact-empty"><h3>Trash is empty</h3><p>History and full migration tools remain available in this center.</p></div>
-        <button v-for="t in filteredTrash" :key="t.trash_path" class="sidepanel-row" type="button" @click="selectedTrash = t">
-          <strong>{{ t.name }}</strong><span>{{ formatDate(t.modified) }} · {{ formatBytes(t.size_bytes) }}</span>
-        </button>
         <section class="recovery-snapshot-list" aria-labelledby="recovery-snapshots-title">
           <div class="sidepanel-intro"><strong id="recovery-snapshots-title">Source snapshots</strong><span class="hint">{{ selected ? selected.name : 'Select a Library target' }}</span></div>
           <p v-if="!selected || !updateTargetAvailable" class="hint">Select an exact writable skill instance in Library to inspect its retained source snapshots.</p>
@@ -1671,12 +1675,40 @@
 
       <div v-else-if="view === 'recovery'" class="detail-inner recovery-center">
         <div class="detail-head"><div><h1 id="view-title" tabindex="-1">Recovery / backups</h1><p class="lead">Global Store recovery composed from existing trash, history/snapshot rollback, and archive transfer seams. Agent-scope trash is not merged here.</p></div></div>
-        <section class="profile-preview" aria-labelledby="recovery-actions-title">
+        <!-- 5.6a — the two sections below were `.profile-preview` cards, a
+             class Profiles uses for its own bordered panels, so a column of
+             plain content was painted as two equal boxes (160px and 451px at
+             1280, measured). They are sections, and the trash list inside them
+             was the *Profiles* member grid: a 3-column `minmax(130px,1fr) auto
+             minmax(120px,1fr)` built for `strong / tag / small`, handed four
+             children. -->
+        <section class="recovery-section" aria-labelledby="recovery-actions-title">
           <h2 id="recovery-actions-title">Recovery actions</h2>
           <p class="hint">Trash restore and snapshot rollback are global Store operations. Full migration archives include global skills, trash, and templates; import remains explicit and can overwrite only when selected.</p>
-          <div class="detail-actions recovery-actions"><button class="btn btn-primary" type="button" @click="openHistory('global')">Review history and snapshots</button><button class="btn btn-secondary" type="button" @click="openImport(true)">Import full archive</button><button class="btn btn-secondary" type="button" @click="exportArchive(true)">Export full backup</button><button v-if="selectedTrash" class="btn btn-secondary" type="button" @click="restoreTrash" :disabled="busy">Restore {{ selectedTrash.name }}</button></div>
+          <!-- Restore moved INTO the list below. It used to live here and
+               behind `v-if="selectedTrash"`, so the only way to find it was to
+               read this card, then press a row whose verb said "Select for
+               restore", then scroll back up. One row, one verb, one place. -->
+          <div class="detail-actions recovery-actions"><button class="btn btn-primary" type="button" @click="openHistory('global')">Review history and snapshots</button><button class="btn btn-secondary" type="button" @click="openImport(true)">Import full archive</button><button class="btn btn-secondary" type="button" @click="exportArchive(true)">Export full backup</button></div>
         </section>
-        <section class="profile-preview" aria-labelledby="recovery-trash-title"><div class="section-label-row"><h2 id="recovery-trash-title">Global trash</h2><span class="hint">{{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }}</span></div><ul v-if="trashSkills.length" class="profile-members"><li v-for="item in filteredTrash" :key="item.trash_path"><strong>{{ item.name }}</strong><span class="hint">{{ formatDate(item.modified) }}</span><code>{{ item.trash_path }}</code><button class="btn btn-secondary" type="button" @click="selectedTrash = item">Select for restore</button></li></ul><p v-else class="hint">Global trash is empty. Existing history and archive transfer actions remain available above.</p><div v-if="trashSkills.length" class="detail-actions notice-list"><button class="btn btn-danger-ghost" type="button" @click="confirmPurge" :disabled="busy">Purge all {{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }} permanently</button></div></section>
+        <section class="recovery-section" aria-labelledby="recovery-trash-title">
+          <div class="section-label-row"><h2 id="recovery-trash-title">Global trash</h2><span class="hint">{{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }}</span></div>
+          <!-- `query` is component state and is NOT cleared by switchView, while
+               the search field does not render on this view at all
+               (`searchAppliesHere` excludes recovery). So a query typed in
+               Library silently narrowed this list with nothing on screen to
+               explain it, and a query that matched nothing rendered "Global
+               trash is empty" — a statement about the disk, made by a filter.
+               5.6a states the filter and stops claiming emptiness. -->
+          <p v-if="recoveryTrashFilterNote" class="hint recovery-filter-note">{{ recoveryTrashFilterNote }}</p>
+          <table v-if="filteredTrash.length" class="recovery-ledger">
+            <thead><tr><th scope="col">Trashed skill</th><th scope="col">Trashed at</th><th scope="col" class="num">Size</th><th scope="col"><span class="sr-only">Restore</span></th></tr></thead>
+            <tbody><tr v-for="item in filteredTrash" :key="item.trash_path"><th scope="row">{{ item.name }}<code class="recovery-trash-path">{{ item.trash_path }}</code></th><td>{{ formatDate(item.modified) }}</td><td class="num">{{ formatBytes(item.size_bytes) }}</td><td class="recovery-ledger-action"><button class="btn btn-secondary" type="button" @click="restoreTrash(item)" :disabled="busy">Restore</button></td></tr></tbody>
+          </table>
+          <p v-else-if="trashSkills.length" class="hint">Nothing in the global trash matches this filter. The {{ formatNumber(trashCount) }} trashed item{{ trashCount === 1 ? '' : 's' }} are still on disk.</p>
+          <p v-else class="hint">Global trash is empty. Existing history and archive transfer actions remain available above.</p>
+          <div v-if="trashSkills.length" class="detail-actions notice-list"><button class="btn btn-danger-ghost" type="button" @click="confirmPurge" :disabled="busy">Purge all {{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }} permanently</button></div>
+        </section>
       </div>
 
       <div v-else-if="view === 'workspaces'" class="detail-inner">

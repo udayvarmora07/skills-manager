@@ -2163,19 +2163,38 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    count of findings and the label is the only place the judgement belongs. */
 .quality-severity-ledger .quality-severity-error strong { color: var(--err); }
 .quality-severity-ledger .quality-severity-warning strong { color: var(--warn); }
+/* 5.6a — `.recovery-ledger` is the SAME primitive with a second host, not a
+   second definition. Two rule sets for one table resolve to whichever came
+   last and leave the other dead CSS that reads as coverage (1.5's class). */
 .quality-ledger-block { margin-top: var(--s4); }
 .quality-ledger-block .hint, .quality-ledger-block .quality-warning { max-width: 78ch; }
-.quality-ledger { width: 100%; margin-top: var(--s2); border-collapse: collapse; table-layout: fixed; }
-.quality-ledger th, .quality-ledger td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-.quality-ledger thead th { color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.quality-ledger tbody th { width: 24%; font-weight: 600; }
+.quality-ledger, .recovery-ledger { width: 100%; margin-top: var(--s2); border-collapse: collapse; table-layout: fixed; }
+.quality-ledger th, .quality-ledger td, .recovery-ledger th, .recovery-ledger td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.quality-ledger thead th, .recovery-ledger thead th { color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.quality-ledger tbody th, .recovery-ledger tbody th { width: 24%; font-weight: 600; }
 /* The wire slug rides along under the sentence, in the mono the rest of the
    product uses for machine values. 5.4c put it on `data-status` for the same
    reason: the reader gets a word, the log and the test keep the exact value. */
 .quality-ledger-slug { display: block; margin-top: 2px; color: var(--text-muted); font-size: var(--t-meta); font-weight: 400; overflow-wrap: anywhere; }
-.quality-ledger .num { width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
-.quality-ledger thead .num { text-align: right; }
-.quality-ledger td:last-child { color: var(--text-muted); width: auto; }
+.quality-ledger .num, .recovery-ledger .num { width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
+.quality-ledger thead .num, .recovery-ledger thead .num { text-align: right; }
+.quality-ledger td:last-child, .recovery-ledger td:last-child { color: var(--text-muted); width: auto; }
+/* Recovery's first column carries the trash path under the name, which is
+   long; the 24% Quality wants for a category label would amputate it. */
+/* Measured at 1280 before 50%: the trash path wrapped to FIVE lines in a 40%
+   column, which made each row 136px tall and the path — the same prefix on
+   every row — the dominant thing on the page. This is 5.4's defect in a new
+   shape: not a clipped path, a path that ate the row. */
+.recovery-ledger tbody th { width: 52%; }
+.recovery-ledger th, .recovery-ledger td { padding-right: 14px; }
+.recovery-trash-path { display: block; margin-top: 2px; color: var(--text-muted); font-size: var(--t-meta); font-weight: 400; overflow-wrap: anywhere; }
+.recovery-ledger-action { white-space: nowrap; }
+/* 5.6a — sections, not `.profile-preview` cards. Profiles' bordered panel
+   class was painting two plain blocks of content as equal boxes. */
+.recovery-section { margin-top: var(--s5); }
+.recovery-section:first-of-type { margin-top: var(--s4); }
+.recovery-section h2 { margin-bottom: 4px; }
+.recovery-filter-note { max-width: 72ch; margin: var(--s2) 0 0; }
 .settings-section { margin-top: 18px; }
 .settings-section h2 { margin-bottom: 4px; }
 .settings-options { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; border: 0; }

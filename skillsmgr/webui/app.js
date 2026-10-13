@@ -822,6 +822,23 @@ const appOptions = {
     activeCount() { return this.skills.filter((s) => !s.disabled).length; },
     disabledCount() { return this.skills.filter((s) => s.disabled).length; },
     trashCount() { return this.trashSkills.length; },
+    /**
+     * 5.6a — `query` is NOT cleared by `switchView` and the search field does
+     * not render on this view (`searchAppliesHere` excludes recovery), so a
+     * query typed in Library kept narrowing this list with nothing on screen
+     * to say so. A value every row shares and the reader cannot see is stated
+     * once, here, or not at all (2.1c's rule). `null` when no filter is
+     * active, so the sentence costs no space in the common case.
+     */
+    recoveryTrashFilterNote() {
+      const q = (this.query || "").trim();
+      if (!q || !this.trashSkills.length) return null;
+      if (!this.filteredTrash.length) return null;
+      return "Showing " + this.formatNumber(this.filteredTrash.length)
+        + " of " + this.formatNumber(this.trashCount)
+        + " trashed item" + (this.trashCount === 1 ? "" : "s")
+        + " for “" + q + "”.";
+    },
     allScopesCount() { return (this.scopes || []).reduce((n, s) => n + (s.count || 0), 0); },
 
     /* Per-scope share of one context window, largest first.
@@ -4514,9 +4531,19 @@ const appOptions = {
       }
     },
 
-    async restoreTrash() {
-      if (!this.selectedTrash) return;
-      const name = this.selectedTrash.name;
+    /**
+     * 5.6a — restore ONE trashed skill.
+     *
+     * `item` is optional because the Trash view's detail pane still restores
+     * through `selectedTrash` (that pane is 5.6b), while Recovery's list
+     * restores the row the reader pressed. Two arguments, one request path:
+     * a second method would be a second place for the two to drift, which is
+     * what 4.7's literal `N` cost.
+     */
+    async restoreTrash(item) {
+      const target = item || this.selectedTrash;
+      if (!target) return;
+      const name = target.name;
       this.busy = true;
       try {
         await api("/api/trash/" + encodeURIComponent(name), { method: "POST" });
