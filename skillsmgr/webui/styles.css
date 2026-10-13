@@ -4074,12 +4074,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    responsive behaviour. Brand plus controls plus padding plus gaps occupy 772px,
    so below 900 there is nothing left for the field to be useful *in*.
 
-   `[?]` The longest placeholders still truncate below ~1000px — "Search
-   registry sources…" needs 168px of text width and only gets 113px at 800. That
-   is **pre-existing**, not introduced here: at 900 with the full treatment
-   restored it needs 166px and gets 126px, on the same layout the previous
-   typeface shipped. It belongs to the responsive pass (backlog 6.2), which
-   owns exactly this question, and it is recorded rather than half-fixed here.
+   ANSWERED for 1100-2560 (`.redesign/probe_62b.py`, 2026-10-13): the longest
+   placeholder in the product, "Search registry sources…", needs 168px and gets
+   **340px** of text width at 1100, 1280, 1440, 1920 and 2560 alike, with zero
+   document overflow at every one. It therefore does not truncate at any width
+   the responsive pass owns, and the gap is 172px at the narrow end. Still true
+   below ~1000px (126px at 900, 113px at 800) and deliberately left there: that
+   belongs to the <760px drawer band, not to a pass scoped to laptop windows.
+   The measurement did find something else - `.searchwrap` is pinned at
+   `max-width: 420px` and does not grow with the window, which is 6.2b's
+   decision to make rather than this comment's.
 
    `.searchwrap`'s `min-width: 0` is declared in the base rule above, not here:
    the field yields before anything else at *every* width, so this band only has
