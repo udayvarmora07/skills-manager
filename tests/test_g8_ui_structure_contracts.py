@@ -313,8 +313,14 @@ class LibraryDensityTests(unittest.TestCase):
         self.assertIn(f"activeScope === 'all' ? '{match.group(1)}'", self.html)
 
     def test_rows_target_56px_and_the_type_floor_is_11px(self):
+        # 7.4f rewrote the row selector: the error branch is now an `<li>` in
+        # this list too, so it carries a fourth `:not()` clause. The assertion
+        # below is about the ROW geometry, not about how many branches are
+        # excluded, so it matches a chain of `:not()`s rather than a literal.
+        # It still requires at least one — a selector with none is a different
+        # rule and `assertIsNotNone` is the control that says so.
         rule = re.search(
-            r"\.skilllist > li:not\(\.selection-hint\):not\(\.skeleton\):not\(\.empty\) \{(.*?)\}",
+            r"\.skilllist > li:not\([^)]*\)(?::not\([^)]*\))* \{((?:.|\n)*?)\}",
             self.css,
             re.S,
         )

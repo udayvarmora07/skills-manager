@@ -34,11 +34,20 @@ HTML = (ROOT / "skillsmgr" / "webui" / "index.html").read_text(encoding="utf-8")
 CSS = (ROOT / "skillsmgr" / "webui" / "styles.css").read_text(encoding="utf-8")
 
 # The list-row grid, by its own selector. Read once so a reformat cannot make
-# every assertion in this file vacuous.
+# every assertion in this file vacuous. 7.4f added a fourth `:not()` clause to
+# it (the failed-read branch is an `<li>` too), so this matches a CHAIN of
+# exclusions rather than a literal: the assertions below are about the grid's
+# geometry and about which elements can reach it, neither of which depends on
+# how many branches are excluded. `assertIsNotNone` is the control — a selector
+# with no `:not()` at all is a different rule, and the loop must not stop there.
 ROW_GRID = re.search(
-    r"\.skilllist\s*>\s*li:not\(\.selection-hint\):not\(\.skeleton\):not\(\.empty\)\s*\{",
+    r"\.skilllist\s*>\s*li:not\([^)]*\)(?::not\([^)]*\))*\s*\{",
     CSS)
 TRASH_PANE = HTML.index('class="skilllist" aria-label="Trash"')
+# 7.4f — the pane is a `<ul>` and this row is a SIBLING of it, so "not an item
+# of the list" is now structural. Sliced from the `<ul>`'s own text so a row put
+# back inside it fails here rather than only in the cascade.
+TRASH_LIST = HTML[TRASH_PANE:HTML.index("</ul>", TRASH_PANE)]
 
 
 class TrashPurgeRowMarkupTests(unittest.TestCase):
@@ -63,6 +72,26 @@ class TrashPurgeRowMarkupTests(unittest.TestCase):
             "the purge row is an <li> again, so it inherits the three-track "
             "row grid and its button lands in the 16px dot track")
 
+    def test_the_purge_row_is_not_even_a_descendant_of_the_list(self):
+        """7.4f made the fix structural rather than notional.
+
+        The pane is a `<ul>` now (a `<div>` carrying `aria-label` exposed no
+        list, and the rows inside it were orphan `<li>`s), and a `<ul>` may only
+        contain `<li>` — so an action could not stay inside it at all. Sliced
+        from the `<ul>`'s own text: a row moved back inside fails HERE, which is
+        a different failure from the one above and would be caught by nothing
+        else in this file."""
+        self.assertNotIn("trash-purge-row", TRASH_LIST,
+                         "the purge row is inside the <ul> again; an action "
+                         "belongs beside the list, not in it")
+
+    def test_the_control_for_the_above_finds_a_real_list(self):
+        """CONTROL. If `</ul>` were never found, the slice above would run to
+        the end of the document and every element in it would 'fail' — so a
+        slice that cannot find its end must fail the suite, not pass it."""
+        self.assertGreater(len(TRASH_LIST), 0)
+        self.assertIn("<li", TRASH_LIST)
+
     def test_the_control_the_same_way_really_finds_the_items(self):
         """CONTROL, the other direction: the detector above must be able to
         match. The trash items ARE `<li class=...>` inside the same list, and
@@ -72,15 +101,25 @@ class TrashPurgeRowMarkupTests(unittest.TestCase):
                          "no <li> trash items remain — 'the purge row is not an "
                          "<li>' is now satisfiable by having no list at all")
 
-    def test_the_purge_row_has_a_rule_qualified_against_the_list(self):
-        """`.skilllist > .trash-purge-row`, not a bare `.trash-purge-row`.
+    def test_the_purge_row_has_a_rule_of_its_own(self):
+        """`.trash-purge-row`, not scoped to a list it no longer lives in.
 
-        A bare rule is (0,1,0) and would lose to `.skilllist > li:not(...)` at
-        (0,4,1) if anything ever put this row back in that list. The compound
-        selector states the relationship rather than relying on source order."""
-        self.assertRegex(
-            CSS, r"\.skilllist\s*>\s*\.trash-purge-row\s*\{",
-            "the purge row's own rule must be scoped to its list parent")
+        The compound selector used to read `.skilllist > .trash-purge-row`,
+        which 7.4d added deliberately: a bare rule is (0,1,0) and would lose to
+        the row grid at (0,5,1) if anything ever put this row back in that list.
+        7.4f answered that properly — the row is a sibling of the `<ul>`, so no
+        list rule can reach it and the scoping is not merely unnecessary but
+        false. `flex: none` is what this task added: as a flex item beside the
+        list, the row would shrink when the list is long, and the one control
+        that cannot be undone would be the one thing that disappears."""
+        block = re.search(r"^\.trash-purge-row\s*\{([^}]*)\}", CSS, re.M)
+        self.assertIsNotNone(block, ".trash-purge-row has no rule of its own")
+        self.assertNotIn(".skilllist >", block.group(0),
+                         "the rule is still scoped to a list the row no longer "
+                         "sits inside")
+        self.assertIn("flex: none", block.group(1),
+                      "the footer is a flex item now and must not shrink away "
+                      "under a long list")
 
     def test_the_button_is_declared_full_width(self):
         """7.4b's declaration, which the cascade ate. Kept in the suite so the
@@ -92,7 +131,8 @@ class TrashPurgeRowMarkupTests(unittest.TestCase):
     def test_the_row_is_marked_as_a_zone_and_not_as_an_item(self):
         """The hairline is the design claim: everything above it can be
         restored, the one control below it cannot be undone."""
-        block = re.search(r"\.skilllist\s*>\s*\.trash-purge-row\s*\{([^}]*)\}", CSS)
+        block = re.search(r"^\.trash-purge-row\s*\{([^}]*)\}", CSS, re.M)
+        self.assertIsNotNone(block)
         self.assertIn("border-top", block.group(1),
                       "the action zone lost the line that separates it from "
                       "the restorable items above it")
@@ -106,7 +146,8 @@ class TrashPurgeRowInventoryTests(unittest.TestCase):
         """A later edit adding `display: flex` here would be fine; adding
         `display: grid` with the dot track's template is the defect wearing a
         new hat. Assert the row's own rule carries no grid template."""
-        block = re.search(r"\.skilllist\s*>\s*\.trash-purge-row\s*\{([^}]*)\}", CSS)
+        block = re.search(r"^\.trash-purge-row\s*\{([^}]*)\}", CSS, re.M)
+        self.assertIsNotNone(block)
         self.assertNotIn("grid-template", block.group(1))
 
 

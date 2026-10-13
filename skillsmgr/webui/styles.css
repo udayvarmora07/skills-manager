@@ -1583,8 +1583,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 /* ~56px rows. The description clamps to one line and the identity line only
    takes a track when it renders something visible; a uniform scope or state is
-   still in the accessibility tree (sr-only), never removed from it. */
-.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) {
+   still in the accessibility tree (sr-only), never removed from it.
+
+   `:not(.read-failed)` (7.4f) is the error branch's exemption. Every clause of
+   this selector adds one class of specificity, so it is (0,5,1) — a bare
+   `.skilllist > .read-failed { display: block }` at (0,2,0) would LOSE and the
+   message and its Try again button would auto-place into the 16px dot track and
+   the 7px gap. This is 2.1b's trap in a fifth place, and it is why an
+   exemption that is not here is a defect, not a missing nicety. */
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty):not(.read-failed) {
   display: grid;
   grid-template-columns: 16px 7px minmax(0, 1fr);
   /* The badge track is only laid out when the row has badges; an auto track
@@ -1597,17 +1604,21 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   padding: 7px 14px;
   border-left-width: 3px;
 }
-.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; margin-top: 0; }
-.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; }
-.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) .row-main { grid-column: 3; grid-row: 1; min-width: 0; align-self: center; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty):not(.read-failed) .row-select { grid-column: 1; grid-row: 1; margin-top: 0; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty):not(.read-failed) > .dot { grid-column: 2; grid-row: 1; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty):not(.read-failed) .row-main { grid-column: 3; grid-row: 1; min-width: 0; align-self: center; }
 /* Scope + state sit under the name on the row's own track; the long
    "scope - consumer" label wraps badly when squeezed into a side column.
    A row whose values are all suppressed takes no track at all (see the
    :has() rule below). */
-.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty) .identity-summary { grid-column: 3; grid-row: 2; }
+.skilllist > li:not(.selection-hint):not(.skeleton):not(.empty):not(.read-failed) .identity-summary { grid-column: 3; grid-row: 2; }
 /* A row whose every identity value is suppressed has nothing visible here. */
 .skilllist > li .identity-summary:not(:has(.identity-observation :not(.sr-only))) { display: none; }
 .skilllist > .empty { display: block; padding: 48px 24px; }
+/* The same shape for a FAILED read (7.4f): a block, not a row. Declared at the
+   same specificity as `.empty`'s rule above, and it only reaches this element
+   because the row grid above exempts it. */
+.skilllist > .read-failed { display: block; }
 
 .dot {
   width: 8px;
@@ -3281,13 +3292,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    a red orphan reading "the global trash" under the list — the label's second
    half, painted outside its own control.
 
-   The fix is the element, not the selector. The row is a <div> now, so no list
-   rule reaches it and `.trash-purge-row` (0,1,0) can describe it without
-   out-specifying a rule meant for rows — an action that has to beat a list rule
-   to exist is a defect waiting for the next `:not()` to be written. The hairline
-   marks the boundary: everything above it is an item that can be restored, this
-   is the one control that cannot be undone. */
-.skilllist > .trash-purge-row {
+   The fix is the element, not the selector. The row is a `<div>`, so no list
+   rule reaches it — and as of 7.4f it is not even inside the list: the pane is a
+   `<ul>` now (a `<div>` carrying `aria-label` exposed no list at all, and the
+   rows inside it were `<li>`s with no list), and a `<ul>` may only contain
+   `<li>`. So this row is a SIBLING of the list, and `.trash-purge-row` (0,1,0)
+   describes it without out-specifying a rule meant for rows — an action that
+   has to beat a list rule to exist is a defect waiting for the next `:not()` to
+   be written. `flex: none` keeps it a pinned footer (the shape 4.3 gave the
+   bulk bar) instead of a flex item that shrinks when the list is long, which is
+   what stops the one control that cannot be undone from scrolling out of reach.
+   The hairline marks the boundary: everything above it is an item that can be
+   restored, this is the one control that cannot be undone. */
+.trash-purge-row {
+  flex: none;
   padding: var(--s3) var(--s4);
   border-top: 1px solid var(--border);
 }

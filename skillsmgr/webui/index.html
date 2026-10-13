@@ -736,23 +736,43 @@
         <p class="settings-side-note">Theme, text size, and regional formats are stored only in this browser. Operating-system settings remain unchanged.</p>
       </div>
 
-      <div v-else-if="view === 'trash'" class="skilllist" aria-label="Trash">
-        <div v-if="loadingTrash" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+      <!-- 7.4f — this column was a `<div>`, so `aria-label="Trash"` was inert:
+           a div with no role exposes no list at all, and the three `<li>` rows it
+           held were orphans — items of a list that was not one. They still
+           painted as rows, because the row grid selects `li` rather than
+           anything semantic, so nothing looked wrong and nothing was a list. It
+           is a `<ul>` now, with every branch an `<li>`, the way the Library's
+           own list has been all along.
+
+           The action moved OUT of the list, which is not tidiness: a `<ul>` may
+           only contain `<li>`, so 7.4d's `<div>` could not stay. Putting it back
+           as an `<li>` would reinstate 7.4d's defect behind a fifth `:not()` in a
+           selector written five times over. As a sibling it is the pane's pinned
+           footer — the shape 4.3 gave the bulk bar — so the one control that
+           cannot be undone no longer scrolls away under the rows it would erase.
+
+           The condition restates the branch above on purpose. While loading,
+           after a failed read (6.3), or with nothing visible, the trash is not
+           observed to hold anything, and offering to empty it would assert
+           something the reader has not been shown. -->
+      <template v-else-if="view === 'trash'">
+        <ul class="skilllist" aria-label="Trash">
+        <li v-if="loadingTrash" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></li>
         <!-- 6.3 — a failed read is not an empty one. This used to fall
              through to "The global trash is empty", a sentence about the
              DISK produced by a request that never arrived. `trashError`
              survives until a read succeeds, so it outranks both empty
              sentences, which then describe only what was really observed. -->
-        <div v-else-if="trashError" class="read-failed" role="alert">
+        <li v-else-if="trashError" class="read-failed" role="alert">
           <p>{{ trashError }}</p>
           <div class="empty-actions"><button class="btn btn-secondary" type="button" @click="retryTrash" :disabled="loadingTrash">Try again</button></div>
-        </div>
-        <div v-else-if="filteredTrash.length === 0" class="empty">
+        </li>
+        <li v-else-if="filteredTrash.length === 0" class="empty">
           <div class="empty-icon"><app-icon name="archive"></app-icon></div>
           <p class="empty-title">{{ trashSkills.length ? 'No matching trashed skills' : 'The global trash is empty' }}</p>
           <p>{{ trashSkills.length ? 'Try a different search term or reset the filter.' : 'Skills removed from the global scope land here and can be restored.' }}</p>
           <div v-if="query && trashSkills.length" class="empty-actions"><button class="btn btn-secondary" type="button" @click="query = ''">Reset search</button></div>
-        </div>
+        </li>
         <template v-else>
           <li v-for="t in filteredTrash" :key="t.trash_path"
               @click="selectTrash(t)" @keydown.enter.prevent="selectTrash(t)" tabindex="0">
@@ -762,17 +782,18 @@
               <div class="row-desc">{{ formatBytes(t.size_bytes) }} · {{ formatDate(t.modified) }}</div>
             </div>
           </li>
-          <!-- 7.4d — NOT an <li>. As one it matched the list-row grid below and
-               its only child auto-placed into the 16px dot track; see
-               .trash-purge-row in styles.css. An action belongs to the list, it
-               is not an item of it. -->
-          <div class="trash-purge-row">
-            <button class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy">
-              Empty the global trash
-            </button>
-          </div>
         </template>
-      </div>
+        </ul>
+        <!-- 7.4d said this row is not an item of the list; 7.4f made that
+             structural rather than notional — it is a sibling of the `<ul>`,
+             so no list rule reaches it. The hairline still separates the
+             restorable items above from the one control that cannot be undone. -->
+        <div v-if="!loadingTrash && !trashError && filteredTrash.length" class="trash-purge-row">
+          <button class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy">
+            Empty the global trash
+          </button>
+        </div>
+      </template>
     </aside>
 
     <!-- ------------------------------------------------------------ detail -->
