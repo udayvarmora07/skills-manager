@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Manager — a local control plane for AI coding-agent skills</title>
+<meta name="description" content="Inspect, review, sync and recover the SKILL.md copies already on your machine, across every agent you use. One stdlib-only CLI and one local web UI.">
+<!-- Offline by construction: one stylesheet, six vendored woff2, one screenshot
+     captured from the running app. No CDN, no remote script, no tracker. -->
+<link rel="stylesheet" href="fonts/geist.css">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="shell shell-wide masthead-inner">
+    <a class="brand" href="./">
+      <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M10 2.5 17 6l-7 3.5L3 6z" fill="currentColor" opacity=".95"/>
+        <path d="M3 10l7 3.5L17 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M3 14l7 3.5L17 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity=".55"/>
+      </svg>
+      skills-manager
+    </a>
+    <nav aria-label="Sections">
+      <a href="#capabilities">What it does</a>
+      <a href="#scopes">Scopes</a>
+      <a href="#reference">CLI</a>
+      <a href="#install">Install</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="shell shell-wide hero">
+    <div>
+      <p class="eyebrow">Local control plane</p>
+      <h1>One place to see what each agent actually loaded.</h1>
+      <p class="lede">The same skill, copied into seven agent directories, drifts. This tool
+        shows you every physical copy on the machine, which of them disagree, how much
+        context each one costs, and what happens if you change it — before you change it.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#install">Install</a>
+        <a class="btn btn-secondary" href="../docs/03-cli-surface.md">Read the CLI reference</a>
+      </div>
+      <ul class="hero-facts">
+        <li><b>Python 3.10+</b></li>
+        <li><b>zero</b> runtime dependencies</li>
+        <li><b>127.0.0.1</b> only, nothing leaves the machine</li>
+      </ul>
+    </div>
+    <figure class="shot">
+      <img src="assets/hero-library.png" width="1440" height="900" decoding="async"
+           alt="The Library view: a left rail of eight scopes, a filter bar, a list of skills with their name, description and observed state, and a detail pane with five tabs.">
+      <figcaption>Top of the Library view at 1440&times;900, light. Captured from the
+        running app against a seeded sandbox, cropped to the header so the
+        interface stays readable at this size. The counts in the screenshot are the
+        fixture's, not a claim about your machine.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="band" id="install">
+    <div class="shell shell-wide">
+      <div class="band-head">
+        <p class="eyebrow">Install</p>
+        <h2>The published distribution, or the checkout.</h2>
+        <p class="lede">The runtime is standard library only — there is nothing to resolve,
+          nothing to audit, and nothing that phones home.</p>
+      </div>
+      <div class="install-grid">
+        <div>
+          <p class="snippet"><span class="prompt" aria-hidden="true">$</span><code>pip install skill-control-plane</code></p>
+          <p class="snippet" style="margin-top:var(--s3)"><span class="prompt" aria-hidden="true">$</span><code>pipx install skill-control-plane</code></p>
+          <p class="note" style="margin-top:var(--s4)">The import package is
+            <code>skillsmgr</code> and the entry point is <code>skills-mgr</code>; the
+            distribution name is longer on purpose, so it does not collide with anything
+            already called “skills” in your environment.</p>
+        </div>
+        <div>
+          <p class="eyebrow">Or run it from a checkout</p>
+          <p class="snippet" style="margin-top:var(--s3)"><span class="prompt" aria-hidden="true">$</span><code>python3 -m skillsmgr --help</code></p>
+          <dl class="install-facts">
+            <div class="install-fact">
+              <dt>Runtime</dt>
+              <dd>Python 3.10 or newer, standard library only.</dd>
+            </div>
+            <div class="install-fact">
+              <dt>Licence</dt>
+              <dd>MIT.</dd>
+            </div>
+            <div class="install-fact">
+              <dt>Where it runs</dt>
+              <dd>Your machine. The web UI binds loopback and refuses to be pointed elsewhere.</dd>
+            </div>
+            <div class="install-fact">
+              <dt>What it touches</dt>
+              <dd>Your skill directories, read and written in place. No copy is made “for safety”.</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="band" id="capabilities">
+    <div class="shell shell-wide">
+      <div class="band-head">
+        <p class="eyebrow">What it does</p>
+        <h2>Six things, each of which is a fact about your disk.</h2>
+        <p class="lede">Nothing below is a score, a recommendation, or an inference about
+          how popular a skill is. Every row is something the tool looked at and can show
+          you the evidence for.</p>
+      </div>
+
+      <div class="ledger">
+        <div class="ledger-row">
+          <p class="ledger-key">inventory</p>
+          <div>
+            <h3>Every physical copy, with the directory it lives in</h3>
+            <p>A skill named <code>commit-signoff-policy</code> is usually three different
+              directories. The list is per-instance, not per-name, and each row carries its
+              absolute path, its scope and whether it is enabled.</p>
+            <p>Disabled skills are renamed on disk to <code>SKILL.md.disabled</code>. That is
+              the format's own convention, so a skill you turned off is invisible to the
+              agent that would otherwise read it — without deleting anything.</p>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <p class="ledger-key">divergence</p>
+          <div>
+            <h3>Which copies disagree, and about what</h3>
+            <p>Two copies of the same name that differ byte-for-byte are marked
+              <em>Divergent</em>; identical ones are marked <em>Duplicated</em>. Both are
+              derived by hashing the file — never by a stored flag that can go stale.</p>
+            <p>Divergence belongs to the cluster, not to each copy inside it: a chip on a
+              single copy would claim that copy is broken when what is observed is that
+              two of them no longer match.</p>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <p class="ledger-key">review</p>
+          <div>
+            <h3>Changes you review before they land</h3>
+            <p><code>update preview</code> writes a review containing a plan hash, and
+              <code>update apply</code> refuses a review that has been changed underneath
+              it. You cannot widen the blast radius after the fact, because the review you
+              approved is a different object from the one that would be applied.</p>
+            <p>For skills with no writable target there is nothing to review and nothing to
+              apply — the tool says which target is unwritable instead of pretending.</p>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <p class="ledger-key">recovery</p>
+          <div>
+            <h3>Trash, snapshots, and a way back</h3>
+            <p>Removing a skill moves it to trash with a timestamp rather than deleting it.
+              Trashed copies can be restored, or emptied — and the purge action names which
+              trash it is about, because agent directories keep their own.</p>
+            <p><code>backup</code> and <code>export</code> write a verifiable archive;
+              <code>restore</code> reads one back and reports what it could not.</p>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <p class="ledger-key">budget</p>
+          <div>
+            <h3>What your skills cost in context</h3>
+            <p>The Overview estimates each scope's token usage against the window size you
+              select, and marks the line at 100%. Three reference documents are enough to
+              push a scope past its budget; the meter tells you which scope and by how
+              much.</p>
+            <p>It is an estimate of a multiple of one copy's cost, not a prediction of what
+              an agent loads. The tool has no resolver, and does not claim one.</p>
+          </div>
+        </div>
+
+        <div class="ledger-row">
+          <p class="ledger-key">hygiene</p>
+          <div>
+            <h3>A read-only report of what is wrong</h3>
+            <p><code>doctor --hygiene</code> surfaces duplicates, drift, malformed documents,
+              oversized bodies and context hotspots across sixteen categories. It is
+              read-only: the report never repairs anything on its own.</p>
+            <p>A check that could not run is reported as unavailable rather than counted as
+              a pass. The number of findings you can trust is smaller than the number the
+              tool printed, and the tool tells you which.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="band" id="scopes">
+    <div class="shell shell-wide">
+      <div class="band-head">
+        <p class="eyebrow">Scopes</p>
+        <h2>Eight roots, listed rather than discovered behind your back.</h2>
+        <p class="lede">Each row is a real directory the tool reads on this machine. A root
+          that does not exist reports a count of zero — it is never silently skipped, and
+          never assumed to be somewhere else.</p>
+      </div>
+      <table class="table">
+        <caption>Agent scopes are read and written in place. <code>global</code> is this
+          tool's own store; project-local scopes appear only when the directory exists.</caption>
+        <thead>
+          <tr><th scope="col">Scope</th><th scope="col">Directory</th><th scope="col">Id</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Global</td><td class="path">$SKILLS_MANAGER_DATA/skills-manager/skills</td><td class="ident">global</td></tr>
+          <tr><td>Claude Code</td><td class="path">~/.claude/skills</td><td class="ident">claude-code</td></tr>
+          <tr><td>Codex</td><td class="path">~/.codex/skills</td><td class="ident">codex</td></tr>
+          <tr><td>Cursor</td><td class="path">~/.cursor/skills</td><td class="ident">cursor</td></tr>
+          <tr><td>Opencode</td><td class="path">~/.config/opencode/skills</td><td class="ident">opencode</td></tr>
+          <tr><td>Gemini</td><td class="path">~/.gemini/skills</td><td class="ident">gemini</td></tr>
+          <tr><td>Command Code</td><td class="path">~/.commandcode/skills</td><td class="ident">commandcode</td></tr>
+          <tr><td>Agents</td><td class="path">~/.agents/skills</td><td class="ident">agents</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="band" id="reference">
+    <div class="shell shell-wide">
+      <div class="band-head">
+        <p class="eyebrow">CLI reference</p>
+        <h2>Twenty-eight commands. <code>--scope</code> where it means something.</h2>
+        <p class="lede">Every command takes <code>--json</code>. Scope-aware commands take
+          <code>--scope</code>; the rest deliberately do not, because a flag that does
+          nothing is worse than a flag that is absent.</p>
+      </div>
+      <ul class="cli">
+        <li><code>init</code><span class="cli-note">create the store layout</span></li>
+        <li><code>list</code> <span class="cli-note">/ <code>ls</code></span></li>
+        <li><code>create</code><span class="cli-note">write a SKILL.md</span></li>
+        <li><code>add</code><span class="cli-note">adopt a directory</span></li>
+        <li><code>view</code><span class="cli-note">print, or <code>--raw</code></span></li>
+        <li><code>edit</code><span class="cli-note">patch fields</span></li>
+        <li><code>open</code><span class="cli-note">reveal in the OS</span></li>
+        <li><code>remove</code> <span class="cli-note">/ <code>rm</code>, <code>--trash</code></span></li>
+        <li><code>disable</code> <span class="cli-note">/ <code>enable</code></span></li>
+        <li><code>validate</code><span class="cli-note">and <code>--evals</code></span></li>
+        <li><code>search</code><span class="cli-note">name and description</span></li>
+        <li><code>import</code> <span class="cli-note">archive in</span></li>
+        <li><code>export</code> <span class="cli-note">archive out</span></li>
+        <li><code>backup</code><span class="cli-note">with snapshots</span></li>
+        <li><code>restore</code><span class="cli-note">from a snapshot</span></li>
+        <li><code>history</code><span class="cli-note">what changed, when</span></li>
+        <li><code>doctor</code><span class="cli-note">+ <code>--hygiene</code></span></li>
+        <li><code>stats</code><span class="cli-note">counts, not scores</span></li>
+        <li><code>trash</code><span class="cli-note">list / restore / purge</span></li>
+        <li><code>templates</code><span class="cli-note">list / new</span></li>
+        <li><code>db</code><span class="cli-note">rebuild / resync the index</span></li>
+        <li><code>sync</code><span class="cli-note">copy one skill to scopes</span></li>
+        <li><code>scopes</code><span class="cli-note">roots and token costs</span></li>
+        <li><code>tokens</code><span class="cli-note">against a window size</span></li>
+        <li><code>install</code><span class="cli-note">fetch and review</span></li>
+        <li><code>update</code><span class="cli-note">preview / apply / snapshots</span></li>
+        <li><code>webui</code> <span class="cli-note">/ <code>gui</code> — the local UI</span></li>
+      </ul>
+      <p class="note" style="margin-top:var(--s5)">Exit codes are part of the contract:
+        <code>0</code> ok, <code>1</code> error, <code>2</code> usage, <code>130</code>
+        interrupted. An invalid skill name fails with <code>1</code> before the data
+        directory is created or touched.</p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="shell shell-wide closer">
+    <div>
+      <h2 style="font:600 var(--t-page)/1.3 var(--sans);letter-spacing:-0.01em">See what is actually there.</h2>
+      <p class="lede" style="margin-top:var(--s2)">Start with <code>skills-mgr doctor --hygiene</code>.
+        It is read-only and it is the fastest way to find out whether the drift you suspect
+        is real.</p>
+    </div>
+    <a class="btn btn-primary" href="#install">Install</a>
+  </section>
+
+</main>
+
+<footer class="colophon">
+  <div class="shell shell-wide colophon-inner">
+    <span>MIT licensed.</span>
+    <span>Standard library only.</span>
+    <span>Source: <a href="https://github.com/udayvarmora07/skills-manager">github.com/udayvarmora07/skills-manager</a></span>
+    <span>Docs: <a href="../docs/03-cli-surface.md">CLI surface</a> · <a href="../docs/08-web-ui.md">web UI</a> · <a href="../DESIGN.md">design contract</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

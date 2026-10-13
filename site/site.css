@@ -1,0 +1,482 @@
+/* site.css — the landing page, in the product's own design language.
+ *
+ * WHY THIS FILE EXISTS BESIDE styles.css AND IS NOT A STYLESHEET IMPORT:
+ * `site/` is NOT in the wheel (RULES: site/ must never be packaged), so it
+ * cannot reach `skillsmgr/webui/static/`. It carries its own copy of the fonts
+ * and its own token layer instead, and `tests/test_redesign_site.py` DERIVES
+ * both palettes out of `skillsmgr/webui/styles.css` and compares. A second
+ * copy that drifts is a site that shows the product's colours to nobody, so
+ * the comparison is a gate rather than a convention — the same trick
+ * `check_design_tokens.py` runs for DESIGN.md.
+ *
+ * EVERY token below is copied from the product's `:root` / dark block. If a
+ * value is not in `skillsmgr/webui/styles.css`, it does not belong here: this
+ * page is the product's voice, and a page that invents its own accent is a
+ * different product wearing its name.
+ *
+ * Nothing loads off-origin. No CDN, no remote font, no remote image, no
+ * script at all — the page is one HTML file, one stylesheet and six woff2.
+ */
+
+/* ==========================================================================
+   1. TOKENS — copied from skillsmgr/webui/styles.css, gated by parity test
+   ========================================================================== */
+
+:root {
+  --sans: "Geist Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* the six steps, and no others */
+  --t-meta:   0.75rem;
+  --t-table:  0.8125rem;
+  --t-ui:     0.875rem;
+  --t-prose:  1rem;
+  --t-page:   1.25rem;
+  --t-empty:  1.75rem;
+
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s9: 48px;
+
+  --r-ctl: 6px;
+  --r-panel: 8px;
+  --radius: 12px;
+
+  --bg: #f2f3f1;
+  --surface: #fbfbfa;
+  --surface-2: #eceef0;
+  --surface-3: #e1e5e9;
+
+  --ink: #1a1c1f;
+  --ink-2: #454a50;
+  --ink-3: #5f666d;
+  --ink-4: #6b727a;
+
+  --line: #e4e6e9;
+  --line-2: #ccd0d6;
+  --line-3: #868d95;
+  --line-strong: #7d848c;
+
+  --accent: #0d6a63;
+  --accent-2: #0a524d;
+  --accent-3: #083f3b;
+  --accent-ink: #ffffff;
+  --accent-bg: #e2f0ee;
+  --accent-line: #a8d0cb;
+
+  --ok: #3f6b3f;   --ok-bg: #e9f0e9;   --ok-line: #c3d6c3;
+  --warn: #7d590e; --warn-bg: #f5f0e0; --warn-line: #ddcda2;
+  --err: #a33526;  --err-bg: #f7e8e5;  --err-line: #e2bdb4;
+  --mute: #5e646b; --mute-bg: #eceef0; --mute-line: #ccd0d6;
+
+  --shadow: 0 1px 2px rgba(20, 26, 32, .06), 0 6px 20px -12px rgba(20, 26, 32, .20);
+  --shadow-lg: 0 8px 22px -10px rgba(20, 26, 32, .26), 0 20px 48px -20px rgba(20, 26, 32, .28);
+  --focus-ring: 0 0 0 3px rgba(13, 106, 99, .34);
+}
+
+[data-theme="dark"] {
+  --bg: #101316;
+  --surface: #171a1e;
+  --surface-2: #1e2227;
+  --surface-3: #272c32;
+
+  --ink: #eef1f3;
+  --ink-2: #c3c9cf;
+  --ink-3: #98a0a8;
+  --ink-4: #8b939b;
+
+  --line: #23282e;
+  --line-2: #31373e;
+  --line-3: #6a7178;
+  --line-strong: #6e757d;
+
+  --accent: #4fc7bd;
+  --accent-2: #7ad9d1;
+  --accent-3: #3ba79e;
+  --accent-ink: #06211f;
+  --accent-bg: #122b29;
+  --accent-line: #1d4744;
+
+  --ok: #7fb87f;   --ok-bg: #16211a;   --ok-line: #2a3a2a;
+  --warn: #d9ab52; --warn-bg: #241f14; --warn-line: #40361f;
+  --err: #e88b76;  --err-bg: #241614;  --err-line: #432420;
+  --mute: #98a0a8; --mute-bg: #1e2227; --mute-line: #31373e;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .40), 0 6px 20px -10px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 10px 26px -10px rgba(0, 0, 0, .68), 0 22px 52px -20px rgba(0, 0, 0, .74);
+  --focus-ring: 0 0 0 3px rgba(79, 199, 189, .34);
+}
+
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
+/* ==========================================================================
+   2. RESET / PRELUDE
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--t-ui)/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p, dl, dd, figure, ul, ol { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+code, kbd, samp, pre { font-family: var(--mono); }
+
+img { max-width: 100%; display: block; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-ctl);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--s4);
+  top: -64px;
+  z-index: 10;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: var(--s2) var(--s4);
+  border-radius: var(--r-ctl);
+  transition: top 120ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.skip-link:focus { top: var(--s4); text-decoration: none; }
+
+/* ==========================================================================
+   3. PRIMITIVES — the same three, borrowed not reinvented
+   ========================================================================== */
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--s6);
+}
+.shell-wide { max-width: 1320px; }
+
+.eyebrow {
+  font: 500 var(--t-meta)/1.45 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.lede {
+  font: 400 var(--t-prose)/1.6 var(--sans);
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+
+.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  height: 36px;
+  padding: 0 var(--s4);
+  border-radius: var(--r-ctl);
+  border: 1px solid transparent;
+  font: 500 var(--t-ui)/1 var(--sans);
+  cursor: default;
+}
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-2); text-decoration: none; }
+.btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.btn-secondary:hover { background: var(--surface-2); text-decoration: none; }
+
+.snippet {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-panel);
+  padding: var(--s3) var(--s4);
+  font: 500 var(--t-table)/1.4 var(--mono);
+  color: var(--ink);
+  overflow-x: auto;
+}
+.snippet .prompt { color: var(--ink-3); user-select: none; }
+
+.note {
+  border-left: 2px solid var(--line-2);
+  padding: var(--s1) 0 var(--s1) var(--s4);
+  color: var(--ink-2);
+  font: 400 var(--t-ui)/1.6 var(--sans);
+}
+
+/* ==========================================================================
+   4. MASTHEAD
+   ========================================================================== */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.masthead-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  height: 52px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s3);
+  color: var(--ink);
+  font: 500 var(--t-ui)/1 var(--mono);
+  letter-spacing: -0.01em;
+}
+.brand:hover { text-decoration: none; }
+.brand-mark { width: 20px; height: 20px; flex: none; color: var(--accent); }
+.masthead nav { margin-left: auto; display: flex; gap: var(--s5); }
+.masthead nav a {
+  color: var(--ink-2);
+  font: 400 var(--t-ui)/1 var(--sans);
+}
+.masthead nav a:hover { color: var(--ink); text-decoration: none; }
+
+/* ==========================================================================
+   5. HERO — one claim, one proof, two ways in. No gradient, no glow.
+   ========================================================================== */
+
+/* `padding-block`, never the `padding` shorthand. Both this rule and `.closer`
+   carry `.shell`, which owns the horizontal gutter; a `padding:` shorthand
+   resets that gutter to 0 at equal specificity and later source order. At 1440
+   the 1320px shell's centring margin hid it completely — at 1100 the hero's
+   text sat against the window edge. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
+  gap: var(--s9);
+  align-items: start;
+  padding-block: var(--s7) var(--s9);
+}
+.hero h1 {
+  font: 600 var(--t-empty)/1.2 var(--sans);
+  letter-spacing: -0.02em;
+  margin: var(--s3) 0 var(--s4);
+  max-width: 15ch;
+}
+.hero-actions { display: flex; gap: var(--s3); margin: var(--s6) 0 var(--s5); }
+.hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s5);
+  font: 400 var(--t-meta)/1.45 var(--mono);
+  color: var(--ink-3);
+}
+.hero-facts b { font-weight: 500; color: var(--ink-2); }
+
+.shot {
+  margin: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--s3);
+  box-shadow: var(--shadow-lg);
+}
+/* The screenshot is EVIDENCE, so it is sized to stay legible rather than to
+   fill the column. The first capture filled it: a 1440-wide capture scaled
+   into ~700px of column put the product's own 12px floor at ~7px on screen,
+   which is not a smaller picture of the app, it is a picture of the idea of an
+   app. Capping the height and cropping from the top keeps the rail, the
+   filter bar, the list and the detail header — the parts a reader recognises —
+   at a size they can actually read. */
+.shot img {
+  width: 100%;
+  height: 460px;
+  object-fit: cover;
+  object-position: 0 0;
+  border-radius: var(--r-panel);
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.shot figcaption {
+  margin-top: var(--s3);
+  padding: 0 var(--s1);
+  font: 400 var(--t-meta)/1.45 var(--mono);
+  color: var(--ink-3);
+}
+
+/* ==========================================================================
+   6. BANDS — a full-bleed hairline between sections, never a card grid
+   ========================================================================== */
+
+.band { padding: var(--s9) 0; border-top: 1px solid var(--line); }
+.band-head { max-width: 68ch; margin-bottom: var(--s7); }
+.band-head h2 {
+  font: 600 var(--t-page)/1.3 var(--sans);
+  letter-spacing: -0.01em;
+  margin: var(--s2) 0 var(--s3);
+}
+
+/* Install: the snippet is the headline, not a card with a "Get started" title. */
+.install-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s6) var(--s9);
+  align-items: start;
+}
+.install-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s4) var(--s5);
+  margin-top: var(--s5);
+}
+.install-fact dt {
+  font: 500 var(--t-meta)/1.45 var(--mono);
+  color: var(--ink-3);
+  margin-bottom: var(--s1);
+}
+.install-fact dd {
+  margin: 0;
+  font: 400 var(--t-ui)/1.45 var(--sans);
+  color: var(--ink);
+}
+
+/* Capability rows: a LEDGER, not three equal feature cards. The product's own
+   §B refusal — three bordered boxes of identical size is the tell that a page
+   was generated rather than designed. A ledger can say five things at five
+   different lengths, which is what a real feature list is. */
+.ledger { border-top: 1px solid var(--line); }
+.ledger-row {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: var(--s3) var(--s7);
+  padding: var(--s5) 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+.ledger-key {
+  font: 500 var(--t-meta)/1.5 var(--mono);
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  padding-top: 3px;
+}
+.ledger-row h3 {
+  font: 600 var(--t-ui)/1.5 var(--sans);
+  margin-bottom: var(--s1);
+}
+.ledger-row p { color: var(--ink-2); max-width: 74ch; }
+.ledger-row p + p { margin-top: var(--s2); color: var(--ink-3); font-size: var(--t-table); }
+
+/* Scope table — every row is a real root, read out of skillsmgr/scopes.py. */
+.table { width: 100%; border-collapse: collapse; }
+.table caption {
+  text-align: left;
+  padding-bottom: var(--s3);
+  font: 400 var(--t-table)/1.45 var(--sans);
+  color: var(--ink-3);
+}
+.table th, .table td {
+  text-align: left;
+  padding: var(--s3) var(--s4) var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: baseline;
+}
+.table th {
+  font: 500 var(--t-meta)/1.45 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.table td { font: 400 var(--t-ui)/1.5 var(--sans); }
+.table td.path { font-family: var(--mono); font-size: var(--t-table); color: var(--ink-2); }
+.table td.ident { font-family: var(--mono); font-size: var(--t-table); color: var(--ink-3); }
+
+/* CLI reference: a two-column definition list of every command, the way the
+   product prints its own palette. */
+.cli {
+  columns: 3 240px;
+  column-gap: var(--s7);
+  border-top: 1px solid var(--line);
+  padding-top: var(--s3);
+}
+.cli li {
+  break-inside: avoid;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.cli code { font: 500 var(--t-table)/1.45 var(--mono); color: var(--ink); }
+.cli .cli-note {
+  display: block;
+  font: 400 var(--t-meta)/1.45 var(--sans);
+  color: var(--ink-3);
+}
+
+/* ==========================================================================
+   7. CLOSER + FOOTER
+   ========================================================================== */
+
+.closer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s6);
+  align-items: center;
+  padding-block: var(--s7);
+  border-top: 1px solid var(--line);
+}
+
+.colophon {
+  border-top: 1px solid var(--line);
+  padding: var(--s6) 0 var(--s9);
+  font: 400 var(--t-table)/1.6 var(--sans);
+  color: var(--ink-3);
+}
+.colophon-inner { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s6); }
+.colophon a { color: var(--ink-2); }
+
+/* ==========================================================================
+   8. RESPONSIVE — laptop-first; 1100 is the shrunk-window band
+   ========================================================================== */
+
+@media (max-width: 1100px) {
+  .hero { gap: var(--s7); }
+  .ledger-row { grid-template-columns: 132px minmax(0, 1fr); gap: var(--s3) var(--s5); }
+  .cli { columns: 2 240px; }
+}
+
+@media (max-width: 860px) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .hero h1 { max-width: none; }
+  .install-grid { grid-template-columns: minmax(0, 1fr); }
+  .closer { grid-template-columns: minmax(0, 1fr); }
+  .ledger-row { grid-template-columns: minmax(0, 1fr); }
+  .ledger-key { padding-top: 0; }
+  .cli { columns: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link { transition: none; }
+}
