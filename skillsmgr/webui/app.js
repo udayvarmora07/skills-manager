@@ -3839,6 +3839,16 @@ const appOptions = {
     },
 
     async updateBatchTags(operation) {
+      /* 6.3b — 4.7b gave `toggleSelected` BOTH halves of the double-click
+       * contract: a `busy` guard before the request AND `:disabled="busy"` on
+       * the button. This handler had NEITHER, and it is the one batch verb that
+       * writes without a dialog in between — `openBatch` opens a review, this
+       * POSTs straight to `/api/catalog/tags`. Measured on arrival: two
+       * presses inside one frame produced two requests, and because the
+       * handler ends with `clearSelection()` the second one re-reads a
+       * selection that no longer exists. A reader who was not sure the first
+       * landed is not a second decision — same rule, same reason. */
+      if (this.busy) return;
       if (!this.selectedTargets.length) { this.toast("Select at least one skill instance.", "err"); return; }
       const tags = this.batchTagInput.split(",").map((tag) => tag.trim()).filter(Boolean);
       if (!tags.length) { this.toast("Enter at least one tag.", "err"); return; }
