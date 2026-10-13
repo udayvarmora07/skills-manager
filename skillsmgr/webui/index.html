@@ -668,11 +668,18 @@
         </section>
       </div>
 
-      <div v-else-if="view === 'workspaces'" class="sidepanel" aria-label="Consumers and adapters">
-        <div v-if="loadingWorkspaces" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
-        <div v-for="adapter in ((workspaces && workspaces.adapters) || []).filter(Boolean)" :key="adapter.id" class="sidepanel-row">
-          <strong>{{ adapter.label }}</strong><span>{{ adapter.tier }} · {{ adapter.status }}</span>
-        </div>
+      <!-- 5.4 — this used to be a second, dead copy of the catalogue: the same
+           six names again, in rows that were not buttons, could not be selected
+           and stayed in step with nothing. It is now the one thing DESIGN-V2 §6
+           asks for and the page was missing — how the evidence is to be read. -->
+      <div v-else-if="view === 'workspaces'" class="sidepanel" aria-label="How this evidence is read">
+        <div class="sidepanel-intro"><strong>Read-only evidence</strong><span class="hint">Nothing on this page writes to disk</span></div>
+        <ul class="workspace-notes">
+          <li><strong>Unknown stays unknown.</strong> A consumer whose own documentation does not say which root wins is recorded as unknown, not ranked below the ones that do.</li>
+          <li><strong>Paths are contained.</strong> A project path is resolved before it is read and must sit inside the managed data root. Anything else is refused, and its path is replaced with <code>&lt;redacted&gt;</code>.</li>
+          <li><strong>A listed root is a possibility, not a finding.</strong> It is a place a consumer may look. Whether the directory exists here is observed per project, in the pane beside this.</li>
+          <li><strong>Tiers are ordered; notes bound them.</strong> Where a tier carries a note, a win from a lower tier is provisional — the note says why.</li>
+        </ul>
       </div>
 
       <div v-else-if="view === 'quality'" class="sidepanel" aria-label="Quality skills">
@@ -1662,26 +1669,77 @@
 
       <div v-else-if="view === 'workspaces'" class="detail-inner">
         <div class="detail-head">
-          <div><h1 id="view-title" tabindex="-1">Consumers &amp; projects</h1><p class="lead">Adapter evidence is read-only. Unknown precedence stays unknown, and project paths are contained before they are observed.</p></div>
+          <div><h1 id="view-title" tabindex="-1">Consumers &amp; projects</h1><p class="lead">Adapter evidence is read-only and transcribed from each consumer's own documentation. Unknown precedence stays unknown, and a project path is contained before it is read.</p></div>
         </div>
         <div class="workspace-project-form">
           <label for="workspace-project">Project root (optional)</label>
-          <input id="workspace-project" name="workspace-project" v-model.trim="workspaceProject" placeholder="/path/inside/managed-data">
-          <button class="btn btn-secondary" type="button" @click="loadWorkspaces" :disabled="loadingWorkspaces">Check project</button>
+          <input id="workspace-project" name="workspace-project" v-model.trim="workspaceProject" placeholder="/path/inside/managed-data" @keydown.enter="loadWorkspaces">
+          <button class="btn btn-secondary" type="button" @click="loadWorkspaces" :disabled="loadingWorkspaces">{{ loadingWorkspaces ? 'Checking…' : 'Check project' }}</button>
         </div>
-        <section v-if="workspaces" class="workspace-observation" aria-live="polite">
-          <div class="section-label-row"><h2>Project observation</h2><span class="badge" :class="workspaces.project.status === 'accepted' ? 'badge-ok' : 'badge-warn'">{{ workspaces.project.status }}</span></div>
-          <p v-if="workspaces.project.path" class="hint"><code>{{ workspaces.project.path }}</code></p>
-          <div v-if="workspaces.project.skills_roots.length" class="root-observation"><span v-for="root in workspaces.project.skills_roots" :key="root.relative" class="tag" :class="root.exists ? 'tag-scope' : ''">{{ root.relative }} · {{ root.exists ? 'available' : 'missing' }}</span></div>
+        <!-- 5.4 — a badge reading "not-requested" was painted amber: it styled
+             the page's resting state as a finding. Nothing is rendered until a
+             path is actually observed. -->
+        <p class="hint workspace-idle">{{ workspaceIdleSentence }}</p>
+        <section v-if="workspaceObservation.requested" class="workspace-observation" aria-labelledby="workspace-observation-title">
+          <div class="section-label-row">
+            <h2 id="workspace-observation-title">Observed project</h2>
+            <span class="badge" :class="workspaceObservation.tone">{{ workspaceObservation.status }}</span>
+          </div>
+          <p v-if="workspaceObservation.path" class="workspace-project-path"><code>{{ workspaceObservation.path }}</code></p>
+          <p class="hint">{{ workspaceObservationSentence }}</p>
+          <ul v-if="workspaceObservation.roots.length" class="workspace-roots">
+            <li v-for="root in workspaceObservation.roots" :key="root.relative" class="workspace-root" :class="root.exists ? 'is-present' : 'is-absent'">
+              <span class="workspace-root-mark" aria-hidden="true"></span>
+              <code>{{ root.relative }}</code>
+              <span class="workspace-root-state">{{ root.exists ? 'present' : 'not present' }}</span>
+            </li>
+          </ul>
         </section>
-        <section class="adapter-grid" aria-labelledby="adapter-title">
-          <div class="section-label-row"><h2 id="adapter-title">Adapter catalog</h2><span class="hint">{{ formatNumber(workspaces && workspaces.adapters.length || 0) }} adapters</span></div>
-          <article v-for="adapter in ((workspaces && workspaces.adapters) || []).filter(Boolean)" :key="adapter.id" class="adapter-card">
-            <div class="adapter-card-head"><h3>{{ adapter.label }}</h3><span class="badge" :class="adapter.status === 'verified' ? 'badge-ok' : 'badge-warn'">{{ adapter.status }}</span></div>
-            <p class="hint">{{ Array.isArray(adapter.precedence.notes) ? adapter.precedence.notes.join(' ') : (adapter.precedence.notes || 'Precedence evidence is recorded.') }}</p>
-            <dl class="meta compact-meta"><div><dt>Precedence</dt><dd>{{ adapter.precedence.status }}</dd></div><div><dt>Reload</dt><dd>{{ adapter.reload }}</dd></div><div><dt>Evidence</dt><dd><a :href="adapter.precedence.evidence" target="_blank" rel="noopener">primary source</a></dd></div></dl>
-            <div class="root-observation"><span v-for="root in adapter.candidate_roots" :key="(root.scope || root.relative_path || root.absolute_path || 'unknown') + adapter.id" class="tag" :class="root.path_known ? 'tag-scope' : 'tag-warn'">{{ root.scope || root.relative_path || root.absolute_path || 'path unknown' }}<span v-if="root.recursive"> · recursive</span></span></div>
-          </article>
+        <section class="adapter-catalog" aria-labelledby="adapter-title">
+          <div class="section-label-row">
+            <h2 id="adapter-title">Adapter catalogue</h2>
+            <span class="hint">{{ workspaceAdapters.length ? formatNumber(workspaceAdapters.length) + (workspaceAdapters.length === 1 ? ' consumer' : ' consumers') : '' }}</span>
+          </div>
+          <p v-if="loadingWorkspaces && !workspaces" class="hint workspace-idle" role="status">Loading adapter evidence…</p>
+          <!-- 5.4 — was a 3-up grid of six equal cards, which flattened `tiers`
+               away: the roots lost the tier that gives them meaning, `.tag`'s
+               90px ceiling amputated every path ("path unkno…", ".claude/sk…"),
+               and the evidence date never appeared at all. -->
+          <table v-else-if="workspaceAdapters.length" class="adapter-table">
+            <caption class="sr-only">Consumer adapters, whether their documentation defines precedence, and the candidate roots each consumer may read, grouped by tier.</caption>
+            <thead>
+              <tr><th scope="col" class="col-consumer">Consumer</th><th scope="col" class="col-precedence">Precedence</th><th scope="col" class="col-roots">Candidate roots by tier</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="adapter in workspaceAdapters" :key="adapter.id" class="adapter-row">
+                <th scope="row" class="adapter-consumer">
+                  <div class="adapter-consumer-head"><span class="adapter-label">{{ adapter.label }}</span><span class="badge" :class="adapter.documented ? 'badge-ok' : 'badge-warn'">{{ adapter.state }}</span></div>
+                  <dl class="meta compact-meta adapter-facts">
+                    <div><dt>Reload</dt><dd>{{ adapter.reload }}</dd></div>
+                    <div><dt>Last verified</dt><dd>{{ adapter.verified || 'not recorded' }}</dd></div>
+                    <div><dt>Evidence</dt><dd><a v-if="adapter.source" class="adapter-source" :href="adapter.source" target="_blank" rel="noopener">{{ adapter.sourceHost }}</a><span v-else>no source recorded</span></dd></div>
+                  </dl>
+                </th>
+                <td class="adapter-precedence">
+                  <p class="adapter-note">{{ adapter.note || 'No precedence note is recorded.' }}</p>
+                  <p class="adapter-policy">Policy <code>{{ adapter.policy }}</code></p>
+                </td>
+                <td class="adapter-roots">
+                  <div v-for="tier in adapter.tiers" :key="tier.key" class="adapter-tier">
+                    <h3 class="adapter-tier-label">{{ tier.label }}</h3>
+                    <ul class="adapter-tier-roots">
+                      <li v-for="root in tier.roots" :key="root.key" class="adapter-root" :class="root.known ? 'is-known' : 'is-unknown'">
+                        <code>{{ root.label }}</code>
+                        <span v-if="root.recursive" class="adapter-root-flag">recursive</span>
+                      </li>
+                    </ul>
+                    <p v-if="tier.note" class="adapter-tier-note">{{ tier.note }}</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else-if="!loadingWorkspaces" class="hint workspace-idle">No adapter evidence is available on this machine.</p>
         </section>
       </div>
 

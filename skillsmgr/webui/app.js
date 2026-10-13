@@ -179,6 +179,29 @@ const AppIcon = {
    in every one of them the moment the file loads — a regression in five test
    modules to register one component. `components:` is read off the object the
    harness already keeps, so it costs those harnesses nothing. */
+/* 5.4 — the one candidate root out of the three shapes `_root_record` accepts.
+ * Kept in one place because the previous template inlined this `||` chain in
+ * TWO places (the tag soup and the Vue `:key`), where a copy could disagree. */
+function rootPath(root) {
+  return root.scope || root.relative_path || root.absolute_path || "";
+}
+
+/* The evidence link used to read "primary source" for six different vendors —
+ * a word that identifies nothing. Show the host it actually points at, and
+ * nothing at all when the catalogue recorded no source. */
+function adapterSourceHost(url) {
+  if (!url) return "";
+  try {
+    return new URL(url).host;
+  } catch (err) {
+    return url;
+  }
+}
+
+function formatCount(n) {
+  return typeof n === "number" ? n.toLocaleString("en-US") : String(n);
+}
+
 const appOptions = {
   components: { AppIcon },
   data() {
@@ -345,6 +368,91 @@ const appOptions = {
   },
 
   computed: {
+    /* 5.4 — Workspaces. Every fact below is derived ONCE, here, and the
+     * template renders what these return. Three reasons, all measured:
+     *
+     *  - `tier` and `status` are the SAME boolean twice — adapters.py derives
+     *    both from `policy == "ordered"` — so the old rail printed "verified ·
+     *    verified" for three of six consumers. One fact, one badge, one word.
+     *  - the card grid rendered `candidate_roots`, the FLAT union of `tiers`,
+     *    so a root lost the tier that gives it meaning and the tier notes —
+     *    the most honest sentences in the payload — were dropped entirely.
+     *  - `.tag` caps at 90px, so every candidate path was amputated to
+     *    "path unkno…". A path is not a label; truncating it makes the one
+     *    fact this view exists to show unreadable.
+     */
+    workspaceAdapters() {
+      return ((this.workspaces && this.workspaces.adapters) || []).filter(Boolean).map((adapter) => {
+        const precedence = adapter.precedence || {};
+        const documented = precedence.status === "documented";
+        const source = precedence.evidence || "";
+        return {
+          id: adapter.id,
+          label: adapter.label || adapter.id,
+          documented,
+          state: documented ? "documented" : "unknown precedence",
+          policy: precedence.policy || "undocumented",
+          note: Array.isArray(precedence.notes)
+            ? precedence.notes.join(" ")
+            : (precedence.notes || ""),
+          source,
+          sourceHost: adapterSourceHost(source),
+          reload: adapter.reload || "reload behavior is undocumented",
+          verified: adapter.last_verified || "",
+          tiers: (adapter.tiers || []).map((tier, index) => ({
+            key: tier.id || tier.label || String(index),
+            label: tier.label || tier.id || "Unnamed tier",
+            note: tier.note || "",
+            roots: (tier.roots || []).map((root, position) => ({
+              key: rootPath(root) + "#" + position,
+              label: rootPath(root) || "path unknown",
+              known: root.path_known !== false && !!rootPath(root),
+              recursive: !!root.recursive,
+            })),
+          })),
+        };
+      });
+    },
+
+    /* "not-requested" is this page's resting state, not a finding. A badge for
+     * it (amber, since it is not `accepted`) turned "you have not asked for
+     * anything" into a warning the reader has to dismiss. Only an observed
+     * state earns a tone; the idle page says one sentence instead. */
+    workspaceObservation() {
+      const project = (this.workspaces && this.workspaces.project) || {};
+      const status = project.status || "not-requested";
+      return {
+        status,
+        requested: status !== "not-requested",
+        tone: status === "accepted" ? "badge-ok" : (status === "not-requested" ? "" : "badge-warn"),
+        path: project.path || "",
+        roots: (project.skills_roots || []).map((root) => ({
+          relative: root.relative || root.path || "",
+          exists: !!root.exists,
+        })),
+      };
+    },
+    workspaceIdleSentence() {
+      if (this.loadingWorkspaces && !this.workspaces) return "";
+      if (this.workspaceObservation.requested) return "";
+      return this.workspaces === null
+        ? "Adapter evidence could not be read from this machine."
+        : "No project has been observed. Enter a path inside the managed data root to see which skill roots exist there; nothing is read until you do.";
+    },
+    workspaceObservationSentence() {
+      const seen = this.workspaceObservation;
+      const here = seen.roots.filter((root) => root.exists).length;
+      const parts = {
+        accepted: here
+          ? here + " of " + formatCount(seen.roots.length) + " candidate roots exist there."
+          : "None of the " + seen.roots.length + " candidate roots exist there.",
+        missing: "The path does not exist, so nothing under it was read.",
+        "outside-managed-roots": "The path is outside the managed data root, so it was not read and its path is withheld.",
+        inaccessible: "The path could not be resolved, so its path is withheld.",
+      };
+      return parts[seen.status] || "";
+    },
+
     filteredSkills() {
       const source = !this.query.trim() && this.skills.length === 0 && this.allSkills.length
         ? this.allSkills

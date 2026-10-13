@@ -2248,12 +2248,63 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .workspace-project-form { display: flex; gap: var(--s2); align-items: end; flex-wrap: wrap; margin-top: var(--s4); }
 .workspace-project-form label { width: 100%; font-size: var(--t-meta); color: var(--text-muted); }
 .workspace-project-form input { min-width: min(520px, 100%); flex: 1; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
-.root-observation { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s2); }
-.adapter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s2); margin-top: var(--s4); }
-.adapter-grid > .section-label-row { grid-column: 1 / -1; }
-.adapter-card { padding: var(--s4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-.adapter-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
-.adapter-card h3 { margin: 0; font-size: var(--t-ui); }
+/* 5.4 — Workspaces: a catalogue TABLE, replacing six equal cards.
+ *
+ * The grid was `repeat(auto-fit, minmax(260px, 1fr))`, so every consumer got
+ * the same 370px box and rows stretched to equal heights: three tiers of
+ * evidence differing by two words, drawn as three identical cards. Worse, each
+ * root was a `.tag`, whose shared `max-width: 90px` amputated every path to
+ * "path unkno…". This table gives the paths the column they need and keeps the
+ * tiers, which the flat `candidate_roots` union had thrown away.
+ *
+ * `table-layout: fixed` + `min-width: 0` on every cell: a long absolute path in
+ * column 3 must WRAP rather than widen the table past the detail pane (the
+ * horizontal-overflow gate fails the whole page, not just this view). */
+.adapter-catalog { margin-top: var(--s4); }
+.adapter-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--t-table); }
+.adapter-table thead th.col-consumer { width: 27%; }
+.adapter-table thead th.col-precedence { width: 25%; }
+.adapter-table thead th.col-roots { width: 48%; }
+.adapter-table thead th { padding: 0 var(--s3) var(--s2); border-bottom: 1px solid var(--border-strong); color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+.adapter-row > th, .adapter-row > td { min-width: 0; padding: var(--s3); border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; font-weight: 400; }
+.adapter-row:last-child > th, .adapter-row:last-child > td { border-bottom: 0; }
+.adapter-consumer { font-weight: 400; }
+.adapter-consumer-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); min-width: 0; }
+.adapter-label { font-size: var(--t-ui); font-weight: 600; color: var(--text); }
+.adapter-consumer-head .badge { flex: none; }
+.adapter-facts { grid-template-columns: 84px 1fr; }
+.adapter-facts dd, .adapter-note { overflow-wrap: anywhere; }
+.adapter-source { overflow-wrap: anywhere; }
+.adapter-note { margin: 0; color: var(--text-muted); }
+.adapter-policy { margin: var(--s2) 0 0; color: var(--text-muted); font-size: var(--t-meta); }
+.adapter-tier + .adapter-tier { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--border); }
+.adapter-tier-label { margin: 0 0 var(--s1); color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; }
+.adapter-tier-roots { margin: 0; padding: 0; list-style: none; }
+.adapter-root { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; padding: 2px 0; }
+.adapter-root code { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+/* A root the catalogue records no path for is a gap in the evidence, so it is
+ * marked in the accent-free warn tone and NAMED — never silently dropped. */
+.adapter-root.is-unknown code { color: var(--text-muted); font-style: italic; }
+.adapter-root-flag { flex: none; color: var(--text-muted); font-size: var(--t-meta); }
+.adapter-tier-note { margin: var(--s2) 0 0; color: var(--text-muted); font-size: var(--t-meta); }
+/* The idle project row is one sentence, not a bordered box: a card with a
+ * heading and a badge and nothing inside is the shape §B refuses. */
+.workspace-idle { margin-top: var(--s2); }
+.workspace-project-path { margin: 0 0 var(--s2); }
+.workspace-project-path code { overflow-wrap: anywhere; }
+.workspace-roots { margin: var(--s2) 0 0; padding: 0; list-style: none; }
+.workspace-root { display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 3px 0; }
+.workspace-root code { min-width: 0; overflow-wrap: anywhere; }
+.workspace-root-state { flex: none; color: var(--text-muted); font-size: var(--t-meta); }
+.workspace-root-mark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.workspace-root.is-present .workspace-root-mark { background: var(--accent-text); }
+.workspace-root.is-absent .workspace-root-mark { background: transparent; box-shadow: inset 0 0 0 1px var(--text-muted); }
+/* The rail is a reading guide, so it reads like one: hanging rules, no cards. */
+.workspace-notes { margin: var(--s3) 0 0; padding: 0; list-style: none; }
+.workspace-notes li { padding: var(--s3) 0; border-top: 1px solid var(--border); color: var(--text-muted); font-size: var(--t-table); line-height: 1.5; }
+.workspace-notes li:first-child { border-top: 0; padding-top: 0; }
+.workspace-notes strong { display: block; color: var(--text); font-weight: 600; }
+.workspace-notes code { overflow-wrap: anywhere; }
 .compact-meta { grid-template-columns: 90px 1fr; margin-top: var(--s2); }
 .check-row { display: flex; gap: var(--s2); align-items: center; min-height: 44px; padding: 7px 0; font-size: var(--t-table); }
 .check-row input[type="checkbox"], .check-row input[type="radio"] { width: 18px; height: 18px; min-height: 18px; max-height: 18px; flex: none; margin: 0; }
