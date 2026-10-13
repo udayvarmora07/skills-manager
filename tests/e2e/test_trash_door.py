@@ -204,11 +204,14 @@ class TrashDoorTests(unittest.TestCase):
         self._page.fill(".command-palette-input", "trash")
         self._page.wait_for_timeout(300)
         labels = self._page.eval_on_selector_all(
-            ".command-palette-row .command-palette-label",
+            ".command-palette-option-copy strong",
             "els => els.map(e => e.textContent.trim())")
-        self.assertTrue(any(label == "Trash" for label in labels),
-                        f"no Trash row in the palette for 'trash': {labels}")
-        self._page.click('.command-palette-row:has-text("Trash")')
+        self.assertIn("Trash", labels,
+                      f"no Trash row in the palette for 'trash': {labels}")
+        # The option's id is `'command-option-' + command.id` in the markup, so
+        # this clicks the row by its own identity rather than by a substring of
+        # text that also appears in its `title` ("Open Trash").
+        self._page.click("#command-option-nav-trash")
         self._page.wait_for_selector('.skilllist[aria-label="Trash"]', timeout=10000)
 
     def test_the_search_field_on_the_trash_view_says_it_filters_trash(self):
@@ -231,19 +234,29 @@ class TrashDoorTests(unittest.TestCase):
     def test_nothing_overflows_at_1100px(self):
         """The laptop window a reader shrinks. Added per task, not per branch:
         it is the width where a section-label row with a count and a door has
-        least room, and nothing in the tree measures it otherwise."""
+        least room, and nothing in the tree measures it otherwise.
+
+        BOTH surfaces are measured: the door on Recovery (it has to paint
+        before it can be pressed) and the view the door opens. The first version
+        pressed the door, resized, and then measured `.recovery-trash-door` —
+        an element that exists only on the view it just left — so the assertion
+        was `width > 0` on `null`. The fallback selector it used instead
+        (`[data-nav-view="trash"]`) is the same element, so it did not help."""
+        self._page.set_viewport_size({"width": 1100, "height": 820})
+        self._page.wait_for_timeout(400)
+        rect = self._page.evaluate(
+            "() => { const r = document.querySelector('.recovery-trash-door');"
+            " return r ? r.getBoundingClientRect().width : 0; }")
+        self.assertGreater(rect, 0, "the door paints nothing at 1100")
+        overflow = self._page.evaluate(
+            "() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+        self.assertLessEqual(overflow, 1, f"horizontal overflow of {overflow}px at 1100 on Recovery")
         self._door().click()
         self._page.wait_for_selector('.skilllist[aria-label="Trash"]', timeout=10000)
-        self._page.set_viewport_size({"width": 1100, "height": 820})
         self._page.wait_for_timeout(400)
         overflow = self._page.evaluate(
             "() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
-        self.assertLessEqual(overflow, 1, f"horizontal overflow of {overflow}px at 1100")
-        rect = self._page.evaluate(
-            "() => { const r = document.querySelector('.recovery-trash-door')"
-            "   || document.querySelector('[data-nav-view=\\"trash\\"]');"
-            " return r ? r.getBoundingClientRect().width : 0; }")
-        self.assertGreater(rect, 0)
+        self.assertLessEqual(overflow, 1, f"horizontal overflow of {overflow}px at 1100 on Trash")
 
     def test_no_console_errors_on_the_way_through(self):
         self._door().click()
