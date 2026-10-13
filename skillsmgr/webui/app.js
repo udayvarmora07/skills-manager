@@ -382,7 +382,6 @@ const appOptions = {
       settingsSections: SETTINGS_SECTIONS,
       settingsSection: SETTINGS_SECTIONS[0].id,
       resolvedLocale: "en-US",
-      prefersReducedMotion: false,
       themeMediaQuery: null,
       themeMediaHandler: null,
       menuOpen: false,
@@ -2013,7 +2012,6 @@ const appOptions = {
     this.applyThemePreference(this.theme);
     this.applyTextSize(this.textSize);
     this.applyLocale(this.locale);
-    this.prefersReducedMotion = this.readReducedMotion();
     this.setupThemeListener();
     document.addEventListener("keydown", this.onKeydown);
     document.addEventListener("mousedown", this.onDocMousedown);
@@ -4192,12 +4190,6 @@ const appOptions = {
         return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
       }
       return "light";
-    },
-
-    readReducedMotion() {
-      return typeof window !== "undefined"
-        && typeof window.matchMedia === "function"
-        && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     },
 
     applyThemePreference(value) {

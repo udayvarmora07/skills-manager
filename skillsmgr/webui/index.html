@@ -211,7 +211,11 @@
       <path d="m2 2 20 20"/>
     </symbol>
 </svg>
-<div id="app" v-cloak>
+<!-- 6.4c — `busy` is ONE global fact (32 controls read it), so the
+     root carries it for assistive tech instead of every control
+     announcing itself. RULES #13: the state must be perceivable,
+     not merely painted. -->
+<div id="app" v-cloak :aria-busy="busy ? 'true' : 'false'">
   <a class="skip-link" href="#main-workspace" :inert="!!activeModal">Skip to main content</a>
 
   <!-- ============================================================ topbar -->
