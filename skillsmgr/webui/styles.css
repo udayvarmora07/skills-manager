@@ -302,6 +302,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Every element the UA stylesheet calls `bold`. The UA default is 700, this
+   package ships 400/500/600 and no 700, so every <h2>, <h3> and <strong> that
+   did not set a weight of its own was being painted in SYNTHESISED type — the
+   browser smearing the 600 outlines because nothing heavier exists. That was
+   18 elements on the first view alone. Snap the UA default to the heaviest face
+   that actually ships. Later rules that name 500 or 600 still win, because this
+   sits above them in the cascade and sets the same value they do. */
+b, strong, h1, h2, h3, h4, h5, h6, th { font-weight: 600; }
+
 #app { min-height: 100dvh; height: 100dvh; display: flex; flex-direction: column; }
 
 button { font-family: inherit; touch-action: manipulation; }
@@ -731,7 +740,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   margin-left: 2px;
 }
 
-.brand-short { display: none; font-size: var(--t-ui); font-weight: 750; letter-spacing: 0.04em; }
+/* No weight outside 400/500/600 is declared in static/fonts/geist.css. A rule
+   asking for one does not get a bolder face — the browser takes the
+   nearest face it has and SMEARS it (synthetic bold), which measured at
+   600/650/700/750 all being exactly 533.609px wide on "Hamburgefonstiv".
+   Every heading here used to do that. Ask for 600, the heaviest face that
+   exists; 700 is a weight this product does not ship. */
+.brand-short { display: none; font-size: var(--t-ui); font-weight: 600; letter-spacing: 0.04em; }
 
 .searchwrap {
   position: relative;
@@ -1103,7 +1118,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .navigation-rail .rail-heading { display: flex; padding: 12px 12px 8px; border: 0; }
 .navigation-rail .budgetbar { margin: 0 12px; }
-.rail-heading { display: flex; justify-content: space-between; align-items: baseline; color: var(--text); font-size: var(--t-meta); font-weight: 700; }
+.rail-heading { display: flex; justify-content: space-between; align-items: baseline; color: var(--text); font-size: var(--t-meta); font-weight: 600; }
 .rail-heading .hint { font-size: var(--t-meta); font-weight: 500; }
 
 /* --- scope switcher (v2 shell) ----------------------------------------------
@@ -1275,7 +1290,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .browse-switch svg { width: 13px; height: 13px; }
 
 .tag-filter-details { padding: 0 var(--s4); border-bottom: 1px solid var(--border); }
-.tag-filter-details summary { display: flex; align-items: center; gap: 8px; min-height: 30px; cursor: pointer; list-style: none; color: var(--text-muted); font-size: var(--t-meta); font-weight: 700; white-space: nowrap; }
+.tag-filter-details summary { display: flex; align-items: center; gap: 8px; min-height: 30px; cursor: pointer; list-style: none; color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; white-space: nowrap; }
 .tag-filter-details summary::-webkit-details-marker { display: none; }
 .tag-filter-details summary::after { content: "+"; color: var(--text-muted); font-size: var(--t-ui); font-weight: 400; line-height: 1; }
 .tag-filter-details[open] summary::after { content: "–"; }
@@ -1632,7 +1647,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .uniform-state-note-warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn); }
 .uniform-state-note-off { border-color: var(--mute-line); background: var(--mute-bg); color: var(--mute); }
-.uniform-state-note strong { font-weight: 700; }
+.uniform-state-note strong { font-weight: 600; }
 .identity-state-ok { color: var(--ok); background: var(--ok-soft); }
 .identity-state-warn { color: var(--warn); background: var(--warn-soft); }
 /* Disabled is a reader's own act, not an alarm, so it paints neutral rather
@@ -2016,7 +2031,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    the shell's accessible name; it is sized as a heading rather than a poster so
    the attention queue is the first substantial block on the page. */
 .overview-status { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--s2) var(--s4); padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-.overview-status h1 { margin: 0; font-size: var(--t-page); line-height: 1.2; font-weight: 650; letter-spacing: -.01em; }
+.overview-status h1 { margin: 0; font-size: var(--t-page); line-height: 1.2; font-weight: 600; letter-spacing: -.01em; }
 .overview-status h1:focus-visible { border-radius: var(--radius-sm); }
 .overview-heading { display: grid; gap: 3px; min-width: 0; }
 /* Freshness sits UNDER the title, never beside it: a reader deciding whether to
@@ -2027,7 +2042,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 /* The health panel that stood here repeated the attention queue's claim one
    block below it and carried the page's only stray --shadow. It is gone; its
    counts live in the strip below and its sentence was the queue's title. */
-.status-mark { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--t-table); font-weight: 750; }
+.status-mark { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--t-table); font-weight: 600; }
 .status-mark-ok { color: var(--ok); background: var(--ok-soft); }
 .status-mark-warn { color: var(--warn); background: var(--warn-soft); }
 /* Same ladder as the chip it promotes: a reader who turned a skill off is not
@@ -2040,7 +2055,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; align-content: stretch; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--border); }
 .overview-metrics > div { min-width: 0; padding: 14px 16px; background: var(--surface); }
 .overview-metrics dt { color: var(--text-muted); font-size: var(--t-meta); }
-.overview-metrics dd { margin: 4px 0 1px; font-size: var(--t-empty); font-weight: 700; font-variant-numeric: tabular-nums; }
+.overview-metrics dd { margin: 4px 0 1px; font-size: var(--t-empty); font-weight: 600; font-variant-numeric: tabular-nums; }
 .overview-metrics small { display: block; margin-top: 4px; color: var(--text-muted); font-size: var(--t-meta); font-weight: 400; }
 .overview-metrics dd.is-absent { color: var(--text-muted); font-weight: 600; }
 /* The seven remaining observed counts read as ONE instrument line. Separators
@@ -2049,7 +2064,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-breakdown { display: flex; flex-wrap: wrap; gap: 0 18px; margin: 12px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--t-table); }
 .overview-breakdown li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; }
 .overview-breakdown li + li { border-left: 1px solid var(--border); padding-left: 18px; }
-.overview-breakdown .num { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+.overview-breakdown .num { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .overview-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .overview-section-head h2 { margin: 0; font-size: var(--t-page); }
 .overview-section-note { margin: 6px 0 14px; color: var(--text-muted); font-size: var(--t-table); }
@@ -2110,7 +2125,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .quality-hygiene { max-width: none; }
 .quality-hygiene-metrics { margin-top: var(--s3); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .quality-hygiene-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: var(--s4) 0 var(--s3); }
-.quality-hygiene-controls label { font-weight: 700; }
+.quality-hygiene-controls label { font-weight: 600; }
 .quality-hygiene-controls select { min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
 .quality-finding-group { margin-top: var(--s4); }
 .quality-finding-group h3 { margin: 0 0 var(--s2); font-size: var(--t-ui); text-transform: capitalize; }
@@ -2141,11 +2156,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .settings-locale-preview span { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: end; }
 .settings-preview, .settings-type-preview { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
 .settings-preview-swatch { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-.settings-type-sample { font-size: var(--t-empty); line-height: 1; font-weight: 700; color: var(--accent-text); }
+.settings-type-sample { font-size: var(--t-empty); line-height: 1; font-weight: 600; color: var(--accent-text); }
 .settings-side-note { margin: 10px 4px; color: var(--text-muted); font-size: var(--t-table); line-height: 1.45; }
 
 .detail-head { display: flex; align-items: flex-start; gap: var(--s4); justify-content: space-between; flex-wrap: wrap; }
-.detail-head h1 { margin: 0; font-size: var(--t-empty); font-weight: 650; line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.detail-head h1 { margin: 0; font-size: var(--t-empty); font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 
 .badge-row { display: flex; gap: var(--s2); margin-top: var(--s2); align-items: center; flex-wrap: wrap; }
 
@@ -2392,7 +2407,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
   line-height: 1.25;
   color: var(--text);
-  font-weight: 640;
+  font-weight: 600;
 }
 .body h1, .markdown-preview h1 {
   font-size: var(--t-empty);
@@ -2489,7 +2504,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   text-align: start;
   vertical-align: top;
 }
-.body th, .markdown-preview th { font-weight: 640; }
+.body th, .markdown-preview th { font-weight: 600; }
 .body thead th, .markdown-preview thead th { border-bottom-color: var(--border-strong); }
 .body tbody tr:last-child > *, .markdown-preview tbody tr:last-child > * { border-bottom: 0; }
 /* A table with no header row has no `tbody`. `tr:last-child` on its own is not
@@ -2820,7 +2835,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .command-palette-option:hover { background: var(--surface-2); }
 .command-palette-option[aria-selected="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
 .command-palette-option-copy { display: grid; gap: 1px; min-width: 0; }
-.command-palette-option-copy strong { font-size: var(--t-ui); font-weight: 650; }
+.command-palette-option-copy strong { font-size: var(--t-ui); font-weight: 600; }
 .command-palette-option-copy span { overflow: hidden; color: var(--text-muted); font-size: var(--t-meta); text-overflow: ellipsis; white-space: nowrap; }
 /* The key cap sits on the row, not in a legend somewhere else — which is the
    reason the `.kbd` primitive exists, and why DESIGN-V2 §F pairs it with the

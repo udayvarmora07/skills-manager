@@ -419,6 +419,75 @@ class DesignContractTests(unittest.TestCase):
             self.assertIn(face.name, declared_names,
                           f"{face.name} is vendored but nothing loads it")
 
+    def test_no_rule_asks_for_a_weight_the_page_does_not_ship(self):
+        """The mirror of "every shipped face is declared", and it was false.
+
+        The other half of that assertion asks whether the bytes are reachable.
+        This asks the question from the other direction: does any rule request a
+        ``font-weight`` for which no ``@font-face`` exists?
+
+        Asking for a weight nobody ships does not fail. The browser takes the
+        nearest face it has and **synthesises** a bolder one by smearing the
+        outlines — and `document.fonts.check()` answers ``True`` for every one of
+        them, because "can this face render 700?" is yes: by cheating. Measured
+        on this tree: 600, 650, 700 and 750 all measured *exactly* 533.609px
+        across `"Hamburgefonstiv"`. Four different weights, one face, zero real
+        difference — that identical advance is the fingerprint of faux bold, and
+        it is why no width probe in the e2e suite could have caught it.
+
+        Fourteen rules asked for 640/650/700/750. They included the Overview's
+        page heading (`.overview-status h1`), every `.rail-heading`, the
+        `.status-mark` and `.overview-metrics dd` figures, and the settings type
+        sample — the largest, most looked-at text in the product, painted with
+        smeared outlines and a `font-weight: 650` the package never contained.
+
+        This is a stdlib test on purpose: the e2e half in
+        ``tests/e2e/test_font_render.py`` can only see weights the *rendered*
+        page resolves, which misses any rule behind a branch this fixture never
+        opens. Reading the cascade catches the declaration itself, and it runs in
+        the CI unit job, which never launches a browser.
+        """
+        sheets = sorted(FONTS.glob("*.css"))
+        declared: set[int] = set()
+        for sheet in sheets:
+            for block in re.findall(r"@font-face\s*\{(.*?)\}", sheet.read_text(encoding="utf-8"), re.S):
+                weight = re.search(r"font-weight:\s*([^;]+);", block)
+                if weight:
+                    try:
+                        declared.add(int(weight.group(1).strip()))
+                    except ValueError:
+                        declared.add(400)
+        self.assertTrue(declared, "no @font-face declares a weight to check against")
+
+        # `bold`/`normal` keywords are real and are deliberately excluded: the
+        # defect is a *number* that names a face nobody ships. Normalise the
+        # keywords first so a future `font-weight: bold` is not a false alarm.
+        keywords = {"normal": 400, "bold": 700, "bolder": 700}
+        offenders: list[str] = []
+        css = CSS.read_text(encoding="utf-8")
+        for lineno, line in enumerate(css.splitlines(), 1):
+            for raw in re.findall(r"font-weight:\s*([^;]+);", line):
+                value = raw.strip()
+                if value in keywords:
+                    continue
+                try:
+                    number = int(value)
+                except ValueError:
+                    continue
+                if number not in declared:
+                    offenders.append(f"styles.css:{lineno} asks for {number}")
+        self.assertEqual(
+            offenders, [],
+            "these rules request a weight no @font-face declares, so the "
+            "browser renders them in SYNTHESISISED (smeared) type: "
+            + "; ".join(offenders))
+
+        # The control, because the assertion above is satisfied by a stylesheet
+        # that sets no weight at all. The cascade must actually name weights.
+        self.assertGreater(
+            len(re.findall(r"font-weight:\s*[0-9]+", css)), 20,
+            "the cascade barely sets a weight, so the check above proves nothing")
+
     def test_the_vendored_faces_are_not_restricted_away_from_ascii(self):
         """The first vendoring pass shipped faces that covered no ASCII.
 

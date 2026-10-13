@@ -283,6 +283,93 @@ class FontRendersInABrowserTests(unittest.TestCase):
                     f"width ({vendored}px) — the browser is using the fallback, "
                     f"not the vendored face")
 
+    def test_the_live_page_never_asks_for_a_weight_nobody_ships(self):
+        """The rendered page requests only weights the stylesheet declares.
+
+        The stdlib half (``test_redesign_contracts``) reads the cascade. This
+        reads the *pixels' own answer* — every element on every open view, with
+        inherited weights resolved by walking up — because the two catch
+        different things. The cascade half catches a rule that is wrong on
+        paper; this catches a weight that arrives through inheritance, a
+        shorthand, or a view the reader opened, none of which the other can see.
+
+        What it is for is the defect 7.3a measured: fourteen rules asked for
+        640/650/700/750 and the package ships 400/500/600 only. Nothing broke.
+        The browser **synthesised** the missing weights by smearing the nearest
+        face, and `document.fonts.check()` returned ``True`` for every one of
+        them — the check that sounds like it would have caught it is the check
+        that cannot, because "can this face render 700?" is answered yes by
+        synthesising. The giveaway was the advance width: 600, 650, 700 and 750
+        all measured exactly 533.609px. One face, four weights, zero difference.
+
+        So this asserts the honest direction — nothing on screen asks for a
+        weight that does not exist — rather than "every face is rendered", which
+        was 7.3a's open question and which the measurement answered *yes* (all
+        six declared faces are genuinely reached, 400 included, so nothing here
+        is dead weight and nothing needed to be deleted).
+        """
+        declared_by_family: dict[str, set[int]] = {}
+        for family, weight in self._faces:
+            declared_by_family.setdefault(family, set()).add(weight)
+
+        resolved = self._page.evaluate(
+            """() => {
+                const out = {};
+                const strip = (s) => s.replace(/^['"]|['"]$/g, '');
+                const views = Array.from(document.querySelectorAll('[data-nav]'))
+                    .map(e => e.getAttribute('data-nav'));
+                const walk = () => {
+                    const root = document.getElementById('app') || document.body;
+                    for (const el of root.querySelectorAll('*')) {
+                        const fam = strip(getComputedStyle(el).fontFamily
+                                              .split(',')[0].trim());
+                        let p = el, weight = null;
+                        while (p) {
+                            const w = getComputedStyle(p).fontWeight;
+                            if (w && w !== '400') { weight = w; break; }
+                            p = p.parentElement;
+                        }
+                        const key = fam + ' ' + (weight || '400');
+                        out[key] = (out[key] || 0) + 1;
+                    }
+                };
+                walk();
+                for (const v of views) {
+                    try { if (window.switchView) window.switchView(v); } catch (e) {}
+                    walk();
+                }
+                return out;
+            }""")
+
+        ours = {k: n for k, n in resolved.items()
+                if k.rsplit(" ", 1)[0] in declared_by_family}
+        self.assertTrue(ours, "the page resolved no element into a vendored face")
+
+        offenders = [
+            f"{k} (x{n})" for k, n in sorted(ours.items())
+            if int(k.rsplit(" ", 1)[1]) not in declared_by_family[k.rsplit(" ", 1)[0]]
+        ]
+        self.assertEqual(
+            offenders, [],
+            "the live page requests weight(s) no @font-face declares, so these "
+            "elements render in synthesised (smeared) type: " + ", ".join(offenders))
+
+        # The control. An app that set weight: 400 on everything satisfies the
+        # assertion above while having no type hierarchy at all — which is the
+        # shape a "fix" that deletes every weight would take. Require the page
+        # to actually use more than one, and to use the heaviest face it ships.
+        weights = {int(k.rsplit(" ", 1)[1]) for k in ours}
+        self.assertGreaterEqual(
+            len(weights), 3,
+            f"the page only ever asks for {sorted(weights)} — the assertion "
+            f"above would pass on a page with no type hierarchy")
+        for family, weights_ in declared_by_family.items():
+            if any(k.startswith(family + " ") for k in ours):
+                self.assertIn(
+                    max(weights_), weights,
+                    f"{family} ships a {max(weights_)} face that nothing on "
+                    f"screen ever asks for")
+
     def test_the_two_vendored_families_are_visually_distinct(self):
         """Sans and Mono must not be the same face under two names.
 
