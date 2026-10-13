@@ -192,8 +192,7 @@ class FrontendSourceContractTests(unittest.TestCase):
         ):
             self.assertIn(phrase, source)
         for phrase in (
-            "Skill Hygiene Report", "Exact duplicate groups", "Near-duplicate candidates",
-            "Broken-reference findings", "Unavailable evidence", "aria-expanded",
+            "Skill Hygiene Report", "What was checked", "Unavailable evidence", "aria-expanded",
             "No combined quality score", "Largest context observations",
         ):
             self.assertIn(phrase, html)

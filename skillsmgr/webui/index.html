@@ -1583,30 +1583,42 @@
             <div v-if="qualityHygieneError" class="quality-warning" role="alert">{{ qualityHygieneError }} <button class="btn btn-secondary" type="button" @click="retryQualityHygiene">Retry</button></div>
             <div v-else-if="qualityHygieneLoading" class="skeleton" role="status"><div class="skel-row"></div><div class="skel-row"></div></div>
             <template v-else-if="qualityHygiene">
-              <dl class="overview-metrics quality-hygiene-metrics" aria-label="Independent hygiene evidence summary">
-                <div><dt>Physical instances</dt><dd>{{ formatNumber(qualityHygieneSummary.physical_instances) }}<small>deduplicated paths</small></dd></div>
-                <div><dt>Errors</dt><dd>{{ formatNumber(qualityHygieneSummary.errors) }}<small>validator or structure</small></dd></div>
-                <div><dt>Warnings</dt><dd>{{ formatNumber(qualityHygieneSummary.warnings) }}<small>inspect deliberately</small></dd></div>
-                <div><dt>Exact duplicate groups</dt><dd>{{ formatNumber(qualityCategoryCount('same-name-identical') + qualityCategoryCount('exact-document-duplicate') + qualityCategoryCount('exact-instruction-duplicate')) }}<small>independent groups</small></dd></div>
-                <div><dt>Divergent name groups</dt><dd>{{ formatNumber(qualityCategoryCount('divergent-name')) }}<small>same-name drift</small></dd></div>
-                <div><dt>Near-duplicate candidates</dt><dd>{{ formatNumber(qualityCategoryCount('near-duplicate')) }}<small>heuristic only</small></dd></div>
-                <div><dt>Broken-reference findings</dt><dd>{{ formatNumber(qualityCategoryCount('broken-reference')) }}<small>validator evidence</small></dd></div>
-                <div><dt>Activation descriptions</dt><dd>{{ formatNumber(qualityCategoryCount('activation-description')) }}<small>existing guidance</small></dd></div>
-                <div><dt>Context over limit</dt><dd>{{ formatNumber(qualityCategoryCount('context-over-limit')) }}<small>body thresholds</small></dd></div>
-                <div><dt>Source-lock drift</dt><dd>{{ formatNumber(qualityCategoryCount('source-lock-drift') + qualityCategoryCount('source-lock-inaccessible')) }}<small>missing is unavailable</small></dd></div>
-                <div><dt>Degraded sections</dt><dd>{{ formatNumber((qualityHygiene.degraded || []).length) }}<small>partial evidence</small></dd></div>
-                <div><dt>Unavailable signals</dt><dd>{{ formatNumber((qualityHygiene.unavailable_signals || []).length) }}<small>not observed</small></dd></div>
-              </dl>
+              <div class="quality-strip" role="group" aria-label="Hygiene report totals">
+                <p class="quality-strip-lead"><strong>{{ formatNumber(qualityHygieneSummary.finding_count) }}</strong> findings across <strong>{{ formatNumber(qualityHygieneSummary.physical_instances) }}</strong> physical instances<template v-if="qualityHygieneSummary.findings_truncated"> &mdash; this list is partial</template><template v-else> &mdash; the whole list</template>. Findings are counted per category and one instance can be named by several.</p>
+                <ul class="quality-severity-ledger">
+                  <li v-for="row in qualitySeverityLedger" :key="row.severity" :class="'quality-severity-' + row.severity">
+                    <strong>{{ formatNumber(row.count) }}</strong><span>{{ row.label }}</span>
+                  </li>
+                </ul>
+                <p v-if="qualityHygieneSummary.partial" class="quality-warning">The server reports this run as partial: some sections did not complete, so the totals below understate what was checked.</p>
+                <p v-if="(qualityHygiene.degraded || []).length" class="quality-warning">Degraded sections: <code>{{ qualityHygiene.degraded.join(', ') }}</code>. Their evidence is partial and is not counted as a clean result.</p>
+              </div>
+              <div class="quality-ledger-block">
+                <div class="section-label-row"><h3>What was checked</h3><span class="hint">{{ qualityCategoryLedger.observed.length }} categor{{ qualityCategoryLedger.observed.length === 1 ? 'y' : 'ies' }} produced a finding</span></div>
+                <p v-if="!qualityCategoryLedger.observed.length" class="empty compact-empty">No category produced a finding for the physical instances in this scope.</p>
+                <table v-else class="quality-ledger">
+                  <thead><tr><th scope="col">Category</th><th scope="col" class="num">Findings</th><th scope="col">What that count means</th></tr></thead>
+                  <tbody>
+                    <tr v-for="row in qualityCategoryLedger.observed" :key="row.slug">
+                      <th scope="row">{{ row.label }}<code class="quality-ledger-slug">{{ row.slug }}</code></th>
+                      <td class="num">{{ formatNumber(row.count) }}</td>
+                      <td>{{ row.detail }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p v-if="qualityCategoryLedger.silent.length" class="hint">{{ qualityCategoryLedger.silent.length }} further check{{ qualityCategoryLedger.silent.length === 1 ? '' : 's' }} ran and found nothing: {{ qualityCategoryLedger.silent.map(function (row) { return row.label; }).join(', ') }}.</p>
+                <p v-if="qualityCategoryLedger.unlabelled.length" class="quality-warning">This build has no sentence for {{ qualityCategoryLedger.unlabelled.length }} categor{{ qualityCategoryLedger.unlabelled.length === 1 ? 'y' : 'ies' }} the server reported: <code>{{ qualityCategoryLedger.unlabelled.join(', ') }}</code>. They are counted, not described.</p>
+              </div>
               <div class="quality-hygiene-controls">
                 <label for="quality-severity-filter">Filter findings</label>
                 <select id="quality-severity-filter" name="quality-severity-filter" v-model="qualitySeverityFilter">
-                  <option value="all">All severities</option><option value="error">Errors</option><option value="warning">Warnings</option><option value="info">Informational</option><option value="unavailable">Unavailable</option>
+                  <option value="all">All severities</option><option value="error">Errors</option><option value="warning">Warnings</option><option value="info">Informational</option>
                 </select>
                 <span class="hint" role="status">{{ formatNumber(filteredQualityHygieneFindings.length) }} matching finding{{ filteredQualityHygieneFindings.length === 1 ? '' : 's' }}</span>
               </div>
-              <p v-if="!filteredQualityHygieneFindings.length" class="empty compact-empty">No findings match this filter. Unavailable signals remain listed separately below.</p>
+              <p v-if="!filteredQualityHygieneFindings.length" class="empty compact-empty">No findings match this filter. Signals that could not be observed are not findings and are listed under Unavailable evidence.</p>
               <div v-for="group in qualityHygieneGroups" :key="group.category" class="quality-finding-group">
-                <h3>{{ group.category }}</h3>
+                <h3>{{ qualityCategoryLabel(group.category) }}</h3>
                 <article v-for="finding in group.findings" :key="finding.id" class="quality-finding" :class="'quality-severity-' + finding.severity">
                   <button class="quality-finding-toggle" type="button" @click="toggleQualityFinding(finding.id)" :aria-expanded="qualityFindingIsExpanded(finding.id) ? 'true' : 'false'" :aria-controls="'finding-' + finding.id">
                     <span><strong>{{ finding.title }}</strong><small>{{ finding.severity }} · {{ finding.confidence }}</small></span><span aria-hidden="true">{{ qualityFindingIsExpanded(finding.id) ? '−' : '+' }}</span>

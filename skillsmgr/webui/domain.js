@@ -560,10 +560,70 @@ function formatTools(v) {
   return String(v);
 }
 
+/* 5.5 — the hygiene category vocabulary.
+   `hygiene.py` ranks and sorts findings by `_CATEGORY_ORDER`, so this list is
+   in THAT order: a reader scanning the ledger reads the most serious evidence
+   first rather than alphabetically, and the two cannot drift apart silently
+   because the server is the one that decides the rank.
+
+   The wire slug is never printed where a reader sees it. Each row carries the
+   one sentence that says what the count means, because a bare number cannot
+   distinguish "checked and found nothing" from "not checked" — and this report
+   is only worth reading if those stay apart (RULES #12). */
+const HYGIENE_CATEGORIES = [
+  { slug: "missing-document", label: "No skill document", detail: "The observed directory holds neither SKILL.md nor SKILL.md.disabled." },
+  { slug: "unreadable-document", label: "Unreadable document", detail: "The loader refused the file: invalid name, decode error, or a read failure." },
+  { slug: "document-conflict", label: "Conflicting document", detail: "Two documents at the same precedence answer for one name." },
+  { slug: "unaddressable", label: "Unaddressable", detail: "The record exists but no physical root resolves to an addressable path." },
+  { slug: "validation", label: "Specification findings", detail: "The validator reported findings against the skill's declared structure." },
+  { slug: "broken-reference", label: "Broken reference", detail: "Validator evidence: the document points at something that is not there." },
+  { slug: "activation-description", label: "Activation description", detail: "Existing guidance about when the agent should reach for this skill." },
+  { slug: "context-over-limit", label: "Context over limit", detail: "The body exceeds the configured token threshold for a loaded skill." },
+  { slug: "same-name-identical", label: "Same name, identical copies", detail: "Two or more copies under one name whose bytes match exactly." },
+  { slug: "divergent-name", label: "Same name, diverged copies", detail: "Two or more copies under one name whose content does not match." },
+  { slug: "exact-document-duplicate", label: "Exact document duplicate", detail: "Whole documents repeated under different names." },
+  { slug: "exact-instruction-duplicate", label: "Exact instruction duplicate", detail: "Identical instruction blocks repeated under different names." },
+  { slug: "near-duplicate", label: "Near-duplicate candidate", detail: "A heuristic resemblance, not a determination of sameness." },
+  { slug: "source-lock-drift", label: "Source-lock drift", detail: "The recorded source no longer agrees with the installed copy." },
+  { slug: "source-lock-inaccessible", label: "Source-lock inaccessible", detail: "The recorded source could not be reached to be compared." },
+  { slug: "source-lock-evidence", label: "Source-lock evidence", detail: "Evidence gathered about a source lock." },
+];
+
+function hygieneCategoryLabel(slug) {
+  if (typeof slug !== "string") return "";
+  const row = HYGIENE_CATEGORIES.find((c) => c.slug === slug);
+  return row ? row.label : slug;
+}
+
+/* Splits the server's histogram into what it found and what it looked for and
+   did not find. `unlabelled` is the honest third bucket: a category this build
+   has no sentence for is reported by name rather than dropped, so a server that
+   grows a category cannot make a finding vanish from the report. */
+function hygieneCategoryLedger(counts) {
+  const source = counts && typeof counts === "object" && !Array.isArray(counts) ? counts : {};
+  const observed = [];
+  const silent = [];
+  for (const category of HYGIENE_CATEGORIES) {
+    const count = Number(source[category.slug] || 0);
+    if (count > 0) {
+      observed.push({ slug: category.slug, label: category.label, detail: category.detail, count });
+    } else {
+      silent.push({ slug: category.slug, label: category.label, count: 0 });
+    }
+  }
+  const unlabelled = Object.keys(source).filter(
+    (slug) => !HYGIENE_CATEGORIES.some((c) => c.slug === slug)
+  );
+  return { observed, silent, unlabelled };
+}
+
 window.SkillManagerDomain = Object.freeze({
   api,
   apiText,
   apiBlob,
+  HYGIENE_CATEGORIES,
+  hygieneCategoryLabel,
+  hygieneCategoryLedger,
   OBSERVED_STATE_LABELS,
   OBSERVED_STATE_SEVERITY,
   observedSeverity,

@@ -2123,12 +2123,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .quality-side-status { margin: var(--s3) 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); font-size: var(--t-ui); overflow-wrap: anywhere; }
 .quality-side-error { border-color: var(--warn); color: var(--text); background: var(--warn-soft); }
 .quality-hygiene { max-width: none; }
-.quality-hygiene-metrics { margin-top: var(--s3); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .quality-hygiene-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: var(--s4) 0 var(--s3); }
 .quality-hygiene-controls label { font-weight: 600; }
 .quality-hygiene-controls select { min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
 .quality-finding-group { margin-top: var(--s4); }
-.quality-finding-group h3 { margin: 0 0 var(--s2); font-size: var(--t-ui); text-transform: capitalize; }
+.quality-finding-group h3 { margin: 0 0 var(--s2); font-size: var(--t-ui); }
 .quality-finding { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-top: var(--s2); overflow: hidden; }
 .quality-finding-toggle { display: flex; justify-content: space-between; gap: var(--s3); align-items: center; width: 100%; min-height: 52px; padding: 10px 12px; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .quality-finding-toggle > span:first-child { display: grid; gap: 3px; min-width: 0; }
@@ -2139,6 +2138,44 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .quality-finding-instances li { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(0, 1.8fr); gap: 8px; align-items: center; min-height: 44px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .quality-finding-instances code { overflow-wrap: anywhere; color: var(--text-muted); }
 .quality-largest { margin-top: var(--s4); }
+
+/* 5.5 — the hygiene report's summary, as a strip and a ledger.
+
+   It was twelve `.overview-metrics` cells on a `repeat(3, 1fr)` grid: four rows
+   of identical boxes, five of which read 0 in a real scope because the category
+   could not fire there, and one of which ADDED three independent category
+   counts and labelled the total "independent groups" while the copy above it
+   said findings overlap. A grid of equal tiles is the shape DESIGN-V2 §B
+   refuses; a ledger is what makes one number per row legible and lets a zero
+   carry its sentence.
+
+   The strip is not a grid of cards either: it is a lead sentence and four
+   figures on one baseline, so the reader gets the scale before the detail. */
+.quality-strip { margin-top: var(--s4); padding: var(--s3) 0 var(--s3); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.quality-strip-lead { max-width: 72ch; margin: 0 0 var(--s3); color: var(--text-muted); }
+.quality-strip-lead strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.quality-severity-ledger { display: flex; flex-wrap: wrap; gap: 0; margin: 0; padding: 0; list-style: none; }
+.quality-severity-ledger li { display: flex; align-items: baseline; gap: 7px; min-height: 28px; padding: 0 var(--s4) 0 0; margin-right: var(--s4); border-right: 1px solid var(--border); }
+.quality-severity-ledger li:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+.quality-severity-ledger strong { font-size: var(--t-prose); font-variant-numeric: tabular-nums; }
+.quality-severity-ledger span { color: var(--text-muted); font-size: var(--t-meta); }
+/* The severity names its own colour rather than the whole row: the number is a
+   count of findings and the label is the only place the judgement belongs. */
+.quality-severity-ledger .quality-severity-error strong { color: var(--err); }
+.quality-severity-ledger .quality-severity-warning strong { color: var(--warn); }
+.quality-ledger-block { margin-top: var(--s4); }
+.quality-ledger-block .hint, .quality-ledger-block .quality-warning { max-width: 78ch; }
+.quality-ledger { width: 100%; margin-top: var(--s2); border-collapse: collapse; table-layout: fixed; }
+.quality-ledger th, .quality-ledger td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.quality-ledger thead th { color: var(--text-muted); font-size: var(--t-meta); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.quality-ledger tbody th { width: 24%; font-weight: 600; }
+/* The wire slug rides along under the sentence, in the mono the rest of the
+   product uses for machine values. 5.4c put it on `data-status` for the same
+   reason: the reader gets a word, the log and the test keep the exact value. */
+.quality-ledger-slug { display: block; margin-top: 2px; color: var(--text-muted); font-size: var(--t-meta); font-weight: 400; overflow-wrap: anywhere; }
+.quality-ledger .num { width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
+.quality-ledger thead .num { text-align: right; }
+.quality-ledger td:last-child { color: var(--text-muted); width: auto; }
 .settings-section { margin-top: 18px; }
 .settings-section h2 { margin-bottom: 4px; }
 .settings-options { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; border: 0; }
@@ -3969,7 +4006,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .overview-breakdown li + li { padding-left: 14px; }
   .quality-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quality-observations li, .quality-unavailable li, .quality-finding-instances li { grid-template-columns: 1fr; gap: 2px; padding: 10px 0; }
-  .quality-hygiene-metrics { grid-template-columns: 1fr; }
   .overview-empty { grid-template-columns: 1fr; gap: 18px; margin-top: 18px; padding: 18px; }
   .overview-empty-actions { justify-content: flex-start; max-width: none; }
   .attention-item, .queue-clear { grid-template-columns: 28px minmax(0, 1fr); align-items: start; padding: 13px; }

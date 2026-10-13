@@ -1482,6 +1482,29 @@ const appOptions = {
     qualityHygieneSummary() {
       return (this.qualityHygiene && this.qualityHygiene.summary) || {};
     },
+    /* 5.5 — the report's own severity tally, in the order the server ranks
+       them. `unavailable` is a count of CHECKS THAT COULD NOT RUN, not of
+       findings: no finding in the list ever carries that severity, which is why
+       the severity <select> has no "Unavailable" option and the ledger says
+       what the number is instead of pretending it is a finding. */
+    qualitySeverityLedger() {
+      const summary = this.qualityHygieneSummary;
+      return [
+        { severity: "error", count: Number(summary.errors || 0), label: "errors — a check that ran and failed" },
+        { severity: "warning", count: Number(summary.warnings || 0), label: "warnings — observed evidence to read" },
+        { severity: "info", count: Number(summary.informational || 0), label: "informational" },
+        { severity: "unavailable", count: Number(summary.unavailable || 0), label: "signals not observed — checks that could not run" },
+      ];
+    },
+    /* One pass over the server's histogram instead of nine `qualityCategoryCount`
+       calls in the template, which is how "Exact duplicate groups" came to sum
+       three independent category counts and label the total "independent
+       groups" while the report's own copy said findings overlap. */
+    qualityCategoryLedger() {
+      return SkillManagerDomain.hygieneCategoryLedger(
+        (this.qualityHygiene && this.qualityHygiene.category_counts) || {}
+      );
+    },
     /* The scope switcher is a listbox over OBSERVED facts only: a scope the
        server did not discover is reported as "root not detected", never as an
        empty library. `/api/scopes` omits missing roots, so `exists: false` here
@@ -2879,6 +2902,16 @@ const appOptions = {
       return carried;
     },
 
+    /* A METHOD, not a computed, and the distinction is load-bearing: Vue's
+       render proxy UNWRAPS a computed before the template sees it, so a
+       `computed` called as `qualityCategoryLabel(group.category)` resolves to
+       the string it returns and the template throws
+       "qualityCategoryLabel is not a function" — the whole view's evidence
+       section renders nothing at all, silently, with no console-free build. */
+    qualityCategoryLabel(category) {
+      return SkillManagerDomain.hygieneCategoryLabel(category);
+    },
+
     async loadQualityHygiene() {
       const scopeAtCall = this.activeScope || "all";
       this.qualityHygieneLoading = true;
@@ -3307,10 +3340,6 @@ const appOptions = {
 
     setTagFilter(tag) {
       this.tagFilter = tag || "";
-    },
-
-    qualityCategoryCount(category) {
-      return Number((this.qualityHygiene && this.qualityHygiene.category_counts || {})[category] || 0);
     },
 
     qualityFindingIsExpanded(id) {
