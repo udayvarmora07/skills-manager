@@ -71,8 +71,23 @@ def css_rule(selector: str) -> str:
 
 
 def settings_sidepanel_block() -> str:
+    """The Settings side column only, comments stripped.
+
+    This was `HTML[start:start + 3000]` — a fixed-character window with no end
+    condition. The block is about 1,100 characters, so the window swallowed the
+    whole next chain member, and when 7.4f documented its Trash branch next to
+    a sentence containing "scrolls", the "the current marker follows the
+    reader's choice, not a scroll" test failed on **prose in a different
+    view's comment**. That is this repository's most repeated locator failure
+    (six times by 6.3b), and it is also `settings_detail_block`'s own docstring
+    two functions above, which already says why comments are stripped.
+
+    Slicing to the next chain member is the end condition the chain itself
+    defines; the comment strip keeps the assertion about copy a reader can see.
+    """
     start = HTML.index('<div v-else-if="view === \'settings\'" class="sidepanel')
-    return HTML[start:start + 3000]
+    end = HTML.index("<template v-else-if=", start)
+    return re.sub(r"<!--.*?-->", "", HTML[start:end], flags=re.S)
 
 
 class SettingsRailTests(unittest.TestCase):
