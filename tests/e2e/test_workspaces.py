@@ -275,12 +275,41 @@ class WorkspacesViewTests(unittest.TestCase):
         self._check_project(self.outside)
         self._page.wait_for_selector(".workspace-observation", timeout=8000)
         panel = self._page.inner_text(".workspace-observation")
-        self.assertIn("outside-managed-roots", panel)
+        # 5.4c — this used to assert the SLUG was painted, which was the
+        # defect: `outside-managed-roots` is a machine value set where a reader
+        # expects a state. The visible mark is prose; the wire value is on the
+        # badge's data-status, and the test asserts BOTH, so it can still fail.
+        self.assertIn("outside managed roots", panel)
+        self.assertNotIn("outside-managed-roots", panel,
+                         "the wire slug is painted in the badge again")
+        self.assertEqual(
+            self._page.get_attribute(".workspace-observation .badge", "data-status"),
+            "outside-managed-roots",
+            "the wire status must stay reachable for the test/a11y surface")
         self.assertIn("withheld", panel)
         self.assertNotIn(self.outside, panel,
                          "the withheld path was printed in the panel")
         self.assertEqual(
             self._page.eval_on_selector_all(".workspace-root", "e => e.length"), 0)
+
+    def test_the_badge_reads_as_a_state_and_carries_the_wire_value(self):
+        """Every displayable status, driven through the real route.
+
+        The label is what a reader reads; `data-status` is what the machine
+        (and the next test of this file) needs. Renaming one without the other
+        is the defect this pins.
+        """
+        for path, status, label in ((self.project, "accepted", "accepted"),
+                                    (self.missing, "missing", "missing"),
+                                    (self.outside, "outside-managed-roots",
+                                     "outside managed roots")):
+            with self.subTest(status=status):
+                self._check_project(path)
+                self._page.wait_for_selector(".workspace-observation", timeout=8000)
+                badge = ".workspace-observation .badge"
+                self.assertEqual(self._page.inner_text(badge).strip(), label)
+                self.assertEqual(self._page.get_attribute(badge, "data-status"), status)
+                self.assertNotIn("-", label, "a compound slug reached a badge")
 
     def test_a_rejected_path_is_not_painted_as_a_success(self):
         for path in (self.missing, self.outside):

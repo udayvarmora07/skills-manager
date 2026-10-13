@@ -432,6 +432,28 @@ const appOptions = {
         })),
       };
     },
+    /* 5.4c — the badge rendered `{{ workspaceObservation.status }}`, which is
+     * the value `adapters.py` names for a MACHINE. Three of the four statuses
+     * that can be displayed are already words; `outside-managed-roots` is a
+     * compound slug with a hyphen in it, set in a badge where a reader expects
+     * a state, next to a sentence that says the same thing in prose.
+     *
+     * The fallback is the raw value on purpose. This build has observed four
+     * statuses; inventing a fifth label for a status it has never seen would be
+     * a claim, and RULES #12 says the UI states observed facts. The wire value
+     * stays on the badge's `data-status`, so the machine surface a test (or a
+     * future reader of the markup) needs never has to be re-derived from text.
+     */
+    workspaceObservationLabel() {
+      const labels = {
+        accepted: "accepted",
+        missing: "missing",
+        inaccessible: "inaccessible",
+        "outside-managed-roots": "outside managed roots",
+      };
+      const status = this.workspaceObservation.status;
+      return labels[status] || status;
+    },
     workspaceIdleSentence() {
       if (this.loadingWorkspaces && !this.workspaces) return "";
       if (this.workspaceObservation.requested) return "";

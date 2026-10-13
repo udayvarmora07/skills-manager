@@ -107,6 +107,7 @@ class WorkspacesTemplateFacts(unittest.TestCase):
 
     def test_the_computed_states_exist(self):
         for name in ("workspaceAdapters()", "workspaceObservation()",
+                     "workspaceObservationLabel()",
                      "workspaceObservationSentence()", "workspaceIdleSentence()"):
             self.assertIn(name, APP, name)
 
@@ -270,6 +271,50 @@ catch (e) { console.log('###THREW: ' + e.message); }
         for state in ({"workspaces": None}, {"workspaces": {}}, {"workspaces": {"adapters": None, "project": None}}):
             self.assertEqual(self._run("workspaceAdapters", state), [])
             self.assertFalse(self._run("workspaceObservation", state)["requested"])
+
+    # ---- 5.4c: the badge printed the wire slug, not a label -------------
+    #
+    # `adapters.py` names its statuses for a machine and the badge rendered the
+    # value verbatim, so a reader saw `outside-managed-roots` where a state mark
+    # belongs — beside a sentence that says the same thing in words. Three of
+    # the four displayable statuses are already words and stay unchanged; the
+    # compound one is derived.
+
+    def _label_for(self, status):
+        return self._run("workspaceObservationLabel",
+                         {"workspaces": {"project": {"status": status, "path": None,
+                                                      "skills_roots": []}}},
+                         deps=["workspaceObservation"])
+
+    def test_the_compound_slug_is_never_painted_as_a_badge(self):
+        self.assertEqual(self._label_for("outside-managed-roots"), "outside managed roots")
+        for status in ("accepted", "missing", "inaccessible"):
+            self.assertEqual(self._label_for(status), status, f"{status} reads fine as-is")
+
+    def test_a_status_this_build_has_never_seen_falls_back_to_the_wire_value(self):
+        """Inventing a label for an unobserved status would be a claim (RULES #12)."""
+        self.assertEqual(self._label_for("some-future-status"), "some-future-status")
+        # and with no payload at all the computed still returns a string
+        self.assertIsInstance(self._run("workspaceObservationLabel", {"workspaces": None},
+                                        deps=["workspaceObservation"]), str)
+
+    def test_every_rendered_label_is_a_single_line_of_prose(self):
+        for status in ("accepted", "missing", "inaccessible", "outside-managed-roots"):
+            label = self._label_for(status)
+            self.assertNotIn("-", label, f"{status} still carries wire punctuation")
+            self.assertNotIn("_", label)
+
+    def test_the_badge_renders_the_label_and_keeps_the_wire_status_reachable(self):
+        badge = re.search(r'<span class="badge" :class="workspaceObservation\.tone"([^>]*)>'
+                          r'([^<]*)</span>', HTML)
+        self.assertIsNotNone(badge, "the observation badge is gone from index.html")
+        attrs, text = badge.groups()
+        self.assertIn("workspaceObservationLabel", text, "the badge paints the wire value again")
+        self.assertNotIn("workspaceObservation.status", text)
+        # The machine value must stay available for the test/a11y surface —
+        # otherwise the label above is the ONLY record of which status this was
+        # and a future status could be renamed into anything.
+        self.assertIn(':data-status="workspaceObservation.status"', attrs)
 
 
 if __name__ == "__main__":

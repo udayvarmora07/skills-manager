@@ -1683,7 +1683,10 @@
         <section v-if="workspaceObservation.requested" class="workspace-observation" aria-labelledby="workspace-observation-title">
           <div class="section-label-row">
             <h2 id="workspace-observation-title">Observed project</h2>
-            <span class="badge" :class="workspaceObservation.tone">{{ workspaceObservation.status }}</span>
+            <!-- 5.4c — the text is the LABEL; `data-status` is the wire value,
+                 which stays available for the aria/test surface (see
+                 workspaceObservationLabel in app.js). -->
+            <span class="badge" :class="workspaceObservation.tone" :data-status="workspaceObservation.status">{{ workspaceObservationLabel }}</span>
           </div>
           <p v-if="workspaceObservation.path" class="workspace-project-path"><code>{{ workspaceObservation.path }}</code></p>
           <p class="hint">{{ workspaceObservationSentence }}</p>
