@@ -1064,7 +1064,15 @@ const appOptions = {
            names a thing the product no longer has a separate surface for.
            `openInstall` is the Overview button's name, not a second route. */
         { id: "nav-install", label: "Install", title: "Open Install", category: "Navigation", keywords: "workflow registry runner npx pnpm bunx", action: "switchView", args: ["install"], focusDestination: true },
-        { id: "nav-recovery", label: "Recovery", title: "Open Recovery", category: "Navigation", keywords: "trash restore backups", action: "switchView", args: ["recovery"], focusDestination: true },
+        { id: "nav-recovery", label: "Recovery", title: "Open Recovery", category: "Navigation", keywords: "backup snapshot rollback archive history", action: "switchView", args: ["recovery"], focusDestination: true },
+        /* 7.4c: `nav-recovery` carried the keyword `trash`, which is WHY the
+           missing door survived review — typing "trash" in the palette did
+           something, so the string was present and the destination was not.
+           Now that a Trash view is real it has its own row, and Recovery keeps
+           the words that actually name it. Ranking is by the shared
+           `_palette_module` scorer, so an exact label match on "Trash" beats a
+           keyword hit on "Recovery" without either row needing to know that. */
+        { id: "nav-trash", label: "Trash", title: "Open Trash", category: "Navigation", keywords: "deleted removed restore empty purge bin", action: "switchView", args: ["trash"], focusDestination: true },
         { id: "nav-workspaces", label: "Workspaces", title: "Open Workspaces", category: "Navigation", keywords: "projects adapters", action: "switchView", args: ["workspaces"], focusDestination: true },
         { id: "nav-quality", label: "Quality", title: "Open Quality", category: "Navigation", keywords: "evidence health", action: "switchView", args: ["quality"], focusDestination: true },
         { id: "nav-settings", label: "Settings", title: "Open Settings", category: "Navigation", keywords: "preferences accessibility theme", action: "switchView", args: ["settings"], focusDestination: true },

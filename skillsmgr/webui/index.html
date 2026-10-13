@@ -1770,7 +1770,23 @@
           <div class="detail-actions recovery-actions"><button class="btn btn-primary" type="button" @click="openHistory('global')">Review history and snapshots</button><button class="btn btn-secondary" type="button" @click="openImport(true)">Import full archive</button><button class="btn btn-secondary" type="button" @click="exportArchive(true)">Export full backup</button></div>
         </section>
         <section class="recovery-section" aria-labelledby="recovery-trash-title">
-          <div class="section-label-row"><h2 id="recovery-trash-title">Global trash</h2><span class="hint">{{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }}</span></div>
+          <!-- 7.4c — THE DOOR. This section used to be the only place the
+               global trash could be read, so nothing was broken about it. What
+               was broken is the rest of the product: a SECOND, fuller surface
+               for the same directory existed (`view === 'trash'`, a sidepanel
+               list plus a detail pane with per-item facts, search and restore)
+               and eight `switchView(...)` controls existed, none of which named
+               it. `SEARCH_VIEWS` listed it, so the search field carried a
+               "Search trash…" placeholder and the `?` reference told the reader
+               the field filtered Trash — both of which described a view no
+               control could open. 0.1's recorded decision stands: trash is not
+               a rail destination (a ninth icon in a 56px column would push the
+               scope picker and the context meter out of reach), so the door
+               lives on the section that owns the subject.
+               `data-nav-view` is what tests/test_redesign_trash_door.py
+               derives the reachable set from — the attribute exists so the test
+               reads MARKUP rather than counting occurrences of a string. -->
+          <div class="section-label-row"><h2 id="recovery-trash-title">Global trash</h2><span class="recovery-section-tools"><span class="hint">{{ formatNumber(trashCount) }} item{{ trashCount === 1 ? '' : 's' }}</span><button class="text-button recovery-trash-door" type="button" data-nav-view="trash" @click="switchView('trash')">Open the Trash view<app-icon name="archive" aria-hidden="true"></app-icon></button></span></div>
           <!-- `query` is component state and is NOT cleared by switchView, while
                the search field does not render on this view at all
                (`searchAppliesHere` excludes recovery). So a query typed in
@@ -2019,10 +2035,18 @@
           </ul>
         </section>
       </div>
-      <div v-else class="detail-inner">
+      <!-- 7.4c — was `v-else`, the chain's unconditional last member, so this
+           pane was reachable for every view id no branch above it named AND
+           for `view === 'trash'` — which no control set. Making the view real
+           means naming it: an unconditional fallback renders "Global trash",
+           a claim about a specific directory, for a destination that is not
+           it. `switchView` only ever assigns one of the eight view ids plus
+           this one, so the chain now ends here and nothing renders otherwise. -->
+      <div v-else-if="view === 'trash'" class="detail-inner">
         <div class="detail-head">
           <h1 id="view-title" tabindex="-1">Global trash</h1>
           <div class="detail-actions">
+            <button class="btn btn-secondary" type="button" data-nav-view="recovery" @click="switchView('recovery')">Back to Recovery</button>
             <button v-if="trashSkills.length" class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy" aria-label="Empty the global trash permanently">Empty the global trash</button>
           </div>
         </div>

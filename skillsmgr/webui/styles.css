@@ -2247,6 +2247,16 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .recovery-section:first-of-type { margin-top: var(--s4); }
 .recovery-section h2 { margin-bottom: 4px; }
 .recovery-filter-note { max-width: 72ch; margin: var(--s2) 0 0; }
+/* 7.4c — the door onto the Trash view. `.section-label-row` is a two-up
+   space-between flex, so a third child (count, then door) would have been
+   spread to a third of the row and pushed the button away from the heading it
+   belongs to. The right-hand side is its own inline group, which keeps the
+   count adjacent to the verb it counts. The button is `.text-button` — an
+   underlined link-shaped control, not a third button in a row of two, because
+   it navigates rather than acts on the section it sits in. */
+.recovery-section-tools { display: inline-flex; align-items: baseline; gap: var(--s3); }
+.recovery-trash-door { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.recovery-trash-door svg { width: 14px; height: 14px; flex: none; }
 /* 5.7b — Settings layout.
    The four subjects are a label/control row, not four bordered boxes. They
    used to be `profile-editor settings-section`: Profiles' editor class
