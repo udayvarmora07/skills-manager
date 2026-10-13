@@ -203,11 +203,66 @@ class PaletteMarkup(unittest.TestCase):
 
 
 class ShortcutReference(unittest.TestCase):
-    def test_the_reference_is_grouped_by_context(self):
+    """5.7a rewrite — was `assertEqual(titles, ["Anywhere", "Command palette",
+    "Inside a dialog"])`.
+
+    THE INTENT was "the reference is grouped by context": a reader needs to
+    know WHERE a key applies before trusting it. Pinning the exact title list
+    asserted a weaker thing — the three strings — and would have failed on
+    the addition of a fourth, correct section. 5.7a added one.
+
+    What follows asserts the intent, and adds two things the literal could
+    not: every row belongs to a named section (an orphan row is a shortcut
+    with no stated scope, which is the defect 5.7a fixed), and every section
+    carries at least one row (an empty heading is a promise with nothing
+    behind it). TEST-CHANGES.md carries the full old -> new row.
+    """
+    def _sections(self):
         html = _read(HTML_PATH)
-        titles = re.findall(r'class="shortcuts-section-title">([^<]+)<', html)
-        self.assertGreaterEqual(len(titles), 3)
-        self.assertEqual(titles, ["Anywhere", "Command palette", "Inside a dialog"])
+        block = html.split('class="modal-body shortcuts-reference"', 1)[1]
+        return re.findall(
+            r'class="shortcuts-section-title">([^<]+)<(.*?)</section>', block, re.S)
+
+    def test_the_reference_is_grouped_by_context(self):
+        sections = self._sections()
+        self.assertGreaterEqual(len(sections), 3)
+        titles = [title for title, _body in sections]
+        self.assertEqual(len(titles), len(set(titles)), "duplicate section headings: %r" % titles)
+        for title, body in sections:
+            self.assertTrue(title.strip(), "a section has no title")
+            self.assertIn("shortcuts-row", body,
+                          "section %r is a heading with no rows" % title)
+
+    def test_no_shortcut_row_is_outside_a_named_section(self):
+        """The defect 5.7a fixed: a row that claims a scope it cannot have.
+
+        `/` sat under "Anywhere" on four of nine views. Asserting that every
+        row is inside a section makes "which scope does this row claim?"
+        answerable for every row, including any added later.
+        """
+        html = _read(HTML_PATH)
+        block = html.split('class="modal-body shortcuts-reference"', 1)[1]
+        block = block.split("</div>\n      <div class=\"modal-foot\"", 1)[0]
+        total_rows = len(re.findall(r'class="shortcuts-row"', block))
+        sectioned_rows = sum(
+            len(re.findall(r'class="shortcuts-row"', body)) for _t, body in self._sections())
+        self.assertEqual(total_rows, sectioned_rows,
+                         "%d row(s) sit outside any section and claim no scope"
+                         % (total_rows - sectioned_rows))
+
+    def test_anywhere_holds_only_keys_that_are_not_view_scoped(self):
+        """Moving `/` out of "Anywhere" is only honest if what stayed is global.
+
+        `Ctrl K`, `?` and `Esc` are gated on `typing`/`activeModal` alone —
+        never on `this.view`. If a future change narrows one of them to a
+        view, the heading has become a false claim again and this fails.
+        """
+        anywhere = dict(self._sections()).get("Anywhere")
+        self.assertIsNotNone(anywhere, "the 'Anywhere' section is gone")
+        for key in ("Ctrl", "?", "Esc"):
+            self.assertIn(key, anywhere, "%s left 'Anywhere' unexpectedly" % key)
+        self.assertNotIn('>/<', anywhere.replace(" ", ""),
+                         "`/` is filed under 'Anywhere' again")
 
     def test_every_shortcut_key_cap_is_the_kbd_primitive(self):
         html = _read(HTML_PATH)
