@@ -344,8 +344,23 @@ PRIMITIVE_PENDING_ADOPTION = {
     ".field-input": "4.5 create/edit editor and 5.3 profile dialog",
     ".tooltip": "2.1 icon-only buttons",
     ".table th": "5.5 hygiene findings, 5.6 recovery",
-    ".panel": "2.1 status strip, 3.1 overview sections",
     ".diff-line": "4.8 update-from-folder review",
+    # The entry below was deleted in a killed iteration, and deleting it was the
+    # defect, not the cleanup: `.panel` has NEVER carried a `class="panel"`
+    # token anywhere (git log -S'class="panel' -- skillsmgr/webui/index.html
+    # returns nothing), and adoption is tested on class-attribute TOKENS, so
+    # removing its exemption did not retire an exception — it promoted a name
+    # to "wired" that no element has ever worn. The gate then failed, and three
+    # other tests failed *through* it: two assert the gate exits 0.
+    #
+    # Its stated adopters are the real rot: "2.1 status strip, 3.1 overview
+    # sections" are both `[x]` and neither adopted it, so the entry pointed at
+    # finished work and the `stale` check cannot see that (it only detects an
+    # ADOPTED primitive, never a finished ADOPTER). An adopter that is open:
+    # 5.5b replaces the Quality overview's `repeat(3, 1fr)` tile grid with a
+    # ledger strip, and the wash sections it lands in are bordered surfaces
+    # with a head rule and a padded body — this primitive, unrolled.
+    ".panel": "5.5b quality overview ledger, 6.3 empty/error surfaces",
     # 4.4 wired the tab primitive: the detail pane's strip is `.tabs`/`.tab`,
     # so the pending-adoption exception was removed rather than left behind.
     # The gate fails when a wired primitive is still listed, which is what

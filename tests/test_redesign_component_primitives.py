@@ -39,16 +39,25 @@ def run_gate() -> subprocess.CompletedProcess:
 
 
 def assert_gate_catches(phrase: str) -> None:
-    """The gate must FAIL, and name the phrase in its output.
+    """The gate must FAIL, and name the phrase in a FAIL detail line.
 
     Both halves matter. A mutation the gate ignores leaves it green, and a
     gate that fails for an unrelated reason would satisfy the test while
     proving nothing about the check under test - the version of this helper
     that only counted "FAIL" lines did exactly that.
+
+    The phrase is matched against the gate's FAILURE DETAIL lines and never
+    against its label, because ``note()`` prints every label it is given,
+    OK or FAIL. Matching the label is how
+    ``test_an_adopted_primitive_left_on_the_pending_list_is_caught`` came to
+    pass on a gate that was failing for an unrelated reason, and it is the
+    seventh recorded instance of this repository's own rule.
     """
     out = run_gate()
     assert out.returncode != 0, "the gate stayed green on a mutated stylesheet"
-    assert phrase in out.stdout, out.stdout
+    details = [ln.strip() for ln in out.stdout.splitlines() if ln.strip().startswith("- ")]
+    assert any(phrase in ln for ln in details), \
+        f"{phrase!r} is not in a failure detail:\n" + "\n".join(details)
 
 
 class PrimitivesGateIsRedFirst(unittest.TestCase):
@@ -143,13 +152,51 @@ class PrimitivesGateIsRedFirst(unittest.TestCase):
     def test_an_adopted_primitive_left_on_the_pending_list_is_caught(self) -> None:
         """An exception that no longer applies is not an exception.
 
-        This one was vacuous in its first form: it compared the required set
-        against the union of pending and wired, which is a tautology - every
-        required primitive is in one or the other by construction, so deleting
-        an entry from the pending list could not make it fail.
+        This one was vacuous twice, for two different reasons, and finding the
+        second one is why the mutation moved.
+
+        First: it compared the required set against the union of pending and
+        wired, which is a tautology - every required primitive is in one or the
+        other by construction, so deleting an entry from the pending list could
+        not make it fail.
+
+        Second, and worse: the mutation deleted `.panel`'s entry and asserted
+        `assert_gate_catches("pending-adoption list")`. `.panel` has NEVER had
+        a `class="panel"` token (git log -S'class="panel' returns nothing), so
+        the gate failed for the *other* check - "declared and never read" - and
+        `assert_gate_catches` matched because `note()` prints its label on every
+        line, OK or FAIL. The helper asserts a phrase appears, not that the
+        phrase is the FAILURE, so the test proved nothing about the stale check
+        it names. A killed iteration then acted on that fiction and deleted the
+        entry as cleanup, reddening the branch.
+
+        So the mutation now puts a genuinely WIRED primitive - `.kbd`, 19 sites
+        - ON the list, which is the only way to make `stale` non-empty, and it
+        asserts the gate names it in the stale detail rather than any label.
         """
-        self._mutate_gate('    ".panel": "2.1 status strip, 3.1 overview sections",\n', "")
-        assert_gate_catches("pending-adoption list")
+        self.assertIn('class="kbd"', self.html_original,
+                      ".kbd must be wired for this mutation to mean anything")
+        self._mutate_gate('PRIMITIVE_PENDING_ADOPTION = {\n',
+                          'PRIMITIVE_PENDING_ADOPTION = {\n'
+                          '    ".kbd": "stale-probe",\n')
+        out = run_gate()
+        self.assertNotEqual(out.returncode, 0, out.stdout)
+        self.assertIn("adopted since the exception was written: ['.kbd']", out.stdout)
+        self.assertNotIn("declared and never read: ['.kbd']", out.stdout)
+
+    def test_removing_the_pending_entry_of_an_unwired_primitive_is_caught(self) -> None:
+        """The mutation the previous version made, against the right assertion.
+
+        `.panel` is unwired, so its entry is the ONLY thing standing between
+        the primitives gate and a pass — deleting it must be caught, and it
+        must be caught by the "never read" check. The stale check cannot fire
+        here at all, which is exactly why the previous version proved nothing.
+        """
+        self._mutate_gate('    ".panel": "5.5b quality overview ledger, '
+                          '6.3 empty/error surfaces",\n', "")
+        out = run_gate()
+        self.assertNotEqual(out.returncode, 0, out.stdout)
+        self.assertIn("declared and never read: ['.panel']", out.stdout)
 
     def test_a_primitive_with_no_reader_is_caught(self) -> None:
         """Declaring a part nobody uses is the exact failure under watch.
