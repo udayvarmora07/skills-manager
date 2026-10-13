@@ -1887,6 +1887,38 @@ const appOptions = {
       };
     },
 
+    /* 6.6 — the left pane's LANDMARK name. `aside.sidebar` is a
+     * `complementary` landmark, and at 1440 the app had exactly two of them,
+     * both unnamed: a screen reader's landmark list offered "complementary"
+     * twice with nothing to tell them apart (axe `landmark-unique`, measured on
+     * 7 of 8 views). `#nav-drawer` now carries its own label in the markup, so
+     * this one names what is actually inside it — the list or context pane —
+     * per view. Honest and observed, never invented: a view with no sidepanel
+     * of its own falls back to the generic name rather than to a guess.
+     *
+     * It lives at the END of `computed` on purpose. `tests/
+     * test_redesign_install_center.py` reads the `modals:` literal as a fixed
+     * 2400-character slice and asserts `install:` is not in it (5.1: the Install
+     * view replaced a modal). A computed parked at the TOP pushed this map's
+     * `install:` key into that slice and the test read it as a regression that
+     * was never made — the eighth recorded instance of a counting assertion
+     * being wrong in the direction that makes a check unadoptable.
+     *
+     * The comment above contains no braces on purpose, either:
+     * `_app_options_literal()` walks `app.js` counting them. */
+    listPaneLabel() {
+      const names = {
+        skills: "Skill list and filters",
+        profiles: "Saved profiles",
+        workspaces: "Candidate roots",
+        install: "Install sources",
+        recovery: "Trash and snapshots",
+        quality: "Skills in this scope",
+        settings: "Settings sections",
+      };
+      return names[this.view] || "Context pane";
+    },
+
   },
 
 

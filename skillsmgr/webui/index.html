@@ -308,7 +308,7 @@
   <!-- ============================================================ layout -->
     <main id="main-workspace" class="layout" :class="{ 'overview-view': view === 'overview', 'grid-browse': view === 'skills' && browseMode === 'grid', 'mobile-detail-open': mobileDetailOpen, 'mobile-aux-view': view !== 'skills' }" :inert="!!activeModal" :aria-hidden="activeModal ? 'true' : 'false'" tabindex="-1">
     <div v-if="drawerOpen" class="nav-drawer-scrim" @click="closeDrawer"></div>
-    <aside id="nav-drawer" class="navigation-rail" :class="{ open: drawerOpen }" :inert="!!activeModal"
+    <aside id="nav-drawer" class="navigation-rail" aria-label="View menu" :class="{ open: drawerOpen }" :inert="!!activeModal"
            :data-drawer="drawerOpen ? 'open' : 'closed'">
       <div class="drawer-head">
         <span class="drawer-head-label">Navigation</span>
@@ -396,7 +396,7 @@
 
     </aside>
 
-    <aside class="sidebar list-pane" :inert="drawerOpen" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view), 'has-bulkbar': view === 'skills' && selectedCount > 0 }">
+    <aside class="sidebar list-pane" :aria-label="listPaneLabel" :inert="drawerOpen" :class="{ 'aux-context-pane': ['install', 'recovery', 'settings'].includes(view), 'has-bulkbar': view === 'skills' && selectedCount > 0 }">
       <h1 v-if="view === 'skills' && !selected" id="library-view-title" class="sr-only" tabindex="-1">Library</h1>
 
       <!-- READING ORDER, measured. The pane heading, the count and the
@@ -562,7 +562,10 @@
         </li>
         <li v-if="!loadingList && visibleSkills.length === 0" class="empty">
           <div class="empty-icon"><app-icon name="menu"></app-icon></div>
-          <h3>{{ filter === 'disabled' ? 'No disabled skills' : (query ? 'No matching skills' : 'No skills installed') }}</h3>
+          <!-- 6.6 — `<p class="empty-title">`, not a heading: this pane renders
+               before the view's `<h1>`, so a heading here is the first heading
+               in the document. See the Install sidepanel for the full note. -->
+          <p class="empty-title">{{ filter === 'disabled' ? 'No disabled skills' : (query ? 'No matching skills' : 'No skills installed') }}</p>
           <p v-if="filter === 'disabled'">Disabled skills appear here. Disable a skill to hide it from validation and searches.</p>
           <p v-else-if="query">Try a different term, or clear the search to see all skills.</p>
           <p v-else>Skills are folders with a SKILL.md file. Create your first one to get started.</p>
@@ -620,7 +623,9 @@
 
       <div v-else-if="view === 'profiles'" class="sidepanel" aria-label="Profiles">
         <div v-if="!Object.keys(catalog.profiles || {}).length" class="empty compact-empty">
-          <h3>No profiles yet</h3>
+          <!-- 6.6 — a `<p class="empty-title">`, not a heading. See the note
+               on the same substitution in the Install sidepanel below. -->
+          <p class="empty-title">No profiles yet</p>
           <p>Profiles describe a desired set of existing skills and targets.</p>
         </div>
         <!-- 5.3b — the MASTER. This list used to exist twice: these rows selected
@@ -642,7 +647,8 @@
 
       <div v-else-if="view === 'install'" class="sidepanel" aria-label="Install sources">
         <div class="sidepanel-intro"><strong>Install / update inbox</strong><span class="hint">Existing registry-backed skills</span></div>
-        <div v-if="!filteredRegistryInventory.length" class="empty compact-empty"><h3>No registry-backed skills observed</h3><p>Browse or search the registry, or use the reviewed fetch flow. No update is claimed unless registry evidence proves it.</p></div>
+        <div v-if="!filteredRegistryInventory.length" class="empty compact-empty"><!-- 6.6 — this was an `<h3>`, and the sidepanel renders BEFORE the view's `<h1>` (index.html order: `aside.sidebar` at 399, `section.detail` at 764). So on the Install view this empty state was the FIRST heading in the document — a level-3 heading with no level 1 or 2 above it, which axe reports as `heading-order` and which is genuinely confusing in a screen reader's heading list. The pane is a `complementary` landmark, not a document section, so the claim is a paragraph with the class the empty title already wears. `.empty .empty-title` carries the same rules as `.empty h3`; detail-pane empties keep their real headings. -->
+          <p class="empty-title">No registry-backed skills observed</p><p>Browse or search the registry, or use the reviewed fetch flow. No update is claimed unless registry evidence proves it.</p></div>
         <div v-for="record in filteredRegistryInventory" :key="record.name + (record.registry_provenance.id || '')" class="sidepanel-row">
           <strong>{{ record.name }}</strong><span>{{ record.registry_provenance.id || record.registry_provenance.source || 'source known' }}</span>
         </div>
@@ -661,7 +667,7 @@
           <p>{{ trashError }}</p>
           <div class="empty-actions"><button class="btn btn-secondary" type="button" @click="retryTrash" :disabled="loadingTrash">Try again</button></div>
         </div>
-        <div v-else-if="!trashSkills.length" class="empty compact-empty"><h3>Trash is empty</h3><p>History and full migration tools remain available in this center.</p></div>
+        <div v-else-if="!trashSkills.length" class="empty compact-empty"><p class="empty-title">Trash is empty</p><p>History and full migration tools remain available in this center.</p></div>
         <section class="recovery-snapshot-list" aria-labelledby="recovery-snapshots-title">
           <div class="sidepanel-intro"><strong id="recovery-snapshots-title">Source snapshots</strong><span class="hint">{{ selected ? selected.name : 'Select a Library target' }}</span></div>
           <p v-if="!selected || !updateTargetAvailable" class="hint">Select an exact writable skill instance in Library to inspect its retained source snapshots.</p>
@@ -698,7 +704,7 @@
         <div v-else-if="qualityHygiene" class="quality-side-status">{{ formatNumber(qualityHygieneSummary.physical_instances) }} physical instances · {{ formatNumber(qualityHygieneFindings.length) }} findings</div>
         <div v-if="loadingList" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <div v-else-if="!filteredQualitySkills.length" class="empty compact-empty">
-          <h3>{{ qualityRecords.length ? 'No matching skills' : 'No skills observed' }}</h3>
+          <p class="empty-title">{{ qualityRecords.length ? 'No matching skills' : 'No skills observed' }}</p>
           <p>{{ qualityRecords.length ? 'Try a different search term.' : 'Quality evidence appears when a skill is observed in the current scope.' }}</p>
         </div>
         <button v-for="record in filteredQualitySkills" :key="targetKey(record)" class="sidepanel-row" type="button" @click="selectSkill(record)">
@@ -739,7 +745,7 @@
         </div>
         <div v-else-if="filteredTrash.length === 0" class="empty">
           <div class="empty-icon"><app-icon name="archive"></app-icon></div>
-          <h3>{{ trashSkills.length ? 'No matching trashed skills' : 'The global trash is empty' }}</h3>
+          <p class="empty-title">{{ trashSkills.length ? 'No matching trashed skills' : 'The global trash is empty' }}</p>
           <p>{{ trashSkills.length ? 'Try a different search term or reset the filter.' : 'Skills removed from the global scope land here and can be restored.' }}</p>
           <div v-if="query && trashSkills.length" class="empty-actions"><button class="btn btn-secondary" type="button" @click="query = ''">Reset search</button></div>
         </div>
@@ -1134,7 +1140,10 @@
             </li>
           </ul>
           <div v-else class="empty compact-empty">
-            <h3>Nothing has been read yet</h3>
+            <!-- 6.6 — h2, not h3. This view's `<h1>Install</h1>` (1055) is
+                 immediately followed by this heading in the document outline, so
+                 a level 3 here skipped a level the reader cannot see. -->
+            <h2>Nothing has been read yet</h2>
             <p>No registry request has been made from this page, so there is nothing to report. Reading a source contacts skills.sh.</p>
             <div class="empty-actions"><button class="btn btn-primary" type="button" @click="runRegistry" :disabled="!installCanRead">Read {{ installSource.label }}</button></div>
           </div>
@@ -1630,7 +1639,7 @@
                reading of the number beside it. No claim is added: every
                sentence below is the one the tile already carried. -->
               <div class="quality-ledger-block">
-                <div class="section-label-row"><h3>What was observed</h3><span class="hint">{{ formatNumber(qualitySummary.observed) }} records in this scope</span></div>
+                <div class="section-label-row"><h2>What was observed</h2><span class="hint">{{ formatNumber(qualitySummary.observed) }} records in this scope</span></div>
                 <table class="quality-ledger" aria-label="Observed quality evidence summary">
                   <thead><tr><th scope="col">Count</th><th scope="col" class="num">Observed</th><th scope="col">What that count means</th></tr></thead>
                   <tbody>
