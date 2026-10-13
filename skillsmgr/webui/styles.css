@@ -1036,7 +1036,26 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .navigation-rail .viewtabs { overflow-y: auto; }
 
-[data-theme="dark"] .navigation-rail { background: #1b1f27; }
+/* 6.1: `[data-theme="dark"] .navigation-rail { background: #1b1f27; }` used to
+   sit here. It was the ONE chrome surface that did not follow the palette:
+   `#1b1f27` is not `--bg` (#101316), not `--surface` (#171a1e), not
+   `--surface-2` (#1e2227) and not `--surface-3` (#272c32), so the rail was a
+   fifth dark surface that exists in no theme block and answers to no token.
+   It is also a v1 value - it predates the measured palette 1.3 shipped, and it
+   survived that rewrite because a rule OUTSIDE both theme blocks is invisible
+   to the parity gate 1.4 added ("a token present in one theme and not the
+   other is not a theme, it is a typo with a colour").
+
+   Two consequences, both measured rather than asserted:
+     - the rail was `--surface-2` in LIGHT and something else in DARK, so the
+       one column every reader sees all day changed colour with the theme
+       without any token recording that it had;
+     - below 761px the drawer band sets `background: var(--surface-2)` and
+       OVERRODE it, so the same element was two different colours either side
+       of the drawer breakpoint.
+
+   The base rule above already says `background: var(--surface-2)` and is
+   theme-agnostic. That is the whole fix. */
 .navigation-rail .viewtabs { flex-direction: column; gap: 0; width: 100%; padding: 12px 0; border: 0; }
 .navigation-rail .nav-group { justify-items: center; width: 100%; }
 /* The group word is gone visually, so the grouping moves onto a hairline.
@@ -1328,9 +1347,25 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   align-items: center;
   gap: 6px var(--s2);
   padding: 8px var(--s3) 8px var(--s4);
+  /* 6.1: the `box-shadow: 0 -6px 16px -12px rgb(0 0 0 / 45%)` this carried is
+     gone, and the rule's own comment above is the reason: the bar is "a FLEX
+     ITEM, not an overlay". A shadow says "this floats above the page", and it
+     did not - the list shrinks to make room for it, so the shadow was drawing
+     a depth cue for a thing that is in the same plane as the rows under it.
+     It was also the file's SECOND shadow definition, after `--shadow` and
+     `--shadow-lg`, with a raw rgba rather than a token, which puts it outside
+     the one-shadow contract in DESIGN.md ("One shadow token for
+     popovers+dialogs only").
+
+     In DARK it was worse than redundant: the same light-theme alpha was
+     applied over `--surface` on `--bg`, so at 45% black on a near-black
+     palette it lifted the bar by roughly nothing and separated the two
+     surfaces by nothing at all. What actually separates them is the
+     `border-top` above, which is a token and is measured in both themes.
+
+     3.2's precedent, applied here: a readout carries no shadow. */
   border-top: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 -6px 16px -12px rgb(0 0 0 / 45%);
   font-size: var(--t-meta);
 }
 /* Clear belongs to the COUNT, not to the verb row. Measured at 390: the six
