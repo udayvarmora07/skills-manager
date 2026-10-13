@@ -4,6 +4,28 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- **The design contract described a product that no longer exists.**
+  `DESIGN.md` drew a 240px rail (the shipped rail is `--rail-w: 56px`), a fixed
+  392px list pane (the track is `minmax(320px, 380px)`), a 28px compact button
+  (`.btn-sm` is 26px), a status bar carrying a last-scan time the API has no
+  field for, and a budget-meter axis "running to 125%" when it is
+  `max(125, ceil(peak / 25) * 25)` — a fixed axis would clamp the bar the
+  component exists to reveal. It now describes the shell as built: the icon rail
+  and how its labels are carried rather than deleted, the rail-anchored panel
+  holding the scope switcher and context meter, the drawer built at ≤760px with
+  761–768 deliberately keeping the rail, the status bar's real facts and their
+  declared degradation order, and the three centred measures the three views
+  actually use.
+
+  The fix is gated, because the finding is that nothing compared them:
+  `check_design_tokens.py`'s `check_doc_numbers()` derives the rail width, every
+  layout band's grid template, every `--dur*` token and value, both button
+  heights and each static status-bar fact out of the stylesheet and the markup,
+  and fails when the contract stops stating them — 12 figures, 4 mutations
+  caught by `tests/test_redesign_doc_numbers.py`. No rendered pixel changes.
+
 ### Added
 
 - **`site/` — a static landing page that cannot state an unsupported fact.**

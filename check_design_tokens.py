@@ -22,6 +22,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 CSS = ROOT / "skillsmgr" / "webui" / "styles.css"
 DESIGN_MD = ROOT / "DESIGN.md"
+# The markup that renders the status bar is the file that owns those facts;
+# a document that describes a bar the markup does not render is the same
+# class of drift as a token that no rule reads.
+HTML = ROOT / "skillsmgr" / "webui" / "index.html"
 FONTS_DIR = ROOT / "skillsmgr" / "webui" / "static" / "fonts"
 
 # --------------------------------------------------------------------------
@@ -1047,6 +1051,151 @@ def check_fonts() -> list[str]:
     return failures
 
 
+def check_doc_numbers(css: str, root_map_param: dict) -> list[str]:
+    """The contract's Shell/Motion/Component figures, derived from the product.
+
+    `check_doc_matches` compares the palette. This compares the *numbers* the
+    document states about the shell it governs, because those drifted for the
+    whole of this redesign and nothing noticed: the rail was described as
+    240px while `--rail-w` said 240px and three layout tracks hard-coded 56px;
+    the status bar listed a last-scan time the API has no field for; the
+    compact button was 26px and the document said 28px.
+
+    The lesson is not "the prose was wrong". It is that a design contract is a
+    claim about the product, and a claim no check reads decays silently — the
+    same finding as the dead `--rail-w`, one layer out. So every figure below is
+    READ OUT OF THE PRODUCT and required to appear in DESIGN.md. Nothing here is
+    hand-listed on the document side: the expected value is whatever the
+    stylesheet or the markup says today, which is the only thing that makes a
+    mismatch a failure rather than a second copy of the same typo.
+
+    Deliberately absent: any assertion that a phrase is *absent*. "The document
+    no longer mentions last scan" cannot fail if a future edit reintroduces it
+    under different words, and a check that can only pass is coverage in name
+    only. What can fail is the positive half: every fact the product renders is
+    named, and every number the product declares is stated.
+    """
+    if not DESIGN_MD.exists():
+        return ["DESIGN.md is missing — the design contract must be checked in"]
+    doc = DESIGN_MD.read_text(encoding="utf-8")
+    scan = strip_css_comments(css)
+    failures: list[str] = []
+    checked = 0
+
+    def require(label: str, needle: str) -> None:
+        nonlocal checked
+        checked += 1
+        if needle not in doc:
+            failures.append(f"DESIGN.md does not state {label} ({needle!r})")
+
+    # `:root {` is opened, closed and reopened around the two palettes, so the
+    # FIRST `:root` block is not the one that holds `--rail-w`. Reading it that
+    # way is how 8.1's site gate compared an empty palette with itself; every
+    # `:root` block is merged here instead.
+    root_map = {}
+    for block in re.findall(r"(?m)^\s*:root\s*\{([^}]*)\}", css):
+        for m in re.finditer(r"(--[a-z0-9-]+)\s*:\s*([^;{}]+);", block):
+            root_map.setdefault(m.group(1), m.group(2).strip())
+    for name, value in root_map_param.items():
+        root_map.setdefault(name, value)
+
+    # 1. The rail width, from the token the layout actually reads. `--rail-w`
+    #    was the repo's second recorded "declared and read by nothing" token and
+    #    the first one the DESIGN contract itself repeated.
+    rail = (root_map.get("--rail-w") or "").strip()
+    if not re.fullmatch(r"\d+px", rail):
+        failures.append(f"styles.css declares no --rail-w in px ({rail!r})")
+    else:
+        require("the rail width", f"`--rail-w` is {rail}")
+
+    # 2. The layout's own grid template, in every band that declares one. This
+    #    is the string the diagram is drawn from, so it is compared rather than
+    #    paraphrased: a paraphrase is how "392px list" got into a file whose
+    #    track is a 320-380px range. `_rule_bodies` rather than a plain find, so
+    #    a responsive band cannot be silently skipped -- and not the first match
+    #    either, which is this repo's own recorded locator trap.
+    declared_cols = re.findall(
+        r"grid-template-columns:\s*([^;]+);", _rule_bodies(scan, ".layout"))
+    if not declared_cols:
+        failures.append("styles.css declares no grid-template-columns on .layout")
+    # The BARE value, not a backticked one: the contract quotes the base band
+    # as a full `grid-template-columns:` declaration and the responsive band as
+    # the value alone, so demanding a backtick on both sides is a check about
+    # this file's punctuation rather than about the product. (Caught by running
+    # it: the first version demanded one shape and reported a figure the
+    # document states verbatim -- this repository's locator trap, again.)
+    for col in dict.fromkeys(c.strip() for c in declared_cols):
+        require("a layout band of the layout's tracks", col)
+
+    # 3. Every duration token, with its value. Derived, so a fourth token added
+    #    in a later task fails here until this file names it.
+    durs = sorted(t for t in root_map if t.startswith("--dur"))
+    if not durs:
+        failures.append("styles.css declares no --dur* duration tokens")
+    for tok in durs:
+        value = (root_map[tok] or "").strip()
+        if not re.fullmatch(r"\d+ms", value):
+            failures.append(f"{tok} is not a plain ms duration ({value!r})")
+            continue
+        require(f"the duration token {tok}", f"`{tok}`")
+        require(f"the value of {tok}", f"{value}")
+
+    # 4. The two button heights, each required to appear on the SAME LINE as its
+    #    selector. "32px default" and a detached "26px" elsewhere in the
+    #    document would otherwise satisfy this, which is exactly the shape of the
+    #    drift being fixed: a right number attached to the wrong control.
+    for sel in (".btn", ".btn-sm"):
+        heights = dict.fromkeys(
+            h.strip() for h in re.findall(
+                r"(?<![\w-])height:\s*(\d+px)\s*;",
+                _rule_bodies(scan, sel)))
+        if not heights:
+            failures.append(f"styles.css declares no fixed height on `{sel}`")
+            continue
+        line_ok = any(
+            f"`{sel}`" in line and any(h in line for h in heights)
+            for line in doc.splitlines())
+        checked += 1
+        if not line_ok:
+            failures.append(
+                f"DESIGN.md does not state the height of `{sel}` "
+                f"({'/'.join(heights)}) beside the selector")
+
+    # 5. The status bar's facts, from the markup that renders them. The document
+    #    used to promise a last-scan time, which is an API gap (no per-instance
+    #    updated_at) rather than a styling choice.
+    if not HTML.exists():
+        failures.append(f"{HTML} is missing — cannot derive the status bar")
+    else:
+        markup = strip_css_comments(HTML.read_text(encoding="utf-8"))
+        facts = []
+        for m in re.finditer(r'class="statusbar-fact"[^>]*>([^<>]*)<', markup):
+            # An interpolation is DATA the bar reads, not a claim the design
+            # makes, so it is stripped before deciding what must be named. What
+            # is left is the static word the reader actually sees.
+            static = re.sub(r"\{\{[^}]*\}\}", "", m.group(1)).strip()
+            if static:
+                facts.append(static)
+        claim = None
+        m = re.search(r'class="statusbar">.*?data stays on this machine', markup, re.S)
+        if m:
+            claim = "data stays on this machine"
+        if not facts:
+            failures.append("index.html renders no .statusbar-fact to derive from")
+        for fact in facts:
+            checked += 1
+            if fact and fact not in doc:
+                failures.append(f"DESIGN.md does not state the status-bar fact {fact!r}")
+        if claim:
+            checked += 1
+            if claim not in doc:
+                failures.append(f"DESIGN.md does not state the status-bar claim {claim!r}")
+
+    print(f"\n=== DESIGN.md numbers ===\n  {'OK  ' if not failures else 'FAIL'} "
+          f"{checked} figure(s) derived from the product and stated in the contract")
+    return failures
+
+
 def main() -> int:
     if not CSS.exists():
         print(f"FAIL: {CSS} does not exist")
@@ -1067,6 +1216,8 @@ def main() -> int:
     print("\n=== scale (space, radius, type, motion, one palette) ===")
     check_scale(css, failures)
     failures.extend(check_doc_matches(light))
+    root_map = read_block(css, ":root {")
+    failures.extend(check_doc_numbers(css, root_map))
     failures.extend(check_fonts())
 
     print()

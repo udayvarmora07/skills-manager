@@ -312,51 +312,122 @@ squarer than a panel. One large radius applied to everything reads as
 inside the 100–160ms band. **No y control point may exceed 1.0** — overshoot
 is the bounce/elastic tell and it makes a dense tool feel unsteady. No entrance
 animation on content that was already there, no springs, no parallax.
-`prefers-reduced-motion` disables all of it. The gate asserts the duration
-bound, the curve, and the absence of an overshoot.
+`prefers-reduced-motion` disables all of it.
+
+Three duration tokens, all 120ms: `--dur` (state changes on a control that was
+already there), `--dur-pop` (a popover's geometry), `--dur-scrim` (the wash
+behind a dialog). A fourth token appearing is a decision, not a convenience.
+
+**A surface that owns a background and a border never fades in.** `.menu` and
+`.modal` rise 4px with no opacity, so both are fully opaque on their first
+painted frame. An opaque surface fading from `opacity: 0` shows the page through
+itself for the whole entrance — this repository captured a screenshot of its own
+dialog at `opacity: 0.386` and read it as a rendering fault. **Only the scrim
+and the toast may fade**: a scrim is a wash over the page, not a surface.
+
+The gate asserts four things, none of which the earlier band check could see:
+the duration is a token inside the band; **every finite `animation:` duration is
+a `var(--…)`**, so the band is enforced against something the cascade reads
+rather than against a variable nothing reads; every `transition:` takes its
+timing from a token; and the fade ban above. The `infinite` loops — the spinner
+and the skeleton shimmer — are progress indicators, not entrances, so no band
+applies to them; they are the only shapes allowed a raw literal, and it is the
+third assertion that keeps that honest.
+
+**The focus ring is an outline first and a halo second.** `--focus-ring` is a
+3px alpha shadow at `.26`/`.34`; the indicator itself is the 2px solid
+`--accent` outline. Dropping the halo leaves every control still clearing 3:1
+over its own surface; dropping the outline leaves nothing. Under
+`forced-colors: active` the UA forces `box-shadow: none`, so the outline is the
+ring in the mode where a reader most needs it.
 
 ## Shell
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ topbar 48px: brand · search ⌘K · New skill · overflow     │
-├──────────┬──────────────────┬────────────────────────────┤
-│ 240px    │ 392px            │ 1fr                        │
-│ rail     │ list             │ detail                     │
-│          │                  │                            │
-│ Scope    │                  │                            │
-│ Views    │                  │                            │
-│ Settings │                  │                            │
-├──────────┴──────────────────┴────────────────────────────┤
-│ status bar 24px: host:port · scope · last scan · locale   │
+├──────┬──────────────────────┬────────────────────────────┤
+│ 56px │ 320–380px             │ 1fr                        │
+│ rail │ list                  │ detail                     │
+├──────┴──────────────────────┴────────────────────────────┤
+│ statusbar 24px: view summary · served host:port · scope ·  │
+│                 locale · data path · local-only claim      │
 └──────────────────────────────────────────────────────────┘
 ```
 
-The rail carries **the scope switcher with each root's token share**, so the
-thing that determines whether your agents are truncated is visible from every
-screen and not only from the overview. Library is full-bleed; Overview,
-Quality and Settings are centred at a 1120px measure.
+**Three tracks, and the token that owns the first one.**
+`grid-template-columns: var(--rail-w) minmax(320px, 380px) minmax(0, 1fr)`; the
+761–1199 shrunk-laptop band narrows the list to
+`var(--rail-w) minmax(320px, 360px) minmax(0, 1fr)`. `--rail-w` is 56px. It was
+declared 240px and read by nothing while three layout tracks hard-coded the real
+width, so the one place a reader would look for the rail's width carried a
+number that was never true — that is why the token is the only source now, and
+why the gate compares the diagram above with the declared value.
 
-≥1280 sidebar + list + detail panel · 1024–1279 rail + list + overlay detail ·
-768–1023 rail + single column, detail as a sheet · <768 drawer nav and
-list/detail as separate full-height states with an explicit Back that returns
-focus to the originating row. Zero horizontal page scroll from 320px up.
+**The rail is an icon column, so its labels are carried, not deleted.** Every
+nav label is a `<span class="nav-label">`, clipped and screen-reader-only — never
+`display: none`, which would leave the button's only accessible name pointing at
+a glyph — with a pure-CSS `data-tip` on hover and focus-visible. The scope
+switcher and the context meter live in **one rail-anchored panel** behind the
+scope-controls disclosure: a 56px column cannot hold a labelled switcher, a
+token meter and a window select side by side, and truncating any of them is
+worse than a disclosure. That panel is why the rail no longer carries the token
+share on every screen; the Overview's meter is still there.
+
+**The drawer is built at ≤760px, and 761–768 deliberately keeps the rail.** The
+drawer and the scope disclosure are one element with two positions
+(`#nav-drawer` / `#compact-controls`), so opening it needs no new Escape branch
+and no second click-outside owner. 761–768 is the gap between the two bands and
+it is left alone rather than rounded, because a band boundary is a decision and
+not something to interpolate.
+
+**The status bar states what is true from every screen, and degrades in a
+declared order.** It carries the view's own count, the loopback authority the
+page was served from, the loaded scope, the resolved locale (`en-US formats`), the data path
+and the local-only claim. It does **not** carry a last-scan time: there is no
+per-instance `updated_at` in the API, so any such figure would be invented.
+Children end exactly at the content edge and every item ellipsises rather than
+being sliced mid-glyph. Degradation order: data path below 1280, locale below
+1024, scope below 900, whole bar below 760.
+
+**Centred measures are three different numbers, because the three views have
+different content.** `.overview-shell` caps at 1180px (its meter row and
+quality ledger need the width), `.quality-center` at 920px, `.settings-center`
+at 900px (a settings column is a rail beside a form, not prose). Library and
+Recovery are full-bleed. Prose is capped separately — `--measure` on `.lead` —
+so widening a column never widens a paragraph.
 
 ## Components
 
 - **Buttons:** one primary per view (accent fill, white ink). Everything else
   is secondary (1px border) or ghost. Row actions are text buttons, never
-  icon-only. 32px default, 28px compact.
+  icon-only. 32px default (`.btn`), 26px compact (`.btn-sm`), 44px on a coarse
+  pointer. A control that is 40px on a fine pointer is one the touch rules must
+  still raise — the floor is not a desktop number.
 - **Rows:** the primary line is the scope and observed state; paths are
   demoted into a disclosure. Selection is a 2px accent marker plus a tint —
-  never a card lift, never a shadow.
+  never a card lift, never a shadow. Multi-select is a leading checkbox, and the
+  bulk bar is the pane's last flex child, so choosing rows cannot move the rows
+  being chosen.
 - **State pill:** dot + label, tinted background at 12%.
+- **Severity is a three-step ladder beside the vocabulary it classifies**
+  (`ok` / `off` / `warn`), never a single boolean. "Differs from Active" is
+  load-bearing beyond colour — it sorts identity chips, drives the uniform-state
+  note, and agrees with the Overview's attention queue — so it keeps its meaning
+  and the *paint* becomes the separate thing. `off` is `--mute` on `--mute-bg`
+  (4.5:1, declared in both themes): a skill someone deliberately turned off is
+  not a finding, and painting it in the alarm colour is how a library trains its
+  reader to ignore alarms. A combination takes the loudest step.
 - **Callout** (the "learn layer"): explains the concept sitting next to the
   number, not the number. **One per screen maximum** — two of them is chrome.
 - **Meter (the signature component):** the context-budget bar. Track, fill, and
-  a labelled 100% threshold rule on an axis running to **125%**, so a root at
-  111% and one at 121% render as visibly different bars. On a 0–100% axis both
-  clamp full and the chart hides its own point.
+  a labelled 100% threshold rule, on an axis that runs to **at least 125%** and
+  then to the next 25% step above the highest share on screen
+  (`max(125, ceil(peak / 25) * 25)`) — a fixed axis would clamp the very bar it
+  exists to reveal. The 100% rule is a grid cell that repeats the meter row's
+  template, so it *is* a track cell and cannot drift sideways of the value it
+  marks; a per-track mark is also painted over the fill. On a 0–100% axis a root
+  at 111% and one at 121% both clamp full and the chart hides its own point.
 - **Diff view:** unified, mono, line numbers, add/remove tint **plus a sign
   glyph**, so it is not colour-only.
 - **Stepper:** three steps, for Registry Fetch → Review → Commit.
@@ -389,6 +460,13 @@ These are refused defaults, recorded so a later pass cannot slide back.
   is a vendored Lucide subset (ISC) inlined as one `<symbol>` sprite; the
   sprite is `display:none` inline rather than a fetched file, because a sprite
   fetched over the network is a second round trip and a second failure mode.
+- **A number in this file that the stylesheet does not enforce.** The rail width
+  was one for a long time: `--rail-w` said 240px, three tracks hard-coded the
+  real value, and the gate read the token — so the contract and the product
+  disagreed and nothing noticed. Every figure in *Shell*, *Motion* and
+  *Components* is now derived out of `styles.css` and compared, which is also
+  why a dead token is a defect: `--pane-w` is declared and read by nothing, and
+  quoting it would be quoting a number no rule enforces.
 - **A `unicode-range` on the vendored faces.**
 - **Vendored bytes without their licence**, named so the gate can find it.
 - **Invented scores, safety verdicts, or "recommended" claims.** The interface
@@ -404,8 +482,22 @@ Three layers, because guidance alone decays:
    ratio from the shipped stylesheet with the WCAG formula, asserts the space
    and radius scales, the type-step set, the motion bound, the absence of an
    overshoot, the absence of a third palette, and that this document's declared
-   palette still equals the stylesheet's. No model, no network.
+   palette still equals the stylesheet's. It also **compares this document's
+   Shell, Motion and Component numbers against the stylesheet** — the rail
+   width, the three duration tokens, the two button heights and the layout's
+   grid template are read out of the CSS and must appear here, so a design
+   change cannot leave this file describing a product that no longer exists. No
+   model, no network.
 3. **`check_docs.py`** and the contract tests — the behaviour.
+
+The static landing page in `site/` is held to the same rule by
+`tests/test_redesign_site.py`, which derives every figure the page prints out of
+the file that owns it — both palettes and the type families from this
+stylesheet, the command list from `docs/03-cli-surface.md`, the scope table
+from `skillsmgr/scopes.py`, the global path from `paths.py`, the distribution
+name and licence from `pyproject.toml` — and fails when they disagree. It is a
+repository artefact and is **not** in the wheel. Whether the page should be in
+the wheel, or published, is a maintainer decision and nothing here assumes it.
 
 Plus `node ~/.claude/skills/avoid-ai-design/scripts/detect.mjs skillsmgr/webui/`
 as an advisory anti-slop scan. It reports code-certain tells only; a clean scan

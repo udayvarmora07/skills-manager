@@ -2505,3 +2505,16 @@ endpoint, `Store` method or schema value).
       `check_design_tokens.py` adoption exception deleted — see
       `CHANGELOG.md`, `docs/08-web-ui.md`, and the `TEST-CHANGES.md` row for
       this task.
+- [x] Redesign 9.1 slice B — `DESIGN.md` was still the 1.3 contract while the
+      shell it describes was rebuilt under it (2.1c–2.1f, 2.2, 2.3). It named a
+      240px rail (shipped: `--rail-w: 56px`), a fixed 392px list pane (the
+      track is `minmax(320px, 380px)`), a 28px compact button (`.btn-sm` is
+      26px), a status-bar last-scan fact the API has no field for, and a
+      budget-meter axis "running to 125%" (it is
+      `max(125, ceil(peak / 25) * 25)`). Corrected, and **gated**:
+      `check_design_tokens.py`'s `check_doc_numbers()` derives 12 figures out of
+      the stylesheet and the markup and fails when the contract stops stating
+      them; `tests/test_redesign_doc_numbers.py` catches 4 mutations including
+      one that edits the *document* rather than the product. Seven declared
+      tokens are read by nothing — measured, filed as backlog 9.1a, not fixed
+      here. See `CHANGELOG.md`, `docs/06-progress-log.md`.

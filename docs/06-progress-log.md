@@ -53,6 +53,37 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
+## 2026-10-13 — The design contract was describing a product that stopped existing
+
+**[SPEC]** `DESIGN.md` had been rewritten once, in 1.3, and was never edited
+again — while the shell it describes was rebuilt underneath it (2.1c–2.1f,
+2.2, 2.3) and the meter, severity ladder and focus ring changed with it. It
+drew a **240px rail**; the shipped rail is `--rail-w: 56px`. It listed a
+**last-scan** fact in the status bar; the markup renders no such thing and the
+API has no per-instance `updated_at` to render it from. It put the list pane at
+a fixed **392px**; the track is `minmax(320px, 380px)`. It called the compact
+button **28px**; `.btn-sm` is 26px. It said the budget meter's axis "runs to
+**125%**"; it is `max(125, ceil(peak / 25) * 25)`, so a fixed axis would clamp
+the bar the component exists to reveal.
+
+**[SPEC] The lesson is not "the prose was wrong".** It is that a design contract
+is a claim about the product and no gate compared its numbers — the same finding
+as `--rail-w` being declared 240px and read by nothing, one layer out. Shell,
+Motion and Components are now derived: `check_design_tokens.py`'s
+`check_doc_numbers()` reads the rail width, every layout band's grid template,
+every `--dur*` token and value, both button heights and each static status-bar
+fact out of the file that owns it, and fails when the contract stops stating
+them. **12 figures compared, 4 mutations caught** by
+`tests/test_redesign_doc_numbers.py`. No screenshot: this task changes a
+document and a gate, and the computed result of every rendered pixel is
+identical by construction.
+
+**[?] Seven declared tokens are read by nothing** — `--accent-line`,
+`--line-2`, `--measure`, `--pane-w`, `--sans`, `--t-id`, `--t-num`. Two of them
+(`--pane-w`, `--measure`) are the numbers the stale contract quoted. Measured,
+recorded as backlog 9.1a, and **not** fixed here: deleting or wiring a token is
+a product change and this task's claim is only that the gate now names them.
+
 ## 2026-10-13 — A landing page arrived, and the gate caught the page, not the gate
 
 **[SPEC]** `site/` is a static product/docs page (see @docs/08-web-ui.md). It is
