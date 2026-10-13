@@ -2154,7 +2154,7 @@
             </div>
             <ul class="validate-issues">
               <li v-for="(issue, i) in modals.validate.result.issues" :key="i" class="validate-issue">
-                <span class="badge" :class="issue.level === 'error' ? 'badge-warn' : ''">{{ issue.level }}</span>
+                <span class="badge" :class="issue.level === 'error' ? 'badge-warn' : ''" :data-status="issue.level">{{ validateLevelLabel(issue.level) }}</span>
                 <span>{{ issue.message }} <span v-if="issue.key" class="issue-key">[{{ issue.key }}]</span></span>
               </li>
             </ul>
@@ -2405,36 +2405,41 @@
       <h2 id="history-modal-title" class="sr-only">History</h2>
       <div class="modal-head"><h2>History</h2><button class="modal-close" aria-label="Close" @click="closeModal('history')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div class="history-bar">
           <label class="sr-only" for="history-skill">History skill</label>
-          <select id="history-skill" name="history-skill" v-model="modals.history.name" style="flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+          <select id="history-skill" name="history-skill" class="field-select" v-model="modals.history.name">
             <option value="">All skills</option>
             <option v-for="s in skills" :key="s.name" :value="s.name">{{ s.name }}</option>
           </select>
           <button class="btn btn-primary" :disabled="busy" @click="loadHistory">Show</button>
         </div>
         <div v-if="modals.history.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
-        <div v-else-if="modals.history.rows.length === 0" class="empty"><p style="margin:0;">No history records.</p></div>
+        <div v-else-if="modals.history.rows.length === 0" class="empty"><p class="empty-note">No history records.</p></div>
         <div v-else class="tablewrap">
           <table class="history-table">
             <thead><tr><th>When</th><th>Skill</th><th>Action</th></tr></thead>
             <tbody>
               <tr v-for="r in (modals.history.rows || []).filter(Boolean)" :key="r.id">
-                <td>{{ formatDate(r.at) }}</td><td>{{ r.name }}</td><td>{{ r.action }}</td>
+                <td>{{ formatDate(r.at) }}</td><td>{{ r.name }}</td>
+                <td><span class="history-action" :data-status="r.action">{{ historyActionLabel(r.action) }}</span></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div v-if="modals.history.name" style="margin-top:16px;">
-          <h3 style="margin:0 0 8px;">Snapshots</h3>
-          <div v-if="!modals.history.snapshots.length" class="empty"><p style="margin:0;">No snapshots for this skill.</p></div>
+        <!-- 5.9b: `loaded`, NOT `name`. The select's v-model changes the moment
+             a row is picked; `loaded` changes when the data below was fetched
+             for it. Binding to `name` put "No snapshots for this skill" above
+             a table still listing every skill. -->
+        <div v-if="modals.history.loaded" class="history-snapshots">
+          <h3 class="modal-subhead">Snapshots <span class="modal-subhead-of">of {{ modals.history.loaded }}</span></h3>
+          <div v-if="!modals.history.snapshots.length" class="empty"><p class="empty-note">No snapshots for this skill.</p></div>
           <div v-else class="tablewrap">
             <table class="history-table">
               <thead><tr><th>Snapshot</th><th>Action</th></tr></thead>
               <tbody>
                 <tr v-for="s in modals.history.snapshots" :key="s">
                   <td><code>{{ s }}</code></td>
-                  <td><button class="btn btn-secondary" :disabled="busy" @click="rollbackSnapshot(modals.history.name, s)">Rollback</button></td>
+                  <td><button class="btn btn-secondary" :disabled="busy" @click="rollbackSnapshot(modals.history.loaded, s)">Rollback</button></td>
                 </tr>
               </tbody>
             </table>
@@ -2460,7 +2465,7 @@
             </li>
           </ul>
         </template>
-        <p v-else style="margin:0;color:var(--text-muted);">No templates available.</p>
+        <p v-else class="empty-note">No templates available.</p>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('templates')">Close</button>
@@ -2478,7 +2483,7 @@
         <button class="modal-close" aria-label="Close" @click="closeModal('newtemplate')"><app-icon name="x"></app-icon></button>
       </div>
       <div class="modal-body">
-        <div class="form-grid" style="grid-template-columns:1fr;">
+        <div class="form-grid form-grid-single">
           <div class="form-field" :class="{ 'has-error': !!modals.newtemplate.error }">
             <label for="t-name">Template name</label>
             <input id="t-name" name="template-name" v-model.trim="modals.newtemplate.name" placeholder="my-template" spellcheck="false">
@@ -2501,28 +2506,51 @@
   <div v-if="modals.import" class="overlay" data-modal="import" @mousedown.self="closeModal('import')">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" tabindex="-1">
       <h2 id="import-modal-title" class="sr-only">Import archive</h2>
-      <div class="modal-head"><h2>Import archive</h2></div>
+      <div class="modal-head"><h2>Import archive</h2><button class="modal-close" aria-label="Close" @click="closeModal('import')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
         <p>Import skills from a Skills Manager <code>.tar.gz</code> export or a compatible <code>.zip</code> archive.</p>
         <div v-if="!modals.import.file" class="dropzone" @click="pickImportFile" @dragover.prevent @drop.prevent="onDropImport"
              role="button" tabindex="0" aria-label="Choose archive" @keydown.enter.prevent="pickImportFile" @keydown.space.prevent="pickImportFile">
           <app-icon name="upload"></app-icon>
-          <p style="margin:4px 0 0;">Choose a file or drop it here</p>
-          <p style="margin:0;font-size:12px;color:var(--text-muted);">.tar.gz, .tar, .zip</p>
+          <p class="dropzone-lead">Choose a file or drop it here</p>
+          <p class="dropzone-hint">.tar.gz, .tar, .zip</p>
         </div>
-        <div v-else class="form-field full">
-          <label>{{ modals.import.file.name }} ({{ formatBytes(modals.import.file.size) }})</label>
+        <!-- 5.9b: this was a <label> wrapping nothing and pointing at no control,
+             so it announced a filename as a field name. It is a value now, and
+             the only control it sits near is the one that replaces it. -->
+        <div v-else class="import-picked">
+          <p class="import-picked-name">{{ modals.import.file.name }}</p>
+          <p class="import-picked-size">{{ formatBytes(modals.import.file.size) }} selected</p>
           <button class="btn btn-secondary" @click="modals.import.file = null">Choose different file</button>
         </div>
-        <label v-if="modals.import.file" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px;cursor:pointer;">
-          <input type="checkbox" name="import-force" v-model="modals.import.force" style="accent-color:var(--accent);">
-          Overwrite existing skills
-        </label>
-        <label v-if="modals.import.file" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:14px;cursor:pointer;">
-          <input type="checkbox" name="import-full" v-model="modals.import.full" style="accent-color:var(--accent);">
-          Full migration (restore trash and templates)
-        </label>
-        <input ref="importInput" type="file" name="import-archive" accept=".tar.gz,.tgz,.tar,.zip" style="display:none" @change="onImportPicked">
+        <!-- 5.9b: the two flags shared one inline-styled <label> each and
+             neither said what it costs. 4.7 settled the rule for a dialog
+             option — state the consequence in words, beside the verb. The
+             checkbox is the 1.5 `.choice` primitive, so `accent-color` is a
+             token decision rather than an inline one. -->
+        <ul class="choice-list import-options">
+          <li>
+            <label class="choice">
+              <input type="checkbox" name="import-force" v-model="modals.import.force">
+              <span class="choice-box" aria-hidden="true"><app-icon name="check"></app-icon></span>
+              <span class="choice-text">
+                <strong>Overwrite existing skills</strong>
+                <span class="choice-note">Replaces a skill that already exists. Without it those entries are skipped and reported.</span>
+              </span>
+            </label>
+          </li>
+          <li>
+            <label class="choice">
+              <input type="checkbox" name="import-full" v-model="modals.import.full">
+              <span class="choice-box" aria-hidden="true"><app-icon name="check"></app-icon></span>
+              <span class="choice-text">
+                <strong>Full migration</strong>
+                <span class="choice-note">Also restores the trash and the templates. Without it neither is touched.</span>
+              </span>
+            </label>
+          </li>
+        </ul>
+        <input ref="importInput" type="file" name="import-archive" accept=".tar.gz,.tgz,.tar,.zip" class="sr-only" @change="onImportPicked">
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('import')">Cancel</button>

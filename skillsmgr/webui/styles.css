@@ -3328,6 +3328,53 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .scope-note { margin: var(--s3) 0 0; padding-left: var(--s3); border-left: 2px solid var(--border-strong); color: var(--text-muted); font-size: var(--t-meta); line-height: 1.5; }
 .scope-note-inline { margin-top: var(--s2); }
 
+/* 5.9b THE INVENTORY DIALOGS -- history, templates, newtemplate, import.
+ *
+ * These four were the last surfaces still describing layout with inline
+ * `style` attributes (31 sat between remove and sync alone before 4.7), so
+ * they looked like a different product from every dialog beside them. Each
+ * rule below replaces one declaration the markup used to carry inline; none
+ * of them is a second definition of something 4.7 already owns.
+ *
+ * `.choice` / `.choice-box` are the 1.5 primitives 4.7 adopted -- this block
+ * does not redefine them, it supplies the two text classes the primitive had
+ * no rule for and the import dialog's arrangement.
+ */
+.history-bar { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
+.history-bar .field-select { flex: 1; min-width: 0; }
+
+/* The wire value rides on `data-status` (5.4c's trade) because here the slug is
+ * the row's identity in a table, not a badge state. It is never painted. */
+.history-action { color: var(--text-muted); }
+.history-snapshots { margin-top: var(--s4); }
+
+/* A subhead that names WHICH skill it belongs to. The Snapshots table hangs
+ * off the loaded name, so its heading has to agree with it -- a bare
+ * "Snapshots" above a skill-scoped table is how this read as a claim about
+ * every skill at once. */
+.modal-subhead { margin: 0 0 var(--s2); font-size: var(--t-ui); font-weight: 600; color: var(--text); }
+.modal-subhead-of { font-weight: 400; color: var(--text-muted); }
+
+/* The empty state's note. Four empty states across the product wrote
+ * `margin: 0` inline so the block's own padding would not double up; one
+ * class is the same statement. */
+.empty-note { margin: 0; }
+
+.dropzone-lead { margin: var(--s1) 0 0; }
+.dropzone-hint { margin: 0; font-size: var(--t-meta); color: var(--text-muted); }
+
+.import-picked { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s1); }
+.import-picked-name { margin: 0; font-family: var(--mono); font-size: var(--t-ui); overflow-wrap: anywhere; }
+.import-picked-size { margin: 0; font-size: var(--t-meta); color: var(--text-muted); }
+.import-options { margin-top: var(--s3); }
+.choice-text strong { font-weight: 600; color: var(--text); }
+.choice-note { font-size: var(--t-meta); line-height: 1.5; color: var(--text-muted); }
+
+/* `sr-only`, not `display: none`, on the file input: it is reachable by the
+ * dropzone's click handler through the ref, and a display:none input is not
+ * focusable, so a keyboard reader could never reach the picker at all. */
+.form-grid-single { grid-template-columns: 1fr; }
+
 .validate-issues { list-style: none; margin: var(--s3) 0 0; padding: 0; }
 .validate-name-field { margin-bottom: var(--s3); }
 .validate-issue { display: flex; gap: var(--s2); align-items: flex-start; padding: var(--s2) 0; border-bottom: 1px solid var(--border); font-size: var(--t-ui); }

@@ -195,6 +195,38 @@ const DOCTOR_FINDINGS = Object.freeze([
   { key: "stale_snapshots", label: "Snapshots whose source is gone", hint: "A rollback target that cannot be read" },
 ]);
 
+/* 5.9b — the two remaining wire vocabularies the INVENTORY dialogs painted.
+ *
+ * `issue.level` and `history.action` are REST values. Printing them meant the
+ * Validate dialog showed "error"/"warning" in a badge and the History dialog
+ * showed "create"/"trash" in a cell, which is the same defect 5.4c fixed on
+ * the Workspaces badge and 5.5 fixed on ten category headings. The wire value
+ * is NOT lost: it rides in `data-status`, because here it is the row's
+ * identity in a table, not a decorative detail.
+ *
+ * The keys are the set the store can write (`_history`/`_commit_history`
+ * call sites across skillsmgr/), NOT a list observed on one seed, so a run
+ * that never produced a `restore` still renders the word. An UNOBSERVED value
+ * falls back to the raw string rather than to an invented word (RULES #12).
+ */
+const HISTORY_ACTIONS = Object.freeze({
+  create: "Created",
+  add: "Added",
+  edit: "Edited",
+  update: "Updated",
+  disable: "Disabled",
+  enable: "Enabled",
+  trash: "Trashed",
+  restore: "Restored",
+  import: "Imported",
+});
+
+const VALIDATE_LEVELS = Object.freeze({
+  error: "Error",
+  warning: "Warning",
+  info: "Note",
+});
+
 /* An unlisted category sorts after every listed one and ALPHABETICALLY among
    its own kind, so a new command can never fall off the end of the palette
    without a heading. The first version of this returned a numeric rank derived
@@ -4890,25 +4922,45 @@ const appOptions = {
         .finally(() => { if (this.modals.stats) this.modals.stats.loading = false; });
     },
 
+    /* 5.9b: a function CALLED from a template must be a METHOD, never a
+     * computed — Vue unwraps a computed to its value before the template
+     * sees it, so `{{ historyActionLabel(r.action) }}` would throw during
+     * render and the History table would vanish with every gate green. */
+    historyActionLabel(action) {
+      return HISTORY_ACTIONS[action] || String(action);
+    },
+
+    validateLevelLabel(level) {
+      return VALIDATE_LEVELS[level] || String(level);
+    },
+
     openHistory(scopeOverride = null) {
       if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
-      this.modals.history = { name: "", rows: [], snapshots: [], loading: false, scope: scopeOverride || "" };
+      this.modals.history = { name: "", loaded: "", rows: [], snapshots: [], loading: false, scope: scopeOverride || "" };
       this.loadHistory();
     },
 
     async loadHistory() {
       const m = this.modals.history;
       if (!m) return;
+      /* 5.9b — the Snapshots block used to hang off `m.name`, which is the
+       * <select>'s v-model, so PICKING a skill claimed "No snapshots for this
+       * skill" above a table still listing every skill's history — a claim
+       * about the disk made by a selection that had not been applied (5.6a's
+       * class). `loaded` is the name the data below it was actually fetched
+       * for, and it is only set once both requests have settled. */
+      const asked = m.name;
       m.loading = true;
       try {
-        const name = m.name ? "&name=" + encodeURIComponent(m.name) : "";
+        const name = asked ? "&name=" + encodeURIComponent(asked) : "";
         m.rows = await api("/api/history?limit=200" + name);
         m.snapshots = [];
-        if (m.name) {
+        if (asked) {
           const scope = m.scope || ((this.selected && this.selected.scope) ? this.selected.scope : "global");
-          const snapshotResult = await api("/api/history?name=" + encodeURIComponent(m.name) + "&scope=" + encodeURIComponent(scope) + "&snapshots=1");
+          const snapshotResult = await api("/api/history?name=" + encodeURIComponent(asked) + "&scope=" + encodeURIComponent(scope) + "&snapshots=1");
           m.snapshots = snapshotResult.snapshots || [];
         }
+        m.loaded = asked;
       } catch (e) {
         this.toast(e.message, "err");
       } finally {
