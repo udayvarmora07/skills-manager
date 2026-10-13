@@ -155,7 +155,12 @@ class ProfileEditorPlacement(unittest.TestCase):
         # The name is trimmed in the toast, because the form's v-model is
         # `.trim` too — printing the raw field would put leading spaces inside
         # quotes the reader believes are the profile's identity.
-        self.assertEqual(results["null"], ["New profile", "Save profile", "Profile spaced saved."])
+        # 6.5c: "Create profile", not "Save profile". The heading beside this
+        # button already said "New profile", so the create path's label is now
+        # the action a reader can start. Same intent as before — the three
+        # strings still follow profileEditing — and it now distinguishes the
+        # create label from the edit label on the verb too.
+        self.assertEqual(results["null"], ["New profile", "Create profile", "Profile spaced saved."])
         self.assertEqual(
             results["release-ready"],
             ["Edit release-ready", "Save changes", "Profile release-ready updated."],

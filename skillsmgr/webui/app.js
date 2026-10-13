@@ -841,7 +841,15 @@ const appOptions = {
       return this.profileEditing ? `Edit ${this.profileEditing}` : "New profile";
     },
     profileSaveLabel() {
-      return this.profileEditing ? "Save changes" : "Save profile";
+      /* 6.5c — §I asks every state to leave one verb-led action, and this
+       * label was the reason the Profiles view measured as STRANDED: with no
+       * profiles on disk the only control in the view read "Save profile",
+       * which is not an action a reader can start and implies something was
+       * already saved. The heading beside it already said "New profile", so
+       * the form and its own button disagreed about what pressing it does.
+       * Nothing about the create path changed — `saveProfile` has always
+       * created when `profileEditing` is null; this only names it. */
+      return this.profileEditing ? "Save changes" : "Create profile";
     },
     profileSaveOutcome() {
       return this.profileEditing
