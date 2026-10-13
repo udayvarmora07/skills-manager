@@ -139,6 +139,37 @@ const SETTINGS_SECTIONS = Object.freeze([
   { id: "settings-accessibility", label: "Accessibility", hint: "The OS signals this app honors" },
 ]);
 
+/* 5.8a — every finding `/api/doctor` can report, in one list.
+ *
+ * The dialog used to read `orphan_dirs` and `stale_rows` by hand, so on the
+ * seeded library it said "Issues found." and then showed one orphaned
+ * directory while SIX undecodable documents and one conflicting document -
+ * the keys that actually explain the word "issues" - were never rendered by
+ * anything in the product. A verdict with nothing under it is the honesty
+ * failure RULES #12 warns about, and it was invisible because no gate looks
+ * at a page's contents.
+ *
+ * One list, so a key cannot be dropped by omission the way two were: the
+ * ledger renders whatever is non-empty and the test asserts this table covers
+ * every finding key the REST route can return.
+ *
+ * `repair` is deliberately NOT here. It is a list of things the backend says
+ * it *can* fix, the empty array on the seed says nothing about its item
+ * shape, and rendering a guessed row for it would be inventing a capability
+ * (API gap, logged in STATE.md).
+ */
+const DOCTOR_FINDINGS = Object.freeze([
+  { key: "undecodable_documents", label: "Documents that could not be read", hint: "Skipped when the library is listed" },
+  { key: "conflicting_documents", label: "Names claimed by more than one document", hint: "Only the first is indexed" },
+  { key: "orphan_dirs", label: "Directories with no skill document", hint: "Not listed as skills" },
+  { key: "stale_rows", label: "Index rows with nothing on disk", hint: "Counted by the index, not the library" },
+  { key: "filesystem_index_drift", label: "Filesystem and index disagree", hint: "The two are separate sources of truth" },
+  { key: "incomplete_transactions", label: "Transactions that did not finish", hint: "Left behind by an interrupted write" },
+  { key: "transaction_artifacts", label: "Transaction artifacts", hint: "Written by an interrupted write" },
+  { key: "temporary_files", label: "Temporary files left behind", hint: "Not cleaned up by the last run" },
+  { key: "stale_snapshots", label: "Snapshots whose source is gone", hint: "A rollback target that cannot be read" },
+]);
+
 /* An unlisted category sorts after every listed one and ALPHABETICALLY among
    its own kind, so a new command can never fall off the end of the palette
    without a heading. The first version of this returned a numeric rank derived
@@ -1669,6 +1700,34 @@ const appOptions = {
         .filter((s) => s && s.kind === "agent" && s.label)
         .map((s) => s.label);
     },
+
+    /* 5.8a - the Doctor ledger. See DOCTOR_FINDINGS for why it is a list.
+     *
+     * A computed, because the template reads it as a VALUE (`v-for`). A
+     * function called from a template has to live in `methods` instead - Vue
+     * unwraps a computed before the template sees it, so
+     * `{{ doctorVerdict() }}` on a computed resolves to the string it returns
+     * and the render throws. 5.5 recorded that trap; it is recorded again
+     * here because the next person will be editing exactly this pair.
+     */
+    doctorFindings() {
+      const report = (this.modals.doctor || {}).report;
+      if (!report) return [];
+      return DOCTOR_FINDINGS.map((f) => ({
+        key: f.key,
+        label: f.label,
+        hint: f.hint,
+        names: Array.isArray(report[f.key]) ? report[f.key] : [],
+      })).filter((f) => f.names.length > 0);
+    },
+    /** 5.8a - a METHOD, because the template calls it inside a `.map()`.
+     *  `/api/doctor` puts `scope_label` on every duplicate record and the
+     *  dialog was printing `d.scopes.join(", ")` - the wire slug - one object
+     *  away from the human name (5.4c, 5.5 and 4.7b all found this once).
+     *  It sat in `computed:` in the first draft of this task and its own suite
+     *  caught it on the first run: Vue unwraps a computed to its value, so a
+     *  template that CALLS one gets a string. `doctorScopeLabel` lives in
+     *  `methods:` next to `doctorVerdict`. */
     purgeScopeSentence() {
       const n = this.trashSkills.length;
       return "Permanently delete " + this.formatNumber(n) + " trashed "
@@ -4668,6 +4727,48 @@ const appOptions = {
 
     /* ------------------------------------------------------- maintenance */
 
+    /* 5.8a - a verdict that counts, and a branch that admits it cannot.
+     *
+     * The banner said "Issues found." on every unhealthy library, whatever
+     * was found. The words name no issue, so the sentence was true of a
+     * library with one orphaned directory and of one with a hundred broken
+     * documents, and the reader had to go looking for which it was.
+     *
+     * A METHOD, because the template calls it (`{{ doctorVerdict() }}`) and
+     * Vue unwraps a computed before the template ever sees it. 5.5's trap.
+     *
+     * The `!ok` branch matters as much as the count: `report.ok` is the
+     * BACKEND's verdict, and if it says unhealthy while `doctorFindings` is
+     * empty then this dialog does not hold the key that explains why. Saying
+     * "nothing found" there would be the dialog inventing a clean bill of
+     * health it was never given.
+     */
+    doctorVerdict() {
+      const report = (this.modals.doctor || {}).report;
+      if (!report) return "";
+      const findings = this.doctorFindings;
+      const n = findings.reduce((sum, f) => sum + f.names.length, 0);
+      if (!n) {
+        return report.ok
+          ? "Nothing to repair. The library, the index and the trash agree."
+          : "The library is flagged, and no finding explains it below.";
+      }
+      return this.formatNumber(n)
+        + (n === 1 ? " finding" : " findings")
+        + " across " + findings.length
+        + (findings.length === 1 ? " check." : " checks.");
+    },
+    /** Scope ids -> the labels this same payload already carries.
+     *  A METHOD, because the template calls it inside a `.map()`. */
+    doctorScopeLabel(id) {
+      const report = (this.modals.doctor || {}).report || {};
+      for (const group of report.duplicates || []) {
+        for (const rec of group.records || []) {
+          if (rec && rec.scope === id && rec.scope_label) return rec.scope_label;
+        }
+      }
+      return id;
+    },
     openDoctor() {
       if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       this.modals.doctor = { loading: true, report: null };

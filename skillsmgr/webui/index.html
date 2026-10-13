@@ -2140,24 +2140,44 @@
           </div>
           <div v-else class="banner banner-error flush tight">
             <app-icon name="circle-alert"></app-icon>
-            Issues found.
+            {{ doctorVerdict() }}
           </div>
-          <dl class="kv">
+
+          <!-- 5.8a: what is wrong comes first. The steady-state facts used to
+               sit above the findings, so a reader was given seven numbers
+               about a library in good order before the one row about a
+               library in bad order. -->
+          <ul v-if="doctorFindings.length" class="doctor-ledger">
+            <li v-for="f in doctorFindings" :key="f.key" class="doctor-finding">
+              <div class="doctor-finding-head">
+                <span class="doctor-finding-count">{{ formatNumber(f.names.length) }}</span>
+                <span class="doctor-finding-label">{{ f.label }}</span>
+              </div>
+              <p class="doctor-finding-hint">{{ f.hint }}</p>
+              <ul class="doctor-finding-names">
+                <li v-for="(nm, i) in f.names" :key="i"><code>{{ nm }}</code></li>
+              </ul>
+            </li>
+          </ul>
+          <p v-else-if="!modals.doctor.report.ok" class="doctor-unlisted">
+            The backend reported this library as needing attention, and none of the
+            findings it returned are listed here. Nothing below explains why.
+          </p>
+
+          <dl class="kv doctor-facts">
             <dt>Database integrity</dt><dd>{{ modals.doctor.report.db_integrity }}</dd>
             <dt>Skills on disk</dt><dd>{{ formatNumber(modals.doctor.report.skills_on_disk) }}</dd>
             <dt>Database rows</dt><dd>{{ formatNumber(modals.doctor.report.db_rows) }}</dd>
-            <dt>Orphan dirs</dt><dd>{{ (modals.doctor.report.orphan_dirs || []).join(', ') || '—' }}</dd>
-            <dt>Stale rows</dt><dd>{{ (modals.doctor.report.stale_rows || []).join(', ') || '—' }}</dd>
             <dt>Trash count</dt><dd>{{ formatNumber(modals.doctor.report.trash_count) }}</dd>
             <dt>Templates count</dt><dd>{{ formatNumber(modals.doctor.report.templates_count) }}</dd>
           </dl>
-          <div v-if="modals.doctor.report.duplicates && modals.doctor.report.duplicates.length" style="margin-top:16px;">
-            <h3 style="margin:0 0 8px;">Same name in multiple scopes ({{ formatNumber(modals.doctor.report.duplicates.length) }})</h3>
-            <p class="muted" style="margin:0 0 8px;">Converge copies with Sync — pick the canonical copy as source.</p>
+          <div v-if="modals.doctor.report.duplicates && modals.doctor.report.duplicates.length" class="doctor-dupes">
+            <h3>Same name in multiple scopes ({{ formatNumber(modals.doctor.report.duplicates.length) }})</h3>
+            <p class="muted doctor-dupes-note">Converge copies with Sync — pick the canonical copy as source.</p>
             <ul class="dupe-list">
               <li v-for="d in modals.doctor.report.duplicates" :key="d.name">
                 <strong>{{ d.name }}</strong>
-                <span class="muted">{{ d.scopes.join(', ') }}</span>
+                <span class="muted">{{ d.scopes.map(doctorScopeLabel).join(', ') }}</span>
                 <span v-if="d.descriptions_differ" class="pill pill-warn">descriptions differ</span>
                 <button class="btn btn-secondary btn-sm" @click="syncDupe(d.name, d.scopes[0])">Sync…</button>
               </li>

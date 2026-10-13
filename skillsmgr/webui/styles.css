@@ -3193,6 +3193,67 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .kv dt { color: var(--text-muted); font-size: var(--t-table); overflow-wrap: anywhere; }
 .kv dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: var(--t-table); }
 
+/* -------------------------------------------------------- 5.8a DOCTOR LEDGER
+ *
+ * Not a grid of cards. A library that needs attention can be wrong in nine
+ * different ways and in any combination, so the surface is a LEDGER: one row
+ * per kind of finding, rows separated by a hairline, count and label on one
+ * line. A `repeat(3, 1fr)` card grid would make "6 documents" and "1
+ * conflicting name" the same visual weight, which is the §B equal-tile tell
+ * 5.5 just removed from the Quality view.
+ *
+ * The count is mono and tabular so a column of them would align if the rows
+ * ever stack into one, and the names ride in `<code>` because a document name
+ * is a filesystem name and the mono face is already vendored.
+ */
+.doctor-ledger { list-style: none; margin: 0 0 var(--s5); padding: 0; }
+.doctor-finding { padding: var(--s3) 0; border-top: 1px solid var(--border); }
+.doctor-finding:first-child { border-top: none; padding-top: 0; }
+.doctor-finding-head { display: flex; align-items: baseline; gap: var(--s3); }
+.doctor-finding-count {
+  font-family: var(--mono);
+  font-size: var(--t-ui);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--err);
+  min-width: 2.5ch;
+  text-align: right;
+  flex: none;
+}
+.doctor-finding-label { font-size: var(--t-ui); font-weight: 600; }
+.doctor-finding-hint { margin: 2px 0 0; font-size: var(--t-meta); color: var(--text-muted); }
+.doctor-finding-names {
+  list-style: none;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s2);
+}
+.doctor-finding-names code {
+  font-family: var(--mono);
+  font-size: var(--t-table);
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  overflow-wrap: anywhere;
+}
+/* The honest empty branch: the backend says unhealthy, nothing here explains
+   it. A green banner would be the dialog inventing a clean bill of health. */
+.doctor-unlisted {
+  margin: 0 0 var(--s5);
+  font-size: var(--t-meta);
+  color: var(--text-muted);
+  border-left: 2px solid var(--warn);
+  padding-left: var(--s3);
+}
+.doctor-facts { margin-bottom: var(--s5); }
+.doctor-dupes { margin-top: var(--s5); }
+.doctor-dupes h3 { margin: 0 0 var(--s2); font-size: var(--t-prose); }
+.doctor-dupes-note { margin: 0 0 var(--s2); font-size: var(--t-meta); }
+
 /* 4.7 ACTION DIALOGS — remove, purge, validate, sync.
  *
  * These four dialogs were the last places in the app still describing a
