@@ -1823,11 +1823,21 @@
             <p id="settings-theme-hint" class="hint">System follows your operating system’s dark-mode preference live. Light and dark are explicit app choices.</p>
           </div>
           <div class="settings-section-control">
+            <!-- The cells carry a LABEL only. They used to carry a second line
+                 as well ("Follows the OS (light now)", "Always light"), which at
+                 a 340px control column wrapped "System" across three lines and
+                 "Light" across two: a segmented control is a row of choices, and
+                 a choice whose cell is three lines tall is a paragraph wearing a
+                 control's border. The explanation was never only here — the
+                 section's left column says all of it, and `aria-describedby`
+                 points the fieldset at that hint, so removing it removes the
+                 duplicate and not the information. Same reason the Text size
+                 hint below was extended to carry what its cells gave up. -->
             <fieldset class="settings-options settings-segmented" aria-describedby="settings-theme-hint">
               <legend class="sr-only">Theme preference</legend>
-              <label class="settings-option"><input type="radio" name="theme-preference" value="system" v-model="theme"><span><strong>System</strong><small>Follows the OS ({{ systemThemeLabel }} now)</small></span></label>
-              <label class="settings-option"><input type="radio" name="theme-preference" value="light" v-model="theme"><span><strong>Light</strong><small>Always light</small></span></label>
-              <label class="settings-option"><input type="radio" name="theme-preference" value="dark" v-model="theme"><span><strong>Dark</strong><small>Always dark</small></span></label>
+              <label class="settings-option"><input type="radio" name="theme-preference" value="system" v-model="theme"><span><strong>System</strong></span></label>
+              <label class="settings-option"><input type="radio" name="theme-preference" value="light" v-model="theme"><span><strong>Light</strong></span></label>
+              <label class="settings-option"><input type="radio" name="theme-preference" value="dark" v-model="theme"><span><strong>Dark</strong></span></label>
             </fieldset>
             <div class="settings-preview" :data-preview-theme="resolvedTheme"><span class="settings-preview-swatch" aria-hidden="true"></span><span><strong>Preview</strong> This is the current {{ resolvedTheme }} surface.</span></div>
           </div>
@@ -1835,13 +1845,13 @@
         <section id="settings-reading" class="settings-section" aria-labelledby="settings-text-size-title" tabindex="-1">
           <div class="settings-section-label">
             <h2 id="settings-text-size-title">Text size</h2>
-            <p id="settings-text-size-hint" class="hint">Choose a fixed reading scale. Your browser zoom remains available and is not overridden.</p>
+            <p id="settings-text-size-hint" class="hint">Choose a fixed reading scale. Standard is the default workspace type; Large is more generous type and controls. Your browser zoom remains available and is not overridden.</p>
           </div>
           <div class="settings-section-control">
             <fieldset class="settings-options settings-segmented" aria-describedby="settings-text-size-hint">
               <legend class="sr-only">Text size preference</legend>
-              <label class="settings-option"><input type="radio" name="text-size" value="standard" v-model="textSize"><span><strong>Standard</strong><small>Default workspace type</small></span></label>
-              <label class="settings-option"><input type="radio" name="text-size" value="large" v-model="textSize"><span><strong>Large</strong><small>More generous type and controls</small></span></label>
+              <label class="settings-option"><input type="radio" name="text-size" value="standard" v-model="textSize"><span><strong>Standard</strong></span></label>
+              <label class="settings-option"><input type="radio" name="text-size" value="large" v-model="textSize"><span><strong>Large</strong></span></label>
             </fieldset>
             <div class="settings-type-preview"><span class="settings-type-sample">Aa</span><span>Skill names and descriptions stay readable at 200% browser zoom.</span></div>
           </div>
