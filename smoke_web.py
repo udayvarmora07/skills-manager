@@ -6,6 +6,7 @@ the web UI uses. Run: python3 smoke_web.py
 """
 import json
 import os
+import re
 import sys
 from urllib.request import Request, urlopen
 
@@ -34,8 +35,23 @@ try:
             return resp.status, (json.loads(raw) if "json" in ct else raw)
 
     print("== static ==")
+    # Gate triage: the expected title is READ from the shipped index.html rather than
+    # written here. This assertion hardcoded the product name and 6.5 renamed
+    # the wordmark, the browser tab and the prose together -- so this smoke
+    # test went RED on the commit that fixed the inconsistency, and nothing in
+    # the gate run noticed because `verify.sh` had been timing out. A test that
+    # asserts a string the product deliberately changed is pinning the old DOM,
+    # which RULES #11 allows rewriting; deriving it is stronger than pinning
+    # either name, because the next rename cannot break it.
+    index_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "skillsmgr", "webui", "index.html"),
+                      "rb").read()
+    expected_title = re.search(rb"<title>([^<]*)</title>", index_html).group(1)
+    assert expected_title, "index.html declares no <title> to check the served page against"
     status, html = req("GET", "/")
-    assert status == 200 and b"Skills Manager" in html
+    assert status == 200 and expected_title in html, (
+        "the served page does not carry the title index.html declares: %r"
+        % expected_title)
     status, css = req("GET", "/styles.css")
     assert status == 200 and b"--accent" in css
     status, js = req("GET", "/app.js")
