@@ -12,7 +12,7 @@ if (!SkillManagerDomain) {
   failure.setAttribute("role", "alert");
   failure.style.cssText = "margin:2rem;padding:1rem;border:1px solid #a94b20;border-radius:8px;"
     + "font:14px/1.5 system-ui,sans-serif;color:#a94b20;background:#fff;";
-  failure.textContent = "Skills Manager could not start: domain.js did not load. "
+  failure.textContent = "skills-manager could not start: domain.js did not load. "
     + "Reload the page; if it persists, the served frontend files are incomplete.";
   document.body.appendChild(failure);
   throw new Error("SkillManagerDomain missing");

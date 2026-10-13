@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Skills Manager</title>
+  <title>skills-manager</title>
   <meta name="description" content="A local-first workspace for inspecting, organizing, and safely managing AI coding-agent skills.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23b4531f'/><text x='50' y='70' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>S</text></svg>">
@@ -1523,7 +1523,7 @@
           <div class="empty-icon"><app-icon name="terminal"></app-icon></div>
           <p class="eyebrow">Getting started</p>
           <h3>Set up your local skill library</h3>
-          <p>Skills Manager stays local: it reads the supported roots below and keeps the filesystem as the source of truth.</p>
+          <p>This app stays local: it reads the supported roots below and keeps the filesystem as the source of truth.</p>
           <ol class="onboarding-steps">
             <li class="complete"><span class="step-mark">✓</span><span><strong>Consumer roots detected</strong><small>{{ formatNumber(onboardingRoots.length) }} available root{{ onboardingRoots.length === 1 ? '' : 's' }}</small></span></li>
             <li class="complete"><span class="step-mark">✓</span><span><strong>Library scan complete</strong><small>No skill documents found yet</small></span></li>
@@ -2589,7 +2589,7 @@
       <h2 id="import-modal-title" class="sr-only">Import archive</h2>
       <div class="modal-head"><h2>Import archive</h2><button class="modal-close" aria-label="Close" @click="closeModal('import')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <p>Import skills from a Skills Manager <code>.tar.gz</code> export or a compatible <code>.zip</code> archive.</p>
+        <p>Import skills from a <code>.tar.gz</code> full-migration export, or a compatible <code>.zip</code> archive.</p>
         <div v-if="!modals.import.file" class="dropzone" @click="pickImportFile" @dragover.prevent @drop.prevent="onDropImport"
              role="button" tabindex="0" aria-label="Choose archive" @keydown.enter.prevent="pickImportFile" @keydown.space.prevent="pickImportFile">
           <app-icon name="upload"></app-icon>
