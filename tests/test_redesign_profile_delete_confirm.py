@@ -35,56 +35,88 @@ APP = (ROOT / "skillsmgr" / "webui" / "app.js").read_text(encoding="utf-8")
 HTML = (ROOT / "skillsmgr" / "webui" / "index.html").read_text(encoding="utf-8")
 
 
+# Runs the WHOLE of app.js in a VM, so the module's own top level resolves its
+# own module-scope names. These stubs are the minimum a first-load browser
+# provides; everything else app.js needs at load time is its own.
+#
+# 5.9c — this harness used to slice the `appOptions` LITERAL out of app.js and
+# evaluate it inside `with (new Proxy(...))` whose `has` trap returns true for
+# every name it does not own. A module-scope `const` is invisible to such a
+# slice, so `SETTINGS_SECTIONS` resolved to the stub `function (){}`,
+# `SETTINGS_SECTIONS[0]` was `undefined`, and `data()` — 5.7b's
+# `settingsSection: SETTINGS_SECTIONS[0].id` — threw before a single assertion
+# in this file ran. The suite had been RED on 3.11/3.12/3.13 since 5.9a and
+# reported it as a stack trace about a Settings list, because the slice could
+# not see the constant it was asking about.
+#
+# 7.1 diagnosed and fixed this exact class in `test_redesign_profile_editor.py`
+# with the whole-file harness below; this file was simply never given it. A
+# slice can be missing a closing scope; a whole file cannot.
+_APP_HARNESS = r'''
+const fs = require('fs'), vm = require('vm');
+const sandbox = {
+  window: {SkillManagerDomain: {
+    api: async () => ({}),
+    formatBytes(){}, formatTokens(){}, tokenPctClass(){}, tokenBarWidth(){},
+    renderMarkdown(){}, parseFrontmatter(){}, formatCompat(){}, formatTools(){},
+    groupLogicalSkills(){}, deriveLogicalSkillIdentity(){}, observedIdentity(){},
+    observeRecord(){}, observedStateFor(){}, observedStateKeys(){},
+    observedSeverity(){}, apiText: async () => ({}), apiBlob: async () => ({})
+  }},
+  Vue: {createApp(app){ sandbox.app = app; return {mount(){}}; }, nextTick(){}, h(){}},
+  localStorage: {getItem(){return null;}, setItem(){}},
+  document: {
+    addEventListener(){}, documentElement:{dataset:{}, setAttribute(){}},
+    querySelectorAll(){return [];}, querySelector(){return null;},
+    createElement(){return {setAttribute(){}, style:{}};},
+    body:{appendChild(){}}
+  },
+  setTimeout, clearTimeout
+};
+vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+// `sandbox.app` IS the options object - it is what was handed to createApp.
+const __opts = sandbox.app;
+const __data = __opts.data();
+'''
+
+
 def _options():
-    """Load the real options object in a Node VM and return its blocks."""
+    """Load the real options object in Node and report where each name lives.
+
+    Marker-slicing cannot tell an object-literal method from a top-level one,
+    which is the whole defect class in this file's docstring.
+    """
     node = shutil.which("node")
     if not node:
         raise unittest.SkipTest("node is not on PATH")
-    decl = APP.index("const appOptions = {")
-    open_brace = APP.index("{", decl)
-    depth, i = 0, open_brace
-    while True:
-        if APP[i] == "{":
-            depth += 1
-        elif APP[i] == "}":
-            depth -= 1
-            if depth == 0:
-                break
-        i += 1
-    literal = APP[open_brace:i + 1]
-    script = (
-        # `data()` reads localStorage. The 4.7 suite never called `data()` —
-        # it wanted the block NAMES — so it needed no DOM stub; this one has
-        # to read the modal map out of it, and the failure mode is a
-        # TypeError from deep inside the options object rather than anything
-        # about the contract under test.
-        "const __own = { Object: Object, JSON: JSON, console: console,\n"
-        "  localStorage: { getItem: () => null, setItem: () => {} } };\n"
-        # The proxy's `has` returns true for every name it does not own, so a
-        # name listed ONLY in the `const` is still swallowed by the `with` and
-        # resolves to a bare stub function — which is why `getItem` was not a
-        # function. It has to be in the passthrough set.
-        "const localStorage = __own.localStorage;\n"
-        "let __captured = null;\n"
-        "const __scope = new Proxy(__own, {\n"
-        "  has: (t, k) => !(k in t),\n"
-        "  get: (t, k) => (k in t ? t[k] : function () {}),\n"
-        "  set: (t, k, v) => { __captured = v; return true; },\n"
-        "});\n"
-        "with (__scope) { __opts = " + literal + "; }\n"
-        "const __opts = __captured;\n"
-        "console.log(JSON.stringify({"
-        " data: Object.keys(((__opts.data ? __opts.data() : {}).modals) || {}),"
-        " methods: Object.keys(__opts.methods || {}),"
-        " computed: Object.keys(__opts.computed || {}) }));\n"
+    script = _APP_HARNESS + (
+        "console.log(JSON.stringify({\n"
+        "  data: Object.keys(__data),\n"
+        "  modals: Object.keys(__data.modals || {}),\n"
+        "  methods: Object.keys(__opts.methods || {}),\n"
+        "  computed: Object.keys(__opts.computed || {})\n"
+        "}));\n"
     )
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "opts.js"
         p.write_text(script, encoding="utf-8")
-        res = subprocess.run([node, str(p)], capture_output=True, text=True, timeout=60)
+        res = subprocess.run(
+            [node, str(p)], capture_output=True, text=True, timeout=60, cwd=str(ROOT)
+        )
     if res.returncode != 0:
-        raise AssertionError("loading app.js failed:\n" + res.stderr[-1500:])
-    return json.loads(res.stdout.strip().splitlines()[-1])
+        raise AssertionError("loading app.js options failed:\n" + res.stderr[-2000:])
+    opts = json.loads(res.stdout.strip().splitlines()[-1])
+    # `data()` must actually have RUN. A harness that catches the TypeError and
+    # reports `{}` would turn every `assertIn(...)` above into a green assertion
+    # about a `data()` that threw — the exact failure this harness had. The
+    # modal map is the load-bearing part: it is the only place `data()` proves
+    # it ran to completion rather than half way.
+    if not opts["modals"]:
+        raise AssertionError(
+            "data() produced an empty modal map, so the harness is reporting "
+            "about a data() that threw rather than one that ran"
+        )
+    return opts
 
 
 class DeletingAProfileAsksFirst(unittest.TestCase):
@@ -93,8 +125,16 @@ class DeletingAProfileAsksFirst(unittest.TestCase):
         cls.opts = _options()
 
     def test_the_state_key_exists(self):
-        self.assertIn("deleteProfile", self.opts["data"],
+        # The old harness labelled the MODAL MAP as "data" (it returned
+        # `Object.keys(data().modals)`), so this assertion is about the modal
+        # map's keys — `deleteProfile` is the name inside `modals`, not a
+        # top-level piece of state. Asserted against the map that actually
+        # holds it, so a reader is not misled by the key the harness prints.
+        self.assertIn("deleteProfile", self.opts["modals"],
                       "the confirm needs its own modal state")
+        self.assertNotIn("deleteProfile", self.opts["data"],
+                         "the confirm's state lives in the modal map; a "
+                         "top-level copy would be a second source of truth")
 
     def test_the_handler_that_asks_replaced_the_one_that_deleted(self):
         methods = self.opts["methods"]
