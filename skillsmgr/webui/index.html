@@ -2078,7 +2078,22 @@
           <h1 id="view-title" tabindex="-1">Global trash</h1>
           <div class="detail-actions">
             <button class="btn btn-secondary" type="button" data-nav-view="recovery" @click="switchView('recovery')">Back to Recovery</button>
-            <button v-if="trashSkills.length" class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy" aria-label="Empty the global trash permanently">Empty the global trash</button>
+            <!-- 7.4g — the second "Empty the global trash" on this view is
+                 gone. It stood here in a red `.text-button`, 500px from the
+                 pane's own full-width action, in two visual languages, and
+                 nothing said they were the same verb (they call the same
+                 `confirmPurge`). This is 5.3b's "the profile list existed
+                 twice" in a third view.
+
+                 The footer keeps it, and the deciding measurement is that the
+                 two were gated DIFFERENTLY. This one asked `trashSkills.length`
+                 — so after a failed read it still offered to empty a trash the
+                 reader had never been shown — while the footer asks what the
+                 reader can see and whether the read succeeded. One door, and it
+                 is the one whose condition is an observation.
+
+                 The pane keeps an action regardless: per-item Restore lives
+                 with the selected item, which is what this column is for. -->
           </div>
         </div>
         <p class="lead">Skills you removed from the global scope. Restore one, or empty the trash forever.</p>
