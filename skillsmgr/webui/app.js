@@ -3543,6 +3543,19 @@ const appOptions = {
       this.profileForm = { name: "", description: "", skills: "", targets: "" };
     },
 
+    /* 5.3b — WHICH profile the detail pane is showing. There used to be two
+     * independent answers to this question on screen at once: the saved-row's
+     * `aria-pressed` (the one being edited) and the preview heading (the one
+     * last previewed), and nothing kept them in step. The mark now lives on the
+     * master row and reads ONE function, so the row and the pane cannot
+     * disagree. Editing wins over previewing: while `profileEditing` is set the
+     * detail pane is literally showing that profile's fields. */
+    profileCurrent(name) {
+      if (!name) return false;
+      if (this.profileEditing) return this.profileEditing === name;
+      return !!(this.profilePreview && this.profilePreview.name === name);
+    },
+
     async previewProfile(name) {
       try { this.profilePreview = await api("/api/catalog/profiles/" + encodeURIComponent(name) + "/preview"); }
       catch (e) { this.toast(e.message, "err"); }

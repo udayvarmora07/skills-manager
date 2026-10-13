@@ -2183,15 +2183,27 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    the Cancel lands on its own line under a full-width Save, which reads as a
    second form rather than as the way out of this one. */
 .profile-editor-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
-/* The row being edited carries a left accent rule rather than a fill: a tinted
-   row would put a background behind text that is also in the editor above it,
-   and two copies of one thing on screen at once is the thing to avoid. */
-.saved-profile-row.is-editing { box-shadow: inset 2px 0 0 var(--accent); padding-left: var(--s3); }
+/* 5.3b — the MASTER list replaced `.saved-profile-row`, which lived in the
+   detail pane as a second copy of the sidepanel's own rows. The marked row
+   carries a left accent rule rather than a fill: a tinted row would put a
+   background behind text that is also in the editor above it, and two copies of
+   one thing on screen at once is the thing to avoid. `.is-current` is the same
+   rule at lower weight — the pane is showing it, which is a weaker claim than
+   "you are editing it". */
+.profile-master-row { position: relative; }
+.profile-master-row.is-current { box-shadow: inset 2px 0 0 var(--border-strong); }
+.profile-master-row.is-editing { box-shadow: inset 2px 0 0 var(--accent); }
+.profile-master-select { width: 100%; }
+.profile-master-actions { display: flex; gap: var(--s2); padding: 0 var(--s3) var(--s2) var(--s3); }
+.profile-master-actions .btn { padding: 2px var(--s2); font-size: var(--t-table); }
 .profile-no-targets { margin: var(--s3) 0 0; }
-.saved-profile-row { display: flex; justify-content: space-between; align-items: center; gap: var(--s4); padding: 10px 0; border-bottom: 1px solid var(--border); }
-.saved-profile-row .hint { display: block; margin-top: 2px; }
 .profile-members, .batch-target-list { list-style: none; margin: var(--s4) 0 0; padding: 0; }
 .profile-members li, .batch-target-list li { display: grid; grid-template-columns: minmax(130px, 1fr) auto minmax(120px, 1fr); gap: var(--s2); align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+/* 5.3b — the observed copies of one member take a row of their own. Auto-placed
+   into a three-track grid they landed in column 1 of a fresh row, directly under
+   the member name and painted in the same type colour, so `claude-code · <path>`
+   read as another member rather than as an instance OF the one above it. */
+.profile-member-copies { grid-column: 1 / -1; display: grid; gap: 2px; }
 /* Four tracks now, because the fourth cell is the per-target transition and it
    must sit in its own column for every operation. It used to render only for
    `enable`, as a fourth child in a THREE-column grid — so it was pushed onto an

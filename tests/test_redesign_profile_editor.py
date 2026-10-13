@@ -174,13 +174,55 @@ class ProfileEditorMarkup(unittest.TestCase):
         self.assertIn("Saving here writes over", HTML)
 
     def test_each_saved_profile_offers_preview_edit_and_delete(self):
-        start = HTML.index('class="saved-profile-row"')
-        end = HTML.index("</div>", HTML.index('deleteProfile(name)', start))
+        """5.3b: the row template MOVED from a bordered card in the detail pane
+        to the master list in the sidepanel. The intent — every saved profile
+        offers all three controls, and the one being edited says so — is
+        unchanged; only the region it is looked for in has moved."""
+        start = HTML.index('class="profile-master-row"')
+        end = HTML.index("</div>\n      </div>", start)
         block = HTML[start:end]
         self.assertIn('@click="previewProfile(name)"', block)
         self.assertIn('@click="editProfile(name)"', block)
         self.assertIn('@click="deleteProfile(name)"', block)
         self.assertIn(':aria-pressed="profileEditing === name', block)
+
+    def test_the_detail_pane_is_not_a_second_copy_of_the_master_list(self):
+        """The shape defect 5.3b fixed: the same names, with the same three
+        buttons, rendered once in the sidepanel and once in a bordered card in
+        the detail pane. Asserted as ABSENCE from the detail branch, because
+        "every row offers its three controls" (above) is satisfied by a list
+        rendered anywhere."""
+        start = HTML.index('v-else-if="view === \'profiles\'" class="detail-inner"')
+        end = HTML.index('v-else-if="view === \'recovery\'"', start)
+        detail = HTML[start:end]
+        self.assertNotIn("v-for=\"(profile, name) in catalog.profiles\"", detail)
+        self.assertNotIn("Saved profiles", detail)
+        # ...and the pane the row mark points at is the one that exists.
+        self.assertIn('id="profile-detail"', detail)
+
+    def test_a_selection_marks_the_row_and_the_pane_from_one_function(self):
+        """The mark and the preview were two independent answers to "which
+        profile is showing". Both now read `profileCurrent`, so they cannot
+        disagree; a mutation that hard-codes `true` into one of them fails."""
+        start = HTML.index('class="profile-master-row"')
+        block = HTML[start:HTML.index("</div>\n      </div>", start)]
+        self.assertIn(':aria-pressed="profileCurrent(name) ? \'true\' : \'false\'"', block)
+        self.assertIn("'is-current': profileCurrent(name)", block)
+        self.assertIn(":aria-controls=\"profileCurrent(name) ? 'profile-detail' : undefined\"", block)
+        src = APP[APP.index("profileCurrent(name) {"):]
+        src = src[:src.index("\n    },")]
+        self.assertIn("this.profileEditing", src)
+        self.assertIn("this.profilePreview", src)
+
+    def test_an_instances_list_is_not_auto_placed_beside_a_member_name(self):
+        """The observed copies of one member share the grid with the member's
+        own name and colour, so auto-placement made a path read as a second
+        member. The copies take a row of their own."""
+        self.assertIn('class="profile-member-copies"', HTML)
+        self.assertIn(".profile-member-copies { grid-column: 1 / -1;", CSS)
+        # ...and the control, not the assertion, is what makes it so.
+        self.assertNotRegex(
+            HTML, r'<li v-for="member in profilePreview\.members"[^>]*>(?:(?!profile-member-copies).)*?<code v-for')
 
     def test_the_form_has_a_way_out_that_does_not_save(self):
         self.assertIn('@click="cancelProfileEdit"', HTML)
@@ -223,12 +265,15 @@ class ProfileEditorGuard(unittest.TestCase):
 
     def test_the_editing_row_is_marked_by_a_rule_not_a_tint(self):
         """Two renderings of one profile on screen at once is the thing to
-        avoid; a background behind the name puts a second copy of it there."""
-        self.assertIn(".saved-profile-row.is-editing", CSS)
+        avoid; a background behind the name puts a second copy of it there.
+        5.3b: the selector is the master row's, which is where the row lives."""
+        self.assertIn(".profile-master-row.is-editing", CSS)
         self.assertIn("box-shadow: inset 2px 0 0 var(--accent)", CSS)
-        block = CSS[CSS.index(".saved-profile-row.is-editing"):]
-        self.assertNotIn("background:", block.split("}")[0])
+        block = CSS[CSS.index(".profile-master-row.is-current"):CSS.index(".profile-master-select")]
+        self.assertNotIn("background:", block)
         self.assertIn(".profile-editor-actions", CSS)
+        # The weaker claim must not paint as the stronger one.
+        self.assertIn(".profile-master-row.is-current { box-shadow: inset 2px 0 0 var(--border-strong); }", CSS)
 
 
 if __name__ == "__main__":

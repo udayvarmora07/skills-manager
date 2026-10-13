@@ -623,9 +623,21 @@
           <h3>No profiles yet</h3>
           <p>Profiles describe a desired set of existing skills and targets.</p>
         </div>
-        <button v-for="(profile, name) in catalog.profiles" :key="name" class="sidepanel-row" type="button" @click="previewProfile(name)">
-          <strong>{{ name }}</strong><span>{{ formatNumber(profile.skills.length) }} skills · {{ profile.targets.length ? formatNumber(profile.targets.length) : 'all targets' }}</span>
-        </button>
+        <!-- 5.3b — the MASTER. This list used to exist twice: these rows selected
+             a profile, and a bordered "Saved profiles" card in the detail pane
+             repeated the same names with the same three buttons. Two surfaces for
+             one selection is how a list and its detail drift apart, and the three
+             equal bordered boxes were the shape DESIGN-V2 §B refuses. The detail
+             pane is now only the detail. -->
+        <div v-for="(profile, name) in catalog.profiles" :key="name" class="profile-master-row" :class="{ 'is-current': profileCurrent(name), 'is-editing': profileEditing === name }">
+          <button class="sidepanel-row profile-master-select" type="button" @click="previewProfile(name)" :aria-pressed="profileCurrent(name) ? 'true' : 'false'" :aria-controls="profileCurrent(name) ? 'profile-detail' : undefined">
+            <strong>{{ name }}</strong><span>{{ formatNumber(profile.skills.length) }} skills · {{ profile.targets.length ? formatNumber(profile.targets.length) : 'all targets' }}</span>
+          </button>
+          <div class="profile-master-actions">
+            <button class="btn btn-secondary" type="button" @click="editProfile(name)" :disabled="busy" :aria-pressed="profileEditing === name ? 'true' : 'false'">Edit</button>
+            <button class="btn btn-danger-ghost" type="button" @click="deleteProfile(name)" :disabled="busy">Delete</button>
+          </div>
+        </div>
       </div>
 
       <div v-else-if="view === 'install'" class="sidepanel" aria-label="Install sources">
@@ -1621,19 +1633,16 @@
           </div>
           <div class="profile-editor-actions"><button class="btn btn-primary" type="button" @click="saveProfile" :disabled="busy">{{ profileSaveLabel }}</button><button v-if="profileEditing" class="btn btn-secondary" type="button" @click="cancelProfileEdit" :disabled="busy">Cancel</button></div>
         </section>
-        <section v-if="Object.keys(catalog.profiles || {}).length" class="profile-preview" aria-labelledby="saved-profiles-title">
-          <div class="section-label-row"><h2 id="saved-profiles-title">Saved profiles</h2><span class="hint">desired sets only</span></div>
-          <div v-for="(profile, name) in catalog.profiles" :key="name" class="saved-profile-row" :class="{ 'is-editing': profileEditing === name }">
-            <div><strong>{{ name }}</strong><span class="hint">{{ formatNumber(profile.skills.length) }} skills · {{ profile.targets.length ? formatNumber(profile.targets.length) : 'all targets' }}</span></div>
-            <div class="detail-actions"><button class="btn btn-secondary" type="button" @click="previewProfile(name)">Preview</button><button class="btn btn-secondary" type="button" @click="editProfile(name)" :disabled="busy" :aria-pressed="profileEditing === name ? 'true' : 'false'">Edit</button><button class="btn btn-danger-ghost" type="button" @click="deleteProfile(name)" :disabled="busy">Delete</button></div>
-          </div>
-        </section>
-        <section v-if="profilePreview" class="profile-preview" aria-live="polite">
-          <div class="section-label-row"><h2>{{ profilePreview.name }}</h2><span class="hint">read-only desired vs observed</span></div>
+        <section v-if="profilePreview" id="profile-detail" class="profile-preview" aria-labelledby="profile-preview-title">
+          <div class="section-label-row"><h2 id="profile-preview-title">{{ profilePreview.name }}</h2><span class="hint">read-only desired vs observed</span></div>
           <dl class="meta profile-summary"><div><dt>Observed</dt><dd>{{ formatNumber((profilePreview.summary || {}).observed || 0) }}</dd></div><div><dt>Disabled</dt><dd>{{ formatNumber((profilePreview.summary || {}).disabled || 0) }}</dd></div><div><dt>Divergent</dt><dd>{{ formatNumber((profilePreview.summary || {}).divergent || 0) }}</dd></div><div><dt>Missing</dt><dd>{{ formatNumber((profilePreview.summary || {}).missing || 0) }}</dd></div></dl>
           <p class="hint">Targets: {{ (profilePreview.targets || []).length ? (profilePreview.targets || []).join(', ') : 'all observed scopes' }} · {{ formatNumber(profileObservedCount) }} observed physical instance{{ profileObservedCount === 1 ? '' : 's' }} in this preview.</p>
           <ul class="profile-members">
-            <li v-for="member in profilePreview.members" :key="member.name"><strong>{{ member.name }}</strong><span class="tag" :class="member.state === 'missing' || member.state === 'divergent' ? 'tag-warn' : ''">{{ member.state }}</span><small>{{ formatNumber(member.instances.length) }} observed instance{{ member.instances.length === 1 ? '' : 's' }}</small><code v-for="instance in member.instances" :key="instance.scope + '/' + instance.path">{{ instance.scope }} · {{ instance.path }}</code></li>
+            <!-- 5.3b — the observed copies of one member span the whole row.
+                 Auto-placed into the grid's 3rd track they landed in column 1
+                 of a fresh row, directly under the member name and with the
+                 same type colour, so three paths read as three members. -->
+            <li v-for="member in profilePreview.members" :key="member.name"><strong>{{ member.name }}</strong><span class="tag" :class="member.state === 'missing' || member.state === 'divergent' ? 'tag-warn' : ''">{{ member.state }}</span><small>{{ formatNumber(member.instances.length) }} observed instance{{ member.instances.length === 1 ? '' : 's' }}</small><div class="profile-member-copies"><code v-for="instance in member.instances" :key="instance.scope + '/' + instance.path">{{ instance.scope }} · {{ instance.path }}</code></div></li>
           </ul>
           <div class="detail-actions profile-actions"><button v-if="profileObservedCount" class="btn btn-primary" type="button" @click="openProfileBatch" :disabled="busy">Review enable plan</button></div>
           <p v-if="!profileObservedCount" class="hint profile-no-targets">No observed physical instance to enable. Every member of this profile is missing or divergent on disk, and a plan can only target a copy the app has already seen — so there is nothing to review until a member is present.</p>
