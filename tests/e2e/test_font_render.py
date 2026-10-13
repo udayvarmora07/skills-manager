@@ -233,10 +233,27 @@ class FontRendersInABrowserTests(unittest.TestCase):
         the fallback, so a single-weight probe reports a healthy page over a
         font that is half missing. Mutation-proved: that exact injection was
         green here before the weights were read from the stylesheet.
+
+        **The probe now forces the load it is measuring.** `document.fonts.ready`
+        resolves when the loading *already in progress* is finished; a face
+        nobody has asked for is never requested, so it never loads, and a
+        synchronous measure of it reads the fallback. That made this test fail
+        on ``Geist Mono 600`` — a face the page genuinely never requests at that
+        weight — and report a broken font file. The distinction matters: "this
+        face is requested" and "this face is real" are two questions, and only
+        the second is this test's subject. Asking the browser for the exact
+        face first keeps the failure it is looking for (a face that will not
+        load at all still measures like the phantom) and drops the one that was
+        never a defect.
         """
         for family, weight in self._faces:
             rows = self._page.evaluate(
-                """([family, weight, phantom, probes]) => {
+                """async ([family, weight, phantom, probes]) => {
+                    const spec = weight + ' 64px "' + family + '"';
+                    if (document.fonts && document.fonts.load) {
+                        try { await document.fonts.load(spec); } catch (e) {}
+                        await document.fonts.ready;
+                    }
                     const mk = (f) => {
                         const el = document.createElement('span');
                         el.style.cssText = 'position:absolute;top:-9999px;left:0;' +
