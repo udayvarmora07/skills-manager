@@ -4402,3 +4402,40 @@ html[data-text-size="large"] { font-size: 1.125rem; }
      width anyway (below), so the tooltip has no job here. */
   .navigation-rail [data-tip]::after { content: none; }
 }
+
+/* ------------------------------------------------------------ 6.2 forced-colors
+
+   This block did not exist, and the reason it had to is 6.1b's own fix.
+
+   In forced-colors mode the UA forces `box-shadow: none` and replaces every
+   author colour with a system one.  6.1b moved the `.overview-metrics` cell
+   hairlines ONTO the cells as `box-shadow: 0 0 0 1px var(--border)` — the
+   right place, because in dark the container's own `background` was painting
+   the empty slots of a 7-on-4 grid as a lighter slab that read as a selected
+   cell.  Measured, this file's only box-shadow-carried separators are those
+   cells: 4 on Overview and 7 on Quality, and under `forcedColors: 'active'`
+   Chromium reports 0 of each.  Every cell border in the product's two metric
+   strips therefore vanished for a reader in high-contrast mode, and nothing
+   said so: no error, no layout shift, just one undivided block.
+
+   `outline` is the right substitute because forced-colors forces its COLOUR
+   (so it stays visible) without forcing its style away (so a 1px line is
+   still 1px).  `gap: 0` replaces the 1px grid gap: the gap was showing the
+   container's background, which forced-colors paints as Canvas — the same
+   "invisible separator" the cells had already been fighting.  `outline-offset:
+   -1px` draws the ring INSIDE the cell, so the shared edge between two cells
+   is one line rather than two, and the container's own `border` still owns the
+   outer edge.  This is the same substitution in the same spirit, not a second
+   way of drawing a hairline.
+
+   `forced-color-adjust: none` appears exactly once and only on the colour
+   swatch, whose entire purpose is to SHOW a colour: with the UA override it
+   renders as an empty outlined circle, which says nothing about anything.  No
+   other element opts out — the rest of the product carries its state in text,
+   `data-status` and `aria-current`, exactly as the stepper comment above
+   already promised. */
+@media (forced-colors: active) {
+  .overview-metrics { gap: 0; }
+  .overview-metrics > div { box-shadow: none; outline: 1px solid; outline-offset: -1px; }
+  .settings-preview-swatch { forced-color-adjust: none; }
+}
