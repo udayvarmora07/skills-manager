@@ -284,5 +284,68 @@ class WordmarkTests(unittest.TestCase):
         self.assertNotIn("brand-mark", brand)
 
 
+class TheClosedDrawerIsNotAHitTarget(unittest.TestCase):
+    """A CLOSED drawer must be unreachable by pointer, not merely unseen.
+
+    The defect, measured rather than argued: at a 390px viewport with
+    `drawerOpen === false`, `document.elementFromPoint` over the Install view's
+    own fetch control returned `aside#nav-drawer.navigation-rail`. The rail is
+    `position: fixed` and `min(300px, 84vw)` wide, so for the 150ms after any
+    resize down into the phone band it was eating clicks aimed at the content
+    underneath it. `tests/e2e/test_fetch_flow.py` reported it as a failure in a
+    module whose subject is a different view entirely — which is why it was
+    recorded rather than written off as flake.
+
+    **Why `visibility: hidden` was not enough, and this is the whole point.**
+    2.1e2's rule is "a closed drawer must be `visibility: hidden`, not merely
+    translated", and it is correct — but BOTH of those properties transition
+    over `--dur`. So on the way out the rail is still `visible` AND still at
+    `translateX(0)`: painted, laid out, and hit-testable for the length of the
+    animation. Hiding from the eye is not the same claim as being out of reach.
+
+    The assertion is deliberately about the CLOSED state rather than about
+    `pointer-events` as a keyword: an implementation that dropped the
+    transition, or hid the rail another way, would satisfy the product claim
+    without ever writing this declaration.
+    """
+
+    def _drawer_rules(self):
+        block = _between(CSS, "/* --- 2.1e2: the rail becomes the drawer",
+                         "\n  .drawer-head {")
+        self.assertIn(".navigation-rail.open", block,
+                      "the drawer block was not located; every assertion over "
+                      "it would pass vacuously")
+        closed = block[: block.index(".navigation-rail.open")]
+        return closed, block[block.index(".navigation-rail.open"):]
+
+    def test_a_closed_drawer_declares_no_pointer_events(self):
+        closed, _ = self._drawer_rules()
+        self.assertIn("pointer-events: none;", closed,
+                      "the closed drawer must not intercept clicks")
+
+    def test_opening_it_gives_the_pointer_back(self):
+        # The control that proves the first: `pointer-events: none` applied to
+        # the OPEN drawer would satisfy it while stranding the navigation
+        # behind an invisible sheet — which is precisely the defect 2.1e2
+        # exists to prevent, restated.
+        _, open_rule = self._drawer_rules()
+        self.assertIn("pointer-events: auto;", open_rule,
+                      "the open drawer must accept pointer events")
+
+    def test_the_control_is_not_left_to_the_transition(self):
+        # Removing the declaration entirely satisfies neither assertion above
+        # but WOULD leave the drawer intercepting for --dur; this one is the
+        # control that says the property has to be declared, not merely
+        # intended. `visibility` and `transform` are both present and both
+        # transition, which is the measurement that produced the bug.
+        closed, _ = self._drawer_rules()
+        self.assertRegex(closed, r"visibility:\s*hidden;",
+                         "2.1e2's hidden-when-closed rule must survive")
+        self.assertRegex(closed, r"transition:[^;]*visibility[^;]*;",
+                         "the delayed hide is the reason pointer-events is "
+                         "declared at all; if this goes, re-measure before "
+                         "deleting the other one")
+
+
 if __name__ == "__main__":
     unittest.main()

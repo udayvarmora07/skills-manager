@@ -4095,8 +4095,25 @@ html[data-text-size="large"] { font-size: 1.125rem; }
        keyboard trap. The delay keeps the slide-out visible on the way out. */
     visibility: hidden;
     transition: transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+    /* A CLOSED drawer must not be a hit target, and `visibility` alone cannot
+       promise that. Both properties above TRANSITION over --dur, so for that
+       long after any resize down into this band the rail is still painted at
+       translateX(0) -- a `position: fixed` panel `min(300px, 84vw)` wide
+       sitting over the content, intercepting every click aimed at its left
+       side. Measured: at a 390px viewport the fetch stage's control reported
+       `interceptedBy: aside#nav-drawer.navigation-rail` while the drawer was
+       closed and `drawerOpen === false`.
+
+       This is 2.1e2's own rule ("a closed drawer must be `visibility: hidden`,
+       not merely translated") carried one step further: hidden-from-the-eye
+       is not the same claim as unreachable-by-pointer, and a panel that is
+       animating OUT is not a surface anybody should be clicking. The
+       alternative -- dropping the transition so `visibility` flips at once --
+       would delete the slide-out that the same block deliberately keeps, and
+       motion is a worse thing to give up than a 150ms dead zone. */
+    pointer-events: none;
   }
-  .navigation-rail.open { visibility: visible; transform: none; transition: transform var(--dur) var(--ease), visibility 0s; }
+  .navigation-rail.open { visibility: visible; transform: none; transition: transform var(--dur) var(--ease), visibility 0s; pointer-events: auto; }
   @media (prefers-reduced-motion: no-preference) {
     .navigation-rail:not(.open) { transform: translateX(-100%); }
   }
