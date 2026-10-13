@@ -3252,6 +3252,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 /* -------------------------------------------------------------- trash view */
 
+/* 7.4b — the last four STATIC inline layout attributes in the product, all of
+   them on this view. 4.7 slice A stated the principle ("describing layout
+   inline is what made them look like a different product") and converted 31 of
+   them; the four below survived because the Trash view was never one of its
+   four dialogs. They are token-exact: 8px -> --s2, 16px -> --s4, so the
+   computed result is unchanged.
+   The purge row was an UNSTYLED <li> whose entire geometry was the inline
+   attribute — 5.1c's "a selector that does not exist is invisible to every
+   gate", in a new surface. It has a rule now. */
+.trash-purge-row { padding: var(--s2) var(--s4); }
+.trash-purge-row .btn { width: 100%; }
+.meta-below-note { margin: var(--s4) 0 0; }
+.trash-actions { display: flex; gap: var(--s2); margin-top: var(--s4); }
+
 .trash-table { width: 100%; border-collapse: collapse; font-size: var(--t-ui); }
 .trash-table th {
   text-align: start;

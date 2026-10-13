@@ -27,6 +27,18 @@ def _read(path: Path) -> str:
 
 CSS = ROOT / "skillsmgr" / "webui" / "styles.css"
 
+# Task 7.4b. A STATIC `style="..."` is layout described in the markup; a
+# `:style="{ ... }"` is a Vue object binding carrying a computed value. The
+# character before `style` is what separates them, so the pattern insists on a
+# boundary there -- `[^:\w-]` cannot match the `:` of `:style`, and therefore
+# cannot match the tail of a binding. Without that anchor this pattern is
+# `_STATIC_STYLE_ATTR` minus one character and matches nothing at all.
+_STATIC_STYLE_ATTR = r'(?<![:\w-])style="[^"]*"'
+# The control: the exact pre-7.4b attribute. If this stops matching, the
+# detector has been broken by an edit to itself and every assertion built on
+# it is reporting PASS about a path it cannot see.
+_CONTROL = _STATIC_STYLE_ATTR
+
 
 class LibraryFilterBarReachabilityTests(unittest.TestCase):
     """Task 2.1f: the Library's own filters are never behind navigation.
@@ -578,6 +590,59 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
             self.assertNotIn(
                 "chip-count", chip, "a chip must not reintroduce a muted count"
             )
+
+    def test_no_static_inline_layout_survives_anywhere(self):
+        """7.4b. No STATIC `style="..."` may remain in the markup.
+
+        The distinction from `:style="{ ... }"` is the whole content of this
+        test, so it is stated rather than implied: five bindings remain on the
+        budget and scope meters, and they are CORRECT -- a computed pixel
+        offset or width has no class to live in, which is why 3.3's meter owns
+        `:style` and not a stylesheet rule. Counting every `style=` would flag
+        them; counting none would flag nothing.
+
+        `_STATIC_STYLE_ATTR` is anchored to whitespace-or-quote before `style`
+        so it cannot match the tail of `:style=`. `_CONTROL` is the proof that
+        it can still fire: the exact pre-7.4b line is matched by the pattern.
+        Without it, a regex that silently matched nothing would leave every
+        assertion below passing forever -- this branch's most repeated failure.
+        """
+        html = _read(INDEX_HTML)
+        self.assertRegex(
+            '<li style="padding: 8px 16px;">',
+            _CONTROL,
+            "the static-style detector no longer matches the case 7.4b fixed, "
+            "so the real assertion below cannot fail",
+        )
+        found = re.findall(_STATIC_STYLE_ATTR, html)
+        self.assertEqual(
+            [], found,
+            "layout belongs in the stylesheet; a static style attribute is a "
+            "second place to look for it and no gate covers it (4.7, 7.4b)",
+        )
+
+    def test_the_dynamic_style_bindings_are_the_meter_and_nothing_else(self):
+        """The exemption half of the test above, asserted rather than assumed.
+
+        "Zero static attributes" is satisfiable by deleting the meters too, and
+        it says nothing about whether what is left is the five bindings the
+        exemption names. Each one must be a Vue object binding, so a future
+        `style="left: 40%"` cannot hide in the allowed set.
+        """
+        html = _read(INDEX_HTML)
+        dynamic = re.findall(r':style="\{[^"]*\}"', html)
+        self.assertTrue(dynamic, "the meter bindings are still there")
+        for binding in dynamic:
+            self.assertIn(
+                "{", binding, "a :style binding must be a Vue object expression"
+            )
+        # Every remaining `style` mention in the markup is one of the two
+        # forms above -- checked over the whole file, not a sampled region.
+        residual = re.findall(r"\S*style=", html)
+        self.assertTrue(
+            all(r == ":style=" for r in residual),
+            "unexpected style attribute: %r" % (residual,),
+        )
 
     def test_detail_surfaces_raw_metadata_failure(self):
         source = _read(APP_JS)

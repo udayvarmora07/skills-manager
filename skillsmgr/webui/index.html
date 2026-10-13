@@ -762,8 +762,8 @@
               <div class="row-desc">{{ formatBytes(t.size_bytes) }} · {{ formatDate(t.modified) }}</div>
             </div>
           </li>
-          <li style="padding: 8px 16px;">
-            <button class="btn btn-danger-ghost" style="width:100%;" @click="confirmPurge" :disabled="busy">
+          <li class="trash-purge-row">
+            <button class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy">
               Empty the global trash
             </button>
           </li>
@@ -2028,12 +2028,12 @@
         </div>
         <p class="lead">Skills you removed from the global scope. Restore one, or empty the trash forever.</p>
         <p class="scope-note scope-note-inline">{{ purgeScopeNote }}</p>
-        <div v-if="selectedTrash" class="meta" style="margin: 16px 0 0;">
+        <div v-if="selectedTrash" class="meta meta-below-note">
           <div><dt>Trashed as</dt><dd><code>{{ selectedTrash.trash_path }}</code></dd></div>
           <div><dt>Trashed at</dt><dd>{{ formatDate(selectedTrash.modified) }}</dd></div>
           <div><dt>Size</dt><dd>{{ formatBytes(selectedTrash.size_bytes) }}</dd></div>
         </div>
-        <div style="margin-top:16px; display:flex; gap:8px;">
+        <div class="trash-actions">
           <button v-if="selectedTrash" class="btn btn-primary" @click="restoreTrash" :disabled="busy">Restore {{ selectedTrash.name }}</button>
         </div>
       </div>
