@@ -3618,6 +3618,61 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 }
 .statusbar .path { font-family: var(--mono); font-size: var(--t-meta); overflow: hidden; text-overflow: ellipsis; }
 .statusbar .spacer { flex: 1; }
+
+/* ------------------------------------------------------- 6.2a: no mid-word cuts
+
+   The bar held nine flex children with three `flex: 1` spacers between them,
+   and the line was over-subscribed at every width the product is actually used
+   at. Because a spacer wins free space before content does, the spacers took
+   294px while the facts they were meant to separate ran out of room, and the
+   LAST child is the one that loses. Measured on the running app:
+
+     1280 / 1100 / 1000 / 900 / 820 / 761   "data stays on this machine" paints
+                                            past the bar's content edge by
+                                            0 / 16 / 16 / 16 / 76 / 135px
+     1280 .. 761                             `.path` renders at width 0 — in the
+                                            DOM, in the accessibility tree, and
+                                            painted nowhere.
+
+   So the product's central offline claim was being sliced in half on a laptop
+   window, and the data directory was pretending to be there. `overflow: hidden`
+   is why nothing caught it: a clipped child does not grow the parent's
+   scrollWidth, so `scrollWidth === clientWidth` and every overflow audit in this
+   repo reads the bar as clean. That is the same class of bug as the missing
+   weight in 0b.4b — a measurement that cannot fail.
+
+   Two changes, in the order the failure happens.
+
+   1. `min-width: 0` on every child, so an over-long item yields *visibly* (with
+      the ellipsis it already declares) instead of forcing the whole line past
+      the clip. The two claims that must not be truncated are pinned back to
+      `flex: 0 0 auto` below them.
+
+   2. Declared degradation. Below the width where a fact stops fitting, it is
+      dropped WHOLE and in a stated order, rather than cut mid-word. The order
+      is by what the reader loses:
+
+        .path        the data directory — longest, and the whole path is what
+                     makes the claim legible
+        locale       "en-US formats" — also in Settings, and the title on the
+                     element already says what it is
+        scope        "All scopes" — the Library's own summary line already
+                     carries the active scope, so this repeats it
+
+      What is deliberately NOT droppable at any width: the view summary on the
+      left, the loopback authority, and "data stays on this machine". Those are
+      the sentence the product exists to make.
+
+   `[?]` The `:nth-child` positions are positional because the fix is CSS-only
+   this iteration (another session held `index.html`). That is fragile by
+   construction, so `tests/e2e/test_statusbar_degrade.py` pins the child order
+   by text: a markup change fails the test loudly instead of quietly moving the
+   hiding to the wrong fact. The follow-up is real classes on the three facts,
+   which needs `index.html` and is backlog 6.2's next slice. */
+.statusbar > * { min-width: 0; }
+.statusbar > span:not(.spacer) { overflow: hidden; text-overflow: ellipsis; }
+.statusbar > span:first-child { flex: 0 1 auto; }
+.statusbar > span:last-child { flex: 0 0 auto; }
 /* Observed facts about this session's context: which loopback authority served
    the page, which scope is loaded, which regional format is in effect. Each is
    what it says — `served` is the real location.host, not a configured value. */
@@ -3682,6 +3737,20 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 @media (max-width: 899px) {
   .stat-pill { display: none; }
   .command-trigger .kbd { display: none; }
+}
+
+/* 6.2a — the status bar's declared degradation. Narrowest band LAST so the
+   cascade reads as "give up the least first". The reasoning, the measurements
+   and the `[?]` about the positional selectors are in the block above. */
+@media (max-width: 1279px) {
+  .statusbar .path { display: none; }
+}
+@media (max-width: 1023px) {
+  .statusbar > :nth-child(5) { display: none; }  /* "<locale> formats" */
+  .statusbar > :nth-child(6) { display: none; }  /* the spacer that only spaced it */
+}
+@media (max-width: 899px) {
+  .statusbar > :nth-child(4) { display: none; }  /* "<scope>" */
 }
 
 @media (max-width: 760px) {
