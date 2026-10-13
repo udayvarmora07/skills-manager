@@ -762,11 +762,15 @@
               <div class="row-desc">{{ formatBytes(t.size_bytes) }} · {{ formatDate(t.modified) }}</div>
             </div>
           </li>
-          <li class="trash-purge-row">
+          <!-- 7.4d — NOT an <li>. As one it matched the list-row grid below and
+               its only child auto-placed into the 16px dot track; see
+               .trash-purge-row in styles.css. An action belongs to the list, it
+               is not an item of it. -->
+          <div class="trash-purge-row">
             <button class="btn btn-danger-ghost" @click="confirmPurge" :disabled="busy">
               Empty the global trash
             </button>
-          </li>
+          </div>
         </template>
       </div>
     </aside>

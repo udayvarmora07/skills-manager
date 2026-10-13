@@ -3271,7 +3271,26 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    The purge row was an UNSTYLED <li> whose entire geometry was the inline
    attribute — 5.1c's "a selector that does not exist is invisible to every
    gate", in a new surface. It has a rule now. */
-.trash-purge-row { padding: var(--s2) var(--s4); }
+/* 7.4d — the purge row is the list's ACTION, not one of its items, and as an
+   <li> it was the list. `.skilllist > li:not(.selection-hint):not(.skeleton)
+   :not(.empty)` (below) is the three-track ROW grid built for `dot | gap | name`,
+   and it matched: the button auto-placed into the 16px dot track and computed a
+   26px box (16px track + the button's own 12px side padding) around a 143px
+   label. Under `justify-content: center` the text overflowed symmetrically and
+   `.skilllist`'s `overflow-y: auto` clipped it to its TAIL, so the pane showed
+   a red orphan reading "the global trash" under the list — the label's second
+   half, painted outside its own control.
+
+   The fix is the element, not the selector. The row is a <div> now, so no list
+   rule reaches it and `.trash-purge-row` (0,1,0) can describe it without
+   out-specifying a rule meant for rows — an action that has to beat a list rule
+   to exist is a defect waiting for the next `:not()` to be written. The hairline
+   marks the boundary: everything above it is an item that can be restored, this
+   is the one control that cannot be undone. */
+.skilllist > .trash-purge-row {
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--border);
+}
 .trash-purge-row .btn { width: 100%; }
 .meta-below-note { margin: var(--s4) 0 0; }
 .trash-actions { display: flex; gap: var(--s2); margin-top: var(--s4); }
