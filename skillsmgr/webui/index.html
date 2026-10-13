@@ -2197,19 +2197,29 @@
       <div class="modal-body">
         <div v-if="modals.stats.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else-if="modals.stats.report">
-          <div class="stat-grid" style="margin-bottom:16px;">
-            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.total) }}</div><div class="stat-label">Total skills</div></div>
-            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.active) }}</div><div class="stat-label">Active</div></div>
-            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.disabled) }}</div><div class="stat-label">Disabled</div></div>
+          <!-- 5.8b: the six figures are NOT additive and never were. `total` is
+               the index row count and so includes the trashed; `active`
+               excludes them; `disabled` is a SUBSET of `active`, not beside
+               it. 45 + 2 + 3 = 50 against a stated 48, and nothing said so. -->
+          <p class="stats-population">{{ statsPopulationNote() }}</p>
+          <div class="stat-grid stats-strip">
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.total) }}</div><div class="stat-label">Indexed rows</div></div>
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.active) }}</div><div class="stat-label">Installed</div></div>
+            <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.disabled) }}</div><div class="stat-label">Disabled, of the installed</div></div>
             <div class="stat-card"><div class="stat-value">{{ formatNumber(modals.stats.report.trashed) }}</div><div class="stat-label">Trashed</div></div>
             <div class="stat-card"><div class="stat-value">{{ formatBytes(modals.stats.report.size_bytes) }}</div><div class="stat-label">Skills on disk</div></div>
             <div class="stat-card"><div class="stat-value">{{ formatBytes(modals.stats.report.db_bytes) }}</div><div class="stat-label">Database</div></div>
           </div>
           <template v-if="modals.stats.report.categories && Object.keys(modals.stats.report.categories).length">
-            <div class="form-field full" style="margin-bottom:8px;"><label>Categories</label></div>
-            <dl class="kv">
+            <!-- 5.8b: this was a <label> inside a .form-field with NO control
+                 anywhere near it - a form label doing a section heading's job.
+                 A <label> with no `for` and nothing to label announces itself
+                 to assistive tech as an unlabelled field. -->
+            <h3 class="stats-categories-title">Categories</h3>
+            <p class="stats-categories-note">{{ statsCategoryNote() }}</p>
+            <dl class="kv stats-categories">
               <template v-for="(count, cat) in modals.stats.report.categories" :key="cat">
-                <dt>{{ cat }}</dt><dd>{{ formatNumber(count) }}</dd>
+                <dt><code>{{ cat }}</code></dt><dd>{{ formatNumber(count) }}</dd>
               </template>
             </dl>
           </template>

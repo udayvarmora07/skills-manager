@@ -255,3 +255,125 @@ class DoctorDialogMarkupContracts(unittest.TestCase):
         self.assertNotIn("grid-template-columns", block)
         self.assertIn(".doctor-finding {", block)
         self.assertIn("border-top", block)
+
+# --------------------------------------------------------------------------
+# 5.8b - the Stats dialog's arithmetic and its `<label>` with no control.
+# --------------------------------------------------------------------------
+
+MEASURED_STATS_PAYLOAD = {
+    "total": 48, "active": 45, "disabled": 2, "trashed": 3, "db_rows": 48,
+    "size_bytes": 701652, "db_bytes": 749568,
+    "categories": {"engineering": 14, "quality": 7, "operations": 6,
+                   "uncategorized": 6, "performance": 5, "security": 4,
+                   "release": 2, "reference": 1},
+    "scopes": [], "all_total": 45, "all_tokens": 169498,
+    "largest": [], "window_tokens": 200000, "all_pct_window": 84.7,
+}
+
+_STATS_HARNESS = _HARNESS.replace(
+    "out.labels = group.scopes",
+    "c.modals.stats = {loading:false, report: JSON.parse(process.argv[2])};\n"
+    "out.statsPopulation = meth.statsPopulationNote.call(c);\n"
+    "out.statsCategory = meth.statsCategoryNote.call(c);\n"
+    "out.statsMethods = ['statsPopulationNote','statsCategoryNote'].map((n)=>typeof meth[n]);\n"
+    "out.labels = group.scopes")
+
+
+def _run_stats(report: dict) -> dict:
+    proc = subprocess.run(["node", "-e", _STATS_HARNESS, "x", json.dumps(report)],
+                          capture_output=True, text=True, cwd=str(ROOT))
+    if proc.returncode != 0:
+        raise AssertionError("node harness failed:\n" + proc.stderr[-2000:])
+    return json.loads(proc.stdout)
+
+
+class StatsDialogContracts(unittest.TestCase):
+    def setUp(self):
+        self.out = _run_stats(MEASURED_STATS_PAYLOAD)
+
+    def test_the_dialog_says_the_figures_do_not_add_up(self):
+        """48 / 45 / 2 / 3 with disabled a SUBSET of active: 45+2+3 = 50. The
+        old strip invited that arithmetic six times over."""
+        note = self.out["statsPopulation"]
+        self.assertIn("45 installed", note)
+        self.assertIn("2 of them disabled", note)
+        self.assertIn("3 trashed", note)
+        self.assertIn("index rows", note)
+        self.assertIn("do not add up", note)
+
+    def test_the_residue_count_is_the_difference_not_a_constant(self):
+        """48 - 45 - 3 = 0 here; the sentence must follow the payload rather
+        than print a number someone typed once."""
+        self.assertIn("with no directory on disk", self.out["statsPopulation"])
+        self.assertEqual(_run_stats({**MEASURED_STATS_PAYLOAD, "total": 60})["statsPopulation"]
+                         .count("index rows"), 1)
+
+    def test_a_store_with_nothing_disabled_does_not_say_zero_of_them_disabled(self):
+        out = _run_stats({**MEASURED_STATS_PAYLOAD, "disabled": 0})
+        self.assertIn("45 installed", out["statsPopulation"])
+        self.assertNotIn("disabled", out["statsPopulation"])
+
+    def test_the_category_note_states_which_population_it_covers(self):
+        """The categories sum to exactly the INSTALLED set (45), which the old
+        dialog never said — a reader could not tell a subset from the whole."""
+        self.assertIn("45", self.out["statsCategory"])
+        self.assertIn("every installed skill has one", self.out["statsCategory"])
+
+    def test_a_gap_between_the_sum_and_the_population_is_stated_not_hidden(self):
+        out = _run_stats({**MEASURED_STATS_PAYLOAD, "active": 60})
+        self.assertIn("15 carry none", out["statsCategory"])
+
+    def test_uncategorized_is_named_as_a_placeholder_not_a_category(self):
+        """It arrives from the store beside seven author-written keys and is
+        this app's own stand-in for a missing `category:` line."""
+        self.assertIn("placeholder", self.out["statsCategory"])
+        self.assertIn("not a category anyone chose", self.out["statsCategory"])
+
+    def test_an_empty_category_map_does_not_promise_a_total_of_zero(self):
+        out = _run_stats({**MEASURED_STATS_PAYLOAD, "categories": {}})
+        self.assertIn("none of them carries one", out["statsCategory"])
+
+    def test_both_sentences_are_methods_not_computeds(self):
+        """Both are CALLED from the template; a computed would be unwrapped to
+        its value and the render would throw. Fifth instance of 5.5's trap."""
+        self.assertEqual(self.out["statsMethods"], ["function", "function"])
+
+
+class StatsDialogMarkupContracts(unittest.TestCase):
+    def _stats_body(self) -> str:
+        body = INDEX[INDEX.index('data-modal="stats"'):]
+        return body[: body.index("<!-- Safe local source update -->")]
+
+    def test_the_categories_heading_is_not_a_form_label_with_no_control(self):
+        """It was `<div class="form-field full"><label>Categories</label></div>`:
+        a <label> with no `for` and nothing inside it to label. A heading is
+        what it is."""
+        body = self._stats_body()
+        self.assertNotIn("<label>Categories</label>", body)
+        self.assertIn("stats-categories-title", body)
+
+    def test_the_dialog_describes_no_layout_with_inline_styles(self):
+        self.assertNotIn("style=", self._stats_body())
+
+    def test_a_disabled_file_is_labelled_as_part_of_the_installed_set(self):
+        """`Disabled` beside `Active` implied a partition of a set that does
+        not partition here. The label states the relationship instead."""
+        self.assertIn("Disabled, of the installed", self._stats_body())
+
+    def test_the_first_tile_names_its_population_rather_than_a_total(self):
+        """`total` is `COUNT(*) FROM skills` - the same value as `db_rows`, and
+        identical to `db_rows` on the seed. Calling it "Total skills" is how a
+        reader concludes 96 skills are on disk when 46 are."""
+        self.assertIn("Indexed rows", self._stats_body())
+        self.assertNotIn(">Total skills<", self._stats_body())
+
+    def test_both_sentences_render_above_the_strip_they_describe(self):
+        """A reader adds the tiles before reading a footnote."""
+        body = self._stats_body()
+        self.assertLess(body.index("statsPopulationNote"),
+                        body.index('class="stat-grid stats-strip"'))
+
+    def test_a_category_key_is_rendered_as_the_author_wrote_it(self):
+        """`{{ cat }}` is whatever a skill's own frontmatter says - not a
+        system slug to be translated, and not a label to be invented."""
+        self.assertIn("<code>{{ cat }}</code>", self._stats_body())

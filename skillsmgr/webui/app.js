@@ -4743,6 +4743,55 @@ const appOptions = {
      * "nothing found" there would be the dialog inventing a clean bill of
      * health it was never given.
      */
+    /** 5.8b - the Stats tiles are NOT additive, and never were.
+     *  `total` is `COUNT(*) FROM skills`, so it includes the trashed rows.
+     *  `active` counts `status='active'` names that exist on disk, so it
+     *  excludes them. `disabled` counts `disabled=1 AND name IN <active>` -
+     *  a SUBSET of `active`, not a sibling. On the seed: 48 / 45 / 2 / 3, and
+     *  45 + 2 + 3 = 50. The dialog put the four numbers side by side as equal
+     *  tiles and called the first one "Total skills", so the arithmetic every
+     *  reader tries is wrong by two and the sentence names the wrong thing -
+     *  `db_rows` is the same number as `total`, not a total.
+     *
+     *  The sentence states the relationship instead of implying it, and it is
+     *  a METHOD because the template calls it. 5.5's trap, fifth instance.
+     */
+    statsPopulationNote() {
+      const r = (this.modals.stats || {}).report;
+      if (!r) return "";
+      return this.formatNumber(r.active) + " installed"
+        + (r.disabled ? ", " + this.formatNumber(r.disabled) + " of them disabled" : "")
+        + ", and " + this.formatNumber(r.trashed) + " trashed."
+        + " The " + this.formatNumber(r.total) + " above is index rows, which is every"
+        + " one of those plus " + this.formatNumber(r.total - r.active - r.trashed)
+        + " with no directory on disk — the figures do not add up, and should not.";
+    },
+    /** What a category IS, and which population it covers.
+     *  `_live_index_totals` (store.py) groups `status='active'` rows that are
+     *  live on disk — the INSTALLED set, disabled included — and the key is
+     *  whatever the skill's own frontmatter says, so `uncategorized` arrives
+     *  beside seven real ones. The old dialog printed the raw key under a bare
+     *  heading and said nothing about either fact. */
+    statsCategoryNote() {
+      const r = (this.modals.stats || {}).report;
+      const cats = (r && r.categories) || {};
+      const covered = Object.keys(cats).length;
+      const sum = Object.keys(cats).reduce((n, k) => n + (Number(cats[k]) || 0), 0);
+      const uncategorized = Number(cats.uncategorized) || 0;
+      let s = "One `category:` line per skill. Keys are what each document says,"
+        + " not a fixed vocabulary. These " + this.formatNumber(sum)
+        + " are the " + this.formatNumber(r.active) + " installed skills; ";
+      s += covered
+        ? (sum === r.active
+            ? "every installed skill has one."
+            : this.formatNumber(r.active - sum) + " carry none and are not listed here.")
+        : "none of them carries one.";
+      if (uncategorized) {
+        s += " `" + Object.keys(cats).indexOf("uncategorized") + " · uncategorized` is this app's"
+          + " placeholder for a document with no `category:`, not a category anyone chose.";
+      }
+      return s;
+    },
     doctorVerdict() {
       const report = (this.modals.doctor || {}).report;
       if (!report) return "";

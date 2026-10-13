@@ -3193,6 +3193,31 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .kv dt { color: var(--text-muted); font-size: var(--t-table); overflow-wrap: anywhere; }
 .kv dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: var(--t-table); }
 
+/* 5.8b - Stats. Two sentences and a heading that was a <label>.
+ *
+ * The tiles keep the strip they had; what changed is that the STRIP SAYS WHAT
+ * ITS NUMBERS ARE. `total` is index rows and includes the trashed, `active`
+ * excludes them, and `disabled` is a subset of `active` rather than a sibling
+ * - so 45 + 2 + 3 = 50 against a stated 48. Six equal tiles invite exactly
+ * that arithmetic and nothing corrected it. The note is above the strip, not
+ * under it, because a reader adds the numbers before reading a footnote.
+ */
+.stats-population {
+  margin: 0 0 var(--s3);
+  font-size: var(--t-meta);
+  color: var(--text-muted);
+  border-left: 2px solid var(--border-strong);
+  padding-left: var(--s3);
+}
+.stats-strip { margin-bottom: var(--s5); }
+/* A DISABLED file is one of the installed ones, so its tile says so. The old
+   "Disabled" beside "Active" implied a partition of a set that partitions
+   nowhere else on this dialog. */
+.stats-strip .stat-label { max-width: 18ch; }
+.stats-categories-title { margin: 0 0 var(--s1); font-size: var(--t-prose); }
+.stats-categories-note { margin: 0 0 var(--s3); font-size: var(--t-meta); color: var(--text-muted); }
+.stats-categories dt code { font-family: var(--mono); font-size: var(--t-table); }
+
 /* -------------------------------------------------------- 5.8a DOCTOR LEDGER
  *
  * Not a grid of cards. A library that needs attention can be wrong in nine
