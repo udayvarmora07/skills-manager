@@ -448,7 +448,7 @@ class FontRendersInABrowserTests(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         tokens = dict(re.findall(r"(--(?:font|sans|mono)):\s*([^;]+);", css))
         declared = set(self._families)
-        for token in ("--font", "--sans", "--mono"):
+        for token in ("--font", "--mono"):
             self.assertIn(token, tokens, f"{token} is not defined in :root")
             lead = tokens[token].split(",")[0].strip().strip("'\"")
             self.assertIn(

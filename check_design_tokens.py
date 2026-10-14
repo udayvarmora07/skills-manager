@@ -417,11 +417,21 @@ def strip_css_comments(css: str) -> str:
 # the check below fails if a name leaves this table, and a test asserts that the
 # table's own names are still declared, so it cannot quietly outlive the file.
 UNREAD_ALLOWED = {
-    "--line-2": "9.1b — a second border step in a family that IS read (--line, "
-                "--line-3, --line-strong). REQUIRED and check_doc_matches' alias "
-                "both quote this name, so deleting it turns a gate red.",
-    "--accent-line": "9.1b — the accent border step, same reasoning: REQUIRED "
-                     "and the alias both quote it, so deleting it turns a gate red.",
+    "--line-2": "9.1b — still exempt. It is byte-identical to `--mute-line` in "
+                "BOTH themes (#ccd0d6 light, #31373e dark), so it is a duplicate "
+                "name rather than a missing step, and no site in the product has "
+                "been named for it yet. REQUIRED and check_doc_matches' alias "
+                "both quote the name, so deleting it turns a gate red. 9.1b gave "
+                "`--accent-line` its reader and left this row open.",
+    # `--accent-line` WAS here on 9.1a's first run and left on 9.1b. It is read
+    # by `.command-palette-option[aria-selected="true"]`, which used to spell
+    # the same colour as an inline `color-mix(in srgb, var(--accent) 38%, …)`
+    # — a hard-coded tint that no token named and whose value (#92b7b6 light /
+    # #346464 dark) DISAGREED with the token's (#a8d0cb / #1d4744). The token is
+    # now the only statement of that colour, and its measured value is the one
+    # the product was already painting, so the render is unchanged. The class
+    # this task exists for: an exemption entry describing a token that is now
+    # read is a claim about a file that has stopped being true.
     # `--ok-line` was HERE on 9.1a's first run and is gone as of 9.1c: the row
     # that proposed adopting it measured neither number. `--ok-line` on
     # `--ok-bg` is 1.32:1 light and 1.37:1 dark, where the text step the banner

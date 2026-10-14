@@ -63,7 +63,6 @@
      correctness property here, not only a taste one. Both are vendored woff2
      (SIL OFL 1.1, © 2023 Vercel + basement.studio) beside this stylesheet —
      see static/fonts/geist.css for why they carry no unicode-range. */
-  --sans: "Geist Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font: "Geist Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -183,7 +182,7 @@
   --accent-3: #083f3b;
   --accent-ink: #ffffff;
   --accent-bg: #e2f0ee;
-  --accent-line: #a8d0cb;
+  --accent-line: #92b7b6;
 
   --ok: #3f6b3f;   --ok-bg: #e9f0e9;
   --warn: #7d590e; --warn-bg: #f5f0e0; --warn-line: #ddcda2;
@@ -233,7 +232,7 @@
   --accent-3: #3ba79e;
   --accent-ink: #06211f;
   --accent-bg: #122b29;
-  --accent-line: #1d4744;
+  --accent-line: #346464;
 
   --ok: #7fb87f;   --ok-bg: #16211a;
   --warn: #d9ab52; --warn-bg: #241f14; --warn-line: #40361f;
@@ -3127,7 +3126,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
 .command-palette-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; margin: 2px 0; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); cursor: pointer; text-align: start; }
 .command-palette-option:hover { background: var(--surface-2); }
-.command-palette-option[aria-selected="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
+.command-palette-option[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent-line); }
 .command-palette-option-copy { display: grid; gap: 1px; min-width: 0; }
 .command-palette-option-copy strong { font-size: var(--t-ui); font-weight: 600; }
 .command-palette-option-copy span { overflow: hidden; color: var(--text-muted); font-size: var(--t-meta); text-overflow: ellipsis; white-space: nowrap; }

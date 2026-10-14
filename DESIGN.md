@@ -19,7 +19,7 @@ colors:
   accent-3: "#083f3b"
   accent-ink: "#ffffff"
   accent-bg: "#e2f0ee"
-  accent-line: "#a8d0cb"
+  accent-line: "#92b7b6"
   ok: "#3f6b3f"
   ok-bg: "#e9f0e9"
   warn: "#7d590e"

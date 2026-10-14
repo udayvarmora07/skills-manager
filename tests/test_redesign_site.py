@@ -178,7 +178,7 @@ class SiteParityWithTheProduct(unittest.TestCase):
     def test_the_type_families_are_the_vendored_ones(self):
         product = _product_tokens(":root")  # the families live with the scale
         site = _site_tokens(":root")
-        for token in ("--sans", "--mono"):
+        for token in ("--font", "--mono"):
             self.assertEqual(site[token], product[token], token + " is not the shipped stack")
 
     def test_the_scale_is_six_steps_and_there_are_no_raw_sizes(self):
