@@ -163,13 +163,14 @@ class SkeletonSourceContracts(unittest.TestCase):
         registry read here. RULES #12: the UI states observed facts.
 
         THIS IS A SOURCE CONTRACT, and the reason is recorded rather than
-        glossed: the honest browser falsifier is "hold a NON-registry action
-        open and read the panel", and driving one needs a selected skill, and
-        the row control that selects one was not established inside this
-        suite's box (four locators were wrong before this file was green —
-        `.skilllist li` matches the batch-selection hint, `.row-select` opens
-        no detail pane, and the toggle button sits in `.detail-actions`, not
-        `.detail-head`). The control for 3 is the DOM half that DOES run in a
+        glossed: the honest browser falsifier needs a selected skill and a
+        non-registry request held open, which is four more locators than this
+        file's box held. It now EXISTS and is mutation-proved —
+        `tests/e2e/test_install_panel_honesty.py` holds a toggle open,
+        navigates to Install while the app is busy, and reads the panel. This
+        contract stays because it covers the BINDING, including what a browser
+        never sees: that the sentence is not re-bound, and that it is
+        announced. The control for 3 is the DOM half that DOES run in a
         browser, so a panel that never renders the sentence is still caught.
         A mutation — rebinding the sentence to `busy` — fails both halves.
         """
