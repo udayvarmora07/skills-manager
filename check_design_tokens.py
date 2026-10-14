@@ -412,6 +412,74 @@ def strip_css_comments(css: str) -> str:
     return re.sub(r"/\*.*?\*/", _blank, css, flags=re.S)
 
 
+# Tokens that are declared and deliberately not read, each with the reason it
+# is still here and the task that owns the decision. An entry is not a licence:
+# the check below fails if a name leaves this table, and a test asserts that the
+# table's own names are still declared, so it cannot quietly outlive the file.
+UNREAD_ALLOWED = {
+    "--line-2": "9.1b — a second border step in a family that IS read (--line, "
+                "--line-3, --line-strong). REQUIRED and check_doc_matches' alias "
+                "both quote this name, so deleting it turns a gate red.",
+    "--accent-line": "9.1b — the accent border step, same reasoning: REQUIRED "
+                     "and the alias both quote it, so deleting it turns a gate red.",
+    "--ok-line": "9.1c — FOUND BY THIS CHECK on its first run, which is the "
+                 "point of it. `.banner-ok` paints its border with `--ok` (the "
+                 "text colour) where the warn family paints `--warn-line`, so "
+                 "the ok border step exists and nothing reads it. Switching the "
+                 "rule to `var(--ok-line)` is a RENDERED change that wants its "
+                 "own contrast measurement and evidence, so it is split out "
+                 "rather than done here.",
+}
+
+TOKEN_BLOCKS = (
+    ":root {",
+    '[data-theme="light"], [data-theme="system"] {',
+    '[data-theme="dark"] {',
+)
+
+
+def unread_tokens(css: str) -> list[str]:
+    """Custom properties this stylesheet declares and never reads.
+
+    Eight tokens were unread at 1.3 and nothing noticed: a declared token is
+    trivially present in the file that declares it, so every check written as
+    "does this name exist" is true of the dead ones too. This one asks the
+    other half of the question - does anything *consume* it - and runs over
+    COMMENT-STRIPPED text for the reason `strip_css_comments` documents: this
+    file explains itself in kilobytes of prose, and prose is not a reader.
+
+    An alias counts as a reader (``--border: var(--line)`` really does consume
+    ``--line``), which is why this is measured as `var(--name)` and not as
+    "appears after the token block".
+    """
+    body = strip_css_comments(css)
+    declared: set[str] = set()
+    for opener in TOKEN_BLOCKS:
+        try:
+            declared |= {m.group(1) for m in _TOKEN.finditer(_block_body(body, opener))}
+        except SystemExit:
+            continue
+    return sorted(n for n in declared if f"var({n})" not in body)
+
+
+def check_unread_tokens(css: str, failures: list[str]) -> None:
+    declared = {m.group(1) for opener in TOKEN_BLOCKS
+                for m in _TOKEN.finditer(_block_body(strip_css_comments(css), opener))}
+    dead = [n for n in unread_tokens(css) if n not in UNREAD_ALLOWED]
+    stale = sorted(set(UNREAD_ALLOWED) - declared)
+    ok = not dead and not stale
+    detail = ""
+    if dead:
+        detail += f"declared and never read: {dead}. "
+    if stale:
+        detail += f"exempt but no longer declared: {stale}."
+    print(f"  {'OK  ' if ok else 'FAIL'} every custom property is read "
+          f"({len(declared)} declared, {len(UNREAD_ALLOWED)} named exemptions)"
+          + (f" — {detail.strip()}" if detail else ""))
+    if not ok:
+        failures.append("custom properties: " + detail.strip())
+
+
 def check_motion(css: str, root_map: dict, note) -> None:
     """Motion the file claims to constrain, and actually constrains.
 
@@ -958,6 +1026,9 @@ def check_scale(css: str, failures: list[str]) -> None:
 
     # -- motion ------------------------------------------------------------
     check_motion(css, root_map, note)
+
+    # -- every declared token is read --------------------------------------
+    check_unread_tokens(css, failures)
 
     # -- one palette, not three -------------------------------------------
     # `index.html` starts at data-theme="system" and preferences.js resolves it

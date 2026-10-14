@@ -81,8 +81,6 @@
   --t-page:   1.25rem;     /* 20px — page, dialog titles, and the document's
                                 second-level heading */
   --t-empty:  1.75rem;     /* 28px — empty-state, first-run and document titles */
-  --t-num:    500 var(--t-meta)/1 var(--mono); font-variant-numeric: tabular-nums;
-  --t-id:     500 var(--t-table)/1.35 var(--mono); letter-spacing: -0.01em;
 
   /* The five role aliases that used to sit here (--t-display, --t-title,
      --t-head, --t-body, --t-sm) are gone. Measured before deletion: zero
@@ -106,8 +104,18 @@
      to the rule that uses the step - a size token that also carried
      `font-weight` would make "make this a page title" silently restyle four
      properties, and the reference leading for each step lives in DESIGN.md
-     rather than here. `--t-num` and `--t-id` keep their shorthand form
-     because they are whole faces (mono, tabular figures) rather than sizes. */
+     rather than here.
+
+     Two whole-face shorthand tokens, `--t-num` (a mono tabular figure face)
+     and `--t-id` (a mono identifier face with -0.01em tracking), stood here
+     and were read by nothing. They were deleted rather than adopted, and the
+     reason is recorded in .redesign/BACKLOG.md task 9.1a: a shorthand is not
+     a scale step, adopting one would restyle every count and every
+     identifier in the product at once, and that is a rendered change wanting
+     its own evidence and its own decision. The faces they described are
+     still declared where they are used - `tabular-nums` appears inline in
+     the eight rules that count things - so nothing was lost but the
+     declaration. */
 
   /* space — 4px base, the eight steps of DESIGN.md §"Space". The v1 scale
      shipped --s7 and --s9 both as 32px, so "the ninth step" was a name for
@@ -144,8 +152,14 @@
   --dur-scrim: 120ms;
 
   --rail-w: 56px;
-  --pane-w: 392px;
-  --measure: 68ch;
+
+  /* The prose measure, in the token layer rather than in the rule that uses
+     it, because a measure is a decision about reading and not about one
+     element. It was 68ch and read by nothing; `.lead` has capped at 78ch
+     since 3.1, so the value was a claim about a product that does not exist.
+     It is now the measured one and `.lead` reads it - the token was renamed
+     into a fact rather than the fact edited to match a token. */
+  --measure: 78ch;
 }
 
 [data-theme="light"], [data-theme="system"] {
@@ -2517,7 +2531,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .instance-choice small { display: block; color: var(--text-muted); overflow-wrap: anywhere; margin-top: 2px; }
 
 .lead {
-  max-width: 78ch;
+  max-width: var(--measure);
   font-size: var(--t-prose);
   color: var(--text);
   background: transparent;
