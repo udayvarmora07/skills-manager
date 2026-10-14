@@ -33,6 +33,17 @@ At 200% the 1280 window is 640 CSS px, which is **inside the `<760px` drawer
 band** — a path no capture had walked. That is the point of measuring it here
 rather than claiming 1100's answer holds.
 
+**The wide end, and what a ceiling cannot see (6.2d, 6.2e).** Everything above is
+`scrollWidth - clientWidth <= 1` — the absence of a defect, which a page that
+ignores its 2560 window also satisfies. `WideEndPlacementTests` adds what can be
+measured instead: the content column is centred in its pane (as a gutter PAIR,
+with a control that the pane is really wider), the detail measure did not grow,
+the product name reads before the actions at 640 CSS px, and **6.2e's floor** —
+a wider window never takes space away, the column keeps a floor share of its
+pane, and the layout reaches both window edges. Each of the last three has a
+mutation injected into the live page that the same probe reports as a violation,
+so the floor cannot be green because the probe reads nothing.
+
 SKIPS LOUDLY when Playwright is absent (never a silent pass).
 """
 
@@ -581,6 +592,12 @@ GEOMETRY = r"""
     colW: inner ? Math.round(inner.w) : null,
     detailInnerW: detailInner ? Math.round(detailInner.w) : null,
     innerWidth: window.innerWidth,
+    // 6.2e: `.detail` starts AFTER the rail and the side list, so `paneX` is not
+    // the left edge of the layout — the rail's own x is. Measured dead canvas is
+    // read off these two, not off `paneX` (which was 436px on a 2560 window and
+    // made "nothing is stranded on the left" fail for a correct tree).
+    railX: box('.navigation-rail') ? box('.navigation-rail').x : null,
+    railW: box('.navigation-rail') ? Math.round(box('.navigation-rail').w) : null,
     topbarCols: t ? getComputedStyle(t).gridTemplateColumns : null,
     kids: kids,
   };
@@ -602,6 +619,13 @@ class WideEndPlacementTests(unittest.TestCase):
     emulates for the zoom sweep — the product name rendered to the RIGHT of the
     actions, because `.brand` was the one child of the topbar row with no
     placement and auto-placement resolves after every definite position.
+
+    6.2e added the FLOOR to this class. (1) and (2) say the column went where it
+    should; nothing said the wide end was *used*, because the sweep above is a
+    ceiling and a ceiling cannot tell a page that uses 2560 from a page that
+    ignores it. The three tests below are the measurable form of that: a wider
+    window never takes space away, the column keeps a floor share of its pane,
+    and the layout reaches both window edges.
     """
 
     @classmethod
@@ -725,6 +749,149 @@ class WideEndPlacementTests(unittest.TestCase):
                              "the detail column grew past its measure (%dpx): "
                              "6.2d centred it on purpose"
                              % got["detailInnerW"])
+
+    # --- 6.2e: the FLOOR. Everything above is a ceiling. ------------------
+    #
+    # The sweep this file was built on asserts `scrollWidth - clientWidth <= 1`,
+    # which is the absence of a defect. It cannot tell a layout that USES a
+    # 2560 window from one that draws an 820px column on the left of it and
+    # leaves 1256px of nothing — 6.2d's finding, and the reason "wide is clean"
+    # was not a claim anyone could check. These three are what is measurable:
+    #
+    #   FLOOR  a wider window never takes space away. The same view at 2560 and
+    #          1920 must not be NARROWER than it is at 1440, the primary laptop
+    #          width. This is the counterpart of the overflow ceiling: overflow
+    #          is "the window is too small for the content", this is "the window
+    #          grew and the content shrank", and only the second one is the wide
+    #          end being wasted.
+    #   SHARE  where the pane IS wider than its column, the column must keep a
+    #          floor share of the pane's own content box, so the surplus cannot
+    #          be parked beside a ribbon.
+    #   EDGE   the layout reaches BOTH window edges: the rail starts at 0 and
+    #          the pane ends at the last pixel. A pane that stopped 300px short
+    #          of the right edge would satisfy every assertion above.
+    #
+    # The floor is 30% and is deliberately loose: measured on this fixture at
+    # 2560 the share runs 40.4% (Library, Profiles, Workspaces, Recovery) to
+    # 49.0% (Overview), so 30 leaves ten points of slack for a font-size or
+    # padding change. It is there to catch a COLLAPSE, not to police a design.
+
+    FLOOR = 0.30
+
+    def _columns_at(self, page, width):
+        """{view: GEOMETRY} at one window width, every view, in rail order."""
+        page.set_viewport_size({"width": width, "height": 900})
+        page.wait_for_timeout(150)
+        out = {}
+        for view in VIEWS:
+            self._goto(page, view)
+            out[view] = page.evaluate(GEOMETRY)
+        return out
+
+    def test_a_wider_window_never_takes_space_away(self):
+        """6.2e's floor. The gate this file already had is a ceiling: it says a
+        2560 window does not overflow, which is also true of a page that ignores
+        it. This says the content got at least as big when the window did —
+        measured against 1440, the width the user actually has."""
+        page = self._page(2560)
+        wide = self._columns_at(page, 2560)
+        mid = self._columns_at(page, 1920)
+        base = self._columns_at(page, 1440)
+        bad = []
+        for view in VIEWS:
+            for width, got in ((1920, mid[view]), (2560, wide[view])):
+                col, ref = got["colW"], base[view]["colW"]
+                if col is None or ref is None:
+                    bad.append("%s @%d: no content column" % (view, width))
+                elif col < ref - 1:
+                    bad.append("%s @%d: column %dpx, narrower than the %dpx it has "
+                               "at 1440" % (view, width, col, ref))
+        self.assertEqual(bad, [], "the wide end gave space away: " + "; ".join(bad))
+
+    def test_the_column_keeps_a_floor_share_of_its_pane_at_2560(self):
+        """The share floor, with the control that makes it mean something: a
+        column that FILLS its pane has a share of 1 and has stranded nothing, so
+        such a view is skipped rather than being satisfied by it — and the count
+        of views that were actually checked is asserted, so the floor cannot go
+        quiet by every view falling into the skip."""
+        page = self._page(2560)
+        bad, checked = [], []
+        for view in VIEWS:
+            self._goto(page, view)
+            g = page.evaluate(GEOMETRY)
+            if g["colW"] is None:
+                bad.append("%s: no content column" % view)
+                continue
+            content = g["paneW"] - g["padL"] - g["padR"]
+            if content <= g["colW"] + 100:
+                continue          # the pane fits: there is no surplus to strand
+            share = g["colW"] / float(content)
+            checked.append("%s %d/%d=%.0f%%" % (view, g["colW"], content, share * 100))
+            if share < self.FLOOR:
+                bad.append("%s: column is %.0f%% of a %dpx pane (floor %.0f%%)" % (
+                    view, share * 100, content, self.FLOOR * 100))
+        self.assertEqual(bad, [], "the column collapsed inside its pane — " + "; ".join(bad))
+        self.assertGreaterEqual(len(checked), len(VIEWS) - 1,
+                                "the share floor never ran: %r" % (checked,))
+
+    def test_the_layout_reaches_both_window_edges_at_2560(self):
+        """The claim the share floor cannot make on its own: nothing is parked
+        beside the content. The RAIL starts at 0 and the pane ends at the last
+        pixel, so 2560 has no dead strip on either side.
+
+        The left edge is the rail's, not the pane's: `.detail` legitimately begins
+        after a 56px rail and a 380px side list, and measuring the pane there
+        reported 436px of "unused" canvas on a correct tree — the same class of
+        probe error as 6.1b's font shorthand, and the reason this note exists."""
+        page = self._page(2560)
+        bad = []
+        for view in VIEWS:
+            self._goto(page, view)
+            g = page.evaluate(GEOMETRY)
+            if g["paneX"] is None or g["railX"] is None:
+                bad.append("%s: no rail or detail pane" % view)
+                continue
+            left = g["railX"]
+            right = g["innerWidth"] - (g["paneX"] + g["paneW"])
+            if left > 1 or right > 1:
+                bad.append("%s: %dpx unused on the left, %dpx on the right"
+                           % (view, round(left), round(right)))
+        self.assertEqual(bad, [], "2560 is not filled edge to edge: " + "; ".join(bad))
+
+    def test_the_usage_probe_can_fail(self):
+        """Without this the three tests above are green noise: a probe that
+        cannot report a defect reports nothing. Both mutations are injected into
+        the LIVE page, and both are plausible accidents — a `max-width` typo on
+        the column, a stray margin on the pane."""
+        page = self._page(2560)
+        self._goto(page, "Library")
+        before = page.evaluate(GEOMETRY)
+        self.assertIsNotNone(before["colW"], "the Library detail column was not found")
+
+        page.add_style_tag(content=".detail-inner { max-width: 120px !important; }")
+        page.wait_for_timeout(150)
+        shrunk = page.evaluate(GEOMETRY)
+        pane_content = shrunk["paneW"] - shrunk["padL"] - shrunk["padR"]
+        # What `test_a_wider_window_never_takes_space_away` compares, and what
+        # `test_the_column_keeps_a_floor_share_of_its_pane_at_2560` measures.
+        self.assertLess(shrunk["colW"], before["colW"] - 1,
+                        "the column did not shrink: the usage probe is measuring "
+                        "something that is not the column")
+        share = shrunk["colW"] / float(pane_content)
+        self.assertLess(share, self.FLOOR,
+                        "a %dpx column in a %dpx pane is %.0f%% of it; the floor must "
+                        "report that as a violation"
+                        % (shrunk["colW"], pane_content, share * 100))
+
+        page.add_style_tag(content=".detail { margin-right: 300px !important; }")
+        page.wait_for_timeout(150)
+        stranded = page.evaluate(GEOMETRY)
+        # What `test_the_layout_reaches_both_window_edges_at_2560` measures.
+        dead = stranded["innerWidth"] - (stranded["paneX"] + stranded["paneW"])
+        self.assertGreater(dead, 1,
+                           "a 300px right margin left no dead strip (measured %dpx): "
+                           "the edge probe cannot see the defect it was written for"
+                           % round(dead))
 
     def test_the_product_name_reads_before_the_actions_at_640(self):
         """200% zoom on a 1280 window. The defect was the name landing in
