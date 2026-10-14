@@ -172,8 +172,14 @@
   --ink-3: #5f666d;
   --ink-4: #6b727a;
 
+  /* lines — three steps, not four. `--line-2` (#ccd0d6 here, #31373e dark) was
+     a second NAME for `--mute-line`'s value in both themes and was read by
+     nothing in the cascade: it was deleted on 9.1c rather than given a site,
+     because no boundary in this product has a reason to sit between the
+     separator step and the control step. `--line-3` is the "must read" step
+     (`--border-strong` is an alias of it, and the blockquote's 2px rule is it),
+     `--line-strong` is where it goes on hover. */
   --line: #e4e6e9;
-  --line-2: #ccd0d6;
   --line-3: #868d95;
   --line-strong: #7d848c;
 
@@ -223,7 +229,6 @@
   --ink-4: #8b939b;
 
   --line: #23282e;
-  --line-2: #31373e;
   --line-3: #6a7178;
   --line-strong: #6e757d;
 

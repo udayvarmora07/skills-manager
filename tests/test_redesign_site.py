@@ -128,7 +128,7 @@ def _site_tokens(selector):
 PALETTE = [
     "bg", "surface", "surface-2", "surface-3",
     "ink", "ink-2", "ink-3", "ink-4",
-    "line", "line-2", "line-3", "line-strong",
+    "line", "line-3", "line-strong",
     "accent", "accent-2", "accent-3", "accent-ink", "accent-bg", "accent-line",
     "ok", "ok-bg", "warn", "warn-bg", "err", "err-bg", "mute", "mute-bg",
 ]
@@ -175,6 +175,38 @@ class SiteParityWithTheProduct(unittest.TestCase):
         self.assertEqual((set(light) & themed) - (set(dark) & themed), set())
         self.assertEqual((set(dark) & themed) - (set(light) & themed), set())
 
+    def test_every_token_the_page_declares_is_declared_by_the_product(self):
+        """The mirror of the test above, and the one the list above could not do.
+
+        `PALETTE` is hand-written, so it only ever compares the tokens it names.
+        The site declared `--ok-line`, `--warn-line`, `--err-line` and
+        `--mute-line` — four tokens that survived a 9.1c change to the product
+        because nothing asked the question in this direction: does the page own
+        a name the product has retired? That is a name the page can keep
+        printing after the product stopped meaning it, which is the site's own
+        "a claim no check reads decays" finding, one file over.
+
+        Derived, so a fifth such token cannot be added without this firing, and
+        a token the PRODUCT adds later is not a failure here — the site is
+        allowed to declare a subset, which is the direction the list above
+        already covers.
+        """
+        # The union of the product's blocks, not one of them. The page's
+        # `:root` carries the type families and the radius steps beside its
+        # colours, and those live in the product's `:root` while its colours
+        # live under the theme selectors — comparing the page's `:root` with
+        # the product's light block alone reports the whole scale as orphaned,
+        # which is 8.1's "the gate compared an empty palette with itself" one
+        # selector over.
+        product_all = set(_product_tokens(":root"))
+        for selector in (":root", '[data-theme="dark"]'):
+            product_selector = PRODUCT_LIGHT if selector == ":root" else selector
+            product_all |= set(_product_tokens(product_selector))
+        for selector in (":root", '[data-theme="dark"]'):
+            orphan = sorted(set(_site_tokens(selector)) - product_all)
+            self.assertEqual(orphan, [], f"{selector}: the page names tokens the "
+                                         "product has retired")
+
     def test_the_type_families_are_the_vendored_ones(self):
         product = _product_tokens(":root")  # the families live with the scale
         site = _site_tokens(":root")
@@ -197,6 +229,71 @@ class SiteParityWithTheProduct(unittest.TestCase):
         for face in re.findall(r"url\(([^)]+)\)", css):
             path = os.path.join(SITE, "fonts", face.strip())
             self.assertTrue(os.path.isfile(path), "the site asks for a font it does not ship: " + face)
+
+
+class TheSitesButtonEdgeIsTheProductsButtonEdge(unittest.TestCase):
+    """`.btn-secondary` existed in both stylesheets and painted two hairlines.
+
+    The product's is `--line-3`; the site's was `--line-2`, a token the product
+    read nowhere, worth 1.50:1 against `--surface` in light and 1.45:1 in dark —
+    the same class, the same design language, half the contrast, and a value
+    that happened to be `--mute-line`'s under another name. Both now read
+    `--line-3`, which is 3.24:1 / 3.53:1.
+
+    This is a measurement, not a taste claim, so it is measured here rather
+    than asserted as a hex: the number below is computed from the shipped
+    tokens with the WCAG 2.2 relative-luminance formula, and the test fails if
+    the step stops clearing 3:1 against its own surface.
+    """
+
+    @staticmethod
+    def _relative_luminance(hex_colour):
+        def channel(value):
+            value /= 255.0
+            return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+        r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+    def _contrast(self, a, b):
+        la, lb = self._relative_luminance(a), self._relative_luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+    def _edge_colour(self, css):
+        """Which step paints `.btn-secondary`'s edge, read out of the rule.
+
+        The FIRST matching rule, in both stylesheets. That is safe here and only
+        here because this is the one selector whose very first declaration is
+        the edge: a `.btn-primary` scan would have to reason about the cascade,
+        and this does not claim to be a cascade reader - it is a parity reader
+        for two files that both declare the button once.
+        """
+        rule = re.search(r"\.btn-secondary\s*\{([^}]*)\}", _COMMENT.sub(" ", css))
+        self.assertIsNotNone(rule, "no .btn-secondary rule")
+        token = re.search(r"border-color:\s*var\((--[\w-]+)\)", rule.group(1))
+        self.assertIsNotNone(token, ".btn-secondary paints no token edge")
+        return token.group(1)
+
+    def test_the_control_boundary_clears_three_to_one_in_both_themes(self):
+        for label, theme_sel, surface in (
+            ("site light", ":root", "--surface"),
+            ("site dark", '[data-theme="dark"]', "--surface"),
+        ):
+            css = _read(SITE_CSS)
+            edge = self._edge_colour(css)
+            tokens = _site_tokens(theme_sel)
+            ratio = self._contrast(tokens[edge], tokens[surface])
+            self.assertGreaterEqual(
+                ratio, 3.0,
+                f"{label}: {edge} is {ratio:.2f}:1 against {surface}, under the "
+                "3:1 WCAG 2.2 SC 1.4.11 asks of a control boundary")
+
+    def test_both_surfaces_paint_the_same_edge_from_the_same_step(self):
+        for label, site_sel, product_sel in (("light", ":root", PRODUCT_LIGHT),
+                                             ("dark", '[data-theme="dark"]', PRODUCT_DARK)):
+            site_edge = self._edge_colour(_read(SITE_CSS))
+            product_edge = self._edge_colour(_read(PRODUCT_CSS))
+            self.assertEqual(site_edge, product_edge,
+                             f"{label}: the same class paints two different edges")
 
 
 class SiteFactsAreDerived(unittest.TestCase):

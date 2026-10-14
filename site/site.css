@@ -52,7 +52,6 @@
   --ink-4: #6b727a;
 
   --line: #e4e6e9;
-  --line-2: #ccd0d6;
   --line-3: #868d95;
   --line-strong: #7d848c;
 
@@ -63,7 +62,7 @@
   --accent-bg: #e2f0ee;
   --accent-line: #92b7b6;
 
-  --ok: #3f6b3f;   --ok-bg: #e9f0e9;   --ok-line: #c3d6c3;
+  --ok: #3f6b3f;   --ok-bg: #e9f0e9;
   --warn: #7d590e; --warn-bg: #f5f0e0; --warn-line: #ddcda2;
   --err: #a33526;  --err-bg: #f7e8e5;  --err-line: #e2bdb4;
   --mute: #5e646b; --mute-bg: #eceef0; --mute-line: #ccd0d6;
@@ -85,7 +84,6 @@
   --ink-4: #8b939b;
 
   --line: #23282e;
-  --line-2: #31373e;
   --line-3: #6a7178;
   --line-strong: #6e757d;
 
@@ -96,7 +94,7 @@
   --accent-bg: #122b29;
   --accent-line: #346464;
 
-  --ok: #7fb87f;   --ok-bg: #16211a;   --ok-line: #2a3a2a;
+  --ok: #7fb87f;   --ok-bg: #16211a;
   --warn: #d9ab52; --warn-bg: #241f14; --warn-line: #40361f;
   --err: #e88b76;  --err-bg: #241614;  --err-line: #432420;
   --mute: #98a0a8; --mute-bg: #1e2227; --mute-line: #31373e;
@@ -203,19 +201,36 @@ img { max-width: 100%; display: block; }
 }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { background: var(--accent-2); text-decoration: none; }
+/* The page wears the product's control boundary: `.btn-secondary` in
+   skillsmgr/webui/styles.css paints `var(--line-3)` and steps to
+   `var(--line-strong)` on hover. It used to paint `--line-2` here, which was
+   1.50:1 against `--surface` in light and 1.45:1 in dark — a control whose
+   boundary carried half the contrast the same control carries in the product.
+   Both themes are now above the 3:1 that WCAG 2.2 SC 1.4.11 asks of a control
+   boundary, and the hover edge matches too. */
 .btn-secondary {
   background: var(--surface);
   color: var(--ink);
-  border-color: var(--line-2);
+  border-color: var(--line-3);
 }
-.btn-secondary:hover { background: var(--surface-2); text-decoration: none; }
+.btn-secondary:hover {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  text-decoration: none;
+}
 
+/* The install command is the one box on the page a reader has to find, so its
+   edge is the "must read" step (`--border-strong`'s value) rather than the
+   hairline a separator would take. `.note`'s 2px rule is the same step for the
+   same reason the document blockquote's is: a rule beside prose has to survive
+   the prose. `.shot` keeps `--line` because `--shadow-lg` already carries that
+   frame — a second dark edge on top of one is noise, not structure. */
 .snippet {
   display: flex;
   align-items: center;
   gap: var(--s3);
   background: var(--surface);
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-3);
   border-radius: var(--r-panel);
   padding: var(--s3) var(--s4);
   font: 500 var(--t-table)/1.4 var(--mono);
@@ -225,7 +240,7 @@ img { max-width: 100%; display: block; }
 .snippet .prompt { color: var(--ink-3); user-select: none; }
 
 .note {
-  border-left: 2px solid var(--line-2);
+  border-left: 2px solid var(--line-3);
   padding: var(--s1) 0 var(--s1) var(--s4);
   color: var(--ink-2);
   font: 400 var(--t-ui)/1.6 var(--font);
@@ -299,7 +314,7 @@ img { max-width: 100%; display: block; }
 
 .shot {
   margin: 0;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   padding: var(--s3);

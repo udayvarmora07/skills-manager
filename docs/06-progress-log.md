@@ -53,6 +53,50 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
+## 2026-10-14 — The duplicate step was deleted, and the page's button was found wearing half its contrast
+
+**[SPEC]** `--line-2` was byte-identical to `--mute-line` in **both** themes
+(`#ccd0d6` light, `#31373e` dark). It was not a scale step waiting for a reader;
+it was a second name for a colour the product already painted, and the four
+rules that read it were all in `site/site.css`. It is deleted from both themes
+of both stylesheets, from `DESIGN.md`, from `check_design_tokens.REQUIRED`, from
+`check_doc_matches`'s alias, from the site `PALETTE`, and from `UNREAD_ALLOWED` —
+eight coordinated files, because a half-done reconciliation leaves a name one
+gate still requires and no stylesheet still declares.
+
+**The product never needed a step between the separator and the control.** The
+line scale is `--line` (126 readers, every hairline), `--line-3` (the "must
+read" step — `--border-strong` is an alias of it, and so is the document
+blockquote's 2px rule) and `--line-strong` (its hover). Nothing had a reason to
+sit between them, so the token was deleted rather than given an invented site.
+
+**What deleting it exposed, in a place no gate had looked.** The landing page's
+`.btn-secondary` painted `--line-2` — **1.50:1** against `--surface` in light
+and **1.45:1** in dark — while the product's identically-named button painted
+`--line-3` at **3.24:1 / 3.53:1**. One design language, one class, two
+hairlines, and the page's carried half the contrast SC 1.4.11 asks of a control
+boundary. The page's four readers are retargeted onto the step the product
+already uses for that job (`.shot` keeps `--line`, because `--shadow-lg`
+already carries that frame), and the hover edge now matches too. **The page also
+declared `--ok-line`**, a token the product had retired the previous day, plus
+`--warn-line`, `--err-line` and `--mute-line` — four names the product does not
+have, invisible because `PALETTE` is a hand-written list of tokens the page is
+*allowed* to restate, so it only ever compared names it already knew.
+
+**Both gaps are gates now.** `check_exemptions_are_distinct_steps()` fails a
+named exemption whose value repeats a read token's in more than one theme — the
+third direction on the exemption table, after 9.1a's "declared and never read"
+and 9.1b's "exempt but now read". And `test_redesign_site.py` derives, from the
+two files rather than from a list, the question the list could not ask: **does
+the page own a name the product has retired?**
+
+**[?] `UNREAD_ALLOWED` is now empty, so the new check is vacuous on the shipped
+tree.** With its call site deleted, `check_design_tokens.py` printed "DESIGN
+TOKENS OK" and exited 0 — measured, mutation M5 — because there is nothing for
+it to examine. Every one of its claims is proved by a test that injects its own
+exemption, and a fourth test parses the gate and asserts the call exists at all.
+**Five mutations, five failures**, recorded in `.redesign/TEST-CHANGES.md`.
+
 ## 2026-10-13 — The design contract was describing a product that stopped existing
 
 **[SPEC]** `DESIGN.md` had been rewritten once, in 1.3, and was never edited

@@ -22,6 +22,7 @@ The same row also found `--sans`, a token whose value was **byte-identical** to
 family stack is not a token, it is a divergence waiting to happen.
 """
 
+import ast
 import re
 import unittest
 from pathlib import Path
@@ -36,7 +37,7 @@ SITE_CSS = (ROOT / "site" / "site.css").read_text(encoding="utf-8")
 PALETTE = (
     "bg", "surface", "surface-2", "surface-3",
     "ink", "ink-2", "ink-3", "ink-4",
-    "line", "line-2", "line-3", "line-strong",
+    "line", "line-3", "line-strong",
     "accent", "accent-2", "accent-3", "accent-ink", "accent-bg", "accent-line",
     "ok", "ok-bg", "warn", "warn-bg", "err", "err-bg", "mute", "mute-bg",
 )
@@ -160,12 +161,214 @@ class OneFamilyOneName(unittest.TestCase):
         self.assertIn("var(--font)", strip_css_comments(SITE_CSS))
 
 
+class TheRetiredLineStepIsGoneFromEveryFileThatNamedIt(unittest.TestCase):
+    """Eight coordinated edits, asserted together or not at all.
+
+    9.1c's row warned that option (b) is "eight coordinated edits across four
+    gates; do not do it half", so this class is the half-check: each file that
+    quoted `--line-2` is named here, and a new one would have to be added to the
+    list by hand. That is a real cost and it is the right trade — the failure
+    this guards is a name surviving in one gate's table while the stylesheet has
+    moved on, which is the branch's recorded claim-about-a-file class.
+    """
+
+    STYLESHEETS = (
+        ("skillsmgr/webui/styles.css", CSS),
+        ("site/site.css", SITE_CSS),
+    )
+
+    def test_no_stylesheet_declares_or_reads_the_deleted_step(self):
+        for label, text in self.STYLESHEETS:
+            # Comments are allowed to name it — styles.css carries a comment
+            # recording WHY it was deleted, and a check that could not tell a
+            # comment from a declaration would forbid the explanation. The
+            # comment strip is the same one `strip_css_comments` exists for.
+            self.assertNotIn("--line-2", strip_css_comments(text), label)
+
+    def test_the_gate_carries_no_live_reference_to_the_deleted_step(self):
+        """`check_design_tokens.py` keeps the reasoning where the table was, so
+        the name IS in the file — in a comment and in two docstrings. What must
+        not survive is a live reference: a `REQUIRED` entry, a
+        `check_doc_matches` alias, or a key in `UNREAD_ALLOWED`, any of which
+        would require the deleted token again.
+
+        Read through `ast` rather than by line, because a line-based filter has
+        to know what a docstring is, and the first version treated two docstring
+        lines as live code. That is this file's own rule applied to itself: a
+        reader that cannot tell prose from structure reports the explanation as
+        the defect. Comments are not in the AST at all, and a module/function/
+        class docstring is skipped by identity below.
+        """
+        tree = ast.parse((ROOT / "check_design_tokens.py").read_text(encoding="utf-8"))
+        docstrings = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                                 ast.ClassDef)):
+                body = getattr(node, "body", None)
+                if (body and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant)
+                        and isinstance(body[0].value.value, str)):
+                    docstrings.add(id(body[0].value))
+        live = [n.value for n in ast.walk(tree)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and "--line-2" in n.value and id(n) not in docstrings]
+        self.assertEqual(live, [], "a live gate reference to a deleted token")
+
+    def test_the_contract_no_longer_prices_a_step_it_does_not_ship(self):
+        """DESIGN.md is the document `check_doc_matches` reads the palette out
+        of. A row left behind would be a price for a colour nothing declares,
+        and the gate's own comparison cannot see it: it iterates the CSS's
+        tokens, not the document's."""
+        doc = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
+        self.assertNotRegex(doc, r'(?m)^\s*line-2:\s*"?#[0-9a-fA-F]{6}',
+                             "the contract still prices a deleted step")
+
+    def test_the_step_the_sites_four_readers_moved_to_is_read_by_each_of_them(self):
+        """.btn-secondary, .snippet, .note and .shot read `--line-2`. Each now
+        reads a step the PRODUCT already uses for that job, and a reader can
+        name which one: the button's edge is the product's `.btn-secondary`
+        edge, `.note`'s 2px rule is the document blockquote's rule."""
+        code = strip_css_comments(SITE_CSS)
+        for selector, token, why in (
+            (".btn-secondary", "--line-3", "the product's control boundary"),
+            (".snippet", "--line-3", "a box the reader has to find"),
+            (".note", "--line-3", "the document blockquote's 2px rule"),
+            (".shot", "--line", "its shadow already carries that frame"),
+        ):
+            rules = re.findall(
+                re.escape(selector) + r"(?:[^\n]*)\{([^}]*)\}", code
+            )
+            self.assertTrue(rules, selector + " has no rule to read")
+            self.assertIn(
+                f"var({token})", rules[0],
+                f"{selector} does not read {token} ({why})",
+            )
+
+    def test_the_retargeted_boundary_is_the_one_the_product_measures(self):
+        """`--line-2` on `--surface` was 1.50:1 light / 1.45:1 dark — half the
+        3:1 a control boundary needs. The step that replaced it clears it in
+        both themes, and the product's own gate already asserts the number; this
+        is the site's copy of that claim."""
+        for expected, site_sel, product_sel in (
+            ("#868d95", ":root", '[data-theme="light"]'),
+            ("#6a7178", '[data-theme="dark"]', '[data-theme="dark"]'),
+        ):
+            value = declared_value(SITE_CSS, site_sel, "--line-3")
+            self.assertEqual(value, expected, "the site's step is not the product's")
+            self.assertEqual(
+                value, declared_value(CSS, product_sel, "--line-3"),
+                "the site's control boundary drifted from the product's")
+
+
+class AnExemptionMustBeADistinctStep(unittest.TestCase):
+    """`UNREAD_ALLOWED` claims a token is a pending STEP.
+
+    `--line-2` sat on that table for three iterations with a well-reasoned
+    exemption and was never a step: it was byte-identical to `--mute-line` in
+    both themes, so it was a second NAME for a colour the product already
+    painted. No reader could have made it a step — only a different colour
+    could. `check_design_tokens.check_exemptions_are_distinct_steps` is the
+    check that says so, and it is empty on the shipped tree, so both tests here
+    supply the exemption rather than reading one from the file.
+    """
+
+    def _gate(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_design_tokens_under_test", ROOT / "check_design_tokens.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _with_exemption(self, gate, css, token):
+        original = gate.UNREAD_ALLOWED
+        gate.UNREAD_ALLOWED = dict(original)
+        gate.UNREAD_ALLOWED[token] = "injected by the test"
+        try:
+            failures = []
+            gate.check_exemptions_are_distinct_steps(css, failures)
+            return failures
+        finally:
+            gate.UNREAD_ALLOWED = original
+
+    def _reinject_line2(self, colour="#ccd0d6", colour_dark="#31373e"):
+        """Rebuild 9.1c's starting state: the token, in both themes, exempt."""
+        css = CSS.replace("  --line-3: #868d95;",
+                          f"  --line-2: {colour};\n  --line-3: #868d95;", 1)
+        css = css.replace("  --line-3: #6a7178;",
+                          f"  --line-2: {colour_dark};\n  --line-3: #6a7178;", 1)
+        return css
+
+    def test_an_exemption_that_repeats_a_read_colour_in_both_themes_fails(self):
+        gate = self._gate()
+        css = self._reinject_line2()
+        self.assertIn("--line-2: #ccd0d6", css, "the injection did not land")
+        failures = self._with_exemption(gate, css, "--line-2")
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn("--mute-line", failures[0],
+                      "the check must name the token whose value it repeats")
+
+    def test_the_gate_actually_calls_it(self):
+        """Deleting the call site leaves `check_design_tokens.py` exiting 0.
+
+        Measured, not assumed: with `check_exemptions_are_distinct_steps(css,
+        failures)` removed from `check_scale`, the gate still printed
+        "DESIGN TOKENS OK" and exited 0 — because the shipped tree has **zero**
+        exemptions, so a check with nothing to examine cannot fail on it. Every
+        test in this class injects its own exemption and calls the function
+        directly, which is what makes the check provable; it is exactly what
+        makes the *call site* invisible to them. So the call site is asserted
+        as structure, by parsing the module and looking for the call.
+
+        The general shape: a gate wired to a corpus that does not yet contain
+        the defect is not a gate until someone puts the defect in the corpus.
+        """
+        tree = ast.parse((ROOT / "check_design_tokens.py").read_text(encoding="utf-8"))
+        called = {n.func.id for n in ast.walk(tree)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        self.assertIn("check_exemptions_are_distinct_steps", called,
+                      "the exemption check is defined but never called")
+
+    def test_an_exemption_with_a_colour_of_its_own_passes(self):
+        """The control. Without it, "the check fails" could mean the check
+        fails on any exemption at all, and the gate would then be banning the
+        table rather than reading it."""
+        gate = self._gate()
+        failures = self._with_exemption(gate, self._reinject_line2("#b0b6bd", "#3c434b"), "--line-2")
+        self.assertEqual(failures, [], "a genuinely distinct pending step was rejected")
+
+    def test_a_coincidence_in_one_theme_is_not_a_second_name(self):
+        """`--mute-bg` IS `--surface-2` in both themes and that is deliberate —
+        a muted block is a recessed surface. The check's claim is narrower: a
+        duplicate in only ONE theme is a coincidence, and rejecting it would
+        make the gate unadoptable."""
+        gate = self._gate()
+        # --mute-line matches --surface-2 in NEITHER theme, so reuse a colour
+        # that does: match --mute-bg, which is #eceef0 / #1e2227.
+        css = self._reinject_line2("#eceef0")
+        failures = self._with_exemption(gate, css, "--line-2")
+        self.assertEqual(failures, [], failures)
+
+    def test_the_alias_of_a_duplicated_token_is_not_a_false_positive(self):
+        """`--border-strong: var(--line-3)` is how the product says "the control
+        step" without repeating a hex. An exempt token that ALIASES a read one
+        is a deliberate restatement, not a second value — and the check has to
+        be able to tell, or every future alias becomes a failure."""
+        gate = self._gate()
+        css = CSS.replace("  --border: var(--line);", "  --border: var(--line-2);")
+        failures = self._with_exemption(gate, css, "--line-2")
+        self.assertEqual(failures, [], failures)
+
+
 class RequiredPaletteStepsAreReadOrNamed(unittest.TestCase):
     """`REQUIRED` says these steps exist. Existence is a claim a reader backs.
 
     9.1a left `--accent-line` and `--line-2` on an exemption table with the
-    reason "9.1b", which is a promise, not a measurement. `--accent-line` now
-    has a reader; `--line-2` is still exempt, and its exemption says why.
+    reason "9.1b", which is a promise, not a measurement. `--accent-line` was
+    given its reader by 9.1b; `--line-2` was deleted by 9.1c, which measured
+    it byte-identical to `--mute-line` in both themes and found every reader of
+    it in `site/site.css`. The table is empty now, so the check below has
+    nothing to examine — `AnExemptionMustBeADistinctStep` supplies it.
     """
 
     def _exemptions(self):

@@ -95,7 +95,7 @@ def read_block(css: str, opener: str) -> dict[str, str]:
 REQUIRED = (
     "bg", "surface", "surface-2", "surface-3",
     "ink", "ink-2", "ink-3", "ink-4",
-    "line", "line-2", "line-3", "line-strong",
+    "line", "line-3", "line-strong",
     "accent", "accent-2", "accent-ink", "accent-bg", "accent-line",
     "ok", "ok-bg", "warn", "warn-bg", "err", "err-bg", "mute", "mute-bg",
 )
@@ -218,7 +218,7 @@ def check_doc_matches(tokens: dict[str, str]) -> list[str]:
         "accent-line": "accent-line",
         "ok": "ok", "ok-bg": "ok-bg", "warn": "warn", "warn-bg": "warn-bg",
         "err": "err", "err-bg": "err-bg", "mute": "mute", "mute-bg": "mute-bg",
-        "line": "line", "line-2": "line-2", "line-3": "line-3",
+        "line": "line", "line-3": "line-3",
         "line-strong": "line-strong",
     }
     checked = 0
@@ -417,12 +417,23 @@ def strip_css_comments(css: str) -> str:
 # the check below fails if a name leaves this table, and a test asserts that the
 # table's own names are still declared, so it cannot quietly outlive the file.
 UNREAD_ALLOWED = {
-    "--line-2": "9.1b — still exempt. It is byte-identical to `--mute-line` in "
-                "BOTH themes (#ccd0d6 light, #31373e dark), so it is a duplicate "
-                "name rather than a missing step, and no site in the product has "
-                "been named for it yet. REQUIRED and check_doc_matches' alias "
-                "both quote the name, so deleting it turns a gate red. 9.1b gave "
-                "`--accent-line` its reader and left this row open.",
+    # `--line-2` WAS here from 9.1a's first run and is gone as of 9.1c. It is
+    # the reason the check below carries a second assertion. It was byte-
+    # identical to `--mute-line` in BOTH themes (#ccd0d6 light, #31373e dark),
+    # so it was not a step waiting for a reader — it was a second name for a
+    # colour the product already painted under another name, and the four
+    # places that read it were all in site/site.css. No boundary in the
+    # product has a reason to sit between the separator step and the control
+    # step, so it was deleted rather than given an invented site; the site's
+    # readers were retargeted onto the step the product already uses for that
+    # job, which raised its `.btn-secondary` boundary from 1.50:1 to 3.24:1.
+    # An exemption is a claim that a token is a pending STEP. One that is
+    # byte-identical to a value already read is a second name, and it cannot
+    # become a step without first becoming a different colour — so
+    # `check_unread_tokens` now fails an exemption that duplicates a read
+    # value in both themes, which is the direction 9.1b's
+    # "an exemption whose token is now read is a claim about a file" left open.
+    #
     # `--accent-line` WAS here on 9.1a's first run and left on 9.1b. It is read
     # by `.command-palette-option[aria-selected="true"]`, which used to spell
     # the same colour as an inline `color-mix(in srgb, var(--accent) 38%, …)`
@@ -470,6 +481,78 @@ def unread_tokens(css: str) -> list[str]:
         except SystemExit:
             continue
     return sorted(n for n in declared if f"var({n})" not in body)
+
+
+def _theme_values(css: str) -> dict[str, dict[str, str]]:
+    """`{token: {theme-opener: raw value}}` for every declared token.
+
+    Both themes are read, because the interesting claim is not "this token has
+    no reader" but "this token is a second name for a colour the product
+    already paints". One theme cannot establish that: `--line-2` matched
+    `--mute-line` in light AND in dark, and a check over one of them would
+    have called a coincidence a design.
+    """
+    body = strip_css_comments(css)
+    out: dict[str, dict[str, str]] = {}
+    for opener in TOKEN_BLOCKS:
+        try:
+            block = _block_body(body, opener)
+        except SystemExit:
+            continue
+        for m in _TOKEN.finditer(block):
+            out.setdefault(m.group(1), {})[opener] = m.group(2).strip().lower()
+    return out
+
+
+def check_exemptions_are_distinct_steps(css: str, failures: list[str]) -> None:
+    """An unread token's exemption is a claim that it is a pending STEP.
+
+    9.1a introduced this table and 9.1b added the reverse check (an exemption
+    whose token has become read is a claim about a file). This is the third
+    direction, and it is the one `--line-2` failed: the token was byte-
+    identical to `--mute-line` in BOTH themes, so it was not a step with no
+    reader yet — it was a second name for a value the product already painted,
+    and no reader could ever make it a distinct step without first making it a
+    different colour. An exemption that duplicates a READ token's value in
+    both themes is therefore never a pending step: it is debt wearing a
+    rationale.
+
+    Only tokens the cascade actually reads can be the other half. Comparing
+    against every declared pair would fail on honest families — `--mute-bg` is
+    `--surface-2` in both themes by design (a muted block is a recessed
+    surface) — so the comparison is against read values only.
+    """
+    values = _theme_values(css)
+    body = strip_css_comments(css)
+    aliases: dict[str, set[str]] = {}
+    for token in values:
+        aliases[token] = {
+            m.group(1) for m in re.finditer(rf"var\(({re.escape(token)}\))", body)
+        }
+    read = {t for t in values if aliases[t] - {t}}
+    duplicated = []
+    for token in sorted(UNREAD_ALLOWED):
+        mine = values.get(token, {})
+        for other in sorted(read):
+            if other == token or other in aliases.get(token, set()):
+                continue
+            theirs = values.get(other, {})
+            # The themes BOTH tokens are declared in, not the themes the
+            # stylesheet has. TOKEN_BLOCKS includes `:root`, which carries the
+            # scale and no colours, so asking for equality across all three
+            # asks for something that cannot exist in `:root` - and the check
+            # then NEVER fires. This branch's own shape, where the set being
+            # compared is quietly the wrong one.
+            shared = [t for t in (mine.keys() & theirs.keys())
+                      if mine[t] and mine[t] == theirs[t]]
+            if len(shared) > 1:
+                duplicated.append(
+                    f"{token} duplicates the value of {other} in {len(shared)} themes")
+    ok = not duplicated
+    print(f"  {'OK  ' if ok else 'FAIL'} every named exemption is a distinct step "
+          f"({len(UNREAD_ALLOWED)} exemptions, {len(read)} read tokens)")
+    if not ok:
+        failures.append("custom properties: " + "; ".join(duplicated))
 
 
 def check_unread_tokens(css: str, failures: list[str]) -> None:
@@ -1039,6 +1122,7 @@ def check_scale(css: str, failures: list[str]) -> None:
 
     # -- every declared token is read --------------------------------------
     check_unread_tokens(css, failures)
+    check_exemptions_are_distinct_steps(css, failures)
 
     # -- one palette, not three -------------------------------------------
     # `index.html` starts at data-theme="system" and preferences.js resolves it

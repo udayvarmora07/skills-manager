@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Fixed
 
+- **A palette step was a second name for another one, and the landing page's
+  secondary button was wearing it.** `--line-2` carried `--mute-line`'s exact
+  value in both themes and was read nowhere in the product; its four readers
+  were all in `site/site.css`. It is deleted from both themes of both
+  stylesheets, from `DESIGN.md`, and from the four lists that named it —
+  `REQUIRED`, the doc-comparison alias, the site palette allow-list and the
+  unread-token exemption table.
+
+  Removing it found two things no gate had looked for. The page's
+  `.btn-secondary` was painting that value — **1.50:1** against `--surface` in
+  light, **1.45:1** in dark — while the product's identically-named button
+  painted `--line-3` at **3.24:1 / 3.53:1**; both now paint the same step and
+  both clear the 3:1 that WCAG 2.2 SC 1.4.11 asks of a control boundary. And
+  the page was declaring four tokens the product does not have, including
+  `--ok-line`, retired the day before; nothing could see it because the
+  palette test iterates a hand-written list of tokens the page is *allowed* to
+  restate, so it only ever compared names it already knew. Both are gates now:
+  one derives "does the page own a name the product has retired?" from the two
+  stylesheets, and `check_design_tokens` fails an unread-token exemption that
+  is byte-identical to a value the product already reads.
+
 - **The design contract described a product that no longer exists.**
   `DESIGN.md` drew a 240px rail (the shipped rail is `--rail-w: 56px`), a fixed
   392px list pane (the track is `minmax(320px, 380px)`), a 28px compact button

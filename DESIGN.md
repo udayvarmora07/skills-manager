@@ -29,7 +29,6 @@ colors:
   mute: "#5e646b"
   mute-bg: "#eceef0"
   line: "#e4e6e9"
-  line-2: "#ccd0d6"
   line-3: "#868d95"
   line-strong: "#7d848c"
 typography:
