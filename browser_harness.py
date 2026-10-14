@@ -33,6 +33,33 @@ from skillsmgr.webapp import WebAppServer
 ROOT = Path(__file__).resolve().parent
 VIEWPORTS = ((320, 700), (400, 800), (640, 900), (900, 800), (1280, 900), (1440, 900))
 
+# The exit code is a CONTRACT with every caller, so it is named here rather
+# than spelled as a literal at each `return`. Until this row the harness had
+# exactly one meaning -- non-zero is a defect -- and a host with no Chrome, or
+# a Chrome that never exposed DevTools, arrived as an uncaught RuntimeError
+# traceback. `ci.yml`'s browser job and `.redesign/verify.sh`'s `step()` both
+# collapse that to "FAILED", which is a claim about the product that the
+# product never made. Two states need two codes; both stay non-zero, so no
+# caller that only checks `!= 0` changes behaviour.
+#
+# 3, not 2: `argparse` exits 2 on a bad flag, and an unknown flag is a third
+# state again -- a mistake, not a host. A code chosen without checking who
+# else could return it would have made `--typo` read as "no Chrome here". The
+# two states that remain are enumerated in
+# `tests/test_redesign_browser_harness_report.py`.
+EXIT_DEFECT = 1
+EXIT_CANNOT_RUN = 3
+
+
+def _emit(report: dict) -> None:
+    """Print the JSON report on stdout.
+
+    One writer for one shape. Every report carries ``ran`` -- a reader that
+    only ever saw ``passed`` could not tell "nothing was checked" from
+    "nothing was wrong", and those are opposite facts.
+    """
+    print(json.dumps(report, indent=2))
+
 
 def _executable_diagnostics(name: str) -> str:
     """Explain why no trusted PATH match exists for *name*.
@@ -516,6 +543,17 @@ def run() -> int:
         help="also save one PNG per viewport in this developer-selected directory",
     )
     args = parser.parse_args()
+    # Host capability, checked BEFORE any fixture is built. A missing or
+    # untrusted Chrome/Node is a fact about this machine, and answering with a
+    # traceback made it indistinguishable from a product defect to every
+    # caller. Naming it costs one call pair that already existed for the
+    # diagnostics `_chrome()`/`_node()` build.
+    try:
+        _chrome()
+        _node()
+    except RuntimeError as exc:
+        _emit({"ran": False, "passed": False, "reason": str(exc), "viewports": [], "scenarios": {}})
+        return EXIT_CANNOT_RUN
     screenshot_dir = None
     if args.screenshots_dir is not None:
         screenshot_dir = args.screenshots_dir.expanduser().resolve()
@@ -561,7 +599,24 @@ def run() -> int:
         # its first real execution failed without a diagnosable cause.  The
         # sandbox stays enabled (SEC-15); only the reporting changes.
         chrome_log = open(Path(directory) / "chrome.stderr.log", "w+", encoding="utf-8")
-        chrome, port = _launch_chrome(profile, chrome_log)
+        try:
+            chrome, port = _launch_chrome(profile, chrome_log)
+        except RuntimeError as exc:
+            # Chrome is present and trusted but never reached DevTools. Still a
+            # fact about the host -- a sandbox that will not start, a missing
+            # user namespace -- and `_launch_chrome` has already written every
+            # attempt to chrome.stderr.log. Say so, and leave the exit code
+            # saying it too.
+            _emit(
+                {
+                    "ran": False,
+                    "passed": False,
+                    "reason": str(exc),
+                    "viewports": [],
+                    "scenarios": {},
+                }
+            )
+            return EXIT_CANNOT_RUN
         try:
             results = [
                 _run_probe(
@@ -601,8 +656,19 @@ def run() -> int:
 
             all_results = [*results, *scenario_results.values()]
             failures = [r for r in all_results if r["errors"] or r["failed"] or r["document"]["overflow"]]
-            print(json.dumps({"viewports": results, "scenarios": scenario_results, "passed": not failures}, indent=2))
-            return 1 if failures else 0
+            # `ran: True` is asserted here rather than defaulted in `_emit`,
+            # because the whole point of the key is that it is written by the
+            # code that actually checked something. A reader that sees it absent
+            # must not be able to assume the default.
+            _emit(
+                {
+                    "ran": True,
+                    "viewports": results,
+                    "scenarios": scenario_results,
+                    "passed": not failures,
+                }
+            )
+            return EXIT_DEFECT if failures else 0
         finally:
             _stop_process(chrome, "chrome")
             chrome_log.close()
