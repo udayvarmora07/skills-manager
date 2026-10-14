@@ -182,14 +182,19 @@ class SeverityReachesTheStylesheetTests(unittest.TestCase):
         # `--mute` and `--mute-bg` existed in both themes and were read by
         # nothing in the whole cascade. Assert they cannot go back.
         #
-        # `--mute-line` is deliberately NOT in this list. It is unread, and so
-        # are `--ok-line`, `--err-line` and `--accent-line` — four line tokens
-        # that have never been read by anything. That is a pre-existing finding
-        # about the palette's border family, not something this rule caused:
-        # `.identity-state-ok` and `-warn` both leave `.identity-state`'s
-        # `border: 1px solid var(--border)` alone, and `-off` mirrors them.
-        # Asserting `--mute-line` here would pin this task to a design decision
-        # it should not make; the honest place for that finding is a row.
+        # `--mute-line` is deliberately NOT in this list, and this comment used
+        # to be wrong about why. It claimed four line tokens had never been
+        # read; 9.1c measured them and only TWO are unread — `--warn-line` has
+        # four readers and `--err-line` one, while `--mute-line` has one and
+        # `--ok-line` had none. `--ok-line` is now DELETED from both themes
+        # (9.1c): measured against its own `--ok-bg` it is 1.32:1 light and
+        # 1.37:1 dark, where the text step the banner family paints is 5.35:1
+        # and 7.16:1 — a hairline step, not a block's edge. `--accent-line` is
+        # the remaining unread one, named in `UNREAD_ALLOWED` with its reason.
+        # `.identity-state-ok` and `-warn` leave `.identity-state`'s
+        # `border: 1px solid var(--border)` alone, and `-off` mirrors them;
+        # asserting `--mute-line` here would pin this task to a design
+        # decision it should not make.
         for token in ("--mute", "--mute-bg"):
             with self.subTest(token):
                 reads = len(re.findall(rf"var\({token}\)", self.css))

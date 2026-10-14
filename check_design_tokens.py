@@ -422,13 +422,13 @@ UNREAD_ALLOWED = {
                 "both quote this name, so deleting it turns a gate red.",
     "--accent-line": "9.1b — the accent border step, same reasoning: REQUIRED "
                      "and the alias both quote it, so deleting it turns a gate red.",
-    "--ok-line": "9.1c — FOUND BY THIS CHECK on its first run, which is the "
-                 "point of it. `.banner-ok` paints its border with `--ok` (the "
-                 "text colour) where the warn family paints `--warn-line`, so "
-                 "the ok border step exists and nothing reads it. Switching the "
-                 "rule to `var(--ok-line)` is a RENDERED change that wants its "
-                 "own contrast measurement and evidence, so it is split out "
-                 "rather than done here.",
+    # `--ok-line` was HERE on 9.1a's first run and is gone as of 9.1c: the row
+    # that proposed adopting it measured neither number. `--ok-line` on
+    # `--ok-bg` is 1.32:1 light and 1.37:1 dark, where the text step the banner
+    # actually paints is 5.35:1 and 7.16:1. It was deleted from both themes, and
+    # this table now names it nowhere — an exemption entry for a token that no
+    # longer exists is a claim about a file, which is the failure this check
+    # exists to prevent.
 }
 
 TOKEN_BLOCKS = (

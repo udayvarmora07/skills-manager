@@ -185,7 +185,7 @@
   --accent-bg: #e2f0ee;
   --accent-line: #a8d0cb;
 
-  --ok: #3f6b3f;   --ok-bg: #e9f0e9;   --ok-line: #c3d6c3;
+  --ok: #3f6b3f;   --ok-bg: #e9f0e9;
   --warn: #7d590e; --warn-bg: #f5f0e0; --warn-line: #ddcda2;
   --err: #a33526;  --err-bg: #f7e8e5;  --err-line: #e2bdb4;
   --mute: #5e646b; --mute-bg: #eceef0; --mute-line: #ccd0d6;
@@ -235,7 +235,7 @@
   --accent-bg: #122b29;
   --accent-line: #1d4744;
 
-  --ok: #7fb87f;   --ok-bg: #16211a;   --ok-line: #2a3a2a;
+  --ok: #7fb87f;   --ok-bg: #16211a;
   --warn: #d9ab52; --warn-bg: #241f14; --warn-line: #40361f;
   --err: #e88b76;  --err-bg: #241614;  --err-line: #432420;
   --mute: #98a0a8; --mute-bg: #1e2227; --mute-line: #31373e;
@@ -2981,6 +2981,17 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   gap: var(--s2);
 }
 .banner svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+
+/* 9.1c — a banner's border is its TEXT step, and the `-line` steps would be a
+   4:1 contrast REGRESSION. Measured, both themes, each `-line` against its own
+   `-bg`: ok 1.32/1.37, warn 1.38/1.38, err 1.45/1.26, mute 1.33/1.33. They are
+   hairlines by construction — the `-line` family draws separators INSIDE a
+   tinted block, not the block's own edge. The text step is the same colour a
+   1px edge should be: 5.35:1 / 7.16:1 (ok), 5.57 / 7.73 (warn), 5.70 / 6.99
+   (err). This is not a claim about contrast alone — a banner is already told
+   apart by its tint, so its border is the step that has to READ at 1px.
+   `--ok-line` was deleted from both themes rather than adopted here; the
+   backlog row that proposed adopting it had measured neither number. */
 .banner-error { background: var(--err-soft); border-color: var(--err); color: var(--err); }
 .banner-ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
 .banner-warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
