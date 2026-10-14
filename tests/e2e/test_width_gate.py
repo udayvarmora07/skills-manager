@@ -544,5 +544,237 @@ class Zoom200Tests(_SweepMixin, unittest.TestCase):
         self.assertEqual(self._errors, [])
 
 
+# In the page. 6.2d: where the content column sits inside its pane, and where the
+# topbar's four children sit inside the topbar's three tracks. Both are about
+# POSITION, so both are measured as geometry and not as a class or a property.
+#
+# `gutter` is reported as a signed pair rather than a boolean: "is it centred"
+# is true of a column that fills its pane, and it is also true of a column that
+# never got to the wide end at all. The tests below require the pane to be
+# genuinely wider than the column FIRST, so a fixture that stopped exercising
+# the defect cannot go green.
+GEOMETRY = r"""
+() => {
+  const box = (s) => { const e = document.querySelector(s); if (!e) return null;
+    const r = e.getBoundingClientRect();
+    return {x: r.x, w: r.width, right: r.right}; };
+  const pane = box('.detail');
+  const inner = box('.detail-inner') || box('.install-shell') ||
+                box('.quality-center') || box('.settings-center') ||
+                box('.overview-shell');
+  const detailInner = box('.detail-inner');
+  const paneEl = document.querySelector('.detail');
+  const pcs = paneEl ? getComputedStyle(paneEl) : null;
+  const t = document.querySelector('.topbar');
+  const kids = t ? [...t.children].map((e) => {
+    const r = e.getBoundingClientRect();
+    return {cls: (e.className || '').split(' ')[0],
+            x: Math.round(r.x), right: Math.round(r.right),
+            col: getComputedStyle(e).gridColumnStart};
+  }) : [];
+  return {
+    paneW: pane ? Math.round(pane.w) : null,
+    paneX: pane ? pane.x : null,
+    padL: pcs ? parseFloat(pcs.paddingLeft) : 0,
+    padR: pcs ? parseFloat(pcs.paddingRight) : 0,
+    colX: inner ? inner.x : null,
+    colW: inner ? Math.round(inner.w) : null,
+    detailInnerW: detailInner ? Math.round(detailInner.w) : null,
+    innerWidth: window.innerWidth,
+    topbarCols: t ? getComputedStyle(t).gridTemplateColumns : null,
+    kids: kids,
+  };
+}
+"""
+
+
+@unittest.skipUnless(
+    _has_chromium(),
+    "Playwright/Chromium unavailable: 6.2d's two claims are about where the "
+    "column and the product name are painted, which no source contract can see",
+)
+class WideEndPlacementTests(unittest.TestCase):
+    """6.2d — the two findings the 6.2c screenshots produced.
+
+    (1) At 2560 the content column is 820px inside a 2124px pane and all of the
+    surplus sat on the left, so a large monitor got a page that looks cut off.
+    (2) At 640 CSS px — 200% zoom on a 1280 window, the width this file already
+    emulates for the zoom sweep — the product name rendered to the RIGHT of the
+    actions, because `.brand` was the one child of the topbar row with no
+    placement and auto-placement resolves after every definite position.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from skillsmgr.store import Store
+        from skillsmgr.webapp import WebAppServer
+
+        cls._tmp = tempfile.mkdtemp(prefix="skillsmgr-e2e-wide-")
+        cls._saved_env = {k: os.environ.get(k)
+                          for k in ("HOME", "XDG_DATA_HOME", "SKILLS_MANAGER_DATA",
+                                    "PLAYWRIGHT_BROWSERS_PATH")}
+        if not cls._saved_env.get("PLAYWRIGHT_BROWSERS_PATH"):
+            rh = cls._saved_env.get("HOME") or os.path.expanduser("~")
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
+                rh, ".cache", "ms-playwright")
+        home = os.path.join(cls._tmp, "home")
+        os.makedirs(home, exist_ok=True)
+        os.environ["HOME"] = home
+        os.environ["XDG_DATA_HOME"] = os.path.join(home, ".local", "share")
+        os.environ["SKILLS_MANAGER_DATA"] = os.path.join(cls._tmp, "data")
+
+        cls.store = Store(cls._tmp)
+        cls.store.init_db()
+        _fixtures(cls.store)
+        cls.server = WebAppServer(cls.store, port=0)
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.thread.join(timeout=5)
+        for k, v in cls._saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(cls._tmp, ignore_errors=True)
+
+    def setUp(self):
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.launch(args=["--no-sandbox"])
+        self._errors = []
+        self._contexts = []
+
+    def tearDown(self):
+        # The contexts close BEFORE the driver stops. Closing them after
+        # `sync_playwright().stop()` raises "Event loop is closed" from
+        # tearDown and reports it as an error in a test that passed.
+        for context in self._contexts:
+            try:
+                context.close()
+            except Exception:
+                pass
+        self._browser.close()
+        self._pw.stop()
+
+    def _page(self, width, height=900, dpr=1):
+        context = self._browser.new_context(
+            viewport={"width": width, "height": height},
+            device_scale_factor=dpr)
+        self._contexts.append(context)
+        page = context.new_page()
+        page.on("console",
+                lambda m: self._errors.append(m.text) if m.type == "error" else None)
+        page.goto(self.server.url, wait_until="networkidle")
+        page.wait_for_selector("#app", timeout=15000)
+        return page
+
+    def test_the_content_column_is_centred_in_its_pane_at_2560(self):
+        """The defect, stated as the reader would see it: the empty canvas was
+        all on one side. Asserted as a gutter PAIR, because a centred column in
+        a pane the width of itself satisfies any boolean."""
+        page = self._page(2560)
+        page.wait_for_timeout(250)
+        got = page.evaluate(GEOMETRY)
+        self.assertIsNotNone(got["colW"], "no content column was found")
+        # The control: if the pane were not genuinely wider than the column,
+        # "centred" would be true of every layout including the broken one.
+        self.assertGreater(got["paneW"], got["colW"] + 100,
+                           "at 2560 the pane must be wider than its column or "
+                           "this test cannot see the defect (pane %s, column %s)"
+                           % (got["paneW"], got["colW"]))
+        left = got["colX"] - (got["paneX"] + got["padL"])
+        right = (got["paneX"] + got["paneW"] - got["padR"]) - (got["colX"] + got["colW"])
+        self.assertLessEqual(abs(left - right), 2,
+                             "the surplus is not shared: %dpx left, %dpx right"
+                             % (round(left), round(right)))
+
+    def test_the_column_is_centred_on_every_view_at_the_wide_end(self):
+        page = self._page(2560)
+        bad = []
+        for view in VIEWS:
+            self._goto(page, view)
+            got = page.evaluate(GEOMETRY)
+            if got["colW"] is None:
+                bad.append("%s: no content column" % view)
+                continue
+            if got["paneW"] <= got["colW"] + 100:
+                continue          # the pane fits; centring is a no-op there
+            left = got["colX"] - (got["paneX"] + got["padL"])
+            right = (got["paneX"] + got["paneW"] - got["padR"]) - (got["colX"] + got["colW"])
+            if abs(left - right) > 2:
+                bad.append("%s: %dpx left / %dpx right" % (view, round(left), round(right)))
+        self.assertEqual(bad, [], "content column not centred at 2560: " + "; ".join(bad))
+
+    def test_the_measure_did_not_move(self):
+        """The decision 6.2d made was to CENTRE the column, not to widen it —
+        so this is the assertion that keeps the other answer from creeping back
+        in as a kindness. `.detail-inner` is `max-width: 82ch`; a 900px+ column
+        at 2560 would be a prose measure nobody chose."""
+        page = self._page(2560)
+        self._goto(page, "Library")
+        got = page.evaluate(GEOMETRY)
+        # `.detail-inner` specifically: the Overview's own shell is a WIDER
+        # 1180px column by design and is already centred, so measuring "the
+        # column" here would report that number and say nothing about the
+        # measure 6.2d decided not to touch.
+        self.assertIsNotNone(got["detailInnerW"], "the Library detail column was not found")
+        self.assertLessEqual(got["detailInnerW"], 860,
+                             "the detail column grew past its measure (%dpx): "
+                             "6.2d centred it on purpose"
+                             % got["detailInnerW"])
+
+    def test_the_product_name_reads_before_the_actions_at_640(self):
+        """200% zoom on a 1280 window. The defect was the name landing in
+        column 3, right of the actions, because it was the only unplaced child
+        and auto-placement resolves after every definite position."""
+        page = self._page(640, 900, dpr=2)
+        page.wait_for_timeout(250)
+        got = page.evaluate(GEOMETRY)
+        self.assertEqual(got["innerWidth"], 640)
+        by = {k["cls"]: k for k in got["kids"]}
+        for name in ("btn", "brand", "topbar-actions"):
+            self.assertIn(name, by, "topbar child %r not found in %s" % (name, got["kids"]))
+        # The control: the reading order is only a claim if the three really
+        # are in one row and inside the window.
+        self.assertEqual(by["brand"]["col"], "2")
+        self.assertEqual(by["topbar-actions"]["col"], "3")
+        self.assertEqual(by["btn"]["col"], "1")
+        # Reading order as GEOMETRY, not as DOM order — DOM order was already
+        # correct, which is why every source-text check of this passed while the
+        # name painted to the right of the actions.
+        self.assertGreater(by["brand"]["x"], by["btn"]["right"],
+                           "the product name does not start after the drawer trigger")
+        self.assertLessEqual(by["brand"]["right"], by["topbar-actions"]["x"],
+                             "the product name overlaps the actions")
+        self.assertGreater(by["topbar-actions"]["x"], by["brand"]["x"],
+                           "the actions still render left of the product name")
+        self.assertLessEqual(by["topbar-actions"]["right"], 640)
+
+    def test_no_console_error_on_either_surface(self):
+        wide = self._page(2560)
+        narrow = self._page(640, 900, dpr=2)
+        self._goto(wide, "Library")
+        self._goto(narrow, "Library")
+        self.assertEqual(self._errors, [])
+
+    @staticmethod
+    def _goto(page, view):
+        """Switch view the way a reader does. Below 760 CSS px the rail is an
+        off-canvas drawer, so at 640 the button is not on screen until it opens.
+        """
+        rail = page.query_selector('.navigation-rail[data-drawer="open"]')
+        if rail is None and page.is_visible(".nav-drawer-trigger"):
+            page.click(".nav-drawer-trigger")
+            page.wait_for_timeout(200)
+        page.click('.navigation-rail button[data-tip="%s"]' % view)
+        page.wait_for_selector(
+            '.navigation-rail button[data-tip="%s"][aria-current="page"]' % view,
+            timeout=10000)
+        page.wait_for_timeout(180)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4185,6 +4185,30 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 
    The band ends at 899, not at the 819 where the overflow stops, and the
    difference is the whole point. Overflow was the *first* symptom; stopping it
+/* ------------------------------------------------------- 6.2d the wide end
+   At 2560 the detail pane measures 2124px and the column inside it 820px, and
+   the surplus all landed on ONE side: `max-width` with `margin: 0` parks a
+   narrow column against the left edge of a very wide box, which reads as a page
+   that was cut off rather than a page with a deliberate measure. At 1440 the
+   gutter is 184px and nobody would notice; at 1920 it is 664px and at 2560 it
+   is 1256px.
+
+   The decision is to CENTRE the column, not to widen it. Widening is what the
+   brief warned against and it is the wrong answer here anyway: `.lead`,
+   `.pane-blank-lede` and the detail headings carry their own `ch` caps, so a
+   wider container buys tables and fact grids room and buys prose none --
+   except for the paragraphs that have no cap of their own, which is exactly the
+   regression this avoids by leaving the measure alone.
+
+   `margin-inline` rather than `margin`, because `margin` would also reset the
+   block's vertical margins and this rule is about the inline axis only. Placed
+   at the end of LAYER 5 so it outranks the four per-view declarations rather
+   than tying with them and losing to source order. */
+.detail-inner,
+.install-shell,
+.quality-center,
+.settings-center { margin-inline: auto; }
+
    at 819 left the search field with 48px — narrower than the icon it contains,
    and the field got smaller as the window got wider, which is never a correct
    responsive behaviour. Brand plus controls plus padding plus gaps occupy 772px,
@@ -4314,6 +4338,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .navigation-rail .nav-group-label {
     display: block; position: static; align-self: stretch; width: 100%; height: auto; margin: 0;
     padding: 10px 12px 4px; overflow: visible; clip: auto; clip-path: none;
+  /* 6.2d: `.brand` was the only child of this row with no placement of its own,
+     and auto-placement resolves AFTER every definite position — so with the
+     trigger at column 1 and `.topbar-actions` at column 2, the product name
+     landed in column 3, to the RIGHT of the actions. Measured at 640 CSS px
+     (200% zoom on a 1280 window): actions at x=240, brand at x=495. Placing
+     both by hand states the reading order the band already implies:
+     [trigger] [brand ............] [actions]. */
+  .brand { grid-column: 2; grid-row: 1; min-width: 0; }
+  .topbar-actions { grid-column: 3; grid-row: 1; }
     white-space: nowrap; text-align: left;
   }
   .navigation-rail .viewtabs button { flex: 0 0 auto; justify-content: flex-start; width: 100%; min-height: 44px; gap: 12px; padding-inline: 12px; border-left: 0; border-bottom: 0; }
