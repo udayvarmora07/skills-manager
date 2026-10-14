@@ -21,9 +21,19 @@ Run
 from __future__ import annotations
 
 import os
+import sys
 import unittest
 
-BASE = os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _live_server  # noqa: E402
+
+def BASE() -> str:
+    """The live app. 6.2f: one helper owns the base URL for every suite that
+    needs a running web UI, so a sweep launched without `.redesign/dev.sh start`
+    brings up its own isolated server instead of reporting ERR_CONNECTION_REFUSED
+    as if the tree were broken. See tests/e2e/_live_server.py for the order."""
+    return _live_server.live_server().url
+
 READY = '[data-overview-ready="true"]'
 WIDTHS = (390, 768, 1280)
 
@@ -105,12 +115,12 @@ class BudgetMeterTests(unittest.TestCase):
         page.on("console", lambda m: m.type == "error" and self._errors.append(m.text))
         page.on("pageerror", lambda e: self._errors.append(str(e)))
         try:
-            page.goto(BASE, wait_until="domcontentloaded", timeout=20000)
+            page.goto(BASE(), wait_until="domcontentloaded", timeout=20000)
             page.wait_for_selector(READY, timeout=20000)
             page.wait_for_selector(".scope-meter-row", timeout=10000)
         except Exception as exc:
             page.close()
-            raise unittest.SkipTest(f"the dev server at {BASE} did not reach the meter ({exc})")
+            raise unittest.SkipTest(f"the dev server at {BASE()} did not reach the meter ({exc})")
         return page
 
     # -- the defect this task fixed --------------------------------------

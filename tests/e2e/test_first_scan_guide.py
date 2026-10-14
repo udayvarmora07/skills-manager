@@ -26,7 +26,18 @@ import unittest
 
 from playwright.sync_api import sync_playwright
 
-BASE = os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _live_server  # noqa: E402
+
+
+def BASE() -> str:
+    """The live app (6.2f). One helper owns this for every suite that needs a
+    running web UI, so a sweep launched without `.redesign/dev.sh start` brings
+    up its own isolated server instead of reporting ERR_CONNECTION_REFUSED as
+    if the tree were broken."""
+    return _live_server.live_server().url
 READY = '[data-overview-ready="true"]'
 GUIDE = "[data-first-scan-guide]"
 
@@ -46,7 +57,7 @@ class FirstScanGuideLayout(unittest.TestCase):
         ctx = self.browser.new_context(viewport={"width": width, "height": height},
                                       color_scheme=theme)
         page = ctx.new_page()
-        page.goto(BASE, wait_until="domcontentloaded", timeout=30000)
+        page.goto(BASE(), wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector(READY, timeout=30000)
         page.wait_for_selector(GUIDE, timeout=20000)
         page.wait_for_timeout(500)
@@ -129,7 +140,7 @@ class FirstScanGuideHonesty(unittest.TestCase):
         self.browser = self._pw.chromium.launch(args=["--no-sandbox"])
         ctx = self.browser.new_context(viewport={"width": 1280, "height": 1100})
         self.page = ctx.new_page()
-        self.page.goto(BASE, wait_until="domcontentloaded", timeout=30000)
+        self.page.goto(BASE(), wait_until="domcontentloaded", timeout=30000)
         self.page.wait_for_selector(READY, timeout=30000)
         self.page.wait_for_selector(GUIDE, timeout=20000)
         self.page.wait_for_timeout(500)
@@ -190,7 +201,7 @@ class FirstScanGuideLifecycle(unittest.TestCase):
     def test_hiding_survives_a_reload_and_restart_clears_it(self):
         ctx = self._context()
         page = ctx.new_page()
-        page.goto(BASE, wait_until="domcontentloaded", timeout=30000)
+        page.goto(BASE(), wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector(READY, timeout=30000)
         page.wait_for_selector(GUIDE, timeout=20000)
         page.locator("[data-first-scan-skip]").click()
@@ -216,7 +227,7 @@ class FirstScanGuideLifecycle(unittest.TestCase):
         message behind a disabled `Open an instance`."""
         ctx = self._context()
         page = ctx.new_page()
-        page.goto(BASE, wait_until="domcontentloaded", timeout=30000)
+        page.goto(BASE(), wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector(READY, timeout=30000)
         # Force the empty branch through the real component, not a stub.
         page.evaluate("() => { const el = document.querySelector('#app');"

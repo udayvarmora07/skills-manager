@@ -23,9 +23,19 @@ Run
 from __future__ import annotations
 
 import os
+import sys
 import unittest
 
-BASE = os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _live_server  # noqa: E402
+
+def BASE() -> str:
+    """The live app. 6.2f: one helper owns the base URL for every suite that
+    needs a running web UI, so a sweep launched without `.redesign/dev.sh start`
+    brings up its own isolated server instead of reporting ERR_CONNECTION_REFUSED
+    as if the tree were broken. See tests/e2e/_live_server.py for the order."""
+    return _live_server.live_server().url
+
 READY = '[data-overview-ready="true"]'
 WIDTHS = (390, 768, 1280)
 
@@ -50,14 +60,14 @@ class OverviewSummaryTests(unittest.TestCase):
         cls._page.on("console", lambda m: m.type == "error" and cls._errors.append(m.text))
         cls._page.on("pageerror", lambda e: cls._errors.append(str(e)))
         try:
-            cls._page.goto(BASE, wait_until="domcontentloaded", timeout=20000)
+            cls._page.goto(BASE(), wait_until="domcontentloaded", timeout=20000)
             cls._page.wait_for_selector(READY, timeout=20000)
             cls._page.wait_for_selector(".overview-metrics", timeout=10000)
         except Exception as exc:
             cls._browser.close()
             cls._pw_cm.stop()
             raise unittest.SkipTest(
-                f"the dev server at {BASE} did not reach the Overview "
+                f"the dev server at {BASE()} did not reach the Overview "
                 f"({exc}). Start it with `.redesign/dev.sh start` — this test "
                 f"is NOT silently passed when it cannot run."
             )
@@ -69,7 +79,7 @@ class OverviewSummaryTests(unittest.TestCase):
 
     def _at(self, width: int):
         self._page.set_viewport_size({"width": width, "height": 1000})
-        self._page.goto(BASE, wait_until="domcontentloaded")
+        self._page.goto(BASE(), wait_until="domcontentloaded")
         self._page.wait_for_selector(READY, timeout=20000)
         self._page.wait_for_timeout(120)
         return self._page

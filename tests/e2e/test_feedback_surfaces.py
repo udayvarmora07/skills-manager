@@ -45,9 +45,13 @@ Run
 from __future__ import annotations
 
 import os
+import sys
 import re
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _live_server  # noqa: E402
 
 from playwright.sync_api import sync_playwright
 
@@ -63,8 +67,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _base_url() -> str:
-    """The live app, from the isolated dev server (never the real HOME)."""
-    return os.environ.get("SKILLS_MANAGER_URL", "http://127.0.0.1:8791")
+    # 6.2f: one helper owns the base URL for every suite that needs a running
+    # web UI, so a sweep launched without `.redesign/dev.sh start` brings up its
+    # own isolated server instead of reporting ERR_CONNECTION_REFUSED as if the
+    # tree were broken. See tests/e2e/_live_server.py for the order.
+    return _live_server.live_server().url
 
 
 def _srgb(channel: float) -> float:
