@@ -675,7 +675,7 @@
         <section class="recovery-snapshot-list" aria-labelledby="recovery-snapshots-title">
           <div class="sidepanel-intro"><strong id="recovery-snapshots-title">Source snapshots</strong><span class="hint">{{ selected ? selected.name : 'Select a Library target' }}</span></div>
           <p v-if="!selected || !updateTargetAvailable" class="hint">Select an exact writable skill instance in Library to inspect its retained source snapshots.</p>
-          <p v-else-if="loadingRecoverySnapshots" class="hint">Loading source snapshots…</p>
+          <p v-else-if="loadingRecoverySnapshots" class="hint" role="status" aria-busy="true">Loading source snapshots…</p>
           <p v-else-if="recoverySnapshotsError" class="read-failed" role="alert">{{ recoverySnapshotsError }} <button class="text-button" type="button" @click="retryRecoverySnapshots">Retry</button></p>
           <p v-else-if="!recoverySnapshots.length" class="hint">No retained source snapshots for this exact target.</p>
           <ul v-else class="recovery-snapshot-items">
@@ -706,7 +706,7 @@
         <div v-if="qualityHygieneLoading" class="quality-side-status" role="status">Loading hygiene evidence…</div>
         <div v-else-if="qualityHygieneError" class="quality-side-status quality-side-error" role="alert">{{ qualityHygieneError }} <button class="text-button" type="button" @click="retryQualityHygiene">Retry</button></div>
         <div v-else-if="qualityHygiene" class="quality-side-status">{{ formatNumber(qualityHygieneSummary.physical_instances) }} physical instances · {{ formatNumber(qualityHygieneFindings.length) }} findings</div>
-        <div v-if="loadingList" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <div v-if="loadingList" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the observed skill inventory…</span><div class="skel-row"></div><div class="skel-row"></div></div>
         <div v-else-if="!filteredQualitySkills.length" class="empty compact-empty">
           <p class="empty-title">{{ qualityRecords.length ? 'No matching skills' : 'No skills observed' }}</p>
           <p>{{ qualityRecords.length ? 'Try a different search term.' : 'Quality evidence appears when a skill is observed in the current scope.' }}</p>
@@ -758,7 +758,7 @@
            something the reader has not been shown. -->
       <template v-else-if="view === 'trash'">
         <ul class="skilllist" aria-label="Trash">
-        <li v-if="loadingTrash" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></li>
+        <li v-if="loadingTrash" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the global trash…</span><div class="skel-row"></div><div class="skel-row"></div></li>
         <!-- 6.3 — a failed read is not an empty one. This used to fall
              through to "The global trash is empty", a sentence about the
              DISK produced by a request that never arrived. `trashError`
@@ -1053,7 +1053,7 @@
 
           <section class="overview-activity" aria-labelledby="activity-title">
             <div class="overview-section-head"><h2 id="activity-title">Recent activity</h2><button class="text-button" type="button" @click="openHistory">View history</button></div>
-            <p v-if="loadingHistory" class="hint">Loading recent activity…</p>
+            <p v-if="loadingHistory" class="hint" role="status" aria-busy="true">Loading recent activity…</p>
             <!-- 6.3 — `loadOverviewHistory`'s catch was completely silent: no
                  toast, no state. The Overview then said "No history entries
                  yet." about a store it had never read. -->
@@ -1156,7 +1156,7 @@
         </div>
 
         <div :id="'install-panel-' + install.registryOp" class="install-panel" role="tabpanel" :aria-labelledby="'install-tab-' + install.registryOp" tabindex="0">
-          <p v-if="busy" class="hint">Reading {{ installSource.label }}…</p>
+          <p v-if="install.reading" class="hint" role="status" aria-busy="true">Reading {{ installSource.label }}…</p>
           <div v-else-if="install.error" class="empty compact-empty">
             <h3>No rows were returned</h3>
             <p>The message above is the registry's own. No conclusion is drawn from a read that failed.</p>
@@ -1352,7 +1352,7 @@
       <div v-else-if="view === 'skills'" class="detail-inner">
         <button class="mobile-back" type="button" @click="closeMobileDetail">← Back to Library</button>
         <template v-if="loadingDetail">
-          <div class="skeleton"><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
+          <div class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the skill…</span><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
         </template>
 
         <template v-else-if="selected">
@@ -1490,7 +1490,7 @@
               <app-icon name="circle-alert" class="banner-icon-error"></app-icon>
               <div class="banner-body"><p>{{ detailHistory.error }}</p></div>
             </div>
-            <div v-else-if="detailHistory.loading" class="skeleton" role="status"><div class="skel-row"></div><div class="skel-row"></div></div>
+            <div v-else-if="detailHistory.loading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading this skill’s change history…</span><div class="skel-row"></div><div class="skel-row"></div></div>
             <p v-else-if="!detailHistory.rows.length" class="empty compact-empty">No change has been recorded for this skill.</p>
             <div v-else class="tablewrap">
               <table class="history-table">
@@ -1620,7 +1620,7 @@
         <div class="banner-body"><p>{{ banner.text }}</p></div>
       </div>
         <template v-if="loadingList || loadingDetail">
-          <div class="skeleton"><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
+          <div class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the skill…</span><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
         </template>
         <template v-else-if="selected">
           <div class="detail-head">
@@ -1695,7 +1695,7 @@
             <div class="section-label-row"><h2 id="quality-hygiene-title">Skill Hygiene Report</h2><button class="btn btn-secondary" type="button" @click="retryQualityHygiene" :disabled="qualityHygieneLoading">{{ qualityHygieneLoading ? 'Refreshing…' : 'Refresh' }}</button></div>
             <p class="hint">No combined quality score is produced. This report is deterministic, read-only evidence from the exact physical instances in the current scope; findings overlap by design and perform no cleanup.</p>
             <div v-if="qualityHygieneError" class="quality-warning" role="alert">{{ qualityHygieneError }} <button class="btn btn-secondary" type="button" @click="retryQualityHygiene">Retry</button></div>
-            <div v-else-if="qualityHygieneLoading" class="skeleton" role="status"><div class="skel-row"></div><div class="skel-row"></div></div>
+            <div v-else-if="qualityHygieneLoading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the hygiene report…</span><div class="skel-row"></div><div class="skel-row"></div></div>
             <template v-else-if="qualityHygiene">
               <div class="quality-strip" role="group" aria-label="Hygiene report totals">
                 <p class="quality-strip-lead"><strong>{{ formatNumber(qualityHygieneSummary.finding_count) }}</strong> findings across <strong>{{ formatNumber(qualityHygieneSummary.physical_instances) }}</strong> physical instances<template v-if="qualityHygieneSummary.findings_truncated"> &mdash; this list is partial</template><template v-else> &mdash; the whole list</template>. Findings are counted per category and one instance can be named by several.</p>
@@ -2064,7 +2064,7 @@
         <section class="profile-preview recovery-snapshots-panel" aria-labelledby="recovery-snapshot-panel-title">
           <div class="section-label-row"><h2 id="recovery-snapshot-panel-title">Retained snapshots</h2><span class="hint">{{ selected ? selected.name : 'No exact target selected' }}</span></div>
           <p v-if="!selected || !updateTargetAvailable" class="hint">Choose an exact writable instance in Library first. Recovery never guesses which physical copy a snapshot belongs to.</p>
-          <p v-else-if="loadingRecoverySnapshots" class="hint">Loading source snapshots…</p>
+          <p v-else-if="loadingRecoverySnapshots" class="hint" role="status" aria-busy="true">Loading source snapshots…</p>
           <p v-else-if="recoverySnapshotsError" class="read-failed" role="alert">{{ recoverySnapshotsError }} <button class="text-button" type="button" @click="retryRecoverySnapshots">Retry</button></p>
           <p v-else-if="!recoverySnapshots.length" class="empty compact-empty">No retained source snapshots for this exact target.</p>
           <ul v-else class="recovery-snapshot-items recovery-snapshot-items-wide">
@@ -2324,7 +2324,7 @@
       <h2 id="validate-modal-title" class="sr-only">Validation</h2>
       <div class="modal-head"><h2>Validate</h2><button class="modal-close" aria-label="Close" @click="closeModal('validate')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <div v-if="modals.validate.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <div v-if="modals.validate.loading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the validation report…</span><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else>
           <div class="form-field full validate-name-field">
             <label for="v-name">Skill name</label>
@@ -2365,7 +2365,7 @@
       <h2 id="doctor-modal-title" class="sr-only">Doctor</h2>
       <div class="modal-head"><h2>Doctor</h2><button class="modal-close" aria-label="Close" @click="closeModal('doctor')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <div v-if="modals.doctor.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <div v-if="modals.doctor.loading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the consistency check…</span><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else-if="modals.doctor.report">
           <div v-if="modals.doctor.report.ok" class="banner banner-ok flush tight">
             <app-icon name="check"></app-icon>
@@ -2428,7 +2428,7 @@
       <h2 id="stats-modal-title" class="sr-only">Stats</h2>
       <div class="modal-head"><h2>Stats</h2><button class="modal-close" aria-label="Close" @click="closeModal('stats')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <div v-if="modals.stats.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <div v-if="modals.stats.loading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the skill statistics…</span><div class="skel-row"></div><div class="skel-row"></div></div>
         <template v-else-if="modals.stats.report">
           <!-- 5.8b: the six figures are NOT additive and never were. `total` is
                the index row count and so includes the trashed; `active`
@@ -2499,7 +2499,7 @@
           <p class="hint">This snapshot is reviewed as a normal candidate and will produce a reverse diff against the current target.</p>
         </section>
 
-        <div v-if="modals.update.loading" class="skeleton" role="status" aria-live="polite"><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
+        <div v-if="modals.update.loading" class="skeleton" role="status" aria-live="polite" aria-busy="true"><span class="sr-only">Loading the update review…</span><div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div></div>
         <div v-if="modals.update.error" class="banner banner-error" role="alert">{{ modals.update.error }}</div>
 
         <template v-if="modals.update.review">
@@ -2604,7 +2604,7 @@
           </select>
           <button class="btn btn-primary" :disabled="busy" @click="loadHistory">Show</button>
         </div>
-        <div v-if="modals.history.loading" class="skeleton"><div class="skel-row"></div><div class="skel-row"></div></div>
+        <div v-if="modals.history.loading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the history records…</span><div class="skel-row"></div><div class="skel-row"></div></div>
         <!-- 6.3 — found by this task's own property assertion, not by reading:
              `loadHistory` toasted and left `rows` empty, so the dialog said
              "No history records." — a claim about the store made by a request
@@ -2655,7 +2655,7 @@
       <h2 id="templates-modal-title" class="sr-only">Templates</h2>
       <div class="modal-head"><h2>Templates</h2><button class="modal-close" aria-label="Close" @click="closeModal('templates')"><app-icon name="x"></app-icon></button></div>
       <div class="modal-body">
-        <div v-if="modals.templates.loading" class="skeleton"><div class="skel-row"></div></div>
+        <div v-if="modals.templates.loading" class="skeleton" role="status" aria-busy="true"><span class="sr-only">Loading the templates…</span><div class="skel-row"></div></div>
         <template v-else-if="modals.templates.names.length">
           <ul class="template-list">
             <li v-for="n in modals.templates.names" :key="n">

@@ -386,7 +386,13 @@ const appOptions = {
       scopeScanFailed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { mode: "registry", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, committed: null, error: null },
+      /* 6.3c — `reading` is the registry panel's OWN flag, and it exists
+         because `busy` was the wrong one. `busy` is set by every action in the
+         app, so binding the panel's "Reading <source>…" hint to it made this
+         panel state something it had not observed: renaming a skill anywhere
+         printed "Reading skills.sh…" here (RULES #12 — the UI states observed
+         facts). The loading half of the same defect 6.3 fixed for errors. */
+      install: { mode: "registry", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, committed: null, error: null, reading: false },
       theme: ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system",
       resolvedTheme: "light",
       systemTheme: "light",
@@ -3101,6 +3107,7 @@ const appOptions = {
       this.install.committed = null;
       this.install.lastResult = null;
       this.busy = true;
+      this.install.reading = true;
       this.install.error = null;
       try {
         const op = this.install.registryOp;
@@ -3138,6 +3145,10 @@ const appOptions = {
         this.toast(e.message, "err");
       } finally {
         this.busy = false;
+        /* `reading` clears in the same `finally` as `busy`, and on the failure
+           path too: a read that failed leaves the error banner, not a spinner
+           that never stops. */
+        this.install.reading = false;
       }
     },
 
