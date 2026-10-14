@@ -1283,7 +1283,14 @@
             <span><strong>{{ installWorkflowLabel }} did not complete</strong> &mdash; {{ install.error }}</span>
           </div>
 
-          <div v-if="install.committed" class="banner banner-success install-fetch-banner" role="status">
+          <!-- 9.1d — `banner-success` was a FIFTH name for a level the family already
+                 calls `ok`, and unlike `banner-info` it was never given a rule:
+                 this banner rendered as the unstyled base `.banner` — grey
+                 surface, `var(--border)` hairline — carrying a green check
+                 glyph. That is the `banner-warn` defect 2.3 fixed, still live
+                 in the other direction: a USED level with no rule, which no
+                 contrast gate can see because nothing was being measured. -->
+          <div v-if="install.committed" class="banner banner-ok install-fetch-banner" role="status">
             <app-icon name="circle-check" aria-hidden="true"></app-icon>
             <span><strong>{{ install.committed.name }}</strong> — {{ installFetchOutcome }}</span>
           </div>
@@ -2522,7 +2529,17 @@
 
           <section class="update-evidence-section" aria-labelledby="update-changes-title">
             <div class="section-label-row"><h3 id="update-changes-title">Changes</h3><span class="hint">added, removed, changed, line-ending-only, binary, and truncated states</span></div>
-            <p v-if="modals.update.review.review_state === 'no-change'" class="banner banner-ok" role="status">No changes detected. This review cannot be applied.</p>
+            <!-- 9.1d — the one observed condition that is neither good nor bad.
+                 It was `banner-ok`: a green tint and the sentence "No changes
+                 detected", so the dialog painted a SUCCESS for a no-op. Nothing
+                 succeeded and nothing failed; the review simply has nothing in
+                 it, and `role="status"` (not `alert`) says it is not urgent.
+                 `.banner-info` is the level the stylesheet declared beside the
+                 three that are used and the markup never reached. The glyph is
+                 the one the dynamic banner's own fallback already names for a
+                 non-error/warn/ok type, so an informational banner is never
+                 colour-only. -->
+            <p v-if="modals.update.review.review_state === 'no-change'" class="banner banner-info" role="status"><app-icon name="circle" class="banner-icon-info" aria-hidden="true"></app-icon><span>No changes detected. This review cannot be applied.</span></p>
             <p v-else-if="!(modals.update.review.comparison && modals.update.review.comparison.changed_files && modals.update.review.comparison.changed_files.length)" class="hint">No file changes were returned.</p>
             <ul v-else class="update-change-list">
               <li v-for="change in modals.update.review.comparison.changed_files" :key="change.path" class="update-change-item">

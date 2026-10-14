@@ -195,6 +195,30 @@ class UpdateReviewLiveTests(unittest.TestCase):
             " return !!(m && m.review && !m.loading); }", timeout=20000)
         self._page.wait_for_timeout(200)
 
+    def _upload_the_installed_bytes(self, name="rollback-fixture"):
+        """9.1d: reach `no-change` by copying what is already installed.
+
+        The bytes are read off disk rather than reconstructed from what
+        `store.create` was called with, because an earlier test in this class
+        COMMITS its candidate and the installed document is no longer the
+        original. Reconstructing it would compare a stale fixture against a
+        changed one and report `pending`, which is a pass for a state nobody
+        reached.
+        """
+        installed = None
+        for root, _dirs, files in os.walk(self._tmp):
+            if os.path.basename(root) == name and "SKILL.md" in files:
+                installed = os.path.join(root, "SKILL.md")
+                break
+        self.assertIsNotNone(
+            installed, f"the fixture's own {name}/SKILL.md was not found on disk")
+        shutil.copyfile(installed, os.path.join(self.candidate, "SKILL.md"))
+        self._page.set_input_files('#update-folder-input', self.candidate)
+        self._page.wait_for_function(
+            "() => { const m = window.__skillsManagerApp.modals.update;"
+            " return !!(m && m.review && !m.loading); }", timeout=20000)
+        self._page.wait_for_timeout(200)
+
     def _review_state(self):
         return self._page.evaluate(
             "() => (window.__skillsManagerApp.modals.update.review || {}).review_state")
@@ -274,6 +298,67 @@ class UpdateReviewLiveTests(unittest.TestCase):
         self.assertTrue(
             apply_btn.is_disabled(),
             "Apply was enabled before the reader ticked the confirmation")
+
+    def test_a_no_change_review_is_stated_in_a_neutral_level_not_a_success(self):
+        """9.1d. `no-change` was painted `banner-ok` — a green success for a
+        no-op, in the one dialog where a reader is deciding whether to abandon
+        a review. Nothing succeeded and nothing failed.
+
+        The colours are read from a probe element rather than from a hex table:
+        a resolved token value survives a palette retune, and this assertion is
+        about WHICH level paints, not about a number that would need rewriting.
+        The `ok` values are read in the same evaluate as the control — asserting
+        only that info is present would pass if the rule were the base class.
+        """
+        self._open_update()
+        self._upload_the_installed_bytes()
+        self.assertEqual(
+            self._review_state(), "no-change",
+            "a byte-identical candidate did not produce `no-change`; the banner "
+            "under test would not be the one this test names")
+
+        painted = self._page.evaluate("""() => {
+          const modal = document.querySelector('[data-modal="update"]');
+          const banner = modal && modal.querySelector('.banner-info');
+          const probe = (declaration) => {
+            const el = document.createElement('span');
+            el.style.color = declaration;
+            document.body.appendChild(el);
+            const out = getComputedStyle(el).color;
+            el.remove();
+            return out;
+          };
+          const glyph = banner && banner.querySelector('.banner-icon-info');
+          const cs = banner ? getComputedStyle(banner) : null;
+          return {
+            info: !!banner,
+            ok: !!(modal && modal.querySelector('.banner-ok')),
+            level: banner ? (banner.className || '') : '',
+            border: cs ? cs.borderTopColor : null,
+            background: cs ? cs.backgroundColor : null,
+            accentText: probe('var(--accent-text)'),
+            accentBg: probe('var(--accent-bg)'),
+            okText: probe('var(--ok)'),
+            okBg: probe('var(--ok-bg)'),
+            glyph: !!glyph,
+            glyphHidden: glyph ? glyph.getAttribute('aria-hidden') : null,
+            text: banner ? banner.textContent.trim() : '',
+          };
+        }""")
+        self.assertTrue(painted["info"], "no .banner-info rendered for `no-change`")
+        self.assertFalse(
+            painted["ok"],
+            "the no-change review still paints `banner-ok` — a success for a "
+            "state in which nothing succeeded")
+        self.assertEqual(painted["border"], painted["accentText"])
+        self.assertEqual(painted["background"], painted["accentBg"])
+        self.assertNotEqual(
+            painted["background"], painted["okBg"],
+            "the info tint is the ok tint — the level was renamed, not changed")
+        self.assertNotEqual(painted["border"], painted["okText"])
+        self.assertTrue(painted["glyph"], "an informational banner is colour-only")
+        self.assertEqual(painted["glyphHidden"], "true")
+        self.assertIn("No changes detected", painted["text"])
 
     def test_the_apply_button_answers_only_the_explicit_confirmation(self):
         self._open_update()
