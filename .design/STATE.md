@@ -27,14 +27,16 @@ Constraint reminder: CSS/vendored-only, no new deps/CDN/build; 326 pins + token 
 - [x] UX principles + all-states design (incl. offline/denied honesty)
 - [x] Build order finalized (Phase 4 list below; CSS + surgical template edits only)
 
-## PHASE 4 — Build (order) [ ]
-- [ ] 1 tokens+globals+fonts(polish) · 2 primitives (button/input/select/card/modal/
-      drawer/toast/tabs/table/tooltip/badge/skeleton) · 3 app shell (nav/header/
-      rail/footer/palette) · 4 Overview · 5 Library+detail · 6 Quality · 7 Profiles ·
-      8 Workspaces · 9 Install · 10 Recovery · 11 Settings · 12 Trash · 13 dialogs depth ·
-      14 states (empty/loading/error/success/offline/denied) · 15 responsive mobile-first ·
-      16 dark-mode art direction · 17 motion polish (CSS-only) · 18 a11y pass · 19 perf ·
-      20 cleanup (remove old CSS only after migrated)
+## PHASE 4 — Build (order) [~] (4.1 done)
+- [x] 4.1 Library a11y+legend: row `aria-label` (fixes empty listitem names, verified
+      in live DOM) + collapsed 7-state legend disclosure (commit d4ef054, 152 green,
+      screenshot `.design/screenshots/library-legend-1280-dark.png`)
+- [ ] 1 tokens+globals+fonts polish · 2 primitives depth · 3 app shell · 4 Overview ·
+      5 Library+detail depth · 6 Quality · 7 Profiles · 8 Workspaces · 9 Install ·
+      10 Recovery · 11 Settings · 12 Trash · 13 dialogs depth · 14 states ·
+      15 responsive (tab-strip affordance) · 16 dark art direction · 17 motion
+      (view transitions, gated) · 18 a11y pass (2.4.11 sticky coverage, `?` overlay,
+      g-keys) · 19 perf (INP budget, Vue 3.5.44 bump candidate) · 20 cleanup
 - Critique bar: each page ≥9/10 on hierarchy, type, color, spacing, motion, clarity,
   a11y, perf, originality (max 3 rounds/page; log scores here)
 
@@ -44,8 +46,14 @@ Constraint reminder: CSS/vendored-only, no new deps/CDN/build; 326 pins + token 
 - a11y (keyboard, focus, landmarks, contrast, reduced-motion, zero console errors)
 - Strict diff review + commit per item on `design/<date>`
 
-## Scores (fill during critique loop)
-(none yet)
+## Scores (critique loop)
+- Library (2026-10-15, self-critique as art director): hierarchy 9 (legend disclosure
+  adds guidance without chrome; rows keep one focal line) · typography 9 (mono names +
+  tabular numerals consistent) · color 9 (status never color-alone, gate green) ·
+  spacing 9 (legend is one 30px row) · motion n/a (no change) · clarity 9 (names +
+  legend fix audit Majors #3/#6) · a11y 9 (named rows verified in live DOM; disclosure
+  keyboard-native) · perf 10 (2 elements, no JS) · originality 8 (disclosure pattern
+  reused from tag filter — consistent, not novel). No second round needed.
 
 ## BLOCKED
 (none)
