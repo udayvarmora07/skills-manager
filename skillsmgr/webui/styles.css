@@ -29,11 +29,13 @@
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
   --s5: 20px; --s6: 24px; --s7: 32px; --s9: 32px;
 
-  /* radius — small and deliberate. A large radius applied to everything reads
-     as "template" before a single word of copy is read. */
+  /* radius — small and deliberate. Panels, dialogs, menus and cards share the
+     6px panel step (prototype `--r-md`); controls use the 4px step. A large
+     radius applied to everything reads as "template" before a single word of
+     copy is read. */
   --r-ctl: 4px;
   --r-panel: 6px;
-  --radius: 10px;
+  --radius: 6px;
   --radius-sm: 6px;
   --radius-xs: 4px;
 
@@ -1491,7 +1493,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   width: 44px;
   height: 44px;
   margin: 0 auto var(--s4);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -1755,7 +1757,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .form-field input[readonly] { opacity: 0.6; cursor: not-allowed; }
 .form-field .field-error { font-size: 0.78125rem; color: var(--err); }
 
-.dropzone { min-height: 160px; display: grid; place-items: center; gap: 8px; padding: 24px; border: 1px dashed var(--border-strong); border-radius: 10px; background: var(--surface-2); color: var(--text-muted); text-align: center; cursor: pointer; }
+.dropzone { min-height: 160px; display: grid; place-items: center; gap: 8px; padding: 24px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-muted); text-align: center; cursor: pointer; }
 .dropzone:hover { border-color: var(--accent); color: var(--text); }
 .dropzone svg { width: 40px; height: 40px; }
 .form-field.has-error input, .form-field.has-error textarea { border-color: var(--err); }
@@ -1924,7 +1926,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .copybtn { min-width: 44px; min-height: 44px; }
   .form-field input, .form-field textarea, .form-field select { min-height: 44px; }
   .searchwrap input, .form-field input, .form-field textarea, .form-field select, .workspace-project-form input, .command-palette-input { font-size: 1rem; }
-  .mobile-controls-toggle { display: block; order: 1; width: calc(100% - 24px); margin: 8px 12px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
+  .mobile-controls-toggle { display: block; order: 1; width: calc(100% - 24px); margin: 8px 12px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
   .navigation-rail .compact-controls { order: 2; display: none; }
   .navigation-rail .compact-controls.open { display: block; }
   .navigation-rail .compact-controls.open .rail-heading { padding: 12px; }
@@ -1949,7 +1951,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .layout:not(.mobile-detail-open):not(.mobile-aux-view) .detail { display: none; }
   .layout.mobile-aux-view:not(.mobile-detail-open) .detail { display: block; flex: 1; overflow-y: auto; }
   .layout.mobile-detail-open .detail { display: block; flex: 1; overflow-y: auto; }
-  .mobile-back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 16px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; }
+  .mobile-back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 16px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; }
   .detail { padding: 16px; min-height: 0; }
   .layout.overview-view .detail { display: block; flex: 1; overflow-y: auto; }
   .overview-shell { max-width: none; }
