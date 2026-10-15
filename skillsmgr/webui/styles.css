@@ -1108,7 +1108,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   top: 0;
   transform: translateX(6px);
   color: var(--text-muted);
+  font-family: var(--mono);
   font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -1141,8 +1143,8 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   overflow: hidden;
 }
 .scope-meter-fill { display: block; height: 100%; border-radius: var(--radius-xs); }
-.scope-meter-num { text-align: right; color: var(--text-muted); }
-.scope-meter-pct { text-align: right; font-weight: 600; }
+.scope-meter-num { text-align: right; color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.scope-meter-pct { text-align: right; font-weight: 600; font-family: var(--mono); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 
 /* Colour is the *last* signal here, after position and length.
    These classes are shared by the bar fill and the percentage label, so the
