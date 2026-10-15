@@ -1624,7 +1624,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
   animation: pop 0.18s cubic-bezier(0.2, 0, 0.2, 1);
 }
@@ -1842,7 +1842,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   gap: var(--s2);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: var(--r-ctl);
   box-shadow: var(--shadow-lg);
   padding: 10px var(--s4);
   font-size: 0.84375rem;
