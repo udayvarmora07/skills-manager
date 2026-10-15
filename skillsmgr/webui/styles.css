@@ -649,6 +649,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   align-items: center;
   gap: 4px;
 }
+/* The state filter reads as one segmented control (prototype `.segment`):
+   joined buttons with a single tinted active cell, no markup change. */
+.filters { gap: 0; }
+.filters .chip { border-radius: 0; margin-left: -1px; padding: 4px 10px; }
+.filters .chip:first-child { border-radius: var(--r-ctl) 0 0 var(--r-ctl); margin-left: 0; }
+.filters .chip:last-child { border-radius: 0 var(--r-ctl) var(--r-ctl) 0; }
+.filters .chip.active { position: relative; }
 .library-switch { margin-left: auto; padding-left: var(--s2); border-left: 1px solid var(--border); }
 .browse-switch .chip { display: inline-flex; align-items: center; gap: 5px; padding-inline: 8px; }
 .browse-switch svg { width: 13px; height: 13px; }
