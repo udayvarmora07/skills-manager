@@ -378,13 +378,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 32px;
+  gap: 7px;
+  height: 34px;
   padding: 0 var(--s3);
   border-radius: var(--r-ctl);
   border: 1px solid transparent;
   background: none;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
   white-space: nowrap;
