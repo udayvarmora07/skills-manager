@@ -239,7 +239,6 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    breakpoint and keeps the base path. */
 @media (min-width: 1200px) {
   body { font-size: 0.9375rem; }
-  .detail-head h1 { font-size: 1.5rem; }
   .overview-status h1 { font-size: 1.4375rem; }
   .overview-section-head h2 { font-size: 1.4375rem; }
   .budget-hero-lead h2 { font-size: 1.4375rem; }
@@ -657,7 +656,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .filters .chip { border-radius: 0; margin-left: -1px; padding: 4px 10px; }
 .filters .chip:first-child { border-radius: var(--r-ctl) 0 0 var(--r-ctl); margin-left: 0; }
 .filters .chip:last-child { border-radius: 0 var(--r-ctl) var(--r-ctl) 0; }
-.filters .chip.active { position: relative; }
+.filters .chip.active { position: relative; z-index: 1; }
+.filters .chip:focus-visible { z-index: 2; }
+.filters .chip:only-child { border-radius: var(--r-ctl); margin-left: 0; }
 .library-switch { margin-left: auto; padding-left: var(--s2); border-left: 1px solid var(--border); }
 .browse-switch .chip { display: inline-flex; align-items: center; gap: 5px; padding-inline: 8px; }
 .browse-switch svg { width: 13px; height: 13px; }
@@ -1232,7 +1233,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .attention-queue { margin-top: 20px; }
 .attention-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
 .attention-item, .queue-clear { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 4px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
-.attention-item:hover { background: var(--surface-2); }
+.attention-item:hover, .attention-item:focus-within { background: var(--surface-2); }
 .attention-index { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-ctl); background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); font-weight: 750; }
 .attention-item h3, .queue-clear h3 { margin: 0; font-size: 0.9375rem; }
 .attention-item p, .queue-clear p { margin: 3px 0 0; color: var(--text-muted); font-size: 0.8125rem; }
