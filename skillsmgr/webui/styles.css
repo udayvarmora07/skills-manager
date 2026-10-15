@@ -237,7 +237,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
    breakpoint and keeps the base path. */
 @media (min-width: 1200px) {
   body { font-size: 0.9375rem; }
-  .detail-head h1 { font-size: 2rem; }
+  .detail-head h1 { font-size: 1.5rem; }
   .overview-status h1 { font-size: 1.4375rem; }
   .overview-section-head h2 { font-size: 1.4375rem; }
   .budget-hero-lead h2 { font-size: 1.4375rem; }
@@ -1256,7 +1256,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-load-error h2 { margin: 0; font-size: 1.5625rem; }
 .overview-load-error p:not(.eyebrow) { max-width: 62ch; margin: 9px 0 18px; color: var(--text-muted); }
 
-.detail-inner { max-width: 82ch; margin: 0; min-width: 0; }
+.detail-inner { max-width: 68ch; margin: 0; min-width: 0; }
 .settings-center { max-width: 760px; }
 .quality-center { max-width: 920px; }
 .quality-actions { align-items: flex-start; }
@@ -1315,7 +1315,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .settings-side-note { margin: 10px 4px; color: var(--text-muted); font-size: 0.8125rem; line-height: 1.45; }
 
 .detail-head { display: flex; align-items: flex-start; gap: var(--s4); justify-content: space-between; flex-wrap: wrap; }
-.detail-head h1 { margin: 0; font-size: 1.75rem; font-weight: 650; line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.detail-head h1 { margin: 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 
 .badge-row { display: flex; gap: var(--s2); margin-top: var(--s2); align-items: center; flex-wrap: wrap; }
 
@@ -1434,7 +1434,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   margin-top: 28px;
   padding-top: 24px;
   border-top: 1px solid var(--border);
-  max-width: 72ch;
+  max-width: 68ch;
 }
 .body h2 { margin-top: 0; border: 0; font-size: 1.3125rem; }
 
