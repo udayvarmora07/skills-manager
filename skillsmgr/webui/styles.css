@@ -1208,7 +1208,7 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-status h1:focus-visible { border-radius: var(--radius-sm); }
 .overview-statusline { margin: 0; color: var(--text-muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
 .overview-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); margin-left: auto; }
-.overview-health { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 28px; margin-top: 28px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); box-shadow: var(--shadow); }
+.overview-health { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 28px; margin-top: 28px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 .overview-health-main { min-width: 0; }
 .overview-health-kicker { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.8125rem; font-weight: 650; }
 .status-mark { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r-ctl); border: 1px solid currentColor; font-size: 0.8125rem; font-weight: 750; }
@@ -1227,8 +1227,9 @@ html[data-text-size="large"] { font-size: 1.125rem; }
 .overview-section-note { margin: 6px 0 14px; color: var(--text-muted); font-size: 0.8125rem; }
 .attention-queue, .overview-compact { min-width: 0; }
 .attention-queue { margin-top: 20px; }
-.attention-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
-.attention-item, .queue-clear { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.attention-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.attention-item, .queue-clear { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 4px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.attention-item:hover { background: var(--surface-2); }
 .attention-index { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-ctl); background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); font-weight: 750; }
 .attention-item h3, .queue-clear h3 { margin: 0; font-size: 0.9375rem; }
 .attention-item p, .queue-clear p { margin: 3px 0 0; color: var(--text-muted); font-size: 0.8125rem; }
