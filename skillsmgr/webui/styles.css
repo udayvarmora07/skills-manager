@@ -1895,6 +1895,15 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   .navigation-rail .viewtabs button { padding-inline: 8px; font-size: 0.8125rem; }
   .detail { padding: 24px; }
   .rail-quick-actions { margin-inline: 8px; }
+  /* Tablet topbar: brand + full search + four actions exceed ~753px because
+     flex items refuse to shrink below min-content. The count pill duplicates
+     the statusbar, so it hides here (as on phones); the search and brand may
+     compress instead of pushing the actions off-canvas. */
+  .stat-pill { display: none; }
+  .searchwrap { min-width: 0; }
+  .searchwrap input { min-width: 0; }
+  .brand { min-width: 0; overflow: hidden; }
+  .brand-name { overflow: hidden; text-overflow: ellipsis; }
   /* Tablet: the two-column health/columns grids blow out below ~1000px and
      paint under each other. Single column here, as on phones. */
   .overview-health, .overview-columns { grid-template-columns: 1fr; gap: 18px; margin-top: 18px; }
