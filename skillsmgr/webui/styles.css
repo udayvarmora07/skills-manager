@@ -156,31 +156,31 @@
    light/dark data-theme. */
 @media (prefers-color-scheme: dark) {
   [data-theme="system"] {
-    --bg: #15181e;
-    --surface: #20252e;
-    --surface-2: #282f3a;
-    --border: #37404c;
-    --border-strong: #6e7884;
-    --text: #edf0f5;
-    --text-muted: #a5afbd;
-    --accent: #e7a06f;
-    --accent-hover: #f0b187;
-    --accent-active: #d38958;
-    --accent-soft: #3b2c25;
-    --accent-text: #f1b287;
-    --on-accent: #24140d;
-    --ok: #74d3a0;
-    --ok-soft: #1c382a;
-    --warn: #e6bd67;
-    --warn-soft: #3b311b;
-    --err: #f08b84;
-    --err-soft: #402522;
-    --on-err: #241212;
-    --code-bg: #2a251e;
-    --overlay: rgba(0, 0, 0, .68);
-    --shadow: 0 1px 2px rgba(0, 0, 0, .36), 0 8px 24px -12px rgba(0, 0, 0, .52);
-    --shadow-lg: 0 12px 32px -12px rgba(0, 0, 0, .65), 0 28px 64px -22px rgba(0, 0, 0, .72);
-    --focus-ring: 0 0 0 3px rgba(231, 160, 111, .42);
+    --bg: #101316;
+    --surface: #171a1e;
+    --surface-2: #1e2227;
+    --border: #23282e;
+    --border-strong: #6a7178;
+    --text: #eef1f3;
+    --text-muted: #98a0a8;
+    --accent: #4fc7bd;
+    --accent-hover: #7ad9d1;
+    --accent-active: #3ba79e;
+    --accent-soft: #122b29;
+    --accent-text: #4fc7bd;
+    --on-accent: #06211f;
+    --ok: #7fb87f;
+    --ok-soft: #16211a;
+    --warn: #d9ab52;
+    --warn-soft: #241f14;
+    --err: #e88b76;
+    --err-soft: #241614;
+    --on-err: #2a0f0b;
+    --code-bg: #12161a;
+    --overlay: rgba(0, 0, 0, .62);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .40), 0 6px 20px -10px rgba(0, 0, 0, .55);
+    --shadow-lg: 0 10px 26px -10px rgba(0, 0, 0, .68), 0 22px 52px -20px rgba(0, 0, 0, .74);
+    --focus-ring: 0 0 0 3px rgba(79, 199, 189, .34);
   }
 }
 
@@ -229,6 +229,20 @@ a {
 input, select, textarea { font-family: inherit; font-size: 0.875rem; color: var(--text); }
 
 html[data-text-size="large"] { font-size: 1.125rem; }
+
+/* Laptop calibration: at a normal viewing distance the base 13-14px body and
+   28px display read small, so above a 1200px CSS viewport the prose and display
+   type step up while chrome keeps its sizing. Mirrors the prototype's laptop
+   tokens; at 125% zoom on a 1366px screen the viewport falls below this
+   breakpoint and keeps the base path. */
+@media (min-width: 1200px) {
+  body { font-size: 0.9375rem; }
+  .detail-head h1 { font-size: 2rem; }
+  .overview-status h1 { font-size: 1.4375rem; }
+  .overview-section-head h2 { font-size: 1.4375rem; }
+  .budget-hero-lead h2 { font-size: 1.4375rem; }
+  .budget-hero-lead p { font-size: 0.9375rem; }
+}
 
 :focus-visible {
   outline: 2px solid var(--accent);
