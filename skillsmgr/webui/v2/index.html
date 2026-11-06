@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Skills Manager</title>
-  <meta name="description" content="See every AI agent on this computer, the skills each one knows, and fix what is out of step. Local only.">
+  <meta name="description" content="Inspect detected AI tools, their skill copies and differences. Local only.">
   <script src="../preferences.js"></script>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
@@ -50,8 +50,8 @@
     <!-- ========== HOME ========== -->
     <div class="page" v-if="route.page === 'home'">
       <h1 class="h1" id="h1" tabindex="-1">Your agents</h1>
-      <p class="lede">Each AI tool on this computer and the skills it knows.
-        <b v-if="queue.length">{{ plural(queue.length, 'thing needs', 'things need') }} a look.</b><b v-else>Everything is working.</b></p>
+      <p class="lede">Each detected AI tool and the skills found in its folders.
+        <b v-if="queue.length">{{ plural(queue.length, 'thing needs', 'things need') }} a look.</b><b v-else>No inventory issues detected.</b></p>
       <p class="state-note err" role="alert" v-if="loadError">{{ loadError }}</p>
       <div class="home">
         <section aria-label="Agents" class="rooms">
@@ -78,7 +78,7 @@
               </div>
               <a class="see-all" href="#/inbox" v-if="queue.length > 3">Open inbox ({{ queue.length }}) <ic name="arrow" cls="i-s"></ic></a>
             </template>
-            <div class="look" v-else><span class="look-ic" style="background:var(--ok-bg);color:var(--ok)"><ic name="check"></ic></span><div><b>All clear</b><p>Every skill can be read and every copy matches.</p></div></div>
+            <div class="look" v-else><span class="look-ic" style="background:var(--ok-bg);color:var(--ok)"><ic name="check"></ic></span><div><b>All clear</b><p>No remaining Inbox items. Hidden notes return after reload.</p></div></div>
           </div>
           <div class="card" v-if="sharedSkills.length">
             <h2>Shared by most agents</h2><p class="sub">Skills that live in the most places</p>
@@ -159,7 +159,7 @@
               <h1 class="doc-title" id="h1" tabindex="-1">{{ titleCase(skill.name) }}</h1>
               <p class="doc-lead">{{ skill.description || 'No description yet.' }}</p>
               <div class="inline-note bad" v-if="skill.status.key === 'bad'"><b>Problem:</b> {{ brokenText }}<br><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
-              <div class="inline-note warn" v-if="skill.status.key === 'warn' && cmp"><b>{{ agentOf(cmp.scope).name }} has a different copy.</b> The highlighted lines are not in it.<br><button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
+              <div class="inline-note warn" v-if="skill.status.key === 'warn' && cmp"><b>{{ agentOf(cmp.scope).name }} has a different copy.</b> The highlighted lines are not in it. Sync also copies file enabled state and companion files. Undo restores document text and file enabled state only.<br><button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
               <div class="doc" v-html="docHtml"></div>
             </article>
             <aside class="margin" aria-label="About this skill">
@@ -170,14 +170,22 @@
                 <label class="hl"><input type="checkbox" v-model="highlight"> Highlight what's missing</label>
                 <button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
               <div class="note bad" v-if="skill.status.key === 'bad'"><b>Problem</b><p>{{ brokenText }}</p><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
-              <div class="note" v-if="skill.status.key === 'off'"><b>Turned off</b><p>No agent uses this skill right now.</p><button type="button" class="btn btn-ink btn-sm" @click="allOn()">Turn on everywhere</button></div>
-              <div class="note ok" v-if="skill.status.key === 'ok'"><b>Status</b><p>Working. Every copy matches.</p></div>
-              <div class="note"><b>Used by</b><div class="uses">
+              <div class="note" v-if="skill.status.key === 'off'"><b>Turned off</b><p>Every observed document copy is disabled on disk.</p><button type="button" class="btn btn-ink btn-sm" @click="allOn()">Turn on everywhere</button></div>
+              <div class="note ok" v-if="skill.status.key === 'ok'"><b>Status</b><p>Readable copies match. Agent loading is not checked.</p></div>
+              <div class="note"><b>Copies in</b><p>Switches rename skill files only; native agent settings are separate.</p><div class="uses">
                 <div class="use" v-for="c in skill.copies" :key="c.path"><logo :agent="agentOf(c.scope)" size="xs"></logo>
                   <span>{{ agentOf(c.scope).name }} <span class="ver-tag" v-if="c.version && skill.ref.groups.length > 1" :class="{ odd: c.hash !== skill.ref.hash }" :title="'Copy ' + c.version + ' — same text as ' + join(skill.copies.filter((x) => x.hash === c.hash).map((x) => agentOf(x.scope).name))">Copy {{ c.version }}</span>
                     <small class="bad" v-if="c.state === 'broken'">Can't be read</small><small v-else-if="c.state === 'link'">Linked from another folder</small><small class="warn" v-else-if="c.hash && c.hash !== skill.ref.hash">Different from most places</small><small v-else-if="c.state === 'off'">Turned off here</small></span>
-                  <label class="switch" :title="(c.state === 'on' ? 'On' : 'Off') + ' in ' + agentOf(c.scope).name"><input type="checkbox" :checked="c.state === 'on'" :disabled="c.state === 'broken' || busy" @change="toggleCopy(c)"><span class="tr"></span><span class="sr-only">Use in {{ agentOf(c.scope).name }}</span></label></div>
+                  <label class="switch" :title="(c.state === 'on' ? 'File enabled' : 'File disabled') + ' in ' + agentOf(c.scope).name"><input type="checkbox" :checked="c.state === 'on'" :disabled="c.state === 'broken' || busy" @change="toggleCopy(c)"><span class="tr"></span><span class="sr-only">File enabled in {{ agentOf(c.scope).name }}</span></label></div>
               </div></div>
+              <div class="note" v-if="skill.copies.some((c) => c.record.native_state)"><details class="native-settings"><summary>Native settings (partial)</summary>
+                <p>Observed declarations only. Effective loading is unknown; file switches do not change these settings.</p>
+                <div v-for="c in skill.copies.filter((c) => c.record.native_state)" :key="c.path">
+                  <b>{{ agentOf(c.scope).name }}</b>
+                  <ul class="hist"><li v-for="source in c.record.native_state.sources" :key="source.source">{{ source.source }}: {{ source.status }}<small>{{ source.declared ? 'Declared setting: ' + source.declared : source.status === 'ok' ? 'No matching declaration' : source.status === 'missing' ? 'Settings file absent' : 'Declaration unknown' }}</small></li></ul>
+                  <p>{{ c.record.native_state.reason }}</p>
+                </div>
+              </details></div>
               <div class="note" v-if="skill.ref.groups.length > 1"><b>Copies</b>
                 <ul class="hist"><li v-for="g in skill.ref.groups" :key="g[0].hash"><span class="ver-tag" :class="{ odd: g[0].hash !== skill.ref.hash }">Copy {{ g[0].version }}</span> {{ join(g.map((c) => agentOf(c.scope).name)) }}<small>{{ g[0].hash === skill.ref.hash && !skill.ref.ambiguous ? 'Held by the most places' : plural(g.length, 'place') }} · {{ fmt(words(g[0].tokens)) }} words</small></li></ul></div>
               <div class="note"><b>Length</b><p>About {{ fmt(words(skill.tokens)) }} words · {{ lengthPct }}% of a reading window</p></div>
@@ -270,7 +278,7 @@
             <div class="mrow" v-if="mapSel.differing.length > 12"><span></span><span><small>and {{ mapSel.differing.length - 12 }} more. Use the Inbox.</small></span><a class="btn btn-soft btn-sm" href="#/inbox">Inbox</a></div></div>
           <div class="minidiff" v-if="peekLines" :aria-label="'Differences in ' + peek"><div class="h">{{ peek }}: what will change in {{ mapSel.agent.name }}</div>
             <div v-for="(l, i) in peekLines" :key="i" :class="l.t"><span class="sr-only" v-if="l.t === 'add'">Added: </span><span class="sr-only" v-else-if="l.t === 'del'">Removed: </span>{{ plainLine(l.x) }}</div></div>
-          <p class="backup" v-if="mapSel.differing.length"><ic name="undo" cls="i-s"></ic>The old text is saved first, and you can undo.</p>
+          <p class="backup" v-if="mapSel.differing.length"><ic name="undo" cls="i-s"></ic>Sync copies file enabled state and companion files too. Undo restores document text and file enabled state only.</p>
           <div class="cta" v-if="mapSel.differing.some((s) => !s.ref.ambiguous)"><button type="button" class="btn btn-ink btn-lg" :disabled="!mapPicked.length || busy" @click="syncPicked()">Make {{ plural(mapPicked.length, 'skill') }} match in {{ mapSel.agent.name }}</button></div>
           <div class="cta" v-else-if="mapSel.differing.length"><a class="btn btn-line btn-lg" href="#/inbox" style="flex:1">Choose which copies to keep in the Inbox</a></div>
         </template>
@@ -313,7 +321,7 @@
     <div class="inbox" v-else-if="route.page === 'inbox'">
       <div class="card empty" style="padding:72px 24px" v-if="!queue.length">
         <span class="ic"><ic name="check"></ic></span><h2 id="h1" tabindex="-1">All done</h2>
-        <p>{{ done ? 'You fixed ' + plural(done, 'thing') + '. ' : '' }}Every skill can be read, and every copy matches.</p>
+        <p>{{ done ? 'You fixed ' + plural(done, 'thing') + '. ' : '' }}No remaining Inbox items. Hidden notes return after reload.</p>
         <div style="display:flex;gap:8px;margin-top:8px"><a class="btn btn-ink" href="#/home">Go to Home</a><a class="btn btn-line" href="#/skills">Browse skills</a></div></div>
       <template v-else>
         <div class="prog"><span class="bars" aria-hidden="true"><i v-for="n in progressBars" :key="n" :class="n <= Math.min(done, progressBars) ? 'done' : n === Math.min(done, progressBars - 1) + 1 ? 'now' : ''"></i></span><span>{{ done }} fixed · {{ queue.length }} to go</span></div>
@@ -322,6 +330,7 @@
           <span :class="['pill', cur.key === 'info' ? '' : cur.key]" :style="cur.key === 'info' ? 'background:var(--sunken);color:var(--ink-2)' : null"><ic :name="cur.key === 'info' ? 'info' : cur.key"></ic>{{ cur.key === 'bad' ? cur.short : cur.key === 'warn' ? 'Copies differ' : cur.space ? 'Suggestion' : cur.noteOnly ? 'Not a skill' : 'For your information' }}</span>
           <h2 id="focus-t">{{ cur.title }}</h2>
           <p class="why">{{ cur.text }}<template v-if="cur.space"> Here are its largest skills:</template></p>
+          <p class="sub" v-if="cur.key === 'warn' || (cur.key === 'bad' && cur.fixable)">Sync also copies file enabled state and companion files. Undo restores document text and file enabled state only.</p>
           <template v-if="cur.key === 'warn'">
             <fieldset class="srcpick" v-if="curSkill.ref.groups.length">
               <legend>Which copy should everyone use?</legend>

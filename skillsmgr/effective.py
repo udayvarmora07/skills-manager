@@ -758,6 +758,17 @@ def _facade_warnings(spec: dict, budget: dict) -> list[str]:
     return warnings
 
 
+def _project_paths(project: str | Path) -> tuple[Path, Path]:
+    """Translate expansion/resolution failures without echoing caller paths."""
+    try:
+        candidate = Path(str(project)).expanduser()
+        return candidate, candidate.resolve()
+    except (RuntimeError, OSError, ValueError):
+        from .store import StoreError
+
+        raise StoreError("invalid project path") from None
+
+
 def explain(consumer: str, project: str | Path | None = None, *,
             skill: str | None = None,
             allowed_root=None) -> dict:
@@ -794,7 +805,7 @@ def explain(consumer: str, project: str | Path | None = None, *,
     resolved_project: Path | None = None
     project_outside = False
     if project is not None:
-        candidate = Path(str(project)).expanduser()
+        candidate, resolved_project = _project_paths(project)
         if not candidate.is_dir():
             return _result(
                 "missing-project",
@@ -803,7 +814,6 @@ def explain(consumer: str, project: str | Path | None = None, *,
                 source=spec["source"],
                 reason=f"project directory does not exist: {candidate}",
             )
-        resolved_project = candidate.resolve()
         project_outside = bool(allowed) and not _under_any(allowed, resolved_project)
 
     if project_outside:

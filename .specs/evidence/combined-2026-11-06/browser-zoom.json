@@ -1,0 +1,16 @@
+[
+  {
+    "percent": 200,
+    "dpr": 2,
+    "width": 640,
+    "client": 632,
+    "scroll": 632
+  },
+  {
+    "percent": 400,
+    "dpr": 4,
+    "width": 320,
+    "client": 316,
+    "scroll": 316
+  }
+]

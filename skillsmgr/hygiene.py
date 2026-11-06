@@ -123,16 +123,20 @@ def _deduplicate_physical_instances(records: list[dict]) -> list[dict]:
                 tuple(reversed(_record_sort_key(item))),
             ),
         )
-        chosen["_aliases"] = [
-            {
-                "scope": alias.get("scope"),
-                "scope_label": alias.get("scope_label"),
-                "consumer": alias.get("consumer"),
-            }
-            for alias in aliases
-        ]
+        chosen["_aliases"] = [_alias_observation(alias) for alias in aliases]
         result.append(chosen)
     return sorted(result, key=_record_sort_key)
+
+
+def _alias_observation(alias: dict) -> dict:
+    result = {key: _bounded(alias.get(key) or "") for key in ("scope", "scope_label", "consumer")}
+    result["path"] = _bounded(alias.get("path", alias.get("physical_path")) or "")
+    for key in ("disabled", "addressable", "malformed"):
+        if key in alias:
+            result[key] = bool(alias[key])
+    if "instance_state" in alias:
+        result["instance_state"] = _bounded(alias["instance_state"])
+    return result
 
 
 def _path(record: dict) -> Path | None:
@@ -283,6 +287,18 @@ def _public_instance(record: dict) -> dict:
         result["physical_path"] = _bounded(path, MAX_STRING)
     else:
         result["path"] = "path unavailable"
+    result.update(_public_aliases(record))
+    return result
+
+
+def _public_aliases(record: dict) -> dict:
+    aliases = record.get("_aliases", [])
+    if len(aliases) <= 1:
+        return {}
+    result = {"observations": aliases[:MAX_GROUP_INSTANCES]}
+    if len(aliases) > MAX_GROUP_INSTANCES:
+        result["observations_total"] = len(aliases)
+        result["observations_truncated"] = True
     return result
 
 

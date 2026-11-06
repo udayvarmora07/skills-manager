@@ -1,0 +1,162 @@
+skillsmgr/webapp.py (largest 10):
+  WebAppHandler._route_get: lines 1498-1533, LOC 36, complexity 13
+  _registry_fetch_result: lines 119-143, LOC 25, complexity 13
+  WebAppHandler._route_skills_get: lines 1128-1186, LOC 59, complexity 12
+  WebAppHandler._route_install_post: lines 1702-1758, LOC 57, complexity 12
+  WebAppHandler._execute_batch_post: lines 1536-1579, LOC 44, complexity 12
+  WebAppHandler._route_source_update_post: lines 1636-1674, LOC 39, complexity 12
+  WebAppHandler._route_stats_get: lines 1343-1401, LOC 59, complexity 11
+  WebAppHandler._route_put: lines 2071-2112, LOC 42, complexity 11
+  WebAppHandler._route_post: lines 1984-2017, LOC 34, complexity 11
+  WebAppHandler._route_tokens_get: lines 1403-1453, LOC 51, complexity 10
+skillsmgr/cli.py (largest 2):
+  main: lines 99-118, LOC 20, complexity 6
+  build_parser: lines 94-96, LOC 3, complexity 1
+skillsmgr/cli_parser.py (largest 3):
+  _port_number: lines 25-32, LOC 8, complexity 3
+  build_parser: lines 35-325, LOC 291, complexity 1
+  add_scope_arg: lines 15-22, LOC 8, complexity 1
+skillsmgr/cli_handlers.py (largest 10):
+  validate_cli_combinations: lines 143-215, LOC 73, complexity 68
+  cmd_doctor: lines 882-972, LOC 91, complexity 28
+  cmd_validate: lines 453-515, LOC 63, complexity 27
+  cmd_tokens: lines 1227-1295, LOC 69, complexity 24
+  cmd_view: lines 336-382, LOC 47, complexity 23
+  _update_preview_text: lines 1708-1737, LOC 30, complexity 21
+  cmd_install: lines 1640-1691, LOC 52, complexity 19
+  validate_cli_names: lines 106-140, LOC 35, complexity 17
+  _registry_operation: lines 1394-1459, LOC 66, complexity 16
+  cmd_search: lines 634-675, LOC 42, complexity 16
+skillsmgr/store.py (largest 10):
+  Store._edit_unlocked: lines 1802-1917, LOC 116, complexity 36
+  Store.import_: lines 2436-2576, LOC 141, complexity 34
+  Store._create_unlocked: lines 1602-1680, LOC 79, complexity 21
+  Store.export: lines 2334-2430, LOC 97, complexity 18
+  Store._resync_locked: lines 1334-1406, LOC 73, complexity 13
+  _sweep_abandoned_artifacts: lines 629-669, LOC 41, complexity 13
+  Store.restore: lines 2027-2083, LOC 57, complexity 10
+  Store.add: lines 1708-1751, LOC 44, complexity 10
+  _doctor_is_clean: lines 708-733, LOC 26, complexity 10
+  _plan_full_restore: lines 814-838, LOC 25, complexity 9
+skillsmgr/frontmatter.py (largest 10):
+  _Parser._parse_block_scalar: lines 411-477, LOC 67, complexity 21
+  _Parser._split_flow: lines 572-617, LOC 46, complexity 16
+  _Parser._strip_inline_comment: lines 783-816, LOC 34, complexity 14
+  _Parser._parse_double_quoted: lines 694-733, LOC 40, complexity 13
+  _Parser._find_flow_end: lines 541-570, LOC 30, complexity 13
+  _Parser._split_key: lines 737-765, LOC 29, complexity 13
+  _format_key_text: lines 1281-1295, LOC 15, complexity 11
+  _find_closing_marker: lines 86-126, LOC 41, complexity 10
+  _dump_scalar_value_nested: lines 988-1013, LOC 26, complexity 9
+  _Parser._parse_inline_mapping: lines 292-336, LOC 45, complexity 8
+skillsmgr/scopes.py (largest 10):
+  sync_skill: lines 894-1019, LOC 126, complexity 34
+  edit_skill: lines 713-803, LOC 91, complexity 28
+  create_skill: lines 628-710, LOC 83, complexity 21
+  get_skill: lines 530-590, LOC 61, complexity 18
+  _search_all_uncached: lines 1119-1159, LOC 41, complexity 12
+  toggle_skill: lines 833-873, LOC 41, complexity 11
+  list_scopes: lines 231-283, LOC 53, complexity 9
+  find_duplicates: lines 483-527, LOC 45, complexity 8
+  _enrich_global_row: lines 358-395, LOC 38, complexity 8
+  _safe_scope_skill_path: lines 83-115, LOC 33, complexity 8
+skillsmgr/registry.py (largest 10):
+  _validate_provenance: lines 960-1074, LOC 115, complexity 72
+  validate_snapshot: lines 236-307, LOC 72, complexity 28
+  RegistryClient._request_json: lines 676-733, LOC 58, complexity 26
+  materialize_snapshot: lines 871-923, LOC 53, complexity 20
+  _safe_join: lines 153-186, LOC 34, complexity 17
+  _local_file_manifest: lines 1077-1113, LOC 37, complexity 14
+  _validate_public_search: lines 498-531, LOC 34, complexity 11
+  RegistryClient._read_cache: lines 618-640, LOC 23, complexity 11
+  _registry_url: lines 94-109, LOC 16, complexity 10
+  write_registry_review: lines 338-397, LOC 60, complexity 9
+skillsmgr/validator.py (largest 10):
+  validate_text: lines 141-267, LOC 127, complexity 32
+  _check_links: lines 390-456, LOC 67, complexity 21
+  _check_layout: lines 307-358, LOC 52, complexity 15
+  validate_skill: lines 479-530, LOC 52, complexity 9
+  _check_portability: lines 270-285, LOC 16, complexity 8
+  _check_scalar: lines 361-387, LOC 27, complexity 7
+  validate_skill_name: lines 74-97, LOC 24, complexity 7
+  _reference_candidates: lines 459-476, LOC 18, complexity 4
+  Issue.__str__: lines 108-112, LOC 5, complexity 3
+  description_score: lines 292-304, LOC 13, complexity 2
+skillsmgr/effective.py (largest 10):
+  explain: lines 772-941, LOC 170, complexity 30
+  _bounded_walk: lines 341-377, LOC 37, complexity 13
+  _overall: lines 603-632, LOC 30, complexity 10
+  _redact_value: lines 660-680, LOC 21, complexity 10
+  _build_tier: lines 466-512, LOC 47, complexity 9
+  _resolve_ordered: lines 529-566, LOC 38, complexity 9
+  _both_load: lines 706-734, LOC 29, complexity 7
+  _tier_report: lines 451-463, LOC 13, complexity 6
+  _facade_warnings: lines 737-758, LOC 22, complexity 5
+  _classify: lines 407-421, LOC 15, complexity 5
+skillsmgr/hygiene.py (largest 10):
+  near_duplicate_candidates: lines 545-609, LOC 65, complexity 31
+  _duplicate_findings: lines 428-492, LOC 65, complexity 26
+  _description_findings: lines 652-681, LOC 30, complexity 14
+  _validation_findings: lines 357-411, LOC 55, complexity 13
+  _source_lock_findings: lines 722-774, LOC 53, complexity 12
+  _candidate_pairs: lines 520-542, LOC 23, complexity 11
+  _read_observation: lines 152-201, LOC 50, complexity 10
+  _context_findings: lines 684-719, LOC 36, complexity 10
+  _validate_record: lines 218-235, LOC 18, complexity 10
+  _prepare_records: lines 238-268, LOC 31, complexity 8
+skillsmgr/source_lock.py (largest 10):
+  commit_local_update: lines 582-653, LOC 72, complexity 22
+  local_manifest: lines 87-132, LOC 46, complexity 18
+  _compare_manifests: lines 314-381, LOC 68, complexity 15
+  preview_local_update: lines 424-491, LOC 68, complexity 14
+  _validate_lock: lines 179-206, LOC 28, complexity 14
+  restore_source_snapshot: lines 656-688, LOC 33, complexity 11
+  _source_text: lines 44-55, LOC 12, complexity 9
+  write_source_lock: lines 245-263, LOC 19, complexity 8
+  read_source_lock: lines 225-242, LOC 18, complexity 8
+  _relative_file: lines 74-84, LOC 11, complexity 8
+skillsmgr/source_update.py (largest 10):
+  commit_update_review: lines 754-828, LOC 75, complexity 16
+  _prepare_from_source: lines 415-495, LOC 81, complexity 13
+  _resolve_target: lines 268-291, LOC 24, complexity 11
+  _active_rollback_ids: lines 599-615, LOC 17, complexity 11
+  _reject_unsafe_tree: lines 301-317, LOC 17, complexity 10
+  _snapshot_folder: lines 538-552, LOC 15, complexity 10
+  _snapshot_entries: lines 555-596, LOC 42, complexity 9
+  _load_record: lines 133-149, LOC 17, complexity 9
+  _target_record: lines 240-265, LOC 26, complexity 8
+  _stage_candidate: lines 349-373, LOC 25, complexity 7
+skillsmgr/backup_sync.py (largest 10):
+  _validate_review: lines 359-397, LOC 39, complexity 21
+  commit_sync_review: lines 492-546, LOC 55, complexity 16
+  _skill_entry: lines 68-94, LOC 27, complexity 13
+  three_way_plan: lines 154-191, LOC 38, complexity 10
+  _ensure_credential_free: lines 224-236, LOC 13, complexity 10
+  dry_run: lines 116-144, LOC 29, complexity 9
+  _source_label: lines 45-54, LOC 10, complexity 9
+  _run_git: lines 279-305, LOC 27, complexity 8
+  read_sync_review: lines 418-434, LOC 17, complexity 7
+  interrupted_sync: lines 194-208, LOC 15, complexity 6
+skillsmgr/archive.py (largest 10):
+  validate_manifest: lines 317-367, LOC 51, complexity 27
+  _validate_archive_layout: lines 156-177, LOC 22, complexity 20
+  commit_staged_skill: lines 491-559, LOC 69, complexity 17
+  validate_zip_members: lines 370-408, LOC 39, complexity 16
+  restore_full_payload: lines 583-636, LOC 54, complexity 15
+  extract_zip_members: lines 411-443, LOC 33, complexity 11
+  normalize_member_name: lines 89-107, LOC 19, complexity 11
+  _validate_archive_limits: lines 110-136, LOC 27, complexity 9
+  extract_members: lines 446-470, LOC 25, complexity 9
+  validate_members: lines 295-314, LOC 20, complexity 8
+skillsmgr/evals.py (largest 10):
+  _assertion_result: lines 379-418, LOC 40, complexity 17
+  load_cases: lines 233-288, LOC 56, complexity 15
+  _assertions: lines 179-210, LOC 32, complexity 15
+  benchmark: lines 490-524, LOC 35, complexity 14
+  normalize_runs: lines 439-473, LOC 35, complexity 12
+  _case_files: lines 156-176, LOC 21, complexity 12
+  record_runs: lines 566-650, LOC 85, complexity 10
+  normalize_case: lines 213-230, LOC 18, complexity 9
+  grade_output: lines 421-436, LOC 16, complexity 7
+  _regex_search: lines 358-376, LOC 19, complexity 5
+COMPLEXITY CHECK PASSED: 721 functions across 16 files; new-function budget <= 15

@@ -20,6 +20,7 @@ from __future__ import annotations
 import copy
 import difflib
 import re
+import unicodedata
 from typing import Callable
 
 from .validator import validate_skill_name
@@ -374,8 +375,39 @@ def risk_scan(record: dict) -> list[dict]:
     findings.extend(_scan_suspicious_phrases(body))
     findings.extend(_scan_extension_keys(record))
     findings.extend(_scan_bare_urls(body, findings))
+    findings.extend(_scan_hidden_unicode(record))
     return [dict(finding, advisory=True, authority="advisory")
             for finding in findings]
+
+
+def _scan_hidden_unicode(record: dict) -> list[dict]:
+    """Report bounded, escaped format-control evidence in known text fields."""
+    counts: dict[tuple[str, str], int] = {}
+    omitted = 0
+    for field in ("name", "description", "body", "compatibility", "allowed_tools", "allowed-tools"):
+        value = record.get(field)
+        if not isinstance(value, str):
+            continue
+        for char in value:
+            if not (unicodedata.category(char) == "Cf" or
+                    0xE0000 <= ord(char) <= 0xE007F or
+                    unicodedata.bidirectional(char) in {"LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI"}):
+                continue
+            key = (field, char)
+            if key in counts or len(counts) < 32:
+                counts[key] = counts.get(key, 0) + 1
+            else:
+                omitted += 1
+    if not counts:
+        return []
+    evidence = "; ".join(
+        f"{field}: U+{ord(char):04X} {unicodedata.name(char, 'UNNAMED')} ({count} occurrences)"
+        for (field, char), count in sorted(counts.items())
+    )
+    if omitted:
+        evidence += f"; {omitted} additional occurrences omitted"
+    return [{"kind": "unicode", "severity": "medium", "evidence": evidence,
+             "why": "Format, bidirectional, or tag characters can hide or reorder text; review the named fields and code points. This scan is advisory and does not establish safety."}]
 
 
 def _scan_script_patterns(body: str) -> list[dict]:

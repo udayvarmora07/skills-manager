@@ -1,0 +1,122 @@
+[manager]	WARNING	Test in comment: every is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: member is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: passed is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: path is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: type is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: size is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: layout is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: validation is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: above is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: each is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: subprocess is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: call is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: below is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: uses is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: trusted is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: Git is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: and is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: bounded is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: argv is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: trusted is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: executable is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: validated is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: argv is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: and is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: no is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: shell is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: this is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: is is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: a is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: boolean is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: trust is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: report is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: field is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: not is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: a is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: credential is not a test name or id, ignoring
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:114
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:115
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:116
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:117
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:118
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:119
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:115
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/bundles.py:118
+[manager]	WARNING	Test in comment: reviewed is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: editor is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: and is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: allowlisted is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: installer is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: calls is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: use is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: list is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: argv is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: explicit is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: user is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: authorized is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: editor is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: list is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: argv is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: shell is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: False is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: runner is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: and is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: argv is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: are is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: validated is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: before is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: execution is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: shell is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: stays is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: false is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: explanatory is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: prose is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: never is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: a is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: secret is not a test name or id, ignoring
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:517
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:518
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:519
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:521
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:522
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:523
+[tester]	WARNING	nosec encountered (B105), but no failed test on file skillsmgr/evals.py:520
+[manager]	WARNING	Test in comment: only is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: internally is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: generated is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: placeholders is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: enter is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: SQL is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: text is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: names is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: remain is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: DB is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: API is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: parameters is not a test name or id, ignoring
+[tester]	WARNING	nosec encountered (B608), but no failed test on file skillsmgr/store.py:399
+[tester]	WARNING	nosec encountered (B608), but no failed test on file skillsmgr/store.py:401
+[tester]	WARNING	nosec encountered (B608), but no failed test on file skillsmgr/store.py:406
+[manager]	WARNING	Test in comment: only is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: the is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: allowlisted is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: installer is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: and is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: trusted is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: opener is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: use is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: it is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: runner is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: options is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: are is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: allowlisted is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: and is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: argv is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: is is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: shell is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: free is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: executable is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: is is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: owner is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: permission is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: validated is not a test name or id, ignoring
+[manager]	WARNING	Test in comment: above is not a test name or id, ignoring

@@ -129,7 +129,11 @@ and explicitly unavailable signals. `normalize_instruction_body()` owns the
 narrow exact-instruction comparison normalization; `near_duplicate_candidates()`
 uses bounded inverted-index features and weighted Jaccard scores. The module
 does not write files, SQLite, caches, history, or network state and exposes no
-Store method.
+Store method. Physical findings retain bounded alias `observations` (scope,
+path and supplied state flags), with explicit total/truncation above 100
+observations. Validation keeps mapping-valued compatibility as an error with
+portability guidance, warns once for non-spec top-level keys, and warns when
+description plus `when_to_use` exceeds 1,536 characters.
 
 ## `registry.py`
 
@@ -238,7 +242,10 @@ Repository-only AST complexity ratchet for the web, CLI, store, and frontmatter 
 Internal policy modules extracted from the former Store/scopes hotspots. They
 own atomic text writes and tree hashes, archive preflight/extraction/staged
 commit behavior, trusted data-root validation, resolved root-containment, and
-physical-root/capability/instance-state observations. `paths.py` remains a
+physical-root/capability/instance-state observations. `archive.open_tar()`
+reads a tar through a position-capped decompressed view (`_BoundedReader`,
+`MAX_ARCHIVE_DECOMPRESSED_BYTES`) and validation walks members one header at a
+time, so no cap waits for a full `getmembers()` listing (R1). `paths.py` remains a
 compatibility adapter for the existing containment function names.
 
 ## `effective.py`
@@ -293,7 +300,8 @@ explicitly unresolved per ADR-002), `diff_skills()`/`diff_three_way()`
 `update_preview()` (changed files, token/body/snapshot risks, rollback flag),
 `quarantine_plan()` (stage-only plan validated by `validate_skill_name`),
 `risk_scan()` (explainable script/link/tool/pattern findings with why +
-evidence), `registry_preview()` (offline dry-run gated on explicit trust),
+evidence, plus bounded hidden-Unicode/bidi/tag code points and names in known
+text fields; advisory only, no safe verdict or rewriting), `registry_preview()` (offline dry-run gated on explicit trust),
 `registry_reference()` (offline parse of `owner/repo`, `owner/repo/slug`,
 `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo` into
 `{form, source, slug, registry_id, page_url, audit_links}` — no request, cache,
@@ -400,3 +408,12 @@ TTY auto-detect; honors `NO_COLOR` and `FORCE_COLOR`; `color(text, code)` and st
 - `check_package_data.py` — verifies the complete web UI inside the built wheel and sdist; `--dist-dir` inspects the exact artifacts CI publishes and, with `--install`, also installs them into fresh temporary venvs. It asserts PEP 639 `License-Expression: MIT`, `License-File: LICENSE`, byte-identical license payloads, and no deprecated license classifier, then checks the vendored Vue bundle against the recorded upstream version/sha256/size (SEC-9) — including the copy inside each artifact — and inspects **every** archive member, so a build shipping `tests/`, `docs/`, `.env`, a database or bytecode fails (BUG-13/SEC-13); `MANIFEST.in` prunes `tests` from the sdist. `browser_harness.py` — dev-only system-Chrome CDP probe (sandbox enabled, loopback-only ephemeral port, trusted executable discovery). `desktop_launcher.py` uses the same resolver.
 - `smoke_store.py` — exercises the Store API (init, add, list, get, search, disable, enable, trash, restore, purge, export, import round-trip, stats, history, resync, db_rebuild). Must pass after any `store.py` change.
 - `smoke_web.py` — starts `WebAppServer` on an ephemeral port and hits every REST endpoint (static, CRUD, search, validate, toggle, stats/doctor/history, templates, export→import, trash/restore/purge, rebuild/resync, multipart upload, error paths). Must pass after any `webapp.py` change.
+
+## `native_state.py`
+
+Read-only bounded JSON observations for Claude Code skill visibility and
+OpenCode skill permissions. `observe_native_states()` loads each selected
+source once per scope batch; `observe_native_state()` serves one name. Nothing
+is cached across requests or written. Reports disclose selected declarations
+with explicit uncertainty, not effective loading. See
+@docs/12-agent-root-discovery-2026-09-08.md for file ordering and parser bounds.

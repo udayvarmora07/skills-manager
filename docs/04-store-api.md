@@ -20,6 +20,9 @@
 
 - `StoreError` (the module-level class in `store.py`) — generic store failure (duplicate, invalid state, I/O).
 - `SkillNotFound` (subclasses `StoreError`) — skill absent or unavailable (e.g. disabled).
+- `LockTimeoutError` (subclasses `StoreError`, `status = 409`) — another
+  process held a mutation lock past `atomic_io.MUTATION_LOCK_TIMEOUT`; retry
+  (R5).
 - `StoreLayoutError` (subclasses `StoreError`, `status = 404`) — the managed
   layout exists but cannot be used: a component of `<data>` is a regular file,
   or the index is a directory. Distinct from "nothing is installed", because
@@ -56,7 +59,7 @@ write paths, so the condition has one name wherever a user meets it.
   include derived, non-persisted observations: portable/extension frontmatter
   partitions, content and metadata hashes, observed timestamp, and provenance.
 - `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`. Scope adapters use `list()` plus **one** `SELECT name, body` over the `_index_rows` read seam when they need body-aware ranking, so ranking costs no per-row document read; see the `search_all()` entry in @docs/02-modules.md. CLI global and merged searches pass their requested Store through that adapter, so `--data-dir` remains authoritative.
-- `add(self, src, name=None) -> dict` — install an existing skill directory (or SKILL.md file) from `src`; `name` overrides the destination name.
+- `add(self, src, name=None) -> dict` — install an existing skill directory (or SKILL.md file) from `src`; `name` overrides the destination name. Manager sidecars (`.skillsmgr-provenance.json`, `.skillsmgr-source-lock.json`) are dropped at any depth: an added folder is external intake, and that evidence describes a different install (R2). The caller's folder is not modified.
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
 - `restore(self, name, snapshot=None) -> dict` — from trash, or from a validated
   snapshot under `<data>/snapshots/global/<name>/`; the current content is saved
@@ -68,6 +71,8 @@ write paths, so the condition has one name wherever a user meets it.
   lists each purged skill once even when several timestamped copies existed.
 - `stats(self) -> dict` — counts and summary.
 - `export(self, dest=None, full=False) -> Path` / `backup(self, dest=None, full=False) -> Path` — slim skills-only archive by default; `full=True` adds validated trash and templates.
+  An explicit destination is a file path and atomically replaces an existing
+  file; default destinations use unique names under backups.
 - Export manifests include a SHA-256 content hash for each skill tree; imports verify hashes in staging and after commit when present. Hashes are verification metadata, not SQLite state.
 - `import_(self, archive, force=False, full=False) -> dict` — imports `.tar.gz`/`.tgz`/`.tar`
   and ZIP content (sniffed by content, not only filename). Resource-budget
@@ -75,9 +80,15 @@ write paths, so the condition has one name wherever a user meets it.
   versions/names/paths, and invalid extracted documents raise `StoreError`.
   ZIP members are manually extracted to contained paths and symlink-bit entries
   are rejected. Each skill is staged independently before replacement;
-  successful names appear in `imported`, failures/already-present names in
+  Preflight failures abort the entire import before any skill is installed,
+  including malformed documents previously exported from the filesystem. At
+  the per-skill commit stage, successful names appear in `imported`,
+  commit failures/already-present names in
   `skipped`, and failed replacements restore the previous destination. A failed
   staging copy leaves the existing skill directory untouched.
+- Archive imports strip both manager sidecars from the whole extracted tree
+  (skills and full-archive trash) before validation, so an export → import
+  round trip deliberately drops provenance and source-lock evidence (R2).
 - `full=True` requires a boolean `full` flag and plain-name `trash`/`templates`
   entries; every payload is validated before any mutation, then installed as one
   all-or-nothing transaction that rolls back on failure and raises
@@ -143,3 +154,10 @@ CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status);
 ## Open questions
 
 - `[?]` None currently.
+
+**[SPEC] Byte-preserving sync snapshots (2026-11-06).** Force sync saves the
+exact prior document bytes at `<data>/snapshots/SCOPE/NAME/ID.md` before
+replacement. Undecodable snapshots are retained for manual byte recovery;
+`read_snapshot` and ordinary text restore refuse a lossy rewrite. Retention
+still keeps the newest five document snapshots, not a whole-tree archive.
+A failed snapshot leaves the destination unchanged.

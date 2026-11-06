@@ -253,7 +253,7 @@ const app = createApp({
         this.history = Array.isArray(history) ? history : (history && history.history) || [];
         this.loadTrash();
       } catch (e) {
-        this.loadError = e.message || "The skills could not be read.";
+        this.loadError = this.friendly(e.message || "The skills could not be read.");
       } finally { this.loading = false; }
     },
     async loadSkillHistory() {
@@ -278,7 +278,8 @@ const app = createApp({
     friendly(msg) {
       let s = String(msg || "Something went wrong.");
       if (/invalid archive|not a gzip|ReadError|zipfile/i.test(s)) return "That file is not a backup archive. Choose a .tar.gz, .tar or .zip file made by Skills Manager.";
-      if (/not valid UTF-8/i.test(s)) return "One of the copies is not saved as UTF-8 text, so it can't be overwritten safely. Open it in a text editor and save it as UTF-8 first.";
+      if (/not valid UTF-8/i.test(s)) return "One of the copies is not saved as UTF-8 text. Keep a copy of the original file, then open it in a text editor and save it as UTF-8 before editing it here.";
+      if (/traceback|(?:UnicodeDecode|Recursion|Permission|FileNotFound|Operational)Error|\[Errno \d+\]/i.test(s)) return "The operation could not be completed. Refresh and try again; check that the skill files are readable and writable.";
       return s.replace(/(?:\/[^\s'":]+)+\/([^\s'":/]+)/g, "$1").replace(/\s*\(byte 0x[0-9a-f]+ at offset \d+\)/i, "");
     },
     toast(text, opts = {}) {
@@ -290,7 +291,7 @@ const app = createApp({
     async runUndo(t) {
       this.toasts = this.toasts.filter((x) => x.id !== t.id);
       this.busy = true;
-      try { await t.undo(); if (t.onUndo) t.onUndo(); await this.refresh(); this.toast("Undone"); } catch (e) { this.toast("Couldn't undo: " + e.message, { err: true }); } finally { this.busy = false; }
+      try { await t.undo(); await this.refresh(); if (t.onUndo) t.onUndo(); this.toast("Undone"); } catch (e) { await this.refresh(); if (t.onUndo) t.onUndo(); this.toast("Couldn't undo: " + e.message, { err: true }); } finally { this.busy = false; }
     },
     openDialog(d) { this.opener = document.activeElement; this.dialog = { cancel: "Cancel", ...d }; this.$nextTick(() => { const d = this.$refs.dlg; const b = d && (d.querySelector("input:not(.sr-only), select") || d.querySelector("button:not(.sr-only)")); if (b) b.focus(); }); },
     closeDialog() { this.dialog = null; this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
@@ -307,29 +308,52 @@ const app = createApp({
 
     /* ----- writes (every one goes through the existing REST routes) ----- */
     async snapshotIds(name, scope) {
-      try { const r = await api(`/api/history?name=${encodeURIComponent(name)}&scope=${encodeURIComponent(scope)}&snapshots=1`); return (r && r.snapshots) || []; } catch (e) { return []; }
+      const r = await api(`/api/history?name=${encodeURIComponent(name)}&scope=${encodeURIComponent(scope)}&snapshots=1`);
+      if (!r || !Array.isArray(r.snapshots)) throw new Error("Recovery snapshots could not be read. Refresh and try again.");
+      return r.snapshots;
     },
     /* Copy `from` over each target. The previous text of each target is
      * snapshotted by the backend, which is what makes Undo possible. */
     async doSync(name, from, tos) {
-      const before = {};
-      for (const t of tos) before[t] = new Set(await this.snapshotIds(name, t));
+      const before = {}, prior = {};
+      for (const t of tos) {
+        before[t] = new Set(await this.snapshotIds(name, t));
+        prior[t] = await api(`/api/skills/${encodeURIComponent(name)}?scope=${encodeURIComponent(t)}`).catch(() => null);
+      }
       const res = await api("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, from_scope: from, to_scopes: tos, force: true }) });
       const synced = res.synced || [];
-      const undo = [];
+      const undo = []; let manualRecovery = false;
       for (const t of synced) {
-        const after = await this.snapshotIds(name, t);
-        const fresh = after.find((id) => !before[t].has(id));
-        if (fresh) undo.push([t, fresh]);
+        let after;
+        try { after = await this.snapshotIds(name, t); } catch (e) { manualRecovery = true; continue; }
+        const fresh = after.filter((id) => !before[t].has(id));
+        if (fresh.length === 1 && prior[t] && !prior[t].decode_error) undo.push([t, fresh[0], !!prior[t].disabled]);
+        else manualRecovery = true;
       }
-      return { synced, skipped: res.skipped || [], undo };
+      return { synced, skipped: res.skipped || [], undo, manualRecovery };
+    },
+    async restoreSyncText(name, scope, snapshot, wasDisabled) {
+      const target = `/api/skills/${encodeURIComponent(name)}`;
+      const query = `?scope=${encodeURIComponent(scope)}`;
+      const current = await api(target + query), initiallyDisabled = !!current.disabled;
+      let restored = false;
+      try {
+        if (initiallyDisabled) await api(target + "/enable" + query, { method: "POST" });
+        await api(`/api/trash/${encodeURIComponent(name)}?snapshot=${encodeURIComponent(snapshot)}&scope=${encodeURIComponent(scope)}`, { method: "POST" });
+        restored = true;
+      } finally {
+        const disabled = restored ? wasDisabled : initiallyDisabled;
+        const latest = await api(target + query);
+        if (!!latest.disabled !== disabled) await api(target + (disabled ? "/disable" : "/enable") + query, { method: "POST" });
+      }
     },
     undoFor(name, entries) {
-      const list = entries.flatMap((e) => e.undo.map(([scope, snap]) => [e.name || name, scope, snap]));
+      if (entries.some((e) => e.manualRecovery)) return null;
+      const list = entries.flatMap((e) => e.undo.map(([scope, snap, off]) => [e.name || name, scope, snap, off]));
       if (!list.length) return null;
-      return async () => { for (const [n, scope, snap] of list) await api(`/api/trash/${encodeURIComponent(n)}?snapshot=${encodeURIComponent(snap)}&scope=${encodeURIComponent(scope)}`, { method: "POST" }); };
+      return async () => { for (const [n, scope, snap, off] of list) await this.restoreSyncText(n, scope, snap, off); };
     },
-    skipText(skipped) { return skipped.length ? ` ${skipped.length} could not be changed: ${skipped.map((s) => s.reason).slice(0, 2).join("; ")}.` : ""; },
+    skipText(skipped) { return skipped.length ? ` ${skipped.length} could not be changed: ${skipped.map((s) => this.friendly(s.reason)).slice(0, 2).join("; ")}.` : ""; },
 
     async syncDiffering() {
       const s = this.skill;
@@ -343,7 +367,7 @@ const app = createApp({
         const r = await this.doSync(name, from, tos);
         const undo = this.undoFor(name, [r]);
         await this.refresh();
-        this.toast(r.synced.length ? `${label} ${join(r.synced.map((id) => this.agentOf(id).name))}.${this.skipText(r.skipped)}` : "Nothing was changed." + this.skipText(r.skipped), { err: !r.synced.length, undo: r.synced.length ? undo : null, onUndo });
+        this.toast(r.synced.length ? `${label} ${join(r.synced.map((id) => this.agentOf(id).name))}.${this.skipText(r.skipped)}${r.manualRecovery ? ' Undo is unavailable for this sync; recovery needs your backup or retained snapshots.' : ''}` : "Nothing was changed." + this.skipText(r.skipped), { err: !r.synced.length, undo: r.synced.length ? undo : null, onUndo });
         return r.synced.length ? r : null;
       } catch (e) { this.toast(e.message, { err: true }); return null; } finally { this.busy = false; }
     },
@@ -386,7 +410,7 @@ const app = createApp({
     openShare() {
       const s = this.skill, from = this.refCopy.scope;
       this.openDialog({
-        title: `Add “${s.name}” to another agent`, lines: ["Choose where it should also be available. The copy comes from " + this.agentOf(from).name + "."],
+        title: `Add “${s.name}” to another agent`, lines: ["Choose where to copy it. The copy comes from " + this.agentOf(from).name + ". Its file enabled or disabled state and companion files are copied too."],
         picks: this.shareTargets.map((a) => ({ id: a.id, label: a.name, path: a.path })), chosen: this.shareTargets.length === 1 ? [this.shareTargets[0].id] : [], confirm: "Add",
         onConfirm: (d) => this.runSync(s.name, from, d.chosen, `${s.name} was added to`),
       });
@@ -540,7 +564,7 @@ const app = createApp({
         const undo = this.undoFor("", results);
         await this.refresh(); this.mapPicked = this.mapDefaults(inf.id);
         const ok = results.filter((r) => r.synced.length).length;
-        this.toast(`${plural(ok, "skill")} now ${ok === 1 ? "matches" : "match"} in ${inf.agent.name}.`, { undo });
+        this.toast(`${plural(ok, "skill")} now ${ok === 1 ? "matches" : "match"} in ${inf.agent.name}.${results.some((r) => r.manualRecovery) ? ' Undo is unavailable for this sync; recovery needs your backup or retained snapshots.' : ''}`, { undo });
       } catch (e) { this.toast(e.message, { err: true }); await this.refresh(); } finally { this.busy = false; }
     },
 
@@ -549,7 +573,7 @@ const app = createApp({
       const p = this.cur; if (!p || this.busy) return null;
       if (p.key === "warn" && !this.srcChoice) return null; /* nothing chosen yet: same as the disabled button */
       /* Undo of a fix puts the item back in the queue, since the file is back. */
-      const back = () => { this.dismissed = this.dismissed.filter((id) => id !== p.id); this.done = Math.max(0, this.done - 1); };
+      const back = () => { if (!this.m.problems.some((item) => item.id === p.id)) return; this.dismissed = this.dismissed.filter((id) => id !== p.id); this.done = Math.max(0, this.done - 1); };
       let ok = false;
       if (p.key === "warn") {
         const s = this.curSkill, src = this.srcChoice;

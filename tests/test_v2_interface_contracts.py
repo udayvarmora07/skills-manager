@@ -35,7 +35,9 @@ def _node(body: str):
         f"vm.runInContext(fs.readFileSync({json.dumps(str(DOMAIN_JS))},'utf8'),ctx);"
         f"vm.runInContext(fs.readFileSync({json.dumps(str(V2 / 'model.js'))},'utf8'),ctx);"
         "const M=ctx.window.SkillsV2Model;"
-        f"const out=(function(){{{body}}})();console.log(JSON.stringify(out));"
+        f"const out=(function(){{{body}}})();"
+        "Promise.resolve(out).then(value=>console.log(JSON.stringify(value)))"
+        ".catch(error=>{console.error(error);process.exit(1);});"
     )
     res = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True, cwd=str(ROOT))
     return json.loads(res.stdout)
@@ -92,6 +94,15 @@ class ModelStatusTests(unittest.TestCase):
             "rec('a','claude-code',{disabled:1,instance_states:['disabled']})]")
         self.assertEqual(out, {"a": "Turned off"})
 
+    def test_native_off_evidence_stays_separate_from_file_enabled_state(self):
+        out = _node(HELPERS + """
+        const native={effective_state:'unknown',partial:true,sources:[{source:'user',status:'ok',declared:'off'}]};
+        const c=M.build([rec('a','claude-code',{native_state:native})],scopes).skills[0].copies[0];
+        return {state:c.state,native:c.record.native_state};""")
+        self.assertEqual(out["state"], "on")
+        self.assertEqual(out["native"]["effective_state"], "unknown")
+        self.assertEqual(out["native"]["sources"][0]["declared"], "off")
+
     def test_aliases_of_one_physical_document_count_once(self):
         out = _node(HELPERS + "const r=[rec('a','claude-code'),rec('a','claude-code')];"
                     "const m=M.build(r,scopes);return m.skills[0].copies.length;")
@@ -134,8 +145,8 @@ class ModelProblemTests(unittest.TestCase):
         self.assertEqual(out, {"claude-code": "A", "codex": "B", "opencode": "A"})
 
     def test_an_undecodable_copy_is_never_offered_an_automatic_overwrite(self):
-        # E2E D1: the backend refuses to overwrite a non-UTF-8 file, so the UI
-        # must not promise a one-click fix it cannot deliver.
+        # E2E D1: force sync can preserve binary snapshots, but this screen's
+        # text Undo cannot restore them. Keep manual guidance here.
         out = _node(HELPERS + """
         const m=M.build([rec('u','claude-code'),
           rec('u','codex',{malformed:true,instance_states:['invalid'],decode_error:"'utf-8' codec can't decode byte 0xff"})],scopes);
@@ -143,6 +154,22 @@ class ModelProblemTests(unittest.TestCase):
         self.assertFalse(out["fixable"])
         self.assertEqual(out["action"], "Show me how")
         self.assertEqual(out["short"], "Not readable text")
+
+    def test_mixed_damaged_targets_do_not_offer_text_undo_for_binary_bytes(self):
+        out = _node(HELPERS + """
+        const m=M.build([rec('u','claude-code',{malformed:true,instance_states:['invalid'],decode_error:'bad frontmatter'}),
+          rec('u','codex',{malformed:true,instance_states:['invalid'],decode_error:'not valid UTF-8'}),
+          rec('u','opencode')],scopes);
+        const p=m.problems.find(x=>x.id==='bad:u');return {fixable:p.fixable,short:p.short};""")
+        self.assertFalse(out["fixable"])
+        self.assertEqual(out["short"], "Not readable text")
+
+    def test_a_refused_link_cannot_be_the_source_of_a_repair(self):
+        out = _node(HELPERS + """
+        const m=M.build([rec('u','claude-code',{malformed:true,instance_states:['invalid'],decode_error:'bad frontmatter'}),
+          rec('u','codex',{malformed:true,instance_states:['invalid'],decode_error:'skill path escapes managed root'})],scopes);
+        return m.problems.find(x=>x.id==='bad:u').fixable;""")
+        self.assertFalse(out)
 
     def test_problems_are_ordered_serious_first(self):
         out = _node(HELPERS + """
@@ -194,6 +221,101 @@ class RenderSafetyTests(unittest.TestCase):
         self.assertIn("del:b", out["small"])
         self.assertIn("add:x", out["small"])
         self.assertLess(out["ms"], 5000)  # the cell budget degrades to a plain replace, never a hang
+
+
+@unittest.skipUnless(NODE, "node is required")
+class ErrorPresentationTests(unittest.TestCase):
+    def test_library_errors_are_actionable_and_private_paths_are_removed(self):
+        source = json.dumps(str(V2 / "app.js"))
+        out = _node(f"""
+        ctx.Vue={{createApp(options){{ctx.options=options;return {{component(){{}},mount(){{}}}};}},markRaw:x=>x}};
+        vm.runInContext(fs.readFileSync({source},'utf8'),ctx);
+        return ['Traceback /home/private/secret', 'PermissionError: [Errno 13] /home/private/file',
+          'invalid archive: ReadError /tmp/private/upload', "skill '/home/private/demo' changed since review"]
+          .map(message=>ctx.options.methods.friendly(message));""")
+        for text in out:
+            self.assertNotRegex(text, r"/home/|/tmp/|Traceback|PermissionError|ReadError|Errno")
+        self.assertIn("backup archive", out[2])
+        self.assertIn("changed since review", out[3])
+
+
+@unittest.skipUnless(NODE, "node is required")
+class SyncUndoTests(unittest.TestCase):
+    def test_sync_undo_requires_complete_unambiguous_snapshot_coverage(self):
+        source = json.dumps(str(V2 / "app.js"))
+        out = _node(f"""
+        let mode='',posts=0;
+        ctx.window.SkillManagerDomain={{...ctx.window.SkillManagerDomain,api:async(url,options={{}})=>{{
+          if(options.method==='POST'){{posts++;return {{synced:['codex','opencode']}};}}
+          if(url.includes('scope=opencode') && mode==='missing-prior') throw new Error('missing');
+          return {{disabled:1,decode_error:mode==='binary'?'not valid UTF-8':''}};
+        }}}};
+        ctx.Vue={{createApp(options){{ctx.options=options;return {{component(){{}},mount(){{}}}};}},markRaw:x=>x}};
+        vm.runInContext(fs.readFileSync({source},'utf8'),ctx);
+        return (async()=>{{
+          const results=[];
+          for(mode of ['normal','new-target','missing-prior','post-failure','before-failure','stale','ambiguous','binary']){{
+            const counts={{}};posts=0;
+            const context={{snapshotIds:async(_name,scope)=>{{
+              const call=counts[scope]=(counts[scope]||0)+1;
+              if(mode==='before-failure' && call===1) throw new Error('read failed');
+              if(mode==='post-failure' && scope==='opencode' && call===2) throw new Error('read failed');
+              if(call===1 || (scope==='opencode' && (mode==='new-target' || mode==='stale'))) return ['old'];
+              return mode==='ambiguous'?['old','new','another']:['old','new'];
+            }}}};
+            try{{const result=await ctx.options.methods.doSync.call(context,'sample','claude-code',['codex','opencode']);
+              results.push({{mode,posts,undo:!!ctx.options.methods.undoFor.call({{}},'sample',[result])}});
+            }}catch(e){{results.push({{mode,posts,error:e.message}});}}
+          }}
+          return results;
+        }})();""")
+        self.assertTrue(out[0]["undo"])
+        for result in out[1:]:
+            with self.subTest(mode=result["mode"]):
+                if result["mode"] == "before-failure":
+                    self.assertEqual(result["posts"], 0)
+                    self.assertEqual(result["error"], "read failed")
+                else:
+                    self.assertFalse(result["undo"])
+                    self.assertEqual(result["posts"], 1)
+
+    def _restore(self, initially_disabled, was_disabled, fail_restore=False):
+        source = json.dumps(str(V2 / "app.js"))
+        return _node(f"""
+        const calls=[];let disabled={json.dumps(initially_disabled)};
+        ctx.window.SkillManagerDomain={{...ctx.window.SkillManagerDomain,api:async(url,options={{}})=>{{
+          calls.push([options.method||'GET',url]);
+          if(url.includes('/enable?')) disabled=false;
+          else if(url.includes('/disable?')) disabled=true;
+          else if(url.includes('/api/trash/') && {json.dumps(fail_restore)}) throw new Error('restore failed');
+          return {{disabled}};
+        }}}};
+        ctx.Vue={{createApp(options){{ctx.options=options;return {{component(){{}},mount(){{}}}};}},markRaw:x=>x}};
+        vm.runInContext(fs.readFileSync({source},'utf8'),ctx);
+        return (async()=>{{
+          let error='';
+          try{{await ctx.options.methods.restoreSyncText('sample','codex','snapshot-1',{json.dumps(was_disabled)});}}
+          catch(e){{error=e.message;}}
+          return {{disabled,calls,error}};
+        }})();""")
+
+    def test_undo_restores_disabled_target_state_after_enabled_source_sync(self):
+        out = self._restore(False, True)
+        self.assertTrue(out["disabled"])
+        self.assertEqual(out["error"], "")
+        self.assertIn("/disable?", out["calls"][-1][1])
+
+    def test_undo_temporarily_enables_a_disabled_copy_for_text_restore(self):
+        out = self._restore(True, False)
+        self.assertFalse(out["disabled"])
+        self.assertIn("/enable?", out["calls"][1][1])
+        self.assertIn("/api/trash/", out["calls"][2][1])
+
+    def test_failed_undo_restores_state_before_undo_attempt(self):
+        out = self._restore(True, False, fail_restore=True)
+        self.assertTrue(out["disabled"])
+        self.assertEqual(out["error"], "restore failed")
+        self.assertIn("/disable?", out["calls"][-1][1])
 
 
 @unittest.skipUnless(NODE, "node is required")

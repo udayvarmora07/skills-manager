@@ -21,6 +21,7 @@ from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
 from .loader import (
     load_skill,
     read_skill_text_strict,
+    read_skill_text,
     reject_conflicting_documents,
     scan_dir,
 )
@@ -341,6 +342,16 @@ def _annotate_scope_entries(entries: list[dict], scope: Scope, physical_root: st
         if isinstance(e.get("provenance"), dict):
             e["provenance"]["scope"] = scope.id
             e["provenance"]["consumer"] = scope.consumer
+    return _annotate_native_entries(entries, scope)
+
+
+def _annotate_native_entries(entries: list[dict], scope: Scope) -> list[dict]:
+    from .native_state import observe_native_states
+
+    states = observe_native_states(scope.consumer, [entry["name"] for entry in entries],
+                                   home=paths.home_dir(), project=_cwd())
+    for entry in entries:
+        entry["native_state"] = states[entry["name"]]
     return entries
 
 
@@ -366,7 +377,7 @@ def _enrich_global_row(r: dict, store: Store, physical_root: str) -> None:
             raw = ""
             for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
                 if cand.is_file():
-                    raw = cand.read_text(encoding="utf-8")
+                    raw, _ = read_skill_text(cand)
                     break
             tok = _est(raw)
             r["tokens"] = tok["tokens"]
@@ -534,7 +545,7 @@ def get_skill(scope_id: str, name: str) -> dict:
             raw = ""
             for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
                 if cand.is_file():
-                    raw = cand.read_text(encoding="utf-8")
+                    raw, _ = read_skill_text(cand)
                     break
             tok = _est(raw)
             rec["tokens"] = tok["tokens"]
@@ -563,7 +574,7 @@ def get_skill(scope_id: str, name: str) -> dict:
         entry["provenance"]["consumer"] = scope.consumer
     # Try to enrich from raw frontmatter (compatibility, allowed-tools).
     try:
-        raw = (skill_dir / "SKILL.md").read_text(encoding="utf-8") if (skill_dir / "SKILL.md").is_file() else (skill_dir / "SKILL.md.disabled").read_text(encoding="utf-8")
+        raw, _ = read_skill_text(skill_dir / ("SKILL.md" if (skill_dir / "SKILL.md").is_file() else "SKILL.md.disabled"))
         data, _ = parse_frontmatter(raw)
         if isinstance(data.get("compatibility"), str):
             entry["compatibility"] = data["compatibility"]
@@ -576,7 +587,7 @@ def get_skill(scope_id: str, name: str) -> dict:
         entry["lines"] = raw.count("\n") + 1 if raw else 0
     except Exception as exc:
         _diagnose(f"scope detail enrichment failed for {scope_id!r}", exc)
-    return entry
+    return _annotate_native_entries([entry], scope)[0]
 
 
 def get_raw(scope_id: str, name: str) -> str:
@@ -596,8 +607,22 @@ def get_raw(scope_id: str, name: str) -> str:
         p = _safe_scope_skill_path(scope, name)
     for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
         if cand.is_file():
-            return read_skill_text_strict(cand, subject=f"skill '{name}'")
+            return read_skill_text(cand)[0]
     raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
+
+
+def _check_mutation_documents(skill_dir: Path) -> None:
+    for filename in ("SKILL.md", "SKILL.md.disabled"):
+        if (skill_dir / filename).is_symlink():
+            raise StoreError("cannot mutate a symlinked skill document; replace the link with a regular file first")
+
+
+def _scope_mutation_lock(skill_dir: Path):
+    # A document symlink changes the lock's resolved key across a rename.
+    # Refuse it before calculating the same key used by Store, then recheck
+    # inside the lock before touching either document.
+    _check_mutation_documents(skill_dir)
+    return _mutation_lock(skill_dir.resolve() / "SKILL.md")
 
 
 def create_skill(
@@ -651,7 +676,8 @@ def create_skill(
     # Do not let the sidecar lock's preparation create the candidate directory;
     # an absent flat path is precisely the successful create case.
     scope.base.mkdir(parents=True, exist_ok=True)
-    with _mutation_lock(skill_dir / "SKILL.md"):
+    with _scope_mutation_lock(skill_dir):
+        _check_mutation_documents(skill_dir)
         # A recursive scope may already contain an observed nested instance with
         # this name.  The flat destination is the public create address, so it
         # is still valid to create it only when the flat path itself is absent;
@@ -711,69 +737,70 @@ def edit_skill(
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     skill_dir = _safe_scope_skill_path(scope, name)
-    if not skill_dir.is_dir():
-        raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
-    md = skill_dir / "SKILL.md"
-    if not md.is_file():
-        if (skill_dir / "SKILL.md.disabled").is_file():
-            raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
-        raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
-    text = read_skill_text_strict(md, subject=f"skill '{name}'")
-    try:
-        data, orig_body = parse_frontmatter(text)
-    except FrontmatterError as exc:
-        # SCOPE-12: treating an unparseable document as "no frontmatter" made
-        # the rewrite re-emit the corrupt document as the *body* and dump a
-        # fresh block above it -- four '---' fences, no 'name', and no error.
-        # Fail closed, mirroring the undecodable-document policy above.
-        raise StoreError(
-            f"cannot safely edit skill '{name}' in scope '{scope_id}': its "
-            f"frontmatter is malformed ({exc}); repair it by hand first"
-        ) from exc
-    orig_keys = list(data.keys())
-    changed = False
-    if description is not None:
-        description = description.strip()
-        if not description:
-            raise StoreError("description cannot be empty")
-        if data.get("description") != description:
-            data["description"] = description
+    with _scope_mutation_lock(skill_dir):
+        _check_mutation_documents(skill_dir)
+        if not skill_dir.is_dir():
+            raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
+        md = skill_dir / "SKILL.md"
+        if not md.is_file():
+            if (skill_dir / "SKILL.md.disabled").is_file():
+                raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
+            raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
+        text = read_skill_text_strict(md, subject=f"skill '{name}'")
+        try:
+            data, orig_body = parse_frontmatter(text)
+        except FrontmatterError as exc:
+            # SCOPE-12: treating an unparseable document as "no frontmatter" made
+            # the rewrite re-emit the corrupt document as the *body* and dump a
+            # fresh block above it -- four '---' fences, no 'name', and no error.
+            # Fail closed, mirroring the undecodable-document policy above.
+            raise StoreError(
+                f"cannot safely edit skill '{name}' in scope '{scope_id}': its "
+                f"frontmatter is malformed ({exc}); repair it by hand first"
+            ) from exc
+        orig_keys = list(data.keys())
+        changed = False
+        if description is not None:
+            description = description.strip()
+            if not description:
+                raise StoreError("description cannot be empty")
+            if data.get("description") != description:
+                data["description"] = description
+                changed = True
+        if license is not None and data.get("license") != license:
+            data["license"] = license
             changed = True
-    if license is not None and data.get("license") != license:
-        data["license"] = license
-        changed = True
-    if compatibility is not None and data.get("compatibility") != compatibility:
-        data["compatibility"] = compatibility
-        changed = True
-    if version is not None and data.get("version") != version:
-        data["version"] = version
-        changed = True
-    if allowed_tools is not None and data.get("allowed-tools") != allowed_tools.strip():
-        data["allowed-tools"] = allowed_tools.strip()
-        changed = True
-    if category is not None:
-        if not isinstance(data.get("metadata"), dict):
-            data["metadata"] = {}
-        if data["metadata"].get("category") != category:
-            data["metadata"]["category"] = category
+        if compatibility is not None and data.get("compatibility") != compatibility:
+            data["compatibility"] = compatibility
             changed = True
-    if body is not None:
-        if not body.endswith("\n"):
-            body += "\n"
-        if body != orig_body:
-            orig_body = body
+        if version is not None and data.get("version") != version:
+            data["version"] = version
             changed = True
-    if changed:
-        from .store import write_snapshot as _write_snapshot
+        if allowed_tools is not None and data.get("allowed-tools") != allowed_tools.strip():
+            data["allowed-tools"] = allowed_tools.strip()
+            changed = True
+        if category is not None:
+            if not isinstance(data.get("metadata"), dict):
+                data["metadata"] = {}
+            if data["metadata"].get("category") != category:
+                data["metadata"]["category"] = category
+                changed = True
+        if body is not None:
+            if not body.endswith("\n"):
+                body += "\n"
+            if body != orig_body:
+                orig_body = body
+                changed = True
+        if changed:
+            from .store import write_snapshot as _write_snapshot
 
-        with _mutation_lock(md):
             _write_snapshot(_global_store().data_dir, scope_id, name, text)
             order = orig_keys + [k for k in data if k not in orig_keys]
             try:
                 _atomic_write_text(md, dump_frontmatter(data, key_order=order) + orig_body)
             except OSError as exc:
                 raise StoreError(f"could not edit skill '{name}' safely: {exc}") from exc
-    return {"name": name, "changed": changed, "scope": scope_id}
+        return {"name": name, "changed": changed, "scope": scope_id}
 
 
 def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
@@ -818,7 +845,8 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
     # writers use.  Without it this was check-then-rename with no exclusion at
     # all, and a concurrent toggle in another process could move the document
     # between the checks and the rename.
-    with _mutation_lock(src):
+    with _scope_mutation_lock(skill_dir):
+        _check_mutation_documents(skill_dir)
         if not src.is_file():
             if dst.is_file():
                 raise StoreError(f"skill '{name}' is already {'enabled' if enable else 'disabled'} in scope '{scope_id}'")
@@ -843,6 +871,24 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
                 "(another process moved its document); retry the toggle"
             ) from None
     return {"name": name, "disabled": not enable, "scope": scope_id}
+
+
+def _snapshot_sync_target(dest: Path, data_dir: Path, scope_id: str, name: str, force: bool) -> bool:
+    """Snapshot existing destination bytes; return False if force is required."""
+    if not dest.exists():
+        return True
+    if not force:
+        return False
+    from .store import _write_snapshot_bytes
+    try:
+        active = dest / "SKILL.md"
+        disabled = dest / "SKILL.md.disabled"
+        document = active if active.is_file() else disabled
+        content = document.read_bytes() if document.is_file() else b""
+        _write_snapshot_bytes(data_dir, scope_id, name, content)
+    except OSError as exc:
+        raise StoreError(f"could not snapshot skill '{name}' in scope '{scope_id}' safely") from exc
+    return True
 
 
 def sync_skill(
@@ -895,8 +941,6 @@ def sync_skill(
     synced: list[str] = []
     skipped: list[dict] = []
     failures: list[tuple[str, str]] = []
-    from .store import write_snapshot as _write_snapshot
-
     snapshot_data_dir = _global_store().data_dir
     target_roots: set[Path] = set()
     for sid in to_scopes:
@@ -917,45 +961,53 @@ def sync_skill(
             # availability is what the filesystem actually allows (SCOPE-8).
             skipped.append({"scope": sid, "reason": "read-only root (cannot be written)"})
             continue
-        previous_content = None
         dest = _safe_scope_skill_path(scope, name)
-        if force and dest.exists():
-            old_md = dest / "SKILL.md"
-            if not old_md.is_file():
-                old_md = dest / "SKILL.md.disabled"
-            if old_md.is_file():
-                previous_content = read_skill_text_strict(
-                    old_md, subject=f"skill '{name}' in scope '{sid}'"
-                )
-        if dest.exists() and not force:
-            skipped.append({"scope": sid, "reason": "already exists (use force)"})
+        if dest.resolve() == src_dir.resolve():
+            skipped.append({"scope": sid, "reason": "same physical skill as source"})
             continue
-        if dest.exists():
-            _write_snapshot(snapshot_data_dir, sid, name, previous_content or "")
-        stage = scope.base / f".{name}.skillsmgr-stage"
-        backup = scope.base / f".{name}.skillsmgr-backup"
-        try:
-            if stage.exists():
-                shutil.rmtree(stage)
-            if backup.exists():
-                shutil.rmtree(backup)
-            _copy_skill_tree(src_dir, stage)
-            if dest.exists():
-                shutil.move(str(dest), str(backup))
-            shutil.move(str(stage), str(dest))
-            if backup.exists():
-                shutil.rmtree(backup)
-        except OSError as exc:
-            if dest.exists() and backup.exists():
-                shutil.rmtree(dest, ignore_errors=True)
-            if backup.exists() and not dest.exists():
-                shutil.move(str(backup), str(dest))
-            shutil.rmtree(stage, ignore_errors=True)
-            reason = getattr(exc, "strerror", None) or str(exc) or "copy failed"
-            failures.append((sid, reason))
-            skipped.append({"scope": sid, "reason": f"failed: {reason}"})
-            continue
-        synced.append(sid)
+        with _scope_mutation_lock(dest):
+            _check_mutation_documents(dest)
+            reject_conflicting_documents(dest, name, scope_id=sid)
+            if not _snapshot_sync_target(dest, snapshot_data_dir, sid, name, force):
+                skipped.append({"scope": sid, "reason": "already exists (use force)"})
+                continue
+            stage = scope.base / f".{name}.skillsmgr-stage"
+            backup = scope.base / f".{name}.skillsmgr-backup"
+            try:
+                if stage.exists():
+                    shutil.rmtree(stage)
+                if backup.exists() or backup.is_symlink():
+                    raise StoreError(f"a previous sync backup for '{name}' in scope '{sid}' needs manual review")
+                _copy_skill_tree(src_dir, stage)
+                if dest.exists():
+                    shutil.move(str(dest), str(backup))
+                shutil.move(str(stage), str(dest))
+            except StoreError as exc:
+                # Policy refusals happen before replacement (retained backup
+                # or unsafe source). Keep recovery evidence and other targets.
+                reason = str(exc)
+                failures.append((sid, reason))
+                skipped.append({"scope": sid, "reason": f"failed: {reason}"})
+                continue
+            except OSError as exc:
+                if dest.exists() and backup.exists():
+                    shutil.rmtree(dest, ignore_errors=True)
+                if backup.exists() and not dest.exists():
+                    shutil.move(str(backup), str(dest))
+                shutil.rmtree(stage, ignore_errors=True)
+                reason = getattr(exc, "strerror", None) or str(exc) or "copy failed"
+                failures.append((sid, reason))
+                skipped.append({"scope": sid, "reason": f"failed: {reason}"})
+                continue
+            if backup.exists() or backup.is_symlink():
+                try:
+                    if backup.is_symlink():
+                        backup.unlink()
+                    else:
+                        shutil.rmtree(backup)
+                except OSError:
+                    _diagnose("sync completed but backup cleanup failed", OSError("backup retained for manual review"))
+            synced.append(sid)
     if failures and not synced:
         failed_scope, reason = failures[0]
         raise StoreError(f"sync to '{failed_scope}' failed: {reason}")
@@ -989,11 +1041,12 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
     content = _read_snapshot(_global_store().data_dir, scope_id, name, snapshot)
     skill_dir = _safe_scope_skill_path(scope, name)
     md = skill_dir / "SKILL.md"
-    if not md.is_file():
-        if (skill_dir / "SKILL.md.disabled").is_file():
-            raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
-        raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
-    with _mutation_lock(md):
+    with _scope_mutation_lock(skill_dir):
+        _check_mutation_documents(skill_dir)
+        if not md.is_file():
+            if (skill_dir / "SKILL.md.disabled").is_file():
+                raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
+            raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
         current = read_skill_text_strict(md, subject=f"skill '{name}' in scope '{scope_id}'")
         _write_snapshot(_global_store().data_dir, scope_id, name, current)
         try:

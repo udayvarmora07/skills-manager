@@ -59,10 +59,10 @@
   /* ---------- Copies and skills ---------- */
   const BROKEN_WHY = {
     linked: ["Linked outside its folder", "This is a shortcut to a folder outside the agent's skills folder. The app does not follow it, so a write could never land somewhere unexpected.", "Copy the real folder into the skills folder instead of linking it."],
-    unaddressable: ["Unusual folder name", "Agents look skills up by a simple lowercase name, so none of them can find this one.", "Rename the folder to lowercase words joined by hyphens."],
-    invalid: ["Damaged file", "The file at the top of this skill cannot be read, so the agent skips it.", "Replace it with a working copy, or repair the first lines by hand."],
-    undecodable: ["Not readable text", "The file is not saved as UTF-8 text, so agents cannot read it and the app cannot safely overwrite it.", "Open it in a text editor and save it as UTF-8, or delete it and copy a working version in."],
-    malformed: ["Damaged file", "The file at the top of this skill cannot be read, so the agent skips it.", "Replace it with a working copy, or repair the first lines by hand."],
+    unaddressable: ["Unusual folder name", "The app cannot address this entry using its supported skill names. Agent loading is not checked.", "Rename the folder to lowercase words joined by hyphens."],
+    invalid: ["Damaged file", "The app cannot parse this skill's document. Agent loading is not checked.", "Replace it with a working copy, or repair the first lines by hand."],
+    undecodable: ["Not readable text", "The file is not saved as UTF-8 text. This screen offers manual repair because text Undo cannot restore its original bytes.", "Keep a copy of the original file, then open it in a text editor and save it as UTF-8."],
+    malformed: ["Damaged file", "The app cannot parse this skill's document. Agent loading is not checked.", "Replace it with a working copy, or repair the first lines by hand."],
   };
 
   function copyOf(record) {
@@ -72,8 +72,8 @@
     const obs = D.observeRecord(record);
     const undecodable = /utf-?8|codec|decode/i.test(String(record.decode_error || ""));
     const state = obs.linkEscape ? "linked" : obs.notAddressable ? "unaddressable" : undecodable ? "undecodable" : D.observedStateFor(record);
-    /* A refused symlink is not a damaged skill: the agent reads it fine, this
-     * tool just will not follow the link. It is its own state, never "broken". */
+    /* A refused symlink is not a damaged skill. This tool will not follow it;
+     * the target and agent loading remain unobserved. */
     const broken = state === "invalid" || state === "malformed" || state === "unaddressable" || state === "undecodable";
     const linked = state === "linked";
     return {
@@ -175,9 +175,11 @@
           title: `“${s.name}” looks like a file or system folder, not a skill`, short: "Not a skill",
           text: "Agents ignore entries like this, so nothing is broken. You can leave it where it is.", action: "Got it" });
       } else if (s.status.key === "bad") {
-        const b = s.broken[0];
+        const repairable = (c) => c.kind === "invalid" || c.kind === "malformed";
+        const b = s.broken.find((c) => !repairable(c)) || s.broken[0];
         const why = BROKEN_WHY[b.kind] || BROKEN_WHY.invalid;
-        const good = s.copies.find((c) => c.state !== "broken");
+        const good = s.copies.find((c) => c.hash && (c.state === "on" || c.state === "off"));
+        const fixable = !!good && s.broken.every(repairable);
         const sole = !good;
         out.push({
           id: "bad:" + s.name, key: "bad", skill: s.name, agents: s.broken.map((c) => c.scope), kind: b.kind,
@@ -185,8 +187,8 @@
           short: why[0], text: why[1], how: why[2],
           /* Only a damaged document can be replaced from a working copy; the
            * other kinds need a change on disk the app does not make. */
-          fixable: !!good && (b.kind === "invalid" || b.kind === "malformed"), source: good ? good.scope : "",
-          action: !!good && (b.kind === "invalid" || b.kind === "malformed") ? `Replace with ${name(good.scope)}'s copy` : "Show me how",
+          fixable, source: good ? good.scope : "",
+          action: fixable ? `Replace with ${name(good.scope)}'s copy` : "Show me how",
         });
       } else if (s.status.key === "warn") {
         const targets = s.differing.map((c) => c.scope);
@@ -216,7 +218,7 @@
         id: "link:" + inf.id, key: "info", agent: inf.id, linkAgent: true,
         title: `${inf.agent.name} has ${plural(inf.links.length, "skill")} linked from outside its folder`,
         short: "For your information",
-        text: "These are shortcuts to folders elsewhere. The agent reads them normally; this app does not follow them, so it cannot compare or edit them. Nothing is broken.",
+        text: "These are shortcuts to folders elsewhere. This app does not follow them, so their contents and agent loading are unobserved; it cannot compare or edit them.",
         action: "Got it",
       });
     }

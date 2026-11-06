@@ -32,6 +32,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from skillsmgr.store import Store, StoreError
 from skillsmgr.web_upload import staged_single_skill, upload_folder
@@ -136,12 +137,14 @@ class UploadPathPolicyParityTests(unittest.TestCase):
                         pass
 
     def test_a_rejected_upload_leaves_no_staging_residue(self):
-        before = set(Path(tempfile.gettempdir()).glob("skillsmgr-add-*"))
         installed: list[str] = []
-        with self.assertRaises(StoreError):
-            upload_folder([_part("../evil/SKILL.md")], _recording_add(installed))
-        after = set(Path(tempfile.gettempdir()).glob("skillsmgr-add-*"))
-        self.assertEqual(before, after, "a rejected upload left a staging tree behind")
+        # Invalid parts are rejected before staging. Inspect this call's
+        # allocation rather than other processes' directories in shared /tmp.
+        with patch("skillsmgr.web_upload.tempfile.mkdtemp", wraps=tempfile.mkdtemp) as stage:
+            with self.assertRaises(StoreError):
+                upload_folder([_part("../evil/SKILL.md")], _recording_add(installed))
+        stage.assert_not_called()
+        self.assertEqual(installed, [])
 
 
 class UnsafeUploadOverHTTPTests(unittest.TestCase):

@@ -637,6 +637,7 @@ def load_skill(
         "malformed": malformed,
         "document_missing": False,
         "decode_error": decode_error,
+        "encoding_error": decode_error is not None,
         "document_conflict": conflict,
         "missing_required": gaps,
         "addressable": name_is_addressable(skill_dir.name),
