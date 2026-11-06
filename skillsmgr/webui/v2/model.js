@@ -61,6 +61,7 @@
     linked: ["Linked outside its folder", "This is a shortcut to a folder outside the agent's skills folder. The app does not follow it, so a write could never land somewhere unexpected.", "Copy the real folder into the skills folder instead of linking it."],
     unaddressable: ["Unusual folder name", "Agents look skills up by a simple lowercase name, so none of them can find this one.", "Rename the folder to lowercase words joined by hyphens."],
     invalid: ["Damaged file", "The file at the top of this skill cannot be read, so the agent skips it.", "Replace it with a working copy, or repair the first lines by hand."],
+    undecodable: ["Not readable text", "The file is not saved as UTF-8 text, so agents cannot read it and the app cannot safely overwrite it.", "Open it in a text editor and save it as UTF-8, or delete it and copy a working version in."],
     malformed: ["Damaged file", "The file at the top of this skill cannot be read, so the agent skips it.", "Replace it with a working copy, or repair the first lines by hand."],
   };
 
@@ -69,10 +70,11 @@
      * badges a refused symlink first (observedStateKeys); follow that reading so
      * the two interfaces never disagree about the same record. */
     const obs = D.observeRecord(record);
-    const state = obs.linkEscape ? "linked" : obs.notAddressable ? "unaddressable" : D.observedStateFor(record);
+    const undecodable = /utf-?8|codec|decode/i.test(String(record.decode_error || ""));
+    const state = obs.linkEscape ? "linked" : obs.notAddressable ? "unaddressable" : undecodable ? "undecodable" : D.observedStateFor(record);
     /* A refused symlink is not a damaged skill: the agent reads it fine, this
      * tool just will not follow the link. It is its own state, never "broken". */
-    const broken = state === "invalid" || state === "malformed" || state === "unaddressable";
+    const broken = state === "invalid" || state === "malformed" || state === "unaddressable" || state === "undecodable";
     const linked = state === "linked";
     return {
       scope: record.scope, label: record.scope_label || record.scope,
@@ -268,7 +270,13 @@
   }
   function renderDoc(src, marks) {
     const set = marks || new Set();
-    const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
+    /* Links are shown as text plus their address, never as live anchors: a
+     * skill body is untrusted, and a reader should see where a link points. */
+    const inline = (t) => esc(t)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, "$1 <code>$2</code>");
     const wrap = (raw, html) => (set.has(raw.trim()) ? `<mark>${html}</mark>` : html);
     const out = []; let list = null; let fence = false;
     const close = () => { if (list) { out.push(`</${list}>`); list = null; } };

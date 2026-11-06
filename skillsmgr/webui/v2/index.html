@@ -6,6 +6,7 @@
   <title>Skills Manager</title>
   <meta name="description" content="See every AI agent on this computer, the skills each one knows, and fix what is out of step. Local only.">
   <script src="../preferences.js"></script>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -50,7 +51,7 @@
     <div class="page" v-if="route.page === 'home'">
       <h1 class="h1" id="h1" tabindex="-1">Your agents</h1>
       <p class="lede">Each AI tool on this computer and the skills it knows.
-        <b v-if="m.problems.length">{{ plural(m.problems.length, 'thing needs', 'things need') }} a look.</b><b v-else>Everything is working.</b></p>
+        <b v-if="queue.length">{{ plural(queue.length, 'thing needs', 'things need') }} a look.</b><b v-else>Everything is working.</b></p>
       <p class="state-note err" role="alert" v-if="loadError">{{ loadError }}</p>
       <div class="home">
         <section aria-label="Agents" class="rooms">
@@ -69,13 +70,13 @@
         <aside class="side">
           <div class="card">
             <h2>Needs a look</h2>
-            <p class="sub">{{ m.problems.length ? plural(m.problems.length, 'thing') + ', most important first' : 'Nothing right now' }}</p>
-            <template v-if="m.problems.length">
-              <div class="look" v-for="(p, i) in m.problems.slice(0, 3)" :key="p.id">
+            <p class="sub">{{ queue.length ? plural(queue.length, 'thing') + ', most important first' : 'Nothing right now' }}</p>
+            <template v-if="queue.length">
+              <div class="look" v-for="(p, i) in queue.slice(0, 3)" :key="p.id">
                 <span :class="['look-ic', p.key]"><ic :name="p.key === 'info' ? 'info' : p.key"></ic></span>
                 <div><b>{{ p.title }}</b><p>{{ p.text }}</p><a :class="['btn btn-sm', i === 0 ? 'btn-ink' : 'btn-soft']" href="#/inbox" @click="front = p.id">{{ p.key === 'info' ? 'Review' : 'Fix it' }}</a></div>
               </div>
-              <a class="see-all" href="#/inbox" v-if="m.problems.length > 3">Open inbox ({{ m.problems.length }}) <ic name="arrow" cls="i-s"></ic></a>
+              <a class="see-all" href="#/inbox" v-if="queue.length > 3">Open inbox ({{ queue.length }}) <ic name="arrow" cls="i-s"></ic></a>
             </template>
             <div class="look" v-else><span class="look-ic" style="background:var(--ok-bg);color:var(--ok)"><ic name="check"></ic></span><div><b>All clear</b><p>Every skill can be read and every copy matches.</p></div></div>
           </div>
@@ -239,7 +240,7 @@
             </template>
           </template>
         </svg>
-        <a class="hub" href="#/skills" :aria-label="'All skills: ' + m.skills.length"><b class="num">{{ m.skills.length }}</b><span>skills in all</span><em>across your agents</em></a>
+        <a class="hub" href="#/skills" :aria-label="'All skills: ' + shelfTotal"><b class="num">{{ fmt(shelfTotal) }}</b><span>skills in all</span><em>across your agents</em></a>
         <span v-for="(inf, i) in agentInfos" :key="'t' + inf.id" :class="['tagw', inf.key]" :style="{ left: (slots[i][0] + 50) / 2 + '%', top: (slots[i][1] + 56) / 2 + '%' }">{{ tagFor(inf) }}</span>
         <button type="button" class="node" v-for="(inf, i) in agentInfos" :key="'n' + inf.id" :style="{ left: slots[i][0] + '%', top: slots[i][1] + '%' }" :aria-pressed="inf.id === mapSel.id" :aria-label="inf.agent.name + ': ' + tagFor(inf, true)" @click="selectMap(inf.id)">
           <logo :agent="inf.agent" size="sm"></logo><span><b>{{ inf.agent.name }}</b><small>{{ plural(inf.mine.length, 'skill') }}</small></span></button>
@@ -247,7 +248,7 @@
       <div class="maplist">
         <h1 class="h1" style="font-size:30px">Sync map</h1>
         <div class="mlist" style="margin-top:16px">
-          <button type="button" class="mrow" v-for="inf in agentInfos" :key="inf.id" :style="{ width: '100%', background: inf.id === mapSel.id ? 'var(--sunken)' : '#fff', borderLeft: 0, borderRight: 0, borderBottom: 0, textAlign: 'left' }" @click="selectMap(inf.id)">
+          <button type="button" class="mrow" v-for="inf in agentInfos" :key="inf.id" :style="{ width: '100%', background: inf.id === mapSel.id ? 'var(--sunken)' : 'var(--surface)', borderLeft: 0, borderRight: 0, borderBottom: 0, textAlign: 'left' }" @click="selectMap(inf.id)">
             <logo :agent="inf.agent" size="xs"></logo><span><b>{{ inf.agent.name }}</b><small>{{ plural(inf.mine.length, 'skill') }}</small></span><span :class="['pill', inf.key]">{{ tagFor(inf) }}</span></button>
         </div>
       </div>
@@ -285,7 +286,7 @@
           <h2 id="rec-trash">Trash <span class="sub num">{{ trash.length }}</span></h2>
           <p class="sub">Skills removed from your library. Each agent keeps its own trash folder, which is not listed here.</p>
           <ul class="rec-list" v-if="trash.length">
-            <li v-for="t in trash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · removed {{ t.modified.replace('T', ' ').replace('Z', ' UTC') }}</small></span>
+            <li v-for="t in trash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · last changed {{ t.modified.replace('T', ' ').replace('Z', ' UTC') }}</small></span>
               <button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="restoreTrash(t)">Restore</button></li>
           </ul>
           <p class="state-note" v-else>The trash is empty.</p>

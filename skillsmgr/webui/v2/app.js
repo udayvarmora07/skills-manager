@@ -275,17 +275,24 @@ const app = createApp({
     focusH1() { this.$nextTick(() => { const h = document.getElementById("h1"); if (h) h.focus({ preventScroll: true }); }); },
 
     /* ----- toasts & dialogs ----- */
+    friendly(msg) {
+      let s = String(msg || "Something went wrong.");
+      if (/invalid archive|not a gzip|ReadError|zipfile/i.test(s)) return "That file is not a backup archive. Choose a .tar.gz, .tar or .zip file made by Skills Manager.";
+      if (/not valid UTF-8/i.test(s)) return "One of the copies is not saved as UTF-8 text, so it can't be overwritten safely. Open it in a text editor and save it as UTF-8 first.";
+      return s.replace(/(?:\/[^\s'":]+)+\/([^\s'":/]+)/g, "$1").replace(/\s*\(byte 0x[0-9a-f]+ at offset \d+\)/i, "");
+    },
     toast(text, opts = {}) {
-      const t = { id: ++this.toastSeq, text, err: !!opts.err, undo: opts.undo || null };
+      if (opts.err) text = this.friendly(text);
+      const t = { id: ++this.toastSeq, text, err: !!opts.err, undo: opts.undo || null, onUndo: opts.onUndo || null };
       this.toasts.push(t); this.live = text;
       setTimeout(() => { this.toasts = this.toasts.filter((x) => x.id !== t.id); }, t.undo ? 9000 : (t.err ? 7000 : 4000));
     },
     async runUndo(t) {
       this.toasts = this.toasts.filter((x) => x.id !== t.id);
       this.busy = true;
-      try { await t.undo(); await this.refresh(); this.toast("Undone"); } catch (e) { this.toast("Couldn't undo: " + e.message, { err: true }); } finally { this.busy = false; }
+      try { await t.undo(); if (t.onUndo) t.onUndo(); await this.refresh(); this.toast("Undone"); } catch (e) { this.toast("Couldn't undo: " + e.message, { err: true }); } finally { this.busy = false; }
     },
-    openDialog(d) { this.opener = document.activeElement; this.dialog = { cancel: "Cancel", ...d }; this.$nextTick(() => { const b = this.$refs.dlg && this.$refs.dlg.querySelector("button"); if (b) b.focus(); }); },
+    openDialog(d) { this.opener = document.activeElement; this.dialog = { cancel: "Cancel", ...d }; this.$nextTick(() => { const d = this.$refs.dlg; const b = d && (d.querySelector("input:not(.sr-only), select") || d.querySelector("button:not(.sr-only)")); if (b) b.focus(); }); },
     closeDialog() { this.dialog = null; this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
     async confirmDialog() { if (this.dialog && this.dialog.form && this.formInvalid) return; const d = this.dialog; this.dialog = null; if (d && d.onConfirm) await d.onConfirm(d); this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
     dialogKeys(e) {
@@ -330,14 +337,14 @@ const app = createApp({
       const from = s.ref.holders[0].scope;
       await this.runSync(s.name, from, s.differing.map((c) => c.scope), `${s.name} now matches in`);
     },
-    async runSync(name, from, tos, label) {
+    async runSync(name, from, tos, label, onUndo) {
       this.busy = true;
       try {
         const r = await this.doSync(name, from, tos);
         const undo = this.undoFor(name, [r]);
         await this.refresh();
-        this.toast(r.synced.length ? `${label} ${join(r.synced.map((id) => this.agentOf(id).name))}.${this.skipText(r.skipped)}` : "Nothing was changed." + this.skipText(r.skipped), { err: !r.synced.length, undo: r.synced.length ? undo : null });
-        return r;
+        this.toast(r.synced.length ? `${label} ${join(r.synced.map((id) => this.agentOf(id).name))}.${this.skipText(r.skipped)}` : "Nothing was changed." + this.skipText(r.skipped), { err: !r.synced.length, undo: r.synced.length ? undo : null, onUndo });
+        return r.synced.length ? r : null;
       } catch (e) { this.toast(e.message, { err: true }); return null; } finally { this.busy = false; }
     },
     async toggleCopy(c) {
@@ -370,8 +377,8 @@ const app = createApp({
       const p = this.m.problems.find((x) => x.id === "bad:" + this.skill.name);
       if (p) this.fixBad(p);
     },
-    fixBad(p) {
-      if (p.fixable) return this.runSync(p.skill, p.source, p.agents, `${p.skill} was replaced in`);
+    fixBad(p, undoHook) {
+      if (p.fixable) return this.runSync(p.skill, p.source, p.agents, `${p.skill} was replaced in`, undoHook);
       const s = this.m.byName.get(p.skill);
       this.openDialog({ title: p.title, lines: [p.text], how: p.how, paths: s.broken.map((c) => shortPath(c.path)), cancel: "Close" });
       return null;
@@ -380,7 +387,7 @@ const app = createApp({
       const s = this.skill, from = this.refCopy.scope;
       this.openDialog({
         title: `Add “${s.name}” to another agent`, lines: ["Choose where it should also be available. The copy comes from " + this.agentOf(from).name + "."],
-        picks: this.shareTargets.map((a) => ({ id: a.id, label: a.name, path: a.path })), chosen: [], confirm: "Add",
+        picks: this.shareTargets.map((a) => ({ id: a.id, label: a.name, path: a.path })), chosen: this.shareTargets.length === 1 ? [this.shareTargets[0].id] : [], confirm: "Add",
         onConfirm: (d) => this.runSync(s.name, from, d.chosen, `${s.name} was added to`),
       });
     },
@@ -389,7 +396,7 @@ const app = createApp({
       this.openDialog({
         title: `Move “${s.name}” to the trash?`, danger: true, confirm: "Move to trash",
         lines: ["Choose the places to remove it from. Each agent keeps its own trash folder, so restoring from inside the app only works for your library."],
-        picks: s.copies.map((c) => ({ id: c.scope, label: this.agentOf(c.scope).name, path: shortPath(c.path) })), chosen: [],
+        picks: s.copies.map((c) => ({ id: c.scope, label: this.agentOf(c.scope).name, path: shortPath(c.path) })), chosen: s.copies.length === 1 ? [s.copies[0].scope] : [],
         onConfirm: async (d) => {
           this.busy = true;
           try {
@@ -473,7 +480,7 @@ const app = createApp({
       const s = this.skill, c = this.refCopy;
       const body = stripFrontmatter(c.body || "");
       this.edit = { name: s.name, desc: s.description, baseDesc: s.description, body, baseBody: body, tab: "write", targets: this.editTargets.map((x) => x.scope) };
-      this.$nextTick(() => this.growArea());
+      this.$nextTick(() => { this.growArea(); const d = document.getElementById("ed-desc"); if (d) d.focus(); });
     },
     async cancelEdit() {
       if (this.editDirty) return this.openDialog({ title: "Discard your changes?", lines: [`You have unsaved changes to “${this.edit.name}”.`], cancel: "Keep editing", confirm: "Discard changes", danger: true, onConfirm: () => { this.edit = null; } });
@@ -517,7 +524,7 @@ const app = createApp({
       return [mx + dir * (x - 50) * 0.08, my + dir * (y - 56) * 0.08];
     },
     tagFor(inf, plain) {
-      return inf.key === "bad" ? `${plural(inf.broken.length, "skill")} can't be read` : inf.key === "warn" ? `${plural(inf.differing.length, "copy", "copies")} differ` : "matches";
+      return inf.key === "bad" ? `${plural(inf.broken.length, "skill")} can't be read` : inf.key === "warn" ? `${plural(inf.differing.length, "copy", "copies")} ${inf.differing.length === 1 ? "differs" : "differ"}` : "matches";
     },
     selectMap(id) { this.mapSelId = id; this.mapPicked = this.mapDefaults(id); this.peek = null; },
     mapDefaults(id) { const i = this.m.info(id); return i ? i.differing.filter((s) => !s.ref.ambiguous).map((s) => s.name) : []; },
@@ -539,17 +546,24 @@ const app = createApp({
 
     /* ----- inbox ----- */
     async fixCurrent() {
-      const p = this.cur; if (!p || this.busy) return;
+      const p = this.cur; if (!p || this.busy) return null;
+      if (p.key === "warn" && !this.srcChoice) return null; /* nothing chosen yet: same as the disabled button */
+      /* Undo of a fix puts the item back in the queue, since the file is back. */
+      const back = () => { this.dismissed = this.dismissed.filter((id) => id !== p.id); this.done = Math.max(0, this.done - 1); };
       let ok = false;
       if (p.key === "warn") {
         const s = this.curSkill, src = this.srcChoice;
         const srcHash = (s.copies.find((c) => c.scope === src) || {}).hash;
         const tos = s.copies.filter((c) => c.state !== "broken" && c.hash && c.hash !== srcHash).map((c) => c.scope);
-        ok = !!(await this.runSync(p.skill, src, tos, `${p.skill} now matches in`));
+        ok = !!(await this.runSync(p.skill, src, tos, `${p.skill} now matches in`, back));
       } else if (p.key === "bad") {
         if (!p.fixable) return this.fixBad(p);
-        ok = !!(await this.fixBad(p));
-      } else { ok = true; this.toast("Marked done for this session."); }
+        ok = !!(await this.fixBad(p, back));
+      } else {
+        /* A note acknowledged is not a fix: it leaves the queue without counting. */
+        this.dismissed.push(p.id); this.skipped = this.skipped.filter((id) => id !== p.id); if (this.front === p.id) this.front = null;
+        this.toast("Hidden until you reload."); return null;
+      }
       if (ok) { this.dismissed.push(p.id); this.skipped = this.skipped.filter((id) => id !== p.id); if (this.front === p.id) this.front = null; this.done++; }
       return null;
     },
@@ -560,8 +574,10 @@ const app = createApp({
     window.addEventListener("hashchange", () => {
       const next = parseRoute();
       if (this.edit && this.editDirty && !(next.page === "skill" && next.name === this.edit.name)) {
+        const target = location.hash;
         location.hash = "#/skill/" + encodeURIComponent(this.edit.name);
-        return this.cancelEdit();
+        return this.openDialog({ title: "Discard your changes?", lines: [`You have unsaved changes to “${this.edit.name}”.`], cancel: "Keep editing", confirm: "Discard changes", danger: true,
+          onConfirm: () => { this.edit = null; location.hash = target; } });
       }
       this.route = next; if (next.page !== "skill") this.edit = null;
       document.title = (next.page === "skill" ? next.name : TITLES[next.page]) + " · Skills Manager";

@@ -133,6 +133,17 @@ class ModelProblemTests(unittest.TestCase):
         return Object.fromEntries(s.copies.map(c=>[c.scope,c.version]));""")
         self.assertEqual(out, {"claude-code": "A", "codex": "B", "opencode": "A"})
 
+    def test_an_undecodable_copy_is_never_offered_an_automatic_overwrite(self):
+        # E2E D1: the backend refuses to overwrite a non-UTF-8 file, so the UI
+        # must not promise a one-click fix it cannot deliver.
+        out = _node(HELPERS + """
+        const m=M.build([rec('u','claude-code'),
+          rec('u','codex',{malformed:true,instance_states:['invalid'],decode_error:"'utf-8' codec can't decode byte 0xff"})],scopes);
+        const p=m.problems.find(x=>x.id==='bad:u'); return {fixable:p.fixable, action:p.action, short:p.short};""")
+        self.assertFalse(out["fixable"])
+        self.assertEqual(out["action"], "Show me how")
+        self.assertEqual(out["short"], "Not readable text")
+
     def test_problems_are_ordered_serious_first(self):
         out = _node(HELPERS + """
         const m=M.build([rec('a','claude-code'),rec('a','codex',{content_hash:'h2'}),
@@ -159,9 +170,15 @@ class RenderSafetyTests(unittest.TestCase):
         out = _node(HELPERS + f"const P={json.dumps(self.PAYLOADS)};return P.map(p=>M.renderDoc(p, new Set()));")
         for html in out:
             tags = set(re.findall(r"<\s*/?\s*([a-zA-Z0-9]+)", html))
-            self.assertLessEqual(tags, {"p", "h2", "ul", "ol", "li", "blockquote", "strong", "code", "pre", "mark"},
+            self.assertLessEqual(tags, {"p", "h2", "ul", "ol", "li", "blockquote", "strong", "em", "code", "pre", "mark"},
                                  f"unexpected tag in {html!r}")
             self.assertNotRegex(html, r"<[^>]+\son\w+\s*=")  # no live event-handler attribute
+
+    def test_links_and_italics_render_as_safe_text(self):
+        out = _node(HELPERS + "return M.renderDoc('see [docs](https://x.test/a) and *this*', new Set());")
+        self.assertNotIn("<a", out)
+        self.assertIn("<code>https://x.test/a</code>", out)
+        self.assertIn("<em>this</em>", out)
 
     def test_a_marked_line_is_highlighted_and_nothing_else(self):
         out = _node(HELPERS + "return M.renderDoc('one\\n\\ntwo', new Set(['two']));")
@@ -221,7 +238,7 @@ class InterfaceSourceTests(unittest.TestCase):
 
     def test_every_asset_it_references_exists(self):
         for src in re.findall(r'(?:src|href)="([^"#]+)"', self.html):
-            if src.startswith(("/", "http", "#")):
+            if src.startswith(("/", "http", "#", "data:")):
                 continue
             self.assertTrue((V2 / src).resolve().exists(), f"missing {src}")
         for rel in re.findall(r'url\("([^")]+\.woff2)"\)', self.css):
