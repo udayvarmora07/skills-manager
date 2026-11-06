@@ -32,6 +32,7 @@ from . import paths
 from . import __version__
 from .diagnostics import diagnose as _diagnose
 from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
+from .atomic_io import register_lock_root as _register_lock_root
 from . import archive as _archive
 from .path_safety import mkdir_private
 from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
@@ -444,6 +445,16 @@ def _driver_errors(action: str):
 
 class SkillNotFound(StoreError):
     """Raised when an operation targets a skill that does not exist."""
+
+
+class LockTimeoutError(StoreError):
+    """Another process held a mutation lock past ``MUTATION_LOCK_TIMEOUT`` (R5).
+
+    Routed as ``409`` by the web layer's existing ``status`` attribute: the
+    request was valid, the library is busy, and a retry is the remedy.
+    """
+
+    status = 409
 
 
 class StoreLayoutError(StoreError):
@@ -918,6 +929,7 @@ class Store:
 
     def __init__(self, data_dir: Path | None = None):
         self.data_dir = Path(data_dir).expanduser() if data_dir else paths.data_dir()
+        _register_lock_root(self.data_dir)
         self.skills_dir = self.data_dir / "skills"
         self.trash_dir = self.data_dir / "trash"
         self.templates_dir = self.data_dir / "templates"

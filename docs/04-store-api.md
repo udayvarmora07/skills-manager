@@ -20,6 +20,9 @@
 
 - `StoreError` (the module-level class in `store.py`) — generic store failure (duplicate, invalid state, I/O).
 - `SkillNotFound` (subclasses `StoreError`) — skill absent or unavailable (e.g. disabled).
+- `LockTimeoutError` (subclasses `StoreError`, `status = 409`) — another
+  process held a mutation lock past `atomic_io.MUTATION_LOCK_TIMEOUT`; retry
+  (R5).
 - `StoreLayoutError` (subclasses `StoreError`, `status = 404`) — the managed
   layout exists but cannot be used: a component of `<data>` is a regular file,
   or the index is a directory. Distinct from "nothing is installed", because

@@ -201,6 +201,20 @@ an export → import round trip drops provenance and lock evidence by design.
 `scopes.sync_skill` copies them between scopes; binding evidence to an install
 needs a maintainer decision.
 
+**[SPEC] R5 / S3 — lock files moved under the data root, with a timeout.**
+Lock files were in `tempfile.gettempdir()/skillsmgr-locks`, so two processes
+with different `TMPDIR` values never excluded each other, the shared directory
+had no ownership check, and an unreleased lock blocked forever. They now live in
+`<data>/locks/` (owner-only, symlink- and foreign-owner-refused, files opened
+`O_NOFOLLOW`), chosen from roots `Store` registers on construction. A blocking
+acquisition gives up after `MUTATION_LOCK_TIMEOUT` (60 s) with
+`LockTimeoutError` (`StoreError`, 409). Red-first: 6 of 6 tests in
+`tests/test_audit_r5_lock_root.py` fail on the old code (with only the new
+names shimmed so the module imports). One existing test,
+`test_record_runs_never_touches_skill_files_or_the_index`, enumerated every
+file under the data root and now excludes `locks/`: those are empty
+coordination files, not skill or index data.
+
 ## 2026-11-06 — The prototype-final design shipped as a v2 interface on real data
 
 **[SPEC]** Branch `ui/prototype-final` adds `skillsmgr/webui/v2/` (served at

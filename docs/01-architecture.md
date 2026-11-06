@@ -170,9 +170,26 @@ CLI process and a web UI process on one data directory exclude one another.
   `msvcrt.locking` region on Windows. On a platform providing neither, the
   lock degrades to thread-only exclusion — that fallback is the one documented
   limit.
-- Lock files live in `tempfile.gettempdir()/skillsmgr-locks/<sha256-of-key>.lock`,
-  deliberately **outside** every managed tree, so acquiring a lock for a path
-  that does not exist yet cannot materialize a fake skill directory.
+- Lock files live in `<data>/locks/<sha256-of-key>.lock` — under the validated
+  data root, a sibling of `skills/`, and deliberately **outside** every managed
+  skill tree, so acquiring a lock for a path that does not exist yet cannot
+  materialize a fake skill directory (R5/S3). `Store` construction registers
+  its data root (`atomic_io.register_lock_root`); a key inside a registered root
+  uses that root, any other key (an agent-scope skill) uses the most recently
+  registered root, and with none registered `paths.data_dir()` is used. None of
+  this depends on `TMPDIR`: the previous `tempfile.gettempdir()/skillsmgr-locks`
+  let two processes with different `TMPDIR` values skip exclusion entirely.
+- `<data>/locks` is created owner-only on first acquisition (a read creates
+  nothing), refused if it is a symlink or owned by another user, and each lock
+  file is opened with `O_NOFOLLOW` and mode `0600`, so a planted symlink cannot
+  redirect the create.
+- A blocking acquisition waits at most `atomic_io.MUTATION_LOCK_TIMEOUT`
+  (60 s) for **another process**, then raises `store.LockTimeoutError` — a
+  `StoreError` with `status = 409` — instead of blocking forever. An explicit
+  `acquire(timeout=…)` still returns `False`. In-process (thread) contention is
+  not bounded, because those holders are this process's own code. **[?]** Two
+  processes pointed at *different* data roots that edit the same agent-scope
+  skill use different lock roots and do not exclude each other.
 - A mutation takes a **per-skill lock** on `<skill>/SKILL.md` and/or the
   **library-wide index lock** at `<data>/skills/.skillsmgr-index-lock`
   (`store._index_lock_path`). `store._skill_and_index_locks()` holds both, always

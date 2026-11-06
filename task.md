@@ -20,7 +20,9 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [ ] **Decide (R2 follow-up, ⚠ approval):** bind sidecars to an install
   (per-install HMAC or recorded physical path). Agent-scope sidecars are still
   trusted as read, and `scopes.sync_skill` copies them between scopes.
-- [ ] **R5** — lock files under the validated data dir, acquire timeout.
+- [x] **R5** — lock files in `<data>/locks/` (owner-only, `O_NOFOLLOW`), 60 s
+  cross-process acquire timeout → `LockTimeoutError` (409).
+  `tests/test_audit_r5_lock_root.py`: 6 of 6 red before.
 - [ ] **R9** — JSON content type on bodyless mutating POSTs.
 - [ ] **R14** — deep JSON → 400; `?project=~nouser/x` → clean error.
 - [ ] **R6 / H1** — compatibility dedupe + portability message, unknown-key
