@@ -38,11 +38,9 @@ const PATHS = {
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
 };
 
-const TINTS = [["#e5eefc", "#2c5ae9"], ["#efe8fb", "#6d3fd6"], ["#e1f1f6", "#0e7490"], ["#fdebe1", "#c2552d"], ["#e3f3e8", "#1c7a47"], ["#fff1d6", "#a2510a"]];
 const CAP = 48;
 const FALLBACK_AGENT = { id: "", name: "Unknown", color: "#55585f", initials: "?", path: "" };
 
-function stableHash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
 function parseRoute() {
   const h = location.hash.replace(/^#\/?/, "");
   const [p, ...rest] = h.split("/");
@@ -76,7 +74,7 @@ const app = createApp({
     filterChoices() {
       const sk = this.m ? this.m.skills : [];
       return [
-        { id: "all", label: "All", n: sk.length },
+        { id: "all", label: "All", n: sk.filter((s) => s.status.key !== "note").length },
         { id: "care", label: "Needs care", n: this.careCount },
         { id: "off", label: "Turned off", n: sk.filter((s) => s.status.key === "off").length },
       ];
@@ -87,6 +85,7 @@ const app = createApp({
       const q = this.query.trim().toLowerCase();
       return this.m.skills.filter((s) => {
         const k = s.status.key;
+        if (k === "note") return false; /* not a skill: listed in the Inbox only */
         if (this.filter === "care" && k !== "warn" && k !== "bad") return false;
         if (this.filter === "off" && k !== "off") return false;
         if (this.agentFilter !== "all" && !s.copies.some((c) => c.scope === this.agentFilter)) return false;
@@ -262,7 +261,6 @@ const app = createApp({
     showMore(id) { this.extra = { ...this.extra, [id]: (this.extra[id] || 0) + 96 }; },
     clearFilters() { this.query = ""; this.filter = "all"; this.agentFilter = "all"; this.extra = {}; },
     pickAgent(id) { this.agentFilter = id; this.filter = "all"; this.query = ""; this.extra = {}; },
-    coverStyle(s) { const t = TINTS[stableHash(s.name) % TINTS.length]; return { background: t[0], color: t[1] }; },
     focusH1() { this.$nextTick(() => { const h = document.getElementById("h1"); if (h) h.focus({ preventScroll: true }); }); },
 
     /* ----- toasts & dialogs ----- */
@@ -508,7 +506,7 @@ const app = createApp({
       return [mx + dir * (x - 50) * 0.08, my + dir * (y - 56) * 0.08];
     },
     tagFor(inf, plain) {
-      return inf.key === "bad" ? `${plain ? "" : "✕ "}${plural(inf.broken.length, "skill")} can't be read` : inf.key === "warn" ? `${plural(inf.differing.length, "copy", "copies")} differ` : `${plain ? "" : "✓ "}matches`;
+      return inf.key === "bad" ? `${plural(inf.broken.length, "skill")} can't be read` : inf.key === "warn" ? `${plural(inf.differing.length, "copy", "copies")} differ` : "matches";
     },
     selectMap(id) { this.mapSelId = id; this.mapPicked = this.mapDefaults(id); this.peek = null; },
     mapDefaults(id) { const i = this.m.info(id); return i ? i.differing.filter((s) => !s.ref.ambiguous).map((s) => s.name) : []; },

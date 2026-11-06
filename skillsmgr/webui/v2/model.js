@@ -103,8 +103,8 @@
     bad: { key: "bad", label: "Can't be read", icon: "bad", rank: 0 },
     warn: { key: "warn", label: "Copies differ", icon: "warn", rank: 1 },
     ok: { key: "ok", label: "Working", icon: "ok", rank: 2 },
-    link: { key: "link", label: "Linked elsewhere", icon: "info", rank: 2 },
-    note: { key: "link", label: "Not a skill", icon: "info", rank: 2 },
+    linked: { key: "linked", label: "Linked elsewhere", icon: "info", rank: 2 },
+    note: { key: "note", label: "Not a skill", icon: "info", rank: 2 },
     off: { key: "off", label: "Turned off", icon: "off", rank: 3 },
   };
 
@@ -130,7 +130,7 @@
       const status = fileLike ? STATUS.note : copies.some((c) => c.state === "broken") ? STATUS.bad
         : !copies.some((c) => c.state === "on" || c.state === "link") ? STATUS.off
         : ref.groups.length > 1 ? STATUS.warn
-        : copies.some((c) => c.state === "link") ? STATUS.link : STATUS.ok;
+        : copies.some((c) => c.state === "link") ? STATUS.linked : STATUS.ok;
       const pick = (copies.find((c) => c.hash === ref.hash) || copies.find((c) => c.state !== "broken") || copies[0]);
       const category = (copies.map((c) => c.record.category).find((c) => c && c !== "uncategorized")) || "";
       skills.push({
@@ -148,7 +148,7 @@
 
   /* ---------- Per-agent summary ---------- */
   function agentInfo(agent, skills, suggested) {
-    const mine = skills.filter((s) => s.copies.some((c) => c.scope === agent.id));
+    const mine = skills.filter((s) => s.status !== STATUS.note && s.copies.some((c) => c.scope === agent.id));
     const copyIn = (s) => s.copies.find((c) => c.scope === agent.id);
     const on = mine.filter((s) => copyIn(s).state === "on");
     const tokens = on.reduce((n, s) => n + (copyIn(s).tokens || 0), 0);
