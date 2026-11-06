@@ -21,7 +21,9 @@ import time
 import tracemalloc
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from skillsmgr import archive as archive_module
 from skillsmgr.store import Store, StoreError
 
 PEAK_BUDGET = 12 * 1024 * 1024  # bytes of traced allocation during the import
@@ -85,6 +87,54 @@ class StreamedTarCaps(unittest.TestCase):
         self.assertIsInstance(error, StoreError)
         self.assertLess(peak, PEAK_BUDGET, f"peak traced memory {peak} bytes")
         self.assertLess(elapsed, TIME_BUDGET)
+
+    def test_extension_size_is_checked_before_initial_or_nested_payload_reads(self) -> None:
+        # The nested case is reached during iteration and recursively through
+        # a small PAX header; newer tarfile versions bypass fromtarfile there.
+        small_pax = tarfile.TarInfo("pax")
+        small_pax.type = tarfile.XHDTYPE
+        record = b"13 comment=x\n"
+        small_pax.size = len(record)
+        nested = (_dir_header("skills/") + small_pax.tobuf(tarfile.USTAR_FORMAT)
+                  + record.ljust(512, b"\0"))
+        path = self.tmp / "header.tar"
+        for prefix in (b"", nested):
+            for kind in (tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.SOLARIS_XHDTYPE,
+                         tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK):
+                with self.subTest(nested=bool(prefix), kind=kind):
+                    info = tarfile.TarInfo("extension")
+                    info.type = kind
+                    info.size = 64 * 1024 * 1024
+                    data = prefix + info.tobuf(tarfile.USTAR_FORMAT)
+                    path.write_bytes(data)
+                    raw = io.BytesIO(data)
+                    with patch.object(archive_module, "_open_decompressed", return_value=raw):
+                        with self.assertRaisesRegex(archive_module.ArchiveError, "decompressed size"):
+                            with archive_module.open_tar(path) as tar:
+                                list(tar)
+                    self.assertTrue(raw.closed)
+
+    def test_valid_pax_and_gnu_long_names_still_import(self) -> None:
+        self.store.create("alpha", "Use when testing extended tar names.")
+        companion = "skills/alpha/" + "é" * 70 + ".txt"
+        (self.store.data_dir / companion).write_bytes(b"kept")
+        exported = self.store.export(self.tmp / "out.tar.gz")
+        for fmt in (tarfile.PAX_FORMAT, tarfile.GNU_FORMAT):
+            with self.subTest(format=fmt):
+                path = self.tmp / f"long-{fmt}.tar"
+                with tarfile.open(exported, "r:gz") as source, tarfile.open(path, "w", format=fmt) as out:
+                    for member in source:
+                        member.pax_headers = {}
+                        body = source.extractfile(member) if member.isfile() else None
+                        try:
+                            out.addfile(member, body)
+                        finally:
+                            if body is not None:
+                                body.close()
+                target = Store(self.tmp / f"long-data-{fmt}")
+                target.init_db()
+                self.assertEqual(target.import_(path)["imported"], ["alpha"])
+                self.assertEqual((target.skills_dir / companion.removeprefix("skills/")).read_bytes(), b"kept")
 
     def test_corrupt_bzip2_is_a_clean_store_error(self) -> None:
         archive = self.tmp / "bad.tar.bz2"

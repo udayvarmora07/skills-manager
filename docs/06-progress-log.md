@@ -8,6 +8,34 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-06 — Refuse oversized tar metadata before chunked reads
+
+**[NOTE]** CI on `5a2f0ce` failed the oversized-PAX memory regression on Python
+3.13.18 and 3.14.10. Their tarfile module accumulates extension payloads through
+chunked `_safe_read` calls, so the per-read guard admitted roughly 24 MiB before
+refusing the next chunk. Loading the upstream 3.13.18 module under local Python
+3.13.13 reproduced a 25,348,158-byte peak; the unchanged test budget is 12 MiB.
+Source: [CPython 3.13.18 tarfile](https://github.com/python/cpython/blob/v3.13.18/Lib/tarfile.py).
+
+**[SPEC]** `open_tar` now supplies a `TarInfo` subclass that checks the declared
+PAX/GNU extension end, including block padding, against the existing absolute
+decompressed-stream limit before dispatching to the stdlib parser. This covers
+recursively parsed extensions without replacing the stdlib parser. Stream,
+member and regression-memory limits are unchanged. Existing `finally` cleanup
+closes the reader on initial-open and iteration failures.
+
+**[NOTE]** All 37 streamed-tar and archive contracts pass with the upstream
+3.13.18 and 3.14.10 tarfile modules loaded under local 3.13.13 and 3.14.3,
+respectively; these are parser-compatibility probes, not runs of the newer
+interpreters. The fixed oversized-PAX peak with the 3.13.18 module measured
+328,169 bytes. New regressions cover all five extension types initially and
+recursively, reader closure, and successful PAX/GNU Unicode long-name imports.
+Full local verification passed: **1,339 tests on each Python 3.10.20,
+3.11.15, 3.12.3, 3.13.13 and 3.14.3**; both smokes, compilation, complexity
+(722 functions), docs, design tokens, Ruff 0.16.8 and Bandit 1.9.4; pinned,
+hash-verified wheel/sdist builds and all 25 UI assets in both artifacts.
+CI independently covers newer interpreter patch versions and non-Linux hosts.
+
 ## 2026-11-06 — Classic screens, 10,000-instance scale and screen-reader checks closed three gaps
 
 **[SPEC]** Three gaps left by @docs/31-combined-e2e-verification-2026-11-06.md
@@ -194,10 +222,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-11-06)
 
-**[NOTE]** 34 indexed entries; full text follows.
+**[NOTE]** 35 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | Refuse oversized tar metadata before chunked reads |
 | 2026-11-06 | Classic screens, 10,000-instance scale and screen-reader checks closed three gaps |
 | 2026-11-06 | Research-roadmap backend items (docs/28, docs/29) |
 | 2026-11-06 | The prototype-final design shipped as a v2 interface on real data |

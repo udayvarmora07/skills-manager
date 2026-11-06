@@ -4,6 +4,19 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## CI blocker — extended tar headers (2026-11-06)
+
+- [x] Reproduce the roughly 25 MB allocation with CPython 3.13.18's tarfile
+  module: chunked metadata reads reached the decompressed-stream cap before
+  rejection. The existing 12 MiB regression budget remains unchanged.
+- [x] Check declared PAX/GNU extension payloads, including padding and stream
+  position, against the existing cap before tarfile reads them. Cover all five
+  extension types initially and recursively, reader cleanup, and valid PAX/GNU
+  long-name imports.
+- [x] Full local verification: 1,339 tests on each Python 3.10–3.14, both
+  smokes, compilation, complexity, docs, design tokens, pinned Ruff/Bandit,
+  and pinned wheel/sdist build and package-data inspection.
+
 ## Continuation verification — classic screens, scale, screen reader (2026-11-06)
 
 See @docs/32-continuation-verification-2026-11-06.md.
