@@ -36,7 +36,8 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   warning, 1,536-character description cap.
 - [ ] **R4 (read-only, JSON part)** — `native_state` from Claude Code
   `skillOverrides` and OpenCode `permission.skill`.
-- [ ] **R10** — advisory hidden-Unicode / bidi / tag-character finding.
+- [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
+  escaped code points, bounded output and no safe verdict or text rewriting.
 
 ## v2 interface — prototype-final on real data (2026-11-06)
 

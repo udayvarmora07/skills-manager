@@ -300,7 +300,8 @@ explicitly unresolved per ADR-002), `diff_skills()`/`diff_three_way()`
 `update_preview()` (changed files, token/body/snapshot risks, rollback flag),
 `quarantine_plan()` (stage-only plan validated by `validate_skill_name`),
 `risk_scan()` (explainable script/link/tool/pattern findings with why +
-evidence), `registry_preview()` (offline dry-run gated on explicit trust),
+evidence, plus bounded hidden-Unicode/bidi/tag code points and names in known
+text fields; advisory only, no safe verdict or rewriting), `registry_preview()` (offline dry-run gated on explicit trust),
 `registry_reference()` (offline parse of `owner/repo`, `owner/repo/slug`,
 `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo` into
 `{form, source, slug, registry_id, page_url, audit_links}` — no request, cache,

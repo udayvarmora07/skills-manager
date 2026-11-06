@@ -169,6 +169,16 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: R10 hidden-Unicode advisory evidence
+
+**[SPEC]** `insights.risk_scan` names format, bidi and tag characters with
+escaped code points, Unicode names and occurrence counts. Output is bounded
+to 32 field/code-point pairs with omitted counts, remains advisory, and never
+rewrites documents or declares them safe. Four red-first tests plus the
+insights contracts cover hidden controls, ordinary Unicode, repeated controls,
+bounds and read purity. Nested metadata and companion files are outside this
+scan. The final five-interpreter suite passed with 1,324 tests each.
+
 ## 2026-11-06 — Continuation: R6 portability and physical findings
 
 **[SPEC]** Compatibility mappings remain errors with a string-portability
