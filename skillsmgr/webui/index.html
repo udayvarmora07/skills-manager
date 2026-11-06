@@ -773,7 +773,7 @@
         <template v-else-if="selected">
           <div class="detail-head">
             <div><h1 id="view-title" tabindex="-1">Quality: {{ selected.name }}</h1><p class="lead">Independent observations for this exact skill copy. These panels do not produce a combined score or infer safety, trust, effective load, or usefulness.</p></div>
-            <div class="detail-actions quality-actions"><button class="btn btn-primary" type="button" @click="openValidate">Validate</button><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="inspectQualityInLibrary">Inspect in Library</button></div>
+            <div class="detail-actions quality-actions"><button class="btn btn-secondary" type="button" @click="showQualityReport">← Hygiene report</button><button class="btn btn-primary" type="button" @click="openValidate">Validate</button><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="inspectQualityInLibrary">Inspect in Library</button></div>
           </div>
           <section class="quality-section" aria-labelledby="quality-validity-title">
             <div class="section-label-row"><h2 id="quality-validity-title">Specification and observed validity</h2><span class="badge" :class="selected.malformed || selected.addressable === false ? 'badge-warn' : ''">{{ qualityStateLabel(selected) }}</span></div>
