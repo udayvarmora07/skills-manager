@@ -72,9 +72,13 @@ def _under_any(path: Path, roots: list[Path]) -> bool:
 def project_observation(project: str | Path | None, allowed_roots: list[Path] | None = None) -> dict:
     if project is None or not str(project).strip():
         return {"status": "not-requested", "path": None, "skills_roots": []}
-    candidate = Path(str(project)).expanduser()
     try:
+        candidate = Path(str(project)).expanduser()
         resolved = candidate.resolve()
+    except (RuntimeError, ValueError):
+        from .store import StoreError
+
+        raise StoreError("invalid project path") from None
     except OSError:
         return {"status": "inaccessible", "path": "<redacted>", "skills_roots": []}
     roots = [Path(root).resolve() for root in (allowed_roots or [])]

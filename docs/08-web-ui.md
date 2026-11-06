@@ -123,6 +123,10 @@ families the audit found disagreeing: 39 routes emitted `{"error": ...}` while
 the source-update family emitted `{"code", "error"}`, so a client could not
 branch on one key (docs/24 §D3-7).
 
+JSON bodies are bounded to 64 nested containers; invalid/deep JSON and project
+paths whose user expansion or resolution fails return a clean `400`. This
+also applies to the source-update JSON routes and doctor/explain.
+
 Statuses: 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown / a broken data layout — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
 
 **[SPEC] Reads never write, and a broken layout answers one 404 everywhere.**

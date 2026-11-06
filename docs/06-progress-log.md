@@ -169,6 +169,15 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: R14 malformed request handling
+
+**[SPEC]** JSON decoding now catches recursion failures and rejects containers
+deeper than 64 levels before downstream metadata handling. Unknown-user project
+expansion was outside the guard in both workspace observation and effective
+resolution; both now return a clean 400 without echoing the supplied path.
+Red-first route tests reproduced project 500s and accepted deep PATCH metadata;
+the same tests now pass across POST/PATCH and both project routes.
+
 ## 2026-11-06 — Research-roadmap backend items (docs/28, docs/29)
 
 **[SPEC] R1 / S1 — tar caps now apply while reading.** `archive.validate_members`

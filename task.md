@@ -28,7 +28,10 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   ⚠ **Both UIs send bodyless POSTs without the header** (classic `app.js` and
   `v2/app.js`); the frontend session was asked to default the header in
   `domain.js requestJson()`. **Do not merge this commit without that change.**
-- [ ] **R14** — deep JSON → 400; `?project=~nouser/x` → clean error.
+- [x] **R14** — JSON nesting bounded to 64 levels (decoder recursion is also
+  caught); unresolved project expansion is a clean 400 on workspaces and
+  doctor/explain. `tests/test_continuation_http.py` covers POST/PATCH bodies
+  and both project routes without modifying the existing skill.
 - [ ] **R6 / H1** — compatibility dedupe + portability message, unknown-key
   warning, 1,536-character description cap.
 - [ ] **R4 (read-only, JSON part)** — `native_state` from Claude Code

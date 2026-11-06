@@ -26,8 +26,24 @@ def parse_json_object(raw: bytes, content_type: str) -> dict:
         raise RequestError(415, "JSON request body required")
     try:
         data = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         raise StoreError("request body is not valid JSON")
     if not isinstance(data, dict):
         raise StoreError("request body must be a JSON object")
+    _check_json_depth(data)
     return data
+
+
+def _check_json_depth(data: dict) -> None:
+    """Bound nesting before downstream recursive frontmatter/metadata handling."""
+    stack = [iter((data,))]
+    while stack:
+        try:
+            value = next(stack[-1])
+        except StopIteration:
+            stack.pop()
+            continue
+        if isinstance(value, (dict, list)):
+            if len(stack) > 64:
+                raise StoreError("request JSON nesting exceeds 64 levels")
+            stack.append(iter(value.values() if isinstance(value, dict) else value))
