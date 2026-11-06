@@ -96,7 +96,7 @@
     <div class="page" v-else-if="route.page === 'skills'">
       <div class="shelf-head">
         <div><h1 class="h1" id="h1" tabindex="-1">Skills</h1>
-          <p class="lede">{{ fmt(m.skills.length) }} skills across {{ agentInfos.length }} tools, {{ grouping === 'category' ? 'grouped by category' : 'A to Z' }}. Open one to read, change or copy it.</p></div>
+          <p class="lede">{{ fmt(shelfTotal) }} skills across {{ agentInfos.length }} tools, {{ grouping === 'category' ? 'grouped by category' : 'A to Z' }}. Open one to read, change or copy it.</p></div>
         <button type="button" class="btn btn-ink" @click="openCreate()"><ic name="plus"></ic>New skill</button>
       </div>
       <div class="tools">
@@ -106,7 +106,7 @@
         </div>
         <label class="sr-only" for="agent-f">Agent</label>
         <select class="field" id="agent-f" v-model="agentFilter" @change="capReset()"><option value="all">All agents</option><option v-for="inf in agentInfos" :key="inf.id" :value="inf.id">Only {{ inf.agent.name }}</option></select>
-        <span class="count" aria-live="polite">{{ visible.length === m.skills.length ? visible.length + ' skills' : 'Showing ' + visible.length + ' of ' + m.skills.length }}</span>
+        <span class="count" aria-live="polite">{{ visible.length === shelfTotal ? fmt(visible.length) + ' skills' : 'Showing ' + fmt(visible.length) + ' of ' + fmt(shelfTotal) }}</span>
       </div>
       <div class="ribbon" v-if="careCount && filter !== 'care'"><ic name="warn"></ic><span><b>{{ plural(careCount, 'skill needs', 'skills need') }} a little care.</b> Cards with a badge have a problem.</span><a class="btn btn-ink btn-sm" href="#/inbox">Fix them in Inbox</a></div>
       <template v-if="groups.length">

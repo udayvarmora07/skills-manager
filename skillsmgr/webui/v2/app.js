@@ -79,6 +79,7 @@ const app = createApp({
         { id: "off", label: "Turned off", n: sk.filter((s) => s.status.key === "off").length },
       ];
     },
+    shelfTotal() { return this.m ? this.m.skills.filter((s) => s.status.key !== "note").length : 0; },
     careCount() { return this.m ? this.m.skills.filter((s) => s.status.key === "warn" || s.status.key === "bad").length : 0; },
     visible() {
       if (!this.m) return [];
