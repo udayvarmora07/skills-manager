@@ -56,7 +56,7 @@ write paths, so the condition has one name wherever a user meets it.
   include derived, non-persisted observations: portable/extension frontmatter
   partitions, content and metadata hashes, observed timestamp, and provenance.
 - `search(self, term) -> list[dict]` — searches name, description, body, and category through the bounded wildcard scorer described in @docs/02-modules.md; invalid query complexity raises `ValueError`. Scope adapters use `list()` plus **one** `SELECT name, body` over the `_index_rows` read seam when they need body-aware ranking, so ranking costs no per-row document read; see the `search_all()` entry in @docs/02-modules.md. CLI global and merged searches pass their requested Store through that adapter, so `--data-dir` remains authoritative.
-- `add(self, src, name=None) -> dict` — install an existing skill directory (or SKILL.md file) from `src`; `name` overrides the destination name.
+- `add(self, src, name=None) -> dict` — install an existing skill directory (or SKILL.md file) from `src`; `name` overrides the destination name. Manager sidecars (`.skillsmgr-provenance.json`, `.skillsmgr-source-lock.json`) are dropped at any depth: an added folder is external intake, and that evidence describes a different install (R2). The caller's folder is not modified.
 - `remove(self, name, purge=False) -> dict` — trash by default; `purge=True` deletes permanently.
 - `restore(self, name, snapshot=None) -> dict` — from trash, or from a validated
   snapshot under `<data>/snapshots/global/<name>/`; the current content is saved
@@ -78,6 +78,9 @@ write paths, so the condition has one name wherever a user meets it.
   successful names appear in `imported`, failures/already-present names in
   `skipped`, and failed replacements restore the previous destination. A failed
   staging copy leaves the existing skill directory untouched.
+- Archive imports strip both manager sidecars from the whole extracted tree
+  (skills and full-archive trash) before validation, so an export → import
+  round trip deliberately drops provenance and source-lock evidence (R2).
 - `full=True` requires a boolean `full` flag and plain-name `trash`/`templates`
   entries; every payload is validated before any mutation, then installed as one
   all-or-nothing transaction that rolls back on failure and raises

@@ -49,6 +49,43 @@ _TAR_DECOMPRESSION_ERRORS = (
 )
 
 
+# Manager-owned evidence files.  They describe *this* install (registry
+# provenance, source-lock identity) and are unauthenticated, so a copy that
+# arrives from outside — an added folder, an archive, an upload — is never
+# trusted: a forged provenance file once made ``Store.get`` report
+# ``hash_verified: true`` for a skill that was never fetched (R2/S2).
+MANAGER_SIDECAR_NAMES = frozenset({".skillsmgr-provenance.json", ".skillsmgr-source-lock.json"})
+
+
+def ignore_manager_sidecars(_directory: str, names: list[str]) -> set[str]:
+    """``shutil.copytree`` ignore callable that drops manager sidecars at any depth."""
+    return {name for name in names if name in MANAGER_SIDECAR_NAMES}
+
+
+def strip_manager_sidecars(root: Path) -> list[str]:
+    """Remove every manager sidecar below *root*; return the relative paths removed.
+
+    Symlinks are unlinked, never followed.  A sidecar name used by a directory
+    is removed as a tree, because nothing legitimate is stored under it.
+    """
+    removed: list[str] = []
+    try:
+        candidates = sorted(
+            (path for path in Path(root).rglob("*") if path.name in MANAGER_SIDECAR_NAMES),
+            key=lambda item: len(item.parts),
+            reverse=True,
+        )
+        for path in candidates:
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            removed.append(path.relative_to(root).as_posix())
+    except OSError as exc:
+        raise ArchiveError(f"could not remove manager evidence from intake: {exc}") from exc
+    return removed
+
+
 def normalize_member_name(name: str) -> str:
     if not isinstance(name, str) or not name or "\x00" in name:
         raise ArchiveError(f"unsafe archive member: {name!r}")

@@ -185,6 +185,22 @@ many-headers and PAX-bomb tests measured 17.4 MB and 101 MB peak traced memory
 on the old code against a 12 MB budget; both pass now, and valid plain/gz/bz2/xz
 exports still import.
 
+**[SPEC] R2 / S2 — manager sidecars never survive external intake.**
+`.skillsmgr-provenance.json` and `.skillsmgr-source-lock.json` are
+unauthenticated; a well-formed forgery needs no secret, and one made `Store.get`
+report `registry_provenance` with `hash_verified: true` for a skill that was
+never fetched. `Store.add` now copies with `archive.ignore_manager_sidecars`,
+archive import strips them from the whole extracted tree (skills and trash), the
+multipart upload inherits `Store.add`'s behaviour, and `registry.validate_snapshot`
+refuses either name at any depth (it blocked only root provenance before). The
+registry commit writes provenance after `Store.add`, into the installed copy, and
+purges the install if that write fails. Red-first: all 7 assertions in
+`tests/test_audit_r2_intake_sidecars.py` fail on the old code. **Consequence:**
+an export → import round trip drops provenance and lock evidence by design.
+**Open:** sidecars inside agent scopes are still trusted as read, and
+`scopes.sync_skill` copies them between scopes; binding evidence to an install
+needs a maintainer decision.
+
 ## 2026-11-06 — The prototype-final design shipped as a v2 interface on real data
 
 **[SPEC]** Branch `ui/prototype-final` adds `skillsmgr/webui/v2/` (served at

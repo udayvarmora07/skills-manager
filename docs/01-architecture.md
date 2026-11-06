@@ -75,6 +75,14 @@ skills-manager/
   directory; loader reconciliation exposes drift instead of trusting stale
   metadata. Registry snapshots are validated and committed through the
   existing Store API, so SQLite remains a rebuildable index only.
+- **[SPEC] Sidecars never cross external intake (R2).** Both manager sidecars
+  are unauthenticated, so `Store.add`, archive import, the multipart upload
+  (which delegates to `Store.add`) and registry snapshot validation drop or
+  refuse them; only this tool writes them, after a reviewed commit. A registry
+  commit writes provenance into the *installed* copy and purges the install if
+  that write fails. **[?]** Sidecars inside agent-scope directories are still
+  read as written by whatever tool put them there; binding them to an install
+  (per-install HMAC or recorded physical path) is an open maintainer decision.
 
 ## Data-dir resolution
 

@@ -1537,6 +1537,17 @@ def _commit_registry_review(store: Store, review_id: str) -> dict:
         return _commit_registry_review_unlocked(store, review_id)
 
 
+def _record_registry_provenance(store: Store, name: str, installed: dict, provenance: dict) -> None:
+    """Write provenance into the installed skill, or undo the install."""
+    from .registry import RegistryError, write_provenance
+
+    try:
+        write_provenance(Path(installed["path"]), provenance)
+    except (RegistryError, OSError) as exc:
+        store.remove(name, purge=True)
+        raise StoreError(f"registry install rolled back: could not record provenance: {exc}") from exc
+
+
 def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
     """Commit one reviewed registry snapshot without another network request."""
     from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
@@ -1546,7 +1557,6 @@ def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
         mark_registry_review_committed,
         provenance_for_snapshot,
         read_registry_review,
-        write_provenance,
     )
 
     review = read_registry_review(store.data_dir, review_id)
@@ -1573,8 +1583,10 @@ def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
             "body": validation.body,
             "allowed_tools": validation.data.get("allowed-tools"),
         })
-        write_provenance(staged, provenance)
+        # Store.add strips manager sidecars from external intake (R2), so the
+        # provenance this review earned is written to the installed copy.
         installed = store.add(staged, name=name)
+        _record_registry_provenance(store, name, installed, provenance)
     committed = mark_registry_review_committed(store.data_dir, review_id)
     registry = dict(committed["registry"])
     registry["remote_hash"] = remote_hash

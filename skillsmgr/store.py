@@ -836,13 +836,26 @@ def _record_restored_trash(store: "Store", labels: list[str]) -> None:
 
 
 def _extract_import_archive(archive: Path, dest: Path) -> None:
-    """Sniff and safely extract either supported archive format."""
+    """Sniff and safely extract either supported archive format.
+
+    Manager sidecars are stripped from the whole extracted tree — skills and
+    trash alike — before anything reads it, so an archive cannot carry forged
+    provenance or source-lock evidence into the store (R2/S2).
+    """
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive, "r") as zipped:
             members = _validate_zip_members(zipped, archive.stat().st_size)
             _extract_zip_members(zipped, dest, members)
-        return
-    _extract_tar_archive(archive, dest)
+    else:
+        _extract_tar_archive(archive, dest)
+    _strip_intake_sidecars(dest)
+
+
+def _strip_intake_sidecars(root: Path) -> None:
+    try:
+        _archive.strip_manager_sidecars(root)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _extract_tar_archive(archive: Path, dest: Path) -> None:
@@ -1717,7 +1730,9 @@ class Store:
         self._init_db()
         stage = _stage_sibling(skill_dir)
         try:
-            shutil.copytree(source, stage)
+            # An added folder is external intake: manager evidence describes a
+            # different install and is never carried in (R2/S2).
+            shutil.copytree(source, stage, ignore=_archive.ignore_manager_sidecars)
             os.replace(stage, skill_dir)
         except OSError as exc:
             shutil.rmtree(stage, ignore_errors=True)

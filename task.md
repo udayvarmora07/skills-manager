@@ -13,7 +13,13 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   (`archive.open_tar`, `_BoundedReader`, `MAX_ARCHIVE_DECOMPRESSED_BYTES`).
   `tests/test_audit_r1_streamed_tar.py`: 2 of 6 fail on the old code
   (17.4 MB and 101 MB peak traced memory against a 12 MB budget).
-- [ ] **R2 (P0)** — strip manager sidecars at every external intake.
+- [x] **R2 (P0)** — manager sidecars stripped at `Store.add`, archive import
+  (skills + trash), multipart upload; registry snapshots refuse both names at
+  any depth; registry commit writes provenance post-install or rolls back.
+  `tests/test_audit_r2_intake_sidecars.py`: 7 of 7 assertions red before.
+- [ ] **Decide (R2 follow-up, ⚠ approval):** bind sidecars to an install
+  (per-install HMAC or recorded physical path). Agent-scope sidecars are still
+  trusted as read, and `scopes.sync_skill` copies them between scopes.
 - [ ] **R5** — lock files under the validated data dir, acquire timeout.
 - [ ] **R9** — JSON content type on bodyless mutating POSTs.
 - [ ] **R14** — deep JSON → 400; `?project=~nouser/x` → clean error.
