@@ -2975,11 +2975,6 @@
       "end_lineno": 2064,
       "lineno": 2049
     },
-    "skillsmgr/webapp.py::WebAppHandler._drain_body": {
-      "complexity": 4,
-      "end_lineno": 883,
-      "lineno": 873
-    },
     "skillsmgr/webapp.py::WebAppHandler._execute_batch_post": {
       "complexity": 12,
       "end_lineno": 1582,
@@ -3526,7 +3521,7 @@
       "lineno": 688
     },
     "skillsmgr/webapp.py::_window_param": {
-      "complexity": 4,
+      "complexity": 2,
       "end_lineno": 589,
       "lineno": 576
     },

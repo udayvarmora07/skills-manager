@@ -138,18 +138,18 @@ also applies to the source-update JSON routes and doctor/explain.
 
 Statuses: 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown / a broken data layout — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
 
-**[SPEC] Reads never write, and a broken layout answers one 404 everywhere.**
+**[SPEC] Reads never write; routes depending on the Store layout share one 404.**
 `GET /api/skills`, `/api/stats`, `/api/doctor` and `/api/search` used to run the
 write path's bootstrap, so one request against a data directory that did not
 exist created four directories and a 32 KB SQLite file. They no longer do: a
 read opens the index without creating the layout, the file, or the schema. When
-a component of `<data>` is a regular file (or the index is a directory), every
-route answers the **same** `404` with the same body naming the path and its
+a component of `<data>` is a regular file (or the index is a directory), routes that inspect that component answer the **same** `404` with the same body naming the path and its
 `mv <path> <path>.broken` repair — previously four routes answered `400` with
 the interpreter's own `mkdir_private` text while `/api/scopes` and `/api/trash`
 still answered `200`, leaving the UI half-broken and half-looking-healthy
 (docs/24 §D3-4). `StoreLayoutError` carries `status = 404`, so the existing
-`StoreError` branch routes it with no special case.
+`StoreError` branch routes it with no special case. Independent template
+listing can still succeed when the skills component is broken.
 
 **[SPEC]** Requests are accepted only on a loopback-bound server with the
 configured loopback `Host` and port. This policy applies to **every** request,
@@ -185,6 +185,9 @@ matched against `^[0-9]+$` rather than `int()`, because `int(" 5 ")`,
 same defect in smaller clothes. Query strings are parsed with
 `keep_blank_values=True`, so `?limit=` is distinguishable from an absent `limit`
 at all — without it `parse_qs` drops the pair and the two look identical.
+History requires `limit >= 1`; an explicitly blank `window` is invalid.
+An over-limit declared Content-Length receives `413` immediately and the
+connection is closed without draining its body.
 
 `to_scopes` is validated the same way on every route that takes it.
 `/api/sync` validated nothing: `to_scopes: [123]` answered `200` and reflected

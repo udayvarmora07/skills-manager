@@ -47,6 +47,9 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   doctor encoding classification. CLI contracts and corrections are
   documented in @docs/03-cli-surface.md.
 
+- [x] **Parent REST:** immediate 413 with connection closure; history zero
+  and blank-window 400s; independent-template layout contract clarified.
+
 ## v2 interface — prototype-final on real data (2026-11-06)
 
 - [x] `skillsmgr/webui/v2/` served at `/v2/`: Home, Skills, Skill page + edit,

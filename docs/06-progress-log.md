@@ -169,6 +169,18 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: prompt HTTP rejection and parameter errors
+
+**[SPEC]** An over-limit declared Content-Length now returns 413 without
+waiting for the sender to finish, and closes the connection so unread bytes
+cannot be reused as a request. History zero limits and blank context windows
+are clean 400s instead of silent defaults. Live socket regressions and existing
+parameter contracts pass; the previous drain assertion was updated to require
+closure without reading. API docs now distinguish independent template listing
+from routes that depend on a broken skills layout. Final full suite: 1,324
+tests on Python 3.10–3.14; complexity lowered/removed stale entries only, both
+smokes, docs, design tokens and static checks passed.
+
 ## 2026-11-06 — Continuation: CLI findings and precise contracts
 
 **[SPEC]** Reproduced CLI search aborts on a refused link and doctor encoding
