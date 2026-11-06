@@ -1010,15 +1010,25 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     # -- static -----------------------------------------------------------
 
+    @staticmethod
+    def _static_rel(parts: list[str]) -> str:
+        """Map URL segments to a path under the web UI directory.
+
+        ``v2`` is the prototype-final interface; it lives in its own directory
+        so the classic UI's files and contracts stay untouched.
+        """
+        rel = parts[0] if parts else "index.html"
+        if rel in ("static", "v2") and len(parts) >= 2:
+            return rel + "/" + "/".join(parts[1:])
+        if rel == "v2":
+            return "v2/index.html"
+        return rel or "index.html"
+
     def _serve_static(self) -> bool:
         parts = self._parts()
-        rel = parts[0] if parts else "index.html"
-        if rel == "api":
+        if parts and parts[0] == "api":
             return False
-        if rel == "" or rel == "index.html":
-            rel = "index.html"
-        elif rel == "static" and len(parts) >= 2:
-            rel = "static/" + "/".join(parts[1:])
+        rel = self._static_rel(parts)
         candidate = (_WEBUI_DIR / rel).resolve()
         try:
             inside = candidate.is_relative_to(_WEBUI_DIR)

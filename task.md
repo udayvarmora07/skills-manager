@@ -4,6 +4,21 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## v2 interface — prototype-final on real data (2026-11-06)
+
+- [x] `skillsmgr/webui/v2/` served at `/v2/`: Home, Skills, Skill page + edit,
+  Sync map, Inbox, Recovery, New skill, dark theme, shortcut list.
+- [x] Honest model: no "older copy" claims, refused symlinks are "Linked
+  elsewhere", file-like entries are "Not a skill"; tie between copies asks.
+- [x] Undo via backend snapshots verified on disk (sync, edit, on/off).
+- [x] `tests/test_v2_interface_contracts.py` (model, escaping, API set, contrast
+  in both themes, served assets, traversal).
+- [ ] Decide: make `/v2/` the default route (classic moves to `/classic/`).
+- [ ] Port Install, Profiles, Quality, Workspaces, Settings into v2.
+- [ ] In-app restore for agent-scope trash (needs a backend route; ⚠ approval).
+- [ ] Slim `/api/skills` list payload (22.7 MB on the maintainer's machine).
+- [ ] Human perceptual review of v2 (screen reader, forced colors, zoom).
+
 ## UI redesign — Warm Instrument (2026-10-08)
 
 The maintainer selected **Prototype A — Warm Instrument** from

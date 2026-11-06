@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skills Manager</title>
+  <meta name="description" content="See every AI agent on this computer, the skills each one knows, and fix what is out of step. Local only.">
+  <script src="../preferences.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app" v-cloak>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top" :inert="!!dialog">
+    <a class="brand" href="#/home"><span class="mark" aria-hidden="true">SM</span><span class="brand-t">Skills Manager</span></a>
+    <nav class="tabs" aria-label="Main">
+      <a href="#/home" :aria-current="route.page === 'home' ? 'page' : null">Home</a>
+      <a href="#/skills" :aria-current="route.page === 'skills' || route.page === 'skill' ? 'page' : null">Skills</a>
+      <a href="#/map" :aria-current="route.page === 'map' ? 'page' : null">Sync map</a>
+      <a href="#/inbox" :aria-current="route.page === 'inbox' ? 'page' : null">Inbox <span class="badge" v-if="inboxCount" :aria-label="inboxCount + ' items'">{{ inboxCount > 99 ? '99+' : inboxCount }}</span></a>
+      <a href="#/recovery" :aria-current="route.page === 'recovery' ? 'page' : null">Recovery</a>
+    </nav>
+    <form class="gsearch" role="search" @submit.prevent="searchSubmit">
+      <ic name="search"></ic>
+      <label class="sr-only" for="gq">Find a skill</label>
+      <input id="gq" ref="gsearch" type="search" placeholder="Find a skill…" autocomplete="off" :value="query" @input="searchInput($event.target.value)">
+      <kbd aria-hidden="true">/</kbd>
+    </form>
+    <button type="button" class="themebtn" @click="cycleTheme()" :aria-label="'Theme: ' + themeLabel + '. Activate to switch.'" :title="'Theme: ' + themeLabel">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true" v-html="themeIcon"></svg></button>
+    <button type="button" class="themebtn help" @click="openHelp()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><span aria-hidden="true" style="font-weight:800">?</span></button>
+    <a class="classic" href="/" title="Install, backups, profiles, quality checks and settings">All tools &amp; settings</a>
+  </header>
+
+  <main id="main" ref="main" tabindex="-1" :inert="!!dialog">
+    <!-- loading / failure -->
+    <div class="page" v-if="loading && !m">
+      <h1 class="h1" id="h1" tabindex="-1">Looking at your agents…</h1>
+      <p class="lede">Reading the skill folders on this computer.</p>
+      <div class="rooms" style="margin-top:28px" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div>
+    <div class="page" v-else-if="loadError && !m">
+      <h1 class="h1" id="h1" tabindex="-1">Couldn't read your skills</h1>
+      <p class="state-note err" role="alert">{{ loadError }}</p>
+      <p style="margin-top:16px"><button type="button" class="btn btn-ink" @click="refresh()">Try again</button></p>
+    </div>
+
+    <template v-else-if="m">
+    <!-- ========== HOME ========== -->
+    <div class="page" v-if="route.page === 'home'">
+      <h1 class="h1" id="h1" tabindex="-1">Your agents</h1>
+      <p class="lede">Each AI tool on this computer and the skills it knows.
+        <b v-if="m.problems.length">{{ plural(m.problems.length, 'thing needs', 'things need') }} a look.</b><b v-else>Everything is working.</b></p>
+      <p class="state-note err" role="alert" v-if="loadError">{{ loadError }}</p>
+      <div class="home">
+        <section aria-label="Agents" class="rooms">
+          <p class="state-note" v-if="!m.rooms.length && !agentInfos.length">No agent skill folders were found on this computer yet. Skills you add will show up here.</p>
+          <a v-for="inf in agentInfos" :key="inf.id" class="card room" href="#/skills" @click="pickAgent(inf.id)" :aria-label="inf.agent.name + ': ' + plural(inf.mine.length, 'skill') + ', open its skills'">
+            <div class="room-h"><logo :agent="inf.agent"></logo><div style="min-width:0"><div class="room-n">{{ inf.agent.name }}</div><div class="room-p" :title="inf.agent.path">{{ inf.agent.path }}</div></div></div>
+            <span :class="['pill', inf.key]">
+              <ic :name="inf.key"></ic>{{ inf.broken.length ? plural(inf.broken.length, 'skill') + " can't be read" : inf.differing.length ? plural(inf.differing.length, 'skill') + (inf.differing.length === 1 ? ' differs' : ' differ') : 'All ' + plural(inf.mine.length, 'skill') + ' readable' }}
+            </span>
+            <p class="room-note" v-if="inf.links.length">{{ plural(inf.links.length, 'skill is a link', 'skills are links') }} to other folders</p>
+            <div class="chips"><span v-for="s in inf.mine.slice(0, 4)" :key="s.name">{{ s.name }}</span><span class="more" v-if="inf.mine.length > 4">+{{ inf.mine.length - 4 }} more</span></div>
+            <div class="meter"><div class="ml"><span>If read in full</span><b class="num">{{ inf.pct }}%</b></div>
+              <div class="track" role="img" :aria-label="inf.pct + '% of a reading window if every skill were read in full'"><i :class="{ warn: inf.over }" :style="{ width: Math.min(Math.max(inf.pct * 0.8, 1.5), 100) + '%' }"></i><span class="lim" style="left:80%"></span></div></div>
+          </a>
+        </section>
+        <aside class="side">
+          <div class="card">
+            <h2>Needs a look</h2>
+            <p class="sub">{{ m.problems.length ? plural(m.problems.length, 'thing') + ', most important first' : 'Nothing right now' }}</p>
+            <template v-if="m.problems.length">
+              <div class="look" v-for="(p, i) in m.problems.slice(0, 3)" :key="p.id">
+                <span :class="['look-ic', p.key]"><ic :name="p.key === 'info' ? 'info' : p.key"></ic></span>
+                <div><b>{{ p.title }}</b><p>{{ p.text }}</p><a :class="['btn btn-sm', i === 0 ? 'btn-ink' : 'btn-soft']" href="#/inbox" @click="front = p.id">{{ p.key === 'info' ? 'Review' : 'Fix it' }}</a></div>
+              </div>
+              <a class="see-all" href="#/inbox" v-if="m.problems.length > 3">Open inbox ({{ m.problems.length }}) <ic name="arrow" cls="i-s"></ic></a>
+            </template>
+            <div class="look" v-else><span class="look-ic" style="background:var(--ok-bg);color:var(--ok)"><ic name="check"></ic></span><div><b>All clear</b><p>Every skill can be read and every copy matches.</p></div></div>
+          </div>
+          <div class="card" v-if="sharedSkills.length">
+            <h2>Shared by most agents</h2><p class="sub">Skills that live in the most places</p>
+            <a class="shared-row" v-for="s in sharedSkills" :key="s.name" :href="'#/skill/' + enc(s.name)"><span>{{ s.name }}</span><span class="faces"><logo v-for="c in s.tools.slice(0, 6)" :key="c.scope" :agent="agentOf(c.scope)" size="xs"></logo></span></a>
+          </div>
+          <div class="card">
+            <h2>Recent changes</h2>
+            <ul class="hist" style="margin-top:12px" v-if="history.length"><li v-for="(h, i) in history.slice(0, 4)" :key="i">{{ h.name }} · {{ h.action }}<small>{{ h.at }}</small></li></ul>
+            <p class="sub" v-else style="margin-top:12px">Changes made here will be listed.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ========== SKILLS ========== -->
+    <div class="page" v-else-if="route.page === 'skills'">
+      <div class="shelf-head">
+        <div><h1 class="h1" id="h1" tabindex="-1">Your skills, <em>{{ grouping === 'category' ? "grouped by what they're for." : 'in alphabetical order.' }}</em></h1>
+          <p class="lede">{{ m.skills.length }} skills across {{ agentInfos.length }} AI tools. Pick one to read it, change it or share it.</p></div>
+        <button type="button" class="btn btn-ink" @click="openCreate()"><ic name="plus"></ic>New skill</button>
+      </div>
+      <div class="tools">
+        <div class="searchf"><ic name="search"></ic><label class="sr-only" for="q">Search skills</label><input class="field" id="q" type="search" placeholder="Search by name or what it does" :value="query" @input="searchInput($event.target.value)" autocomplete="off"></div>
+        <div class="seg" role="group" aria-label="Show">
+          <button type="button" v-for="f in filterChoices" :key="f.id" :aria-pressed="filter === f.id" @click="filter = f.id; capReset()">{{ f.label }}<span class="n num">{{ f.n }}</span></button>
+        </div>
+        <label class="sr-only" for="agent-f">Agent</label>
+        <select class="field" id="agent-f" v-model="agentFilter" @change="capReset()"><option value="all">All agents</option><option v-for="inf in agentInfos" :key="inf.id" :value="inf.id">Only {{ inf.agent.name }}</option></select>
+        <span class="count" aria-live="polite">{{ visible.length === m.skills.length ? visible.length + ' skills' : 'Showing ' + visible.length + ' of ' + m.skills.length }}</span>
+      </div>
+      <div class="ribbon" v-if="careCount && filter !== 'care'"><ic name="warn"></ic><span><b>{{ plural(careCount, 'skill needs', 'skills need') }} a little care.</b> Cards with a badge have a problem.</span><a class="btn btn-ink btn-sm" href="#/inbox">Fix them in Inbox</a></div>
+      <template v-if="groups.length">
+        <section class="cat" v-for="g in groups" :key="g.id" :aria-labelledby="'cat-' + g.key">
+          <div class="cat-h"><h2 class="h2" :id="'cat-' + g.key">{{ g.id }}</h2><span>{{ plural(g.items.length, 'skill') }}</span></div>
+          <div class="shelf">
+            <a v-for="s in g.shown" :key="s.name" :class="['card sk', { faded: s.status.key === 'off' }]" :href="'#/skill/' + enc(s.name)" :aria-label="s.name + '. ' + s.status.label + '. ' + s.description">
+              <div class="cover" :style="coverStyle(s)"><span class="glyph" aria-hidden="true">{{ s.name.charAt(0).toUpperCase() }}</span>
+                <span v-if="s.status.key !== 'ok'" :class="['pill', s.status.key]"><ic :name="s.status.icon"></ic>{{ s.status.label }}</span></div>
+              <div class="sk-b"><b>{{ s.name }}</b><p>{{ s.description || 'No description yet.' }}</p>
+                <div class="sk-f"><span class="dots"><i v-for="c in s.tools" :key="c.scope" :class="{ 'is-off': c.state === 'off', 'is-bad': c.state === 'broken' }" :style="{ background: agentOf(c.scope).color }" :title="agentOf(c.scope).name"></i></span>
+                  <small>{{ s.status.key === 'off' ? 'Off everywhere' : plural(s.tools.length, 'tool') }}</small></div></div>
+            </a>
+          </div>
+          <div class="more-row" v-if="g.items.length > g.shown.length"><button type="button" class="btn btn-line" @click="showMore(g.id)">Show {{ Math.min(g.items.length - g.shown.length, 96) }} more of {{ g.items.length }}</button></div>
+        </section>
+      </template>
+      <div class="card empty" style="margin-top:28px" v-else>
+        <span class="ic" style="background:var(--sunken);color:var(--ink-2)"><ic name="search"></ic></span>
+        <h2>{{ query ? 'No skills match “' + query + '”' : filter === 'care' ? 'Nothing needs care' : 'Nothing here' }}</h2>
+        <p>{{ query ? 'Check the spelling, or search for what the skill does, like “tests” or “commit”.' : 'Every skill in this view is working.' }}</p>
+        <button type="button" class="btn btn-line" @click="clearFilters()">Show all skills</button>
+      </div>
+    </div>
+
+    <!-- ========== SKILL (notebook) ========== -->
+    <div v-else-if="route.page === 'skill'">
+      <div class="page" v-if="!skill"><div class="card empty">
+        <span class="ic" style="background:var(--sunken);color:var(--ink-2)"><ic name="search"></ic></span>
+        <h2 id="h1" tabindex="-1">This skill isn't here any more</h2><p>It may have been moved to the trash.</p><a class="btn btn-line" href="#/skills">Back to skills</a></div></div>
+      <div class="nb" v-else>
+        <nav class="tree" aria-label="All skills">
+          <div class="tree-find"><label class="sr-only" for="tree-q">Filter skills</label><input id="tree-q" type="search" placeholder="Filter skills" autocomplete="off" v-model="treeQuery"></div>
+          <a v-for="x in treeList" :key="x.name" :href="'#/skill/' + enc(x.name)" :aria-current="x.name === skill.name ? 'page' : null"><span class="nm">{{ x.name }}</span><i :class="['d', x.status.key]" :aria-label="x.status.label"></i></a>
+          <p class="tree-more" v-if="treeHidden">{{ treeHidden }} more. Type to filter.</p>
+        </nav>
+        <div class="nb-main">
+          <div class="nb-bar"><a href="#/skills">Skills</a><span aria-hidden="true">/</span><b>{{ skill.name }}</b>
+            <span class="acts" v-if="!edit">
+              <button type="button" class="btn btn-line btn-sm" @click="openShare()" v-if="shareTargets.length"><ic name="share" cls="i-s"></ic>Add to agent</button>
+              <button type="button" class="btn btn-ink btn-sm" @click="startEdit()" :disabled="!editable"><ic name="pencil" cls="i-s"></ic>Edit</button></span></div>
+
+          <!-- read -->
+          <div class="sheet" v-if="!edit">
+            <article>
+              <p class="meta">{{ skill.category || 'Skill' }} · in {{ plural(skill.tools.length, 'place') }}</p>
+              <h1 class="doc-title" id="h1" tabindex="-1">{{ titleCase(skill.name) }}</h1>
+              <p class="doc-lead">{{ skill.description || 'No description yet.' }}</p>
+              <div class="inline-note bad" v-if="skill.status.key === 'bad'"><b>Problem:</b> {{ brokenText }}<br><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
+              <div class="inline-note warn" v-if="skill.status.key === 'warn' && cmp"><b>{{ agentOf(cmp.scope).name }} has a different copy.</b> The highlighted lines are not in it.<br><button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
+              <div class="doc" v-html="docHtml"></div>
+            </article>
+            <aside class="margin" aria-label="About this skill">
+              <div class="note warn" v-if="skill.status.key === 'warn' && cmp"><b>Note</b>
+                <p>{{ highlight ? 'The highlighted lines are missing from' : 'Some lines are missing from' }} {{ agentOf(cmp.scope).name }}'s copy, so it may skip these steps.</p>
+                <p v-if="skill.ref.ambiguous">Your copies are split evenly, so the app can't tell which is the reference. Open the Inbox to choose one.</p>
+                <label class="hl" v-if="skill.differing.length > 1">Compare with <select class="field" style="height:32px;font-size:13px" v-model="compareWith"><option v-for="c in skill.differing" :key="c.scope" :value="c.scope">{{ agentOf(c.scope).name }}</option></select></label>
+                <label class="hl"><input type="checkbox" v-model="highlight"> Highlight what's missing</label>
+                <button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
+              <div class="note bad" v-if="skill.status.key === 'bad'"><b>Problem</b><p>{{ brokenText }}</p><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
+              <div class="note" v-if="skill.status.key === 'off'"><b>Turned off</b><p>No agent uses this skill right now.</p><button type="button" class="btn btn-ink btn-sm" @click="allOn()">Turn on everywhere</button></div>
+              <div class="note ok" v-if="skill.status.key === 'ok'"><b>Status</b><p>Working. Every copy matches.</p></div>
+              <div class="note"><b>Used by</b><div class="uses">
+                <div class="use" v-for="c in skill.copies" :key="c.path"><logo :agent="agentOf(c.scope)" size="xs"></logo>
+                  <span>{{ agentOf(c.scope).name }}<small class="bad" v-if="c.state === 'broken'">Can't be read</small><small class="warn" v-else-if="c.hash && c.hash !== skill.ref.hash">Different copy</small></span>
+                  <label class="switch" :title="(c.state === 'on' ? 'On' : 'Off') + ' in ' + agentOf(c.scope).name"><input type="checkbox" :checked="c.state === 'on'" :disabled="c.state === 'broken' || busy" @change="toggleCopy(c)"><span class="tr"></span><span class="sr-only">Use in {{ agentOf(c.scope).name }}</span></label></div>
+              </div></div>
+              <div class="note"><b>Length</b><p>About {{ fmt(words(skill.tokens)) }} words · {{ lengthPct }}% of a reading window</p></div>
+              <div class="note"><b>History</b><ul class="hist"><li v-for="(h, i) in skillHistory" :key="i">{{ h.action }}<small>{{ h.at }}</small></li><li v-if="!skillHistory.length">No recorded changes<small>Edits made here are listed</small></li></ul></div>
+              <div class="note"><details class="paths"><summary>Folder locations</summary><code v-for="c in skill.copies" :key="c.path">{{ shortPath(c.path) }}</code></details></div>
+              <div><button type="button" class="btn btn-danger btn-sm" @click="openTrash()"><ic name="trash" cls="i-s"></ic>Move to trash</button></div>
+            </aside>
+          </div>
+
+          <!-- edit -->
+          <template v-else>
+            <div class="sheet" style="grid-template-columns:minmax(0,760px)">
+              <article>
+                <p class="meta">Editing · the previous text is kept as a snapshot you can roll back to</p>
+                <h1 class="doc-title" id="h1" tabindex="-1">{{ titleCase(skill.name) }}</h1>
+                <label class="ed-label" for="ed-desc">Description <span style="font-weight:600;color:var(--muted)">(when should an agent use this?)</span></label>
+                <input class="ed-input" id="ed-desc" v-model="edit.desc" :aria-invalid="editError ? 'true' : null" :aria-describedby="editError ? 'ed-err' : null">
+                <p class="ed-err" id="ed-err" v-if="editError"><ic name="bad" cls="i-s"></ic>{{ editError }}</p>
+                <p class="ed-hint num" v-else>{{ edit.desc.length }} / 1024</p>
+                <div class="ed-tabs" role="tablist" aria-label="Editor">
+                  <button type="button" role="tab" :aria-selected="edit.tab === 'write'" @click="edit.tab = 'write'">Write</button>
+                  <button type="button" role="tab" :aria-selected="edit.tab === 'preview'" @click="edit.tab = 'preview'">Preview</button>
+                  <span class="ed-tools" aria-label="Formatting" v-if="edit.tab === 'write'">
+                    <button type="button" title="Heading" @click="insertText('## ')">H</button><button type="button" title="Bullet list" @click="insertText('- ')">• List</button><button type="button" title="Numbered list" @click="insertText('1. ')">1. List</button><button type="button" title="Bold" @click="wrapText('**')"><b>B</b></button></span>
+                </div>
+                <template v-if="edit.tab === 'write'"><label class="sr-only" for="ed-body">Instructions</label><textarea class="ed-area" id="ed-body" ref="edbody" spellcheck="true" v-model="edit.body"></textarea></template>
+                <div class="doc" style="margin-top:20px" v-else v-html="renderDoc(edit.body)"></div>
+              </article>
+            </div>
+            <div class="savebar" role="region" aria-label="Save changes">
+              <span class="dirty" v-if="editDirty">● Unsaved changes</span>
+              <span class="to">Save to:
+                <label v-for="c in editTargets" :key="c.scope"><input type="checkbox" :value="c.scope" v-model="edit.targets">{{ agentOf(c.scope).name }}</label></span>
+              <span class="sp"><button type="button" class="btn btn-soft" @click="cancelEdit()">Cancel</button>
+                <button type="button" class="btn btn-ink" @click="saveEdit()" :disabled="!!editError || !edit.targets.length || busy || !editDirty">Save {{ edit.targets.length ? 'to ' + plural(edit.targets.length, 'place') : '' }}</button></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== SYNC MAP ========== -->
+    <div class="mapwrap" v-else-if="route.page === 'map'">
+      <section class="canvas" aria-label="Sync map">
+        <div class="intro">
+          <div><h1 class="h1" id="h1" tabindex="-1">Everything in one picture</h1>
+            <p class="lede">{{ agentInfos.length - mapBad }} of {{ agentInfos.length }} agents match. <b class="warn" v-if="mapBad">{{ plural(mapBad, 'agent needs', 'agents need') }} a look.</b><b v-else>Nothing needs fixing.</b> Click an agent to see why.</p></div>
+          <div class="legend" aria-hidden="true">
+            <span><svg viewBox="0 0 28 8"><path d="M0 4h28" stroke="#22a05a" stroke-width="3"/></svg>Matches</span>
+            <span><svg viewBox="0 0 28 8"><path d="M0 4h28" stroke="#d97706" stroke-width="3" stroke-dasharray="5 4"/></svg>Copies differ</span>
+            <span><svg viewBox="0 0 28 8"><path d="M0 4h10M18 4h10" stroke="#dc2626" stroke-width="3"/></svg>Can't be read</span>
+          </div>
+        </div>
+        <svg class="wires" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <template v-for="(inf, i) in agentInfos" :key="inf.id">
+            <line v-if="inf.key !== 'bad'" x1="50" y1="56" :x2="slots[i][0]" :y2="slots[i][1]" :stroke="wireColor(inf.key)" stroke-width="4" :stroke-dasharray="inf.key === 'warn' ? '10 8' : null" vector-effect="non-scaling-stroke"/>
+            <template v-else>
+              <line x1="50" y1="56" :x2="mid(i, 0, -1)[0]" :y2="mid(i, 1, -1)[1]" :stroke="wireColor('bad')" stroke-width="4" vector-effect="non-scaling-stroke"/>
+              <line :x1="mid(i, 0, 1)[0]" :y1="mid(i, 1, 1)[1]" :x2="slots[i][0]" :y2="slots[i][1]" :stroke="wireColor('bad')" stroke-width="4" vector-effect="non-scaling-stroke"/>
+            </template>
+          </template>
+        </svg>
+        <a class="hub" href="#/skills" :aria-label="'All skills: ' + m.skills.length"><b class="num">{{ m.skills.length }}</b><span>skills in all</span><em>across your agents</em></a>
+        <span v-for="(inf, i) in agentInfos" :key="'t' + inf.id" :class="['tagw', inf.key]" :style="{ left: (slots[i][0] + 50) / 2 + '%', top: (slots[i][1] + 56) / 2 + '%' }">{{ tagFor(inf) }}</span>
+        <button type="button" class="node" v-for="(inf, i) in agentInfos" :key="'n' + inf.id" :style="{ left: slots[i][0] + '%', top: slots[i][1] + '%' }" :aria-pressed="inf.id === mapSel.id" :aria-label="inf.agent.name + ': ' + tagFor(inf, true)" @click="selectMap(inf.id)">
+          <logo :agent="inf.agent" size="sm"></logo><span><b>{{ inf.agent.name }}</b><small>{{ plural(inf.mine.length, 'skill') }}</small></span></button>
+      </section>
+      <div class="maplist">
+        <h1 class="h1" style="font-size:30px">Sync map</h1>
+        <div class="mlist" style="margin-top:16px">
+          <button type="button" class="mrow" v-for="inf in agentInfos" :key="inf.id" :style="{ width: '100%', background: inf.id === mapSel.id ? 'var(--sunken)' : '#fff', borderLeft: 0, borderRight: 0, borderBottom: 0, textAlign: 'left' }" @click="selectMap(inf.id)">
+            <logo :agent="inf.agent" size="xs"></logo><span><b>{{ inf.agent.name }}</b><small>{{ plural(inf.mine.length, 'skill') }}</small></span><span :class="['pill', inf.key]">{{ tagFor(inf) }}</span></button>
+        </div>
+      </div>
+      <aside class="mpanel" aria-live="polite" v-if="mapSel">
+        <span class="crumb">All skills → {{ mapSel.agent.name }}</span>
+        <template v-if="mapSel.key === 'ok'">
+          <div><h2>{{ mapSel.agent.name }} matches</h2><p class="sub" style="font-size:15px">All {{ plural(mapSel.mine.length, 'skill') }} match what your other agents hold.</p></div>
+          <div class="flow"><logo :agent="mapSel.agent" size="xs"></logo>{{ mapSel.agent.name }}<span class="ar ok"></span>the rest</div>
+          <div class="cta"><a class="btn btn-line" href="#/skills" @click="pickAgent(mapSel.id)" style="flex:1">See {{ mapSel.agent.name }}'s skills</a></div>
+        </template>
+        <template v-else>
+          <div><h2>{{ mapSel.broken.length ? mapSel.agent.name + " can't read " + plural(mapSel.broken.length, 'skill') : mapSel.agent.name + ' has ' + plural(mapSel.differing.length, 'different copy', 'different copies') }}</h2>
+            <p class="sub" style="font-size:15px">{{ mapSel.agent.name }} may behave differently from your other agents until these are sorted out.</p></div>
+          <div class="flow"><logo :agent="mapSel.agent" size="xs"></logo>{{ mapSel.agent.name }}<span :class="['ar', mapSel.key]"></span>the rest</div>
+          <div class="mlist" v-if="mapSel.broken.length"><div class="mrow" v-for="s in mapSel.broken.slice(0, 8)" :key="s.name"><span class="bad"><ic name="bad"></ic></span><span><b>{{ s.name }}</b><small>{{ brokenShort(s, mapSel.id) }}</small></span><a class="btn btn-soft btn-sm" :href="'#/skill/' + enc(s.name)">Open</a></div>
+            <div class="mrow" v-if="mapSel.broken.length > 8"><span></span><span><small>and {{ mapSel.broken.length - 8 }} more. See the Inbox.</small></span><a class="btn btn-soft btn-sm" href="#/inbox">Inbox</a></div></div>
+          <div class="mlist" v-if="mapSel.differing.length">
+            <div class="mrow" v-for="s in mapSel.differing.slice(0, 12)" :key="s.name"><input type="checkbox" :checked="mapPicked.includes(s.name)" :disabled="s.ref.ambiguous" :aria-label="'Make ' + s.name + ' match'" @change="togglePick(s.name)"><span><b>{{ s.name }}</b><small>{{ s.ref.ambiguous ? 'Split evenly. Choose in the Inbox' : plural(diffCount(s, mapSel.id), 'line') + ' different from the reference copy' }}</small></span><button type="button" class="peek" :aria-pressed="peek === s.name" @click="peek = peek === s.name ? null : s.name">{{ peek === s.name ? 'Hide' : 'Peek' }}</button></div>
+            <div class="mrow" v-if="mapSel.differing.length > 12"><span></span><span><small>and {{ mapSel.differing.length - 12 }} more. Use the Inbox.</small></span><a class="btn btn-soft btn-sm" href="#/inbox">Inbox</a></div></div>
+          <div class="minidiff" v-if="peekLines" :aria-label="'Differences in ' + peek"><div class="h">{{ peek }}: what will change in {{ mapSel.agent.name }}</div>
+            <div v-for="(l, i) in peekLines" :key="i" :class="l.t"><span class="sr-only" v-if="l.t === 'add'">Added: </span><span class="sr-only" v-else-if="l.t === 'del'">Removed: </span>{{ plainLine(l.x) }}</div></div>
+          <p class="backup" v-if="mapSel.differing.length"><ic name="undo" cls="i-s"></ic>The old text is saved first, and you can undo.</p>
+          <div class="cta" v-if="mapSel.differing.length"><button type="button" class="btn btn-ink btn-lg" :disabled="!mapPicked.length || busy" @click="syncPicked()">Make {{ plural(mapPicked.length, 'skill') }} match in {{ mapSel.agent.name }}</button></div>
+        </template>
+      </aside>
+    </div>
+
+    <!-- ========== RECOVERY ========== -->
+    <div class="page" v-else-if="route.page === 'recovery'">
+      <h1 class="h1" id="h1" tabindex="-1">Recovery <em>and backups.</em></h1>
+      <p class="lede">Bring back skills you removed, keep a copy of your library, or load one from another computer.</p>
+      <div class="rec-grid">
+        <section class="card rec-card" aria-labelledby="rec-trash">
+          <h2 id="rec-trash">Trash <span class="sub num">{{ trash.length }}</span></h2>
+          <p class="sub">Skills removed from your library. Each agent keeps its own trash folder, which is not listed here.</p>
+          <ul class="rec-list" v-if="trash.length">
+            <li v-for="t in trash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · removed {{ t.modified.replace('T', ' ').replace('Z', ' UTC') }}</small></span>
+              <button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="restoreTrash(t)">Restore</button></li>
+          </ul>
+          <p class="state-note" v-else>The trash is empty.</p>
+          <div class="rec-acts" v-if="trash.length"><button type="button" class="btn btn-danger btn-sm" :disabled="busy" @click="openPurge()"><ic name="trash" cls="i-s"></ic>Empty the trash</button></div>
+        </section>
+        <section class="card rec-card" aria-labelledby="rec-backup">
+          <h2 id="rec-backup">Backup</h2>
+          <p class="sub">Saves the skills in your library as one file you can keep or move. Skills that only live in an agent's folder are not included.</p>
+          <div class="rec-acts"><button type="button" class="btn btn-ink" :disabled="busy" @click="exportBackup(false)"><ic name="arrow" cls="i-s"></ic>Download a backup</button>
+            <button type="button" class="btn btn-line" :disabled="busy" @click="exportBackup(true)">Include trash and templates</button></div>
+        </section>
+        <section class="card rec-card" aria-labelledby="rec-import">
+          <h2 id="rec-import">Load from a backup</h2>
+          <p class="sub">Choose a backup file (.tar.gz, .tar or .zip). Skills that already exist are kept unless you tick the box.</p>
+          <label class="ed-label" for="imp-file">Backup file</label>
+          <input class="field" id="imp-file" type="file" accept=".tar.gz,.tgz,.tar,.zip" @change="importFile = $event.target.files[0] || null" style="height:auto;padding:10px 12px;width:100%">
+          <label class="hl-row"><input type="checkbox" v-model="importForce"> Replace skills that already exist</label>
+          <div class="rec-acts"><button type="button" class="btn btn-ink" :disabled="!importFile || busy" @click="doImport()">Load skills</button></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ========== INBOX ========== -->
+    <div class="inbox" v-else-if="route.page === 'inbox'">
+      <div class="card empty" style="padding:72px 24px" v-if="!queue.length">
+        <span class="ic"><ic name="check"></ic></span><h2 id="h1" tabindex="-1">All done</h2>
+        <p>{{ done ? 'You fixed ' + plural(done, 'thing') + '. ' : '' }}Every skill can be read, and every copy matches.</p>
+        <div style="display:flex;gap:8px;margin-top:8px"><a class="btn btn-ink" href="#/home">Go to Home</a><a class="btn btn-line" href="#/skills">Browse skills</a></div></div>
+      <template v-else>
+        <div class="prog"><span class="bars" aria-hidden="true"><i v-for="n in progressBars" :key="n" :class="n <= Math.min(done, progressBars) ? 'done' : n === Math.min(done, progressBars - 1) + 1 ? 'now' : ''"></i></span><span>{{ done }} fixed · {{ queue.length }} to go</span></div>
+        <h1 class="label" id="h1" tabindex="-1">Next up</h1>
+        <article class="card focus" aria-labelledby="focus-t">
+          <span :class="['pill', cur.key === 'info' ? '' : cur.key]" :style="cur.key === 'info' ? 'background:var(--sunken);color:var(--ink-2)' : null"><ic :name="cur.key === 'info' ? 'info' : cur.key"></ic>{{ cur.key === 'bad' ? cur.short : cur.key === 'warn' ? 'Copies differ' : cur.space ? 'Suggestion' : cur.noteOnly ? 'Not a skill' : 'For your information' }}</span>
+          <h2 id="focus-t">{{ cur.title }}</h2>
+          <p class="why">{{ cur.text }}<template v-if="cur.space"> Here are its largest skills:</template></p>
+          <template v-if="cur.key === 'warn'">
+            <fieldset class="srcpick" v-if="curSkill.ref.groups.length">
+              <legend>Which copy should everyone use?</legend>
+              <label v-for="g in curSkill.ref.groups" :key="g[0].hash"><input type="radio" name="src" :value="g[0].scope" v-model="srcChoice"> {{ join(g.map((c) => agentOf(c.scope).name)) }}<span class="kbd-hint" v-if="g[0].hash === curSkill.ref.hash && !curSkill.ref.ambiguous"> · held by the most places</span></label>
+            </fieldset>
+            <div class="vs" v-if="curChanges">
+              <div class="ver"><header><logo :agent="agentOf(cur.agents[0])" size="xs"></logo>{{ agentOf(cur.agents[0]).name }}'s copy<small>now</small></header><p v-for="(l, i) in curChanges.filter((x) => x.t !== 'add')" :key="'d' + i" :class="l.t">{{ plainLine(l.x) }}</p></div>
+              <div class="ver"><header><logo :agent="agentOf(srcChoice || curSkill.ref.holders[0].scope)" size="xs"></logo>{{ agentOf(srcChoice || curSkill.ref.holders[0].scope).name }}'s copy<small>will be used</small></header><p v-for="(l, i) in curChanges.filter((x) => x.t !== 'del')" :key="'a' + i" :class="l.t">{{ plainLine(l.x) }}</p></div>
+            </div>
+          </template>
+          <div class="big-list" v-if="cur.space">
+            <div class="big-row" v-for="s in curBig" :key="s.name"><span><b>{{ s.name }}</b><small>About {{ fmt(words(s.tokens)) }} words</small></span>
+              <a class="link" :href="'#/skill/' + enc(s.name)">Open</a><button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="turnOffIn(s, cur.agent)">Turn off in {{ agentOf(cur.agent).name }}</button></div></div>
+          <div class="f-acts">
+            <button type="button" class="btn btn-ink btn-lg" data-primary :disabled="busy || (cur.key === 'warn' && !srcChoice)" @click="fixCurrent()">{{ cur.action }}</button>
+            <button type="button" class="btn btn-soft btn-lg" @click="skipCurrent()">Skip for now</button>
+            <a class="link" v-if="cur.skill" :href="'#/skill/' + enc(cur.skill)">Open skill</a>
+            <span class="keys"><span><kbd>Enter</kbd> {{ cur.key === 'info' ? 'Done' : 'Fix' }}</span><span><kbd>S</kbd> Skip</span></span>
+          </div>
+        </article>
+        <template v-if="queue.length > 1">
+          <h2 class="label">Still to do</h2>
+          <div class="queue"><button type="button" class="qi" :class="{ skipped: skipped.includes(p.id) }" v-for="p in queue.slice(1, 26)" :key="p.id" @click="front = p.id; focusH1()"><span :class="['k', p.key]"><ic :name="p.key === 'info' ? 'info' : p.key"></ic></span><b>{{ p.title }}</b><small>{{ skipped.includes(p.id) ? 'Skipped' : p.short }}</small></button></div>
+          <p class="sub" style="margin-top:10px" v-if="queue.length > 26">and {{ queue.length - 26 }} more after these.</p>
+        </template>
+        <p style="margin-top:24px;color:var(--ok);font-weight:700;display:flex;gap:8px;align-items:center"><ic name="check" cls="i-s"></ic>When this list is empty, everything is working.</p>
+      </template>
+    </div>
+    </template>
+  </main>
+
+  <!-- dialog -->
+  <div class="scrim" v-if="dialog" @mousedown.self="closeDialog()" @keydown="dialogKeys($event)">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t" ref="dlg">
+      <div class="dlg-h"><h2 id="dlg-t">{{ dialog.title }}</h2></div>
+      <div class="dlg-b">
+        <p v-for="(line, i) in dialog.lines" :key="i">{{ line }}</p>
+        <div class="explain" v-if="dialog.how"><b>What to do</b>{{ dialog.how }}<code v-for="p in dialog.paths" :key="p">{{ p }}</code></div>
+        <form class="dlg-form" v-if="dialog.form" @submit.prevent="confirmDialog()">
+          <label class="ed-label" for="nf-name">Name</label>
+          <input class="ed-input" style="font-family:var(--mono);font-style:normal;font-size:15px" id="nf-name" v-model="dialog.form.name" autocomplete="off" spellcheck="false" :aria-invalid="formErrors.name ? 'true' : null" aria-describedby="nf-hint">
+          <p :class="formErrors.name ? 'ed-err' : 'ed-hint'" id="nf-hint" style="text-align:left">{{ formErrors.name || 'Lowercase words joined by hyphens, like code-review.' }}</p>
+          <label class="ed-label" for="nf-desc">Description <span style="font-weight:600;color:var(--muted)">(when should an agent use this?)</span></label>
+          <input class="ed-input" id="nf-desc" v-model="dialog.form.desc" :aria-invalid="formErrors.desc ? 'true' : null" aria-describedby="nf-dhint">
+          <p :class="formErrors.desc ? 'ed-err' : 'ed-hint'" id="nf-dhint" style="text-align:left">{{ formErrors.desc || 'Start with “Use this when…”.' }}</p>
+          <label class="ed-label" for="nf-scope">Create it in</label>
+          <select class="field" id="nf-scope" v-model="dialog.form.scope" style="width:100%"><option v-for="a in createTargets" :key="a.id" :value="a.id">{{ a.name }}</option></select>
+          <button type="submit" class="sr-only">Create</button>
+        </form>
+        <ul class="keylist" v-if="dialog.keys"><li v-for="k in dialog.keys" :key="k[1]"><span><kbd v-for="x in k[0]" :key="x">{{ x }}</kbd></span>{{ k[1] }}</li></ul>
+        <div class="pick-list" v-if="dialog.picks"><label class="pick" v-for="p in dialog.picks" :key="p.id"><input type="checkbox" :value="p.id" v-model="dialog.chosen"><logo :agent="agentOf(p.id)" size="xs"></logo><span>{{ p.label }}<small>{{ p.path }}</small></span></label></div>
+      </div>
+      <div class="dlg-f"><button type="button" class="btn btn-line" @click="closeDialog()">{{ dialog.cancel || 'Cancel' }}</button>
+        <button type="button" :class="['btn', dialog.danger ? 'btn-danger' : 'btn-ink']" v-if="dialog.confirm" :disabled="(dialog.picks && !dialog.chosen.length) || (dialog.form && !!formInvalid)" @click="confirmDialog()">{{ dialog.confirm }}</button></div>
+    </div>
+  </div>
+
+  <div class="sr-only" role="status" aria-live="polite">{{ live }}</div>
+  <div class="toasts"><div class="toast" role="status" v-for="t in toasts" :key="t.id"><ic :name="t.err ? 'bad' : 'ok'"></ic><span>{{ t.text }}</span><button type="button" v-if="t.undo" @click="runUndo(t)">Undo</button></div></div>
+</div>
+<script src="../static/vendor/vue.global.prod.js"></script>
+<script src="../domain.js"></script>
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

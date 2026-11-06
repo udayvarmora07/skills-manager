@@ -133,10 +133,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-10-08)
 
-**[NOTE]** 26 dated entries; full text follows.
+**[NOTE]** 27 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | The prototype-final design shipped as a v2 interface on real data |
 | 2026-10-08 | The UI was redesigned against a contract, and the redesign found a product defect |
 | 2026-10-06 | TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong |
 | 2026-10-06 | A search body cost one document read per row, to compute nothing |
@@ -166,6 +167,30 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-11-06 — The prototype-final design shipped as a v2 interface on real data
+
+**[SPEC]** Branch `ui/prototype-final` adds `skillsmgr/webui/v2/` (served at
+`/v2/`): Home, Skills, Skill page with edit, Sync map, Inbox, Recovery, New
+skill, a dark theme and a shortcut list, all on the existing REST routes. The
+classic interface and every existing contract are untouched; see
+@docs/08-web-ui.md.
+
+**[NOTE] Real data changed three design decisions.** On the maintainer's machine
+all 2,061 records are `uncategorized`, so the category shelf falls back to A–Z.
+The prototype's "Can't be read" would have labelled 169 of Claude Code's skills
+broken; 168 were refused symlinks the agent reads fine, now "Linked elsewhere".
+And the prototype's "older copy" has no basis (no version order exists), so the
+reference is the majority content hash and a tie asks the user.
+
+**[SPEC] Verified, not asserted.** Against an isolated fixture in a real browser:
+replacing a damaged copy, making copies match, editing and saving to two scopes,
+and each Undo all round-tripped on disk. A new contrast test caught the
+prototype's muted text at 4.41:1 on the sunken surface; it is now ≥ 4.5:1.
+
+**[?] Open.** v2 is not the default route; the maintainer decides when to flip
+it. `GET /api/skills?scope=all` is 22.7 MB on this machine and both interfaces
+pay it on every load.
 
 ## 2026-10-08 — The UI was redesigned against a contract, and the redesign found a product defect
 

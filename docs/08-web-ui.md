@@ -366,6 +366,44 @@ pins the contract). What a client must know:
   security headers — do not use them as a reachability probe; use `HEAD` (which
   mirrors `GET`, headers only) or `/api/stats`.
 
+## v2 interface (`/v2/`, prototype-final design)
+
+**[SPEC]** `skillsmgr/webui/v2/` is a second presentation of the same backend,
+served at `http://127.0.0.1:<port>/v2/`. It implements the maintainer-selected
+`prototype-final` design on real data: **Home** (one card per agent with health,
+skills and a full-text reading-window meter), **Skills** (a shelf grouped by
+category when skills carry categories, otherwise A–Z, with All / Needs care /
+Turned off and per-agent filters), the **Skill page** (escaped document, margin
+notes, per-agent on/off switches, folder locations, edit with Write/Preview and
+"save to" targets), the **Sync map**, the **Inbox** (one problem at a time with
+a side-by-side diff), **Recovery** (global trash restore/empty, backup download,
+archive import), **New skill**, a measured warm dark theme that shares the
+classic `skillsmgr-theme` preference, and a `?` shortcut list. Install, Profiles,
+Quality, Workspaces and Settings stay in the classic interface, linked as
+"All tools & settings". The classic interface at `/` is unchanged.
+
+- **No new surface.** It calls only existing routes (`/api/scopes`, `/api/skills`,
+  `/api/history`, `/api/sync`, `/api/trash`, `/api/import`, `/api/export`). The
+  only backend change is that `_serve_static` serves files under `webui/v2/`.
+- **Honesty rules** (`v2/model.js`): there is no version order, so a skill whose
+  copies differ is "Copies differ" and the reference copy is the content most
+  copies hold; a tie is reported as ambiguous and the Inbox asks which copy to
+  use. A refused symlink is "Linked elsewhere", never "Can't be read" (the agent
+  reads it; this tool will not follow it). A dot-prefixed or file-like entry
+  (`.system`, `README.md`) is "Not a skill". Only a damaged document with a
+  readable copy elsewhere offers an automatic fix; the other kinds explain the
+  manual step.
+- **Undo** for sync, edit and on/off uses the backend's own snapshots
+  (`write_snapshot` on forced sync and edit) and the snapshot rollback route.
+  Agent-scope trash has no in-app restore, and the dialog says so.
+- The page re-reads the filesystem when the tab becomes visible again (at most
+  every 15 s, never during an edit).
+- Pinned by `tests/test_v2_interface_contracts.py`: model behaviour under Node
+  with the real `domain.js`, hostile-Markdown escaping, the closed set of
+  `v-html` sites and API routes, declared CSS variables, light **and** dark
+  contrast (text ≥ 4.5:1, control boundary ≥ 3:1), assets present, and served
+  routes including traversal refusal.
+
 ## Frontend map (app.js)
 
 ### Overview-first shell
