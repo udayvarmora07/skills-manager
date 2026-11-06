@@ -32,7 +32,7 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   caught); unresolved project expansion is a clean 400 on workspaces and
   doctor/explain. `tests/test_continuation_http.py` covers POST/PATCH bodies
   and both project routes without modifying the existing skill.
-- [ ] **R6 / H1** — compatibility dedupe + portability message, unknown-key
+- [x] **R6 / H1** — compatibility dedupe + portability message, unknown-key
   warning, 1,536-character description cap.
 - [ ] **R4 (read-only, JSON part)** — `native_state` from Claude Code
   `skillOverrides` and OpenCode `permission.skill`.

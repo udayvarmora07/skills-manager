@@ -1055,3 +1055,13 @@ usage database, filesystem mutation, validator severity change, or new CLI
 command is necessary, stop and request owner approval. Do not expand the task
 silently.
 
+
+## R6 bounded alias visibility (2026-11-06)
+
+**[SPEC]** Findings continue to deduplicate by resolved physical directory,
+not by equal content. An instance seen through multiple scope/path aliases
+adds `observations` with each supplied scope, consumer, path and state flags.
+At most 100 observations are emitted per physical instance; larger groups
+carry `observations_total` and `observations_truncated`. Distinct directories
+with identical bytes retain independent findings. The ordinary scope list
+continues to expose its instance records.

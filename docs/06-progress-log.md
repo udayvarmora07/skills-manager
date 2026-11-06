@@ -169,6 +169,17 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: R6 portability and physical findings
+
+**[SPEC]** Compatibility mappings remain errors with a string-portability
+explanation. The validator warns once for unknown top-level keys (escaped for
+display), and lints the combined description/when_to_use 1,536-character cap.
+Hygiene retains one finding per physical identity while exposing bounded alias
+paths, scopes and supplied state flags; identical separate copies remain
+separate. Seven focused tests cover boundary lengths, spec keys, empty input,
+physical aliases, distinct copies and truncation. Final source-tree suite:
+1,324 tests passed on each of Python 3.10, 3.11, 3.12, 3.13 and 3.14.
+
 ## 2026-11-06 — Continuation: R14 malformed request handling
 
 **[SPEC]** JSON decoding now catches recursion failures and rejects containers

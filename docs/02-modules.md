@@ -129,7 +129,11 @@ and explicitly unavailable signals. `normalize_instruction_body()` owns the
 narrow exact-instruction comparison normalization; `near_duplicate_candidates()`
 uses bounded inverted-index features and weighted Jaccard scores. The module
 does not write files, SQLite, caches, history, or network state and exposes no
-Store method.
+Store method. Physical findings retain bounded alias `observations` (scope,
+path and supplied state flags), with explicit total/truncation above 100
+observations. Validation keeps mapping-valued compatibility as an error with
+portability guidance, warns once for non-spec top-level keys, and warns when
+description plus `when_to_use` exceeds 1,536 characters.
 
 ## `registry.py`
 
