@@ -169,6 +169,18 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: R4 native JSON observations
+
+**[SPEC]** Scoped list/search/detail adds fresh `native_state` without changing
+manager on/off fields. Selected Claude and OpenCode JSON sources are parsed
+once per scope batch with explicit missing/invalid/unavailable states, source
+order and bounds. Effective state stays unknown because managed/CLI/environment
+and other sources are incomplete. Nine helper tests and a real REST regression
+cover precedence, wildcard ordering, freshness, corrupt/large/duplicate input,
+FIFO refusal, partial evidence and no settings/document mutation. Codex TOML
+is deferred without changing Python >=3.10 or dependencies. The final suite
+passed all 1,324 tests on each of Python 3.10–3.14.
+
 ## 2026-11-06 — Continuation: R10 hidden-Unicode advisory evidence
 
 **[SPEC]** `insights.risk_scan` names format, bidi and tag characters with

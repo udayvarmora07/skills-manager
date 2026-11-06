@@ -34,10 +34,15 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   and both project routes without modifying the existing skill.
 - [x] **R6 / H1** — compatibility dedupe + portability message, unknown-key
   warning, 1,536-character description cap.
-- [ ] **R4 (read-only, JSON part)** — `native_state` from Claude Code
-  `skillOverrides` and OpenCode `permission.skill`.
+- [x] **R4 (read-only, JSON part)** — `native_state` from Claude Code
+  `skillOverrides` and OpenCode `permission.skill`, per-file evidence and
+  partial/unknown effective state; batched reads, no settings writes.
 - [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
   escaped code points, bounded output and no safe verdict or text rewriting.
+
+- [ ] **Decide (R4 / D-1):** Codex TOML parsing remains deferred. Keep Python
+  >=3.10 and dependencies unchanged; choose a maintained parser/floor policy
+  before implementing `[[skills.config]]`, rather than a partial TOML parser.
 
 ## v2 interface — prototype-final on real data (2026-11-06)
 

@@ -341,6 +341,16 @@ def _annotate_scope_entries(entries: list[dict], scope: Scope, physical_root: st
         if isinstance(e.get("provenance"), dict):
             e["provenance"]["scope"] = scope.id
             e["provenance"]["consumer"] = scope.consumer
+    return _annotate_native_entries(entries, scope)
+
+
+def _annotate_native_entries(entries: list[dict], scope: Scope) -> list[dict]:
+    from .native_state import observe_native_states
+
+    states = observe_native_states(scope.consumer, [entry["name"] for entry in entries],
+                                   home=paths.home_dir(), project=_cwd())
+    for entry in entries:
+        entry["native_state"] = states[entry["name"]]
     return entries
 
 
@@ -576,7 +586,7 @@ def get_skill(scope_id: str, name: str) -> dict:
         entry["lines"] = raw.count("\n") + 1 if raw else 0
     except Exception as exc:
         _diagnose(f"scope detail enrichment failed for {scope_id!r}", exc)
-    return entry
+    return _annotate_native_entries([entry], scope)[0]
 
 
 def get_raw(scope_id: str, name: str) -> str:
