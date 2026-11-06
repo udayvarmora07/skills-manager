@@ -522,3 +522,29 @@ svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; }
 .sk:hover { box-shadow: none; border-color: var(--line-strong); }
 .sk.st-warn:hover { border-left-color: var(--warn-line); } .sk.st-bad:hover { border-left-color: var(--bad-line); }
 .h1 { letter-spacing: -.015em; }
+
+/* Which copy each agent has: a letter per distinct text, A = most places. */
+.ver-tag { display: inline-block; font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: var(--r-xs); background: var(--sunken); color: var(--ink-2); border: 1px solid var(--line); vertical-align: 1px; }
+.ver-tag.odd { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-edge); }
+.use small { color: var(--muted); }
+/* Phone: navigation moves to the bottom where a thumb reaches it, and no tab is cut off. */
+.bottomnav { display: none; }
+@media (max-width: 600px) {
+  .top .tabs { display: none; }
+  .gsearch { display: block; flex: 1 1 auto; width: auto; min-width: 0; }
+  .gsearch kbd { display: none; }
+  .bottomnav { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--surface); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  .bottomnav a { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 48px; justify-content: center; font-size: 11.5px; font-weight: 600; color: var(--muted); text-decoration: none; border-radius: var(--r-sm); }
+  .bottomnav a[aria-current="page"] { color: var(--ink); background: var(--sunken); }
+  .bottomnav .i { width: 20px; height: 20px; }
+  .bn-ic { position: relative; display: inline-flex; }
+  .bn-ic .badge { position: absolute; top: -6px; right: -14px; min-width: 18px; height: 18px; font-size: 10.5px; }
+  body { padding-bottom: 72px; }
+  .savebar { bottom: 64px; }
+  .toasts { bottom: 84px; }
+}
+/* Progress bars shrink to fit, so the count beside them is never pushed off-screen. */
+.prog { flex-wrap: wrap; row-gap: 8px; }
+.prog .bars { flex: 1 1 160px; min-width: 0; max-width: 360px; }
+.prog .bars i { flex: 1 1 0; width: auto; max-width: 28px; min-width: 6px; }
+@media (max-width: 600px) { .inbox { padding-top: 24px; } .label { margin: 24px 0 10px; } }

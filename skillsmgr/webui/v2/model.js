@@ -131,6 +131,9 @@
         : !copies.some((c) => c.state === "on" || c.state === "link") ? STATUS.off
         : ref.groups.length > 1 ? STATUS.warn
         : copies.some((c) => c.state === "link") ? STATUS.linked : STATUS.ok;
+      /* Name each distinct text: A is the one most places hold. This answers the
+       * question users ask most, "which copy does each agent have". */
+      ref.groups.forEach((g, i) => { for (const c of g) c.version = String.fromCharCode(65 + Math.min(i, 25)); });
       const pick = (copies.find((c) => c.hash === ref.hash) || copies.find((c) => c.state !== "broken") || copies[0]);
       const category = (copies.map((c) => c.record.category).find((c) => c && c !== "uncategorized")) || "";
       skills.push({

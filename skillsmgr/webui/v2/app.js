@@ -31,6 +31,10 @@ const PATHS = {
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
   trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>',
   share: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  home: '<path d="m4 11 8-7 8 7"/><path d="M6 10v10h12V10"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+  map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/>',
+  inbox: '<path d="M4 13h4l2 3h4l2-3h4"/><path d="M5 5h14l1 8v6H4v-6Z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/>',
@@ -55,7 +59,7 @@ const app = createApp({
   data() {
     return {
       route: parseRoute(), m: null, loading: true, loadError: "", history: [], busy: false,
-      query: "", filter: "all", agentFilter: "all", extra: {},
+      query: "", filter: "all", agentFilter: "all", extra: {}, sortBy: "name",
       front: null, skipped: [], dismissed: [], done: 0, srcChoice: "",
       treeQuery: "", edit: null, highlight: true, compareWith: "",
       mapSelId: "", mapPicked: [], peek: null,
@@ -94,6 +98,12 @@ const app = createApp({
       });
     },
     groups() {
+      if (this.sortBy !== "name") {
+        const key = this.sortBy === "size" ? (s) => -s.tokens : (s) => -s.tools.length;
+        const items = [...this.visible].sort((a, b) => key(a) - key(b) || a.name.localeCompare(b.name));
+        const id = this.sortBy === "size" ? "Largest first" : "In the most tools";
+        return items.length ? [{ id, key: "sorted", items, shown: items.slice(0, CAP + (this.extra[id] || 0)) }] : [];
+      }
       const by = new Map();
       for (const s of this.visible) {
         const id = this.grouping === "category" ? (s.category || "Other") : (/[a-z]/i.test(s.name[0]) ? s.name[0].toUpperCase() : "#");

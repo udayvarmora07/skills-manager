@@ -127,6 +127,12 @@ class ModelProblemTests(unittest.TestCase):
         self.assertFalse(by["bad:badname"]["fixable"])  # needs a rename on disk
         self.assertTrue(any(p["id"].startswith("link:") for p in out))
 
+    def test_each_distinct_text_gets_a_letter_and_a_is_the_majority(self):
+        out = _node(HELPERS + """
+        const s=M.build([rec('a','claude-code'),rec('a','codex',{content_hash:'h2'}),rec('a','opencode')],scopes).skills[0];
+        return Object.fromEntries(s.copies.map(c=>[c.scope,c.version]));""")
+        self.assertEqual(out, {"claude-code": "A", "codex": "B", "opencode": "A"})
+
     def test_problems_are_ordered_serious_first(self):
         out = _node(HELPERS + """
         const m=M.build([rec('a','claude-code'),rec('a','codex',{content_hash:'h2'}),
@@ -227,6 +233,12 @@ class InterfaceSourceTests(unittest.TestCase):
             for fg, bg in (("--ok", "--ok-bg"), ("--warn", "--warn-bg"), ("--bad", "--bad-bg"), ("--off", "--off-bg")):
                 self.assertGreaterEqual(ratio(t[fg], t[bg]), 4.5, f"{name} {fg} on {bg}")
             self.assertGreaterEqual(ratio(t["--line-strong"], t["--surface"]), 3.0, f"{name} control boundary")
+
+    def test_phone_navigation_reaches_every_page(self):
+        nav = self.html[self.html.index('class="bottomnav"'):]
+        nav = nav[: nav.index("</nav>")]
+        for page in ("home", "skills", "map", "inbox", "recovery"):
+            self.assertIn(f'href="#/{page}"', nav)
 
     def test_reduced_motion_is_honoured(self):
         self.assertIn("prefers-reduced-motion", self.css)

@@ -106,6 +106,8 @@
         </div>
         <label class="sr-only" for="agent-f">Agent</label>
         <select class="field" id="agent-f" v-model="agentFilter" @change="capReset()"><option value="all">All agents</option><option v-for="inf in agentInfos" :key="inf.id" :value="inf.id">Only {{ inf.agent.name }}</option></select>
+        <label class="sr-only" for="sort-f">Sort</label>
+        <select class="field" id="sort-f" v-model="sortBy" @change="capReset()"><option value="name">A to Z</option><option value="size">Largest first</option><option value="shared">In most tools</option></select>
         <span class="count" aria-live="polite">{{ visible.length === shelfTotal ? fmt(visible.length) + ' skills' : 'Showing ' + fmt(visible.length) + ' of ' + fmt(shelfTotal) }}</span>
       </div>
       <div class="ribbon" v-if="careCount && filter !== 'care'"><ic name="warn"></ic><span><b>{{ plural(careCount, 'skill needs', 'skills need') }} a little care.</b> Cards with a badge have a problem.</span><a class="btn btn-ink btn-sm" href="#/inbox">Fix them in Inbox</a></div>
@@ -171,9 +173,12 @@
               <div class="note ok" v-if="skill.status.key === 'ok'"><b>Status</b><p>Working. Every copy matches.</p></div>
               <div class="note"><b>Used by</b><div class="uses">
                 <div class="use" v-for="c in skill.copies" :key="c.path"><logo :agent="agentOf(c.scope)" size="xs"></logo>
-                  <span>{{ agentOf(c.scope).name }}<small class="bad" v-if="c.state === 'broken'">Can't be read</small><small class="warn" v-else-if="c.hash && c.hash !== skill.ref.hash">Different copy</small></span>
+                  <span>{{ agentOf(c.scope).name }} <span class="ver-tag" v-if="c.version && skill.ref.groups.length > 1" :class="{ odd: c.hash !== skill.ref.hash }" :title="'Copy ' + c.version + ' — same text as ' + join(skill.copies.filter((x) => x.hash === c.hash).map((x) => agentOf(x.scope).name))">Copy {{ c.version }}</span>
+                    <small class="bad" v-if="c.state === 'broken'">Can't be read</small><small v-else-if="c.state === 'link'">Linked from another folder</small><small class="warn" v-else-if="c.hash && c.hash !== skill.ref.hash">Different from most places</small><small v-else-if="c.state === 'off'">Turned off here</small></span>
                   <label class="switch" :title="(c.state === 'on' ? 'On' : 'Off') + ' in ' + agentOf(c.scope).name"><input type="checkbox" :checked="c.state === 'on'" :disabled="c.state === 'broken' || busy" @change="toggleCopy(c)"><span class="tr"></span><span class="sr-only">Use in {{ agentOf(c.scope).name }}</span></label></div>
               </div></div>
+              <div class="note" v-if="skill.ref.groups.length > 1"><b>Copies</b>
+                <ul class="hist"><li v-for="g in skill.ref.groups" :key="g[0].hash"><span class="ver-tag" :class="{ odd: g[0].hash !== skill.ref.hash }">Copy {{ g[0].version }}</span> {{ join(g.map((c) => agentOf(c.scope).name)) }}<small>{{ g[0].hash === skill.ref.hash && !skill.ref.ambiguous ? 'Held by the most places' : plural(g.length, 'place') }} · {{ fmt(words(g[0].tokens)) }} words</small></li></ul></div>
               <div class="note"><b>Length</b><p>About {{ fmt(words(skill.tokens)) }} words · {{ lengthPct }}% of a reading window</p></div>
               <div class="note"><b>History</b><ul class="hist"><li v-for="(h, i) in skillHistory" :key="i">{{ h.action }}<small>{{ h.at }}</small></li><li v-if="!skillHistory.length">No recorded changes<small>Edits made here are listed</small></li></ul></div>
               <div class="note"><details class="paths"><summary>Folder locations</summary><code v-for="c in skill.copies" :key="c.path">{{ shortPath(c.path) }}</code></details></div>
@@ -346,6 +351,14 @@
     </div>
     </template>
   </main>
+
+  <nav class="bottomnav" aria-label="Main" :inert="!!dialog">
+    <a href="#/home" :aria-current="route.page === 'home' ? 'page' : null"><ic name="home"></ic>Home</a>
+    <a href="#/skills" :aria-current="route.page === 'skills' || route.page === 'skill' ? 'page' : null"><ic name="list"></ic>Skills</a>
+    <a href="#/map" :aria-current="route.page === 'map' ? 'page' : null"><ic name="map"></ic>Map</a>
+    <a href="#/inbox" :aria-current="route.page === 'inbox' ? 'page' : null"><span class="bn-ic"><ic name="inbox"></ic><span class="badge" v-if="inboxCount">{{ inboxCount > 99 ? '99+' : inboxCount }}</span></span>Inbox</a>
+    <a href="#/recovery" :aria-current="route.page === 'recovery' ? 'page' : null"><ic name="undo"></ic>Recovery</a>
+  </nav>
 
   <!-- dialog -->
   <div class="scrim" v-if="dialog" @mousedown.self="closeDialog()" @keydown="dialogKeys($event)">
