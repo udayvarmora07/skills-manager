@@ -4,6 +4,25 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Continuation verification — classic screens, scale, screen reader (2026-11-06)
+
+See @docs/32-continuation-verification-2026-11-06.md.
+
+- [x] Classic-only screens E2E (`tools/e2e_classic`): 37 scenarios / 312
+  assertions, 0 failures twice. Fixed C-1 (batch dialog focus return) and C-2
+  (Quality report unreachable after selecting a skill).
+- [x] Synthetic 10,000-instance run: no crash, error or >5 s stall; measured
+  payload, render, heap, DOM and interaction costs for both UIs.
+- [x] Screen-reader investigation (Orca 46 transcripts + CDP audit): fixed
+  SR-1 (P0, Enter on "Open skill" ran the fix), SR-2/3/4 (P1) and SR-5–13,
+  15, 16; v2 browser suite 27/27 twice.
+- [ ] Human spoken screen-reader sign-off using the docs/32 walkthrough.
+- [ ] Decide: body-less list projection (R3); `/api/scopes` without token
+  totals; capping classic Library rows (changes "exact visible-set").
+- [ ] Decide: batch plan binding of before-state and sync source content (P3).
+- [ ] P3: Enter in Workspaces project field; classic Install shows API trust
+  blockers.
+
 ## Research roadmap — backend items (docs/28 R-table, docs/29 Horizon 1; 2026-11-06)
 
 Branch `claude/research-roadmap-c0a574`. Only items the roadmap marks as not

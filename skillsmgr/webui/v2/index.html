@@ -11,9 +11,9 @@
 </head>
 <body>
 <div id="app" v-cloak>
-  <a class="skip" href="#main">Skip to content</a>
+  <a class="skip" href="#main" @click.prevent="skipToContent()">Skip to content</a>
   <header class="top" :inert="!!dialog">
-    <a class="brand" href="#/home"><span class="mark" aria-hidden="true">SM</span><span class="brand-t">Skills Manager</span></a>
+    <a class="brand" href="#/home" aria-label="Skills Manager home"><span class="mark" aria-hidden="true">SM</span><span class="brand-t">Skills Manager</span></a>
     <nav class="tabs" aria-label="Main">
       <a href="#/home" :aria-current="route.page === 'home' ? 'page' : null">Home</a>
       <a href="#/skills" :aria-current="route.page === 'skills' || route.page === 'skill' ? 'page' : null">Skills</a>
@@ -74,7 +74,7 @@
             <template v-if="queue.length">
               <div class="look" v-for="(p, i) in queue.slice(0, 3)" :key="p.id">
                 <span :class="['look-ic', p.key]"><ic :name="p.key === 'info' ? 'info' : p.key"></ic></span>
-                <div><b>{{ p.title }}</b><p>{{ p.text }}</p><a :class="['btn btn-sm', i === 0 ? 'btn-ink' : 'btn-soft']" href="#/inbox" @click="front = p.id">{{ p.key === 'info' ? 'Review' : 'Fix it' }}</a></div>
+                <div><b>{{ p.title }}</b><p>{{ p.text }}</p><a :class="['btn btn-sm', i === 0 ? 'btn-ink' : 'btn-soft']" href="#/inbox" @click="front = p.id" :aria-label="(p.key === 'info' ? 'Review: ' : 'Fix it: ') + p.title">{{ p.key === 'info' ? 'Review' : 'Fix it' }}</a></div>
               </div>
               <a class="see-all" href="#/inbox" v-if="queue.length > 3">Open inbox ({{ queue.length }}) <ic name="arrow" cls="i-s"></ic></a>
             </template>
@@ -113,7 +113,7 @@
       </div>
       <div class="ribbon" v-if="careCount && filter !== 'care'"><ic name="warn"></ic><span><b>{{ plural(careCount, 'skill needs', 'skills need') }} a little care.</b> Cards with a badge have a problem.</span><a class="btn btn-ink btn-sm" href="#/inbox">Fix them in Inbox</a></div>
       <template v-if="groups.length">
-        <section class="cat" v-for="g in groups" :key="g.id" :aria-labelledby="'cat-' + g.key">
+        <section class="cat" v-for="g in groups" :key="g.id" role="group" :aria-label="grouping === 'letter' && sortBy === 'name' ? 'Skills starting with ' + g.id : g.id">
           <div class="cat-h"><h2 class="h2" :id="'cat-' + g.key">{{ g.id }}</h2><span>{{ plural(g.items.length, 'skill') }}</span></div>
           <div class="shelf">
             <a v-for="s in g.shown" :key="s.name" :class="['card sk', 'st-' + s.status.key, { faded: s.status.key === 'off' }]" :href="'#/skill/' + enc(s.name)" :aria-label="s.name + '. ' + s.status.label + '. ' + s.description">
@@ -163,20 +163,20 @@
               <div class="doc" v-html="docHtml"></div>
             </article>
             <aside class="margin" aria-label="About this skill">
-              <div class="note warn" v-if="skill.status.key === 'warn' && cmp"><b>Note</b>
+              <div class="note warn" v-if="skill.status.key === 'warn' && cmp"><h2 class="note-h">Note</h2>
                 <p>{{ highlight ? 'The highlighted lines are missing from' : 'Some lines are missing from' }} {{ agentOf(cmp.scope).name }}'s copy, so it may skip these steps.</p>
                 <p v-if="skill.ref.ambiguous">Your copies are split evenly, so the app can't tell which is the reference. Open the Inbox to choose one.</p>
                 <label class="hl" v-if="skill.differing.length > 1">Compare with <select class="field" style="height:32px;font-size:13px" v-model="compareWith"><option v-for="c in skill.differing" :key="c.scope" :value="c.scope">{{ agentOf(c.scope).name }}</option></select></label>
                 <label class="hl"><input type="checkbox" v-model="highlight"> Highlight what's missing</label>
                 <button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
-              <div class="note bad" v-if="skill.status.key === 'bad'"><b>Problem</b><p>{{ brokenText }}</p><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
-              <div class="note" v-if="skill.status.key === 'off'"><b>Turned off</b><p>Every observed document copy is disabled on disk.</p><button type="button" class="btn btn-ink btn-sm" @click="allOn()">Turn on everywhere</button></div>
-              <div class="note ok" v-if="skill.status.key === 'ok'"><b>Status</b><p>Readable copies match. Agent loading is not checked.</p></div>
-              <div class="note"><b>Copies in</b><p>Switches rename skill files only; native agent settings are separate.</p><div class="uses">
+              <div class="note bad" v-if="skill.status.key === 'bad'"><h2 class="note-h">Problem</h2><p>{{ brokenText }}</p><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
+              <div class="note" v-if="skill.status.key === 'off'"><h2 class="note-h">Turned off</h2><p>Every observed document copy is disabled on disk.</p><button type="button" class="btn btn-ink btn-sm" @click="allOn()">Turn on everywhere</button></div>
+              <div class="note ok" v-if="skill.status.key === 'ok'"><h2 class="note-h">Status</h2><p>Readable copies match. Agent loading is not checked.</p></div>
+              <div class="note"><h2 class="note-h">Copies in</h2><p>Switches rename skill files only; native agent settings are separate.</p><div class="uses">
                 <div class="use" v-for="c in skill.copies" :key="c.path"><logo :agent="agentOf(c.scope)" size="xs"></logo>
                   <span>{{ agentOf(c.scope).name }} <span class="ver-tag" v-if="c.version && skill.ref.groups.length > 1" :class="{ odd: c.hash !== skill.ref.hash }" :title="'Copy ' + c.version + ' — same text as ' + join(skill.copies.filter((x) => x.hash === c.hash).map((x) => agentOf(x.scope).name))">Copy {{ c.version }}</span>
                     <small class="bad" v-if="c.state === 'broken'">Can't be read</small><small v-else-if="c.state === 'link'">Linked from another folder</small><small class="warn" v-else-if="c.hash && c.hash !== skill.ref.hash">Different from most places</small><small v-else-if="c.state === 'off'">Turned off here</small></span>
-                  <label class="switch" :title="(c.state === 'on' ? 'File enabled' : 'File disabled') + ' in ' + agentOf(c.scope).name"><input type="checkbox" :checked="c.state === 'on'" :disabled="c.state === 'broken' || busy" @change="toggleCopy(c)"><span class="tr"></span><span class="sr-only">File enabled in {{ agentOf(c.scope).name }}</span></label></div>
+                  <label class="switch" :title="(c.state === 'on' ? 'File enabled' : 'File disabled') + ' in ' + agentOf(c.scope).name"><input type="checkbox" :checked="c.state === 'on'" :disabled="c.state === 'broken' || busy" @change="toggleCopy(c)"><span class="tr"></span><span class="sr-only">File enabled in {{ agentOf(c.scope).name }}{{ c.version && skill.ref.groups.length > 1 ? ', copy ' + c.version + (c.hash !== skill.ref.hash ? ', differs from most places' : '') : '' }}</span></label></div>
               </div></div>
               <div class="note" v-if="skill.copies.some((c) => c.record.native_state)"><details class="native-settings"><summary>Native settings (partial)</summary>
                 <p>Observed declarations only. Effective loading is unknown; file switches do not change these settings.</p>
@@ -188,8 +188,8 @@
               </details></div>
               <div class="note" v-if="skill.ref.groups.length > 1"><b>Copies</b>
                 <ul class="hist"><li v-for="g in skill.ref.groups" :key="g[0].hash"><span class="ver-tag" :class="{ odd: g[0].hash !== skill.ref.hash }">Copy {{ g[0].version }}</span> {{ join(g.map((c) => agentOf(c.scope).name)) }}<small>{{ g[0].hash === skill.ref.hash && !skill.ref.ambiguous ? 'Held by the most places' : plural(g.length, 'place') }} · {{ fmt(words(g[0].tokens)) }} words</small></li></ul></div>
-              <div class="note"><b>Length</b><p>About {{ fmt(words(skill.tokens)) }} words · {{ lengthPct }}% of a reading window</p></div>
-              <div class="note"><b>History</b><ul class="hist"><li v-for="(h, i) in skillHistory" :key="i">{{ h.action }}<small>{{ h.at }}</small></li><li v-if="!skillHistory.length">No recorded changes<small>Edits made here are listed</small></li></ul></div>
+              <div class="note"><h2 class="note-h">Length</h2><p>About {{ fmt(words(skill.tokens)) }} words · {{ lengthPct }}% of a reading window</p></div>
+              <div class="note"><h2 class="note-h">History</h2><ul class="hist"><li v-for="(h, i) in skillHistory" :key="i">{{ h.action }}<small>{{ h.at }}</small></li><li v-if="!skillHistory.length">No recorded changes<small>Edits made here are listed</small></li></ul></div>
               <div class="note"><details class="paths"><summary>Folder locations</summary><code v-for="c in skill.copies" :key="c.path">{{ shortPath(c.path) }}</code></details></div>
               <div><button type="button" class="btn btn-danger btn-sm" @click="openTrash()"><ic name="trash" cls="i-s"></ic>Move to trash</button></div>
             </aside>
@@ -248,10 +248,10 @@
             </template>
           </template>
         </svg>
-        <a class="hub" href="#/skills" :aria-label="'All skills: ' + shelfTotal"><b class="num">{{ fmt(shelfTotal) }}</b><span>skills in all</span><em>across your agents</em></a>
         <span v-for="(inf, i) in agentInfos" :key="'t' + inf.id" :class="['tagw', inf.key]" :style="{ left: (slots[i][0] + 50) / 2 + '%', top: (slots[i][1] + 56) / 2 + '%' }">{{ tagFor(inf) }}</span>
         <button type="button" class="node" v-for="(inf, i) in agentInfos" :key="'n' + inf.id" :style="{ left: slots[i][0] + '%', top: slots[i][1] + '%' }" :aria-pressed="inf.id === mapSel.id" :aria-label="inf.agent.name + ': ' + tagFor(inf, true)" @click="selectMap(inf.id)">
           <logo :agent="inf.agent" size="sm"></logo><span><b>{{ inf.agent.name }}</b><small>{{ plural(inf.mine.length, 'skill') }}</small></span></button>
+        <a class="hub" href="#/skills" :aria-label="'All skills: ' + shelfTotal"><b class="num">{{ fmt(shelfTotal) }}</b><span>skills in all</span><em>across your agents</em></a>
       </section>
       <div class="maplist">
         <h1 class="h1" style="font-size:30px">Sync map</h1>
@@ -274,7 +274,7 @@
           <div class="mlist" v-if="mapSel.broken.length"><div class="mrow" v-for="s in mapSel.broken.slice(0, 8)" :key="s.name"><span class="bad"><ic name="bad"></ic></span><span><b>{{ s.name }}</b><small>{{ brokenShort(s, mapSel.id) }}</small></span><a class="btn btn-soft btn-sm" :href="'#/skill/' + enc(s.name)">Open</a></div>
             <div class="mrow" v-if="mapSel.broken.length > 8"><span></span><span><small>and {{ mapSel.broken.length - 8 }} more. See the Inbox.</small></span><a class="btn btn-soft btn-sm" href="#/inbox">Inbox</a></div></div>
           <div class="mlist" v-if="mapSel.differing.length">
-            <div class="mrow" v-for="s in mapSel.differing.slice(0, 12)" :key="s.name"><input type="checkbox" :checked="mapPicked.includes(s.name)" :disabled="s.ref.ambiguous" :aria-label="'Make ' + s.name + ' match'" @change="togglePick(s.name)"><span><b>{{ s.name }}</b><small>{{ s.ref.ambiguous ? 'Split evenly. Choose in the Inbox' : plural(diffCount(s, mapSel.id), 'line') + ' different from the reference copy' }}</small></span><button type="button" class="peek" :aria-pressed="peek === s.name" @click="peek = peek === s.name ? null : s.name">{{ peek === s.name ? 'Hide' : 'Peek' }}</button></div>
+            <div class="mrow" v-for="s in mapSel.differing.slice(0, 12)" :key="s.name"><input type="checkbox" :checked="mapPicked.includes(s.name)" :disabled="s.ref.ambiguous" :aria-label="'Make ' + s.name + ' match'" @change="togglePick(s.name)"><span><b>{{ s.name }}</b><small>{{ s.ref.ambiguous ? 'Split evenly. Choose in the Inbox' : plural(diffCount(s, mapSel.id), 'line') + ' different from the reference copy' }}</small></span><button type="button" class="peek" :aria-pressed="peek === s.name" @click="peek = peek === s.name ? null : s.name" :aria-label="'Show changes in ' + s.name">{{ peek === s.name ? 'Hide' : 'Peek' }}</button></div>
             <div class="mrow" v-if="mapSel.differing.length > 12"><span></span><span><small>and {{ mapSel.differing.length - 12 }} more. Use the Inbox.</small></span><a class="btn btn-soft btn-sm" href="#/inbox">Inbox</a></div></div>
           <div class="minidiff" v-if="peekLines" :aria-label="'Differences in ' + peek"><div class="h">{{ peek }}: what will change in {{ mapSel.agent.name }}</div>
             <div v-for="(l, i) in peekLines" :key="i" :class="l.t"><span class="sr-only" v-if="l.t === 'add'">Added: </span><span class="sr-only" v-else-if="l.t === 'del'">Removed: </span>{{ plainLine(l.x) }}</div></div>
@@ -343,7 +343,7 @@
           </template>
           <div class="big-list" v-if="cur.space">
             <div class="big-row" v-for="s in curBig" :key="s.name"><span><b>{{ s.name }}</b><small>About {{ fmt(words(s.tokens)) }} words</small></span>
-              <a class="link" :href="'#/skill/' + enc(s.name)">Open</a><button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="turnOffIn(s, cur.agent)">Turn off in {{ agentOf(cur.agent).name }}</button></div></div>
+              <a class="link" :href="'#/skill/' + enc(s.name)" :aria-label="'Open ' + s.name">Open</a><button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="turnOffIn(s, cur.agent)">Turn off in {{ agentOf(cur.agent).name }}</button></div></div>
           <div class="f-acts">
             <button type="button" class="btn btn-ink btn-lg" data-primary :disabled="busy || (cur.key === 'warn' && !srcChoice)" @click="fixCurrent()">{{ cur.action }}</button>
             <button type="button" class="btn btn-soft btn-lg" @click="skipCurrent()">Skip for now</button>
@@ -366,7 +366,7 @@
     <a href="#/home" :aria-current="route.page === 'home' ? 'page' : null"><ic name="home"></ic>Home</a>
     <a href="#/skills" :aria-current="route.page === 'skills' || route.page === 'skill' ? 'page' : null"><ic name="list"></ic>Skills</a>
     <a href="#/map" :aria-current="route.page === 'map' ? 'page' : null"><ic name="map"></ic>Map</a>
-    <a href="#/inbox" :aria-current="route.page === 'inbox' ? 'page' : null"><span class="bn-ic"><ic name="inbox"></ic><span class="badge" v-if="inboxCount">{{ inboxCount > 99 ? '99+' : inboxCount }}</span></span>Inbox</a>
+    <a href="#/inbox" :aria-current="route.page === 'inbox' ? 'page' : null"><span class="bn-ic"><ic name="inbox"></ic><span class="badge" v-if="inboxCount" aria-hidden="true">{{ inboxCount > 99 ? '99+' : inboxCount }}</span></span>Inbox<span class="sr-only" v-if="inboxCount">, {{ inboxCount }} items</span></a>
     <a href="#/recovery" :aria-current="route.page === 'recovery' ? 'page' : null"><ic name="undo"></ic>Recovery</a>
   </nav>
 
@@ -386,7 +386,7 @@
           <p :class="formErrors.desc ? 'ed-err' : 'ed-hint'" id="nf-dhint" style="text-align:left">{{ formErrors.desc || 'Start with “Use this when…”.' }}</p>
           <label class="ed-label" for="nf-scope">Create it in</label>
           <select class="field" id="nf-scope" v-model="dialog.form.scope" style="width:100%"><option v-for="a in createTargets" :key="a.id" :value="a.id">{{ a.name }}</option></select>
-          <button type="submit" class="sr-only">Create</button>
+          <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Create</button>
         </form>
         <ul class="keylist" v-if="dialog.keys"><li v-for="k in dialog.keys" :key="k[1]"><span><kbd v-for="x in k[0]" :key="x">{{ x }}</kbd></span>{{ k[1] }}</li></ul>
         <div class="pick-list" v-if="dialog.picks"><label class="pick" v-for="p in dialog.picks" :key="p.id"><input type="checkbox" :value="p.id" v-model="dialog.chosen"><logo :agent="agentOf(p.id)" size="xs"></logo><span>{{ p.label }}<small>{{ p.path }}</small></span></label></div>
@@ -397,7 +397,7 @@
   </div>
 
   <div class="sr-only" role="status" aria-live="polite">{{ live }}</div>
-  <div class="toasts"><div class="toast" role="status" v-for="t in toasts" :key="t.id"><ic :name="t.err ? 'bad' : 'ok'"></ic><span>{{ t.text }}</span><button type="button" v-if="t.undo" @click="runUndo(t)">Undo</button></div></div>
+  <div class="toasts"><div class="toast" role="status" v-for="t in toasts" :key="t.id" @focusin="holdToast(t, true)" @focusout="holdToast(t, false)" @mouseenter="holdToast(t, true)" @mouseleave="holdToast(t, false)"><ic :name="t.err ? 'bad' : 'ok'"></ic><span>{{ t.text }}</span><button type="button" v-if="t.undo" @click="runUndo(t)">Undo</button></div></div>
 </div>
 <script src="../static/vendor/vue.global.prod.js"></script>
 <script src="../domain.js"></script>

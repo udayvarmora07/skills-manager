@@ -8,6 +8,24 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-06 — Classic screens, 10,000-instance scale and screen-reader checks closed three gaps
+
+**[SPEC]** Three gaps left by @docs/31-combined-e2e-verification-2026-11-06.md
+are closed in @docs/32-continuation-verification-2026-11-06.md, all on
+isolated fixtures. The classic-only screens now have an end-to-end runner
+(`tools/e2e_classic`), passing 312 assertions twice after fixing two defects:
+the batch dialog lost its focus return, and Quality's hygiene report became
+unreachable once a skill was selected. A 10,000-instance run found no crash or
+stall and measured where time goes: a 56.7 MB list payload, a token-counting
+`/api/scopes` rescan, and a classic Library that renders all 55,765 nodes.
+Orca 46 transcripts plus a CDP audit found a P0: Enter on the Inbox "Open
+skill" link ran the fix instead of navigating. It and twelve other findings
+are fixed and pinned by four new browser checks (v2 suite 27/27 twice).
+
+**[?] Open.** No person has heard the screen-reader output; the docs/32
+walkthrough is the requested next step. The payload, scopes-rescan and classic
+row-cap fixes are maintainer decisions, not silent changes.
+
 ## 2026-11-06 — Combined frontend/backend integration and browser verification
 
 - Normally merged completed backend `fbe8ec2` into frontend `7d225dc` without
@@ -176,10 +194,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-10-08)
 
-**[NOTE]** 27 dated entries; full text follows.
+**[NOTE]** 28 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | Classic screens, 10,000-instance scale and screen-reader checks closed three gaps |
 | 2026-11-06 | Research-roadmap backend items (docs/28, docs/29) |
 | 2026-11-06 | The prototype-final design shipped as a v2 interface on real data |
 | 2026-10-08 | The UI was redesigned against a contract, and the redesign found a product defect |

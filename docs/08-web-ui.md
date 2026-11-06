@@ -431,6 +431,11 @@ Quality, Workspaces and Settings stay in the classic interface, linked as
 - **Undo** for sync, edit and on/off uses the backend's own snapshots
   (`write_snapshot` on forced sync and edit) and the snapshot rollback route.
   Agent-scope trash has no in-app restore, and the dialog says so.
+- Keyboard shortcuts (`/`, `?`, and the Inbox's Enter/`S`) never fire from a
+  link, button, field or summary, so Enter on a link always follows it. An Undo
+  toast lasts 20 s and pauses while focused or hovered. "Skip to content"
+  focuses the page heading without changing the route. See
+  @docs/32-continuation-verification-2026-11-06.md.
 - The page re-reads the filesystem when the tab becomes visible again (at most
   every 15 s, never during an edit).
 - Pinned by `tests/test_v2_interface_contracts.py`: model behaviour under Node

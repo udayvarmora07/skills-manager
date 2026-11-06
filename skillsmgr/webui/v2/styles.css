@@ -557,3 +557,9 @@ svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* D14: the text link in the top bar meets the 24px target size (WCAG 2.5.8). */
 .top .classic { display: inline-flex; align-items: center; min-height: 32px; padding: 0 4px; }
 .doc em { font-style: italic; }
+
+/* Screen-reader E2E: sidebar labels are real headings with the old look. */
+.note > .note-h { display: block; font-family: var(--ui); font-size: 12px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); font-weight: 800; margin: 0 0 6px; }
+/* WCAG 2.5.8: small controls reach 24px. */
+.paths summary, .nb-bar a, .f-acts .link, .big-row .link { display: inline-flex; align-items: center; min-height: 24px; }
+.mrow input[type="checkbox"] { width: 22px; height: 22px; margin: 1px; }

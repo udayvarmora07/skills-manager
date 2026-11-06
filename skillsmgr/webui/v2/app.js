@@ -270,8 +270,9 @@ const app = createApp({
     searchSubmit() { if (this.route.page !== "skills") location.hash = "#/skills"; },
     capReset() { this.extra = {}; },
     showMore(id) { this.extra = { ...this.extra, [id]: (this.extra[id] || 0) + 96 }; },
-    clearFilters() { this.query = ""; this.filter = "all"; this.agentFilter = "all"; this.extra = {}; },
+    clearFilters() { this.query = ""; this.filter = "all"; this.agentFilter = "all"; this.extra = {}; this.$nextTick(() => { const q = document.getElementById("q"); if (q) q.focus(); }); },
     pickAgent(id) { this.agentFilter = id; this.filter = "all"; this.query = ""; this.extra = {}; },
+    skipToContent() { const h = document.getElementById("h1") || this.$refs.main; if (h) h.focus(); },
     focusH1() { this.$nextTick(() => { const h = document.getElementById("h1"); if (h) h.focus({ preventScroll: true }); }); },
 
     /* ----- toasts & dialogs ----- */
@@ -285,8 +286,19 @@ const app = createApp({
     toast(text, opts = {}) {
       if (opts.err) text = this.friendly(text);
       const t = { id: ++this.toastSeq, text, err: !!opts.err, undo: opts.undo || null, onUndo: opts.onUndo || null };
-      this.toasts.push(t); this.live = text;
-      setTimeout(() => { this.toasts = this.toasts.filter((x) => x.id !== t.id); }, t.undo ? 9000 : (t.err ? 7000 : 4000));
+      this.toasts.push(t); this.live = text + (t.undo ? " Undo is available." : "");
+      this.armToast(t, t.undo ? 20000 : (t.err ? 7000 : 4000));
+    },
+    /* WCAG 2.2.1: a toast with an action never times out while the reader is
+     * on it; it waits until focus and pointer leave, then gets its time again. */
+    armToast(t, ms) {
+      clearTimeout(t.timer);
+      t.ms = ms;
+      t.timer = setTimeout(() => { if (!t.held) this.toasts = this.toasts.filter((x) => x.id !== t.id); }, ms);
+    },
+    holdToast(t, held) {
+      t.held = held;
+      if (!held) this.armToast(t, Math.max(t.ms || 4000, 6000));
     },
     async runUndo(t) {
       this.toasts = this.toasts.filter((x) => x.id !== t.id);
@@ -295,7 +307,12 @@ const app = createApp({
     },
     openDialog(d) { this.opener = document.activeElement; this.dialog = { cancel: "Cancel", ...d }; this.$nextTick(() => { const d = this.$refs.dlg; const b = d && (d.querySelector("input:not(.sr-only), select") || d.querySelector("button:not(.sr-only)")); if (b) b.focus(); }); },
     closeDialog() { this.dialog = null; this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
-    async confirmDialog() { if (this.dialog && this.dialog.form && this.formInvalid) return; const d = this.dialog; this.dialog = null; if (d && d.onConfirm) await d.onConfirm(d); this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
+    async confirmDialog() {
+      if (this.dialog && this.dialog.form && this.formInvalid) {
+        const f = this.dialog.form;
+        this.live = this.formErrors.name || this.formErrors.desc || (!f.name.trim() ? "Add a name." : "Add a description.");
+        return;
+      } const d = this.dialog; this.dialog = null; if (d && d.onConfirm) await d.onConfirm(d); this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
     dialogKeys(e) {
       if (e.key === "Escape") { e.stopPropagation(); this.closeDialog(); return; }
       if (e.key !== "Tab") return;
@@ -614,8 +631,14 @@ const app = createApp({
       if (e.key === "/" && !typing && !this.dialog && !e.ctrlKey && !e.metaKey) { e.preventDefault(); this.$refs.gsearch.focus(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s" && this.edit) { e.preventDefault(); this.saveEdit(); }
       if (this.route.page === "inbox" && this.cur && !typing && !this.dialog && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (e.key === "s" || e.key === "S") { e.preventDefault(); this.skipCurrent(); }
-        else if (e.key === "Enter" && !(t && t.tagName === "BUTTON")) { e.preventDefault(); this.fixCurrent(); }
+        /* Shortcuts never fire from a link, button or field: Enter on "Open
+         * skill" must open the skill, not run the fix (screen-reader E2E SR-1). */
+        const onControl = t && t.closest && t.closest("a, button, input, select, textarea, summary, [role=button], [contenteditable]");
+        const inScope = !t || t === document.body || (t.closest && t.closest("#main"));
+        if (!onControl && inScope) {
+          if (e.key === "s" || e.key === "S") { e.preventDefault(); this.skipCurrent(); }
+          else if (e.key === "Enter") { e.preventDefault(); this.fixCurrent(); }
+        }
       }
     });
     document.title = (this.route.page === "skill" ? this.route.name : TITLES[this.route.page]) + " · Skills Manager";

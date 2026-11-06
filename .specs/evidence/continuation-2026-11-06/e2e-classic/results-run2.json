@@ -1,0 +1,366 @@
+{
+  "results": [
+    {
+      "screen": "Settings",
+      "name": "defaults, theme radios persist across reload (no flash), system follows OS live",
+      "status": "PASS",
+      "assertions": 16,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Settings",
+      "name": "text size standard/large persists and really scales text",
+      "status": "PASS",
+      "assertions": 6,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Settings",
+      "name": "regional format locale changes numbers, persists, document lang stays en",
+      "status": "PASS",
+      "assertions": 8,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Settings",
+      "name": "the v2 UI at /v2/ shares the theme key in both directions",
+      "status": "PASS",
+      "assertions": 4,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Settings",
+      "name": "keyboard: radios reachable by Tab, arrow keys change and persist, locale select by keyboard",
+      "status": "PASS",
+      "assertions": 6,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "validation: empty name / unsafe name writes nothing",
+      "status": "PASS",
+      "assertions": 2,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "create a profile with members + targets; stored in catalog sidecar; row + side panel",
+      "status": "PASS",
+      "assertions": 4,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "preview: observed/disabled/divergent/missing correct vs disk, read-only",
+      "status": "PASS",
+      "assertions": 13,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "Review enable plan: batch preview targets only observed instances; Escape returns focus",
+      "status": "PASS",
+      "assertions": 13,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "execute enables disabled members on disk; non-members and out-of-scope copies untouched",
+      "status": "PASS",
+      "assertions": 6,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "plan whose target vanished is rejected before anything applies; state drift is applied safely (already-set)",
+      "status": "PASS",
+      "assertions": 14,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "delete removes only profile metadata; skills untouched",
+      "status": "PASS",
+      "assertions": 5,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "tags: add / remove in Library batch bar, replace via API; sidecar + chips + filter agree",
+      "status": "PASS",
+      "assertions": 10,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Profiles",
+      "name": "keyboard: form controls reachable, Save via Enter key, heading focus, preview via keyboard",
+      "status": "PASS",
+      "assertions": 7,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "report loads for scope all; counts equal API and on-disk instance count; read-only",
+      "status": "PASS",
+      "assertions": 8,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "severity filter + finding expansion + counts agree with API",
+      "status": "PASS",
+      "assertions": 14,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "search filters the evidence list; exact-instance navigation opens that copy in Library",
+      "status": "PASS",
+      "assertions": 5,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "hygiene report stays reachable after a skill is selected (rail click returns to the overview)",
+      "status": "PASS",
+      "assertions": 3,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "one scope: scope switch re-queries with that scope and matches API",
+      "status": "PASS",
+      "assertions": 3,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "forced failure shows an alert; Retry recovers",
+      "status": "PASS",
+      "assertions": 4,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Quality",
+      "name": "keyboard: filter + refresh reachable; side-list item opens per-skill Quality",
+      "status": "PASS",
+      "assertions": 4,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Workspaces",
+      "name": "adapter catalog matches API; read-only; heading focus",
+      "status": "PASS",
+      "assertions": 12,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Workspaces",
+      "name": "project inside the data root is accepted; outside is refused and redacted; missing/traversal/symlink",
+      "status": "PASS",
+      "assertions": 19,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Workspaces",
+      "name": "keyboard: field + button reachable; Enter in the field runs the check",
+      "status": "PASS",
+      "assertions": 3,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Install",
+      "name": "registry browse without a token fails cleanly (400 naming the token), no cache, no runner",
+      "status": "PASS",
+      "assertions": 10,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Install",
+      "name": "inbox shows no fabricated update claims; safe operation select; allow-stale unchecked by default",
+      "status": "PASS",
+      "assertions": 5,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Install",
+      "name": "full workflow dialog: Escape closes with focus return; runner preview text == server dry-run; Preview makes no request",
+      "status": "PASS",
+      "assertions": 9,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Install",
+      "name": "registry-id source: UI preview vs server dry-run vs offline bridge plan",
+      "status": "PASS",
+      "assertions": 3,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Install",
+      "name": "offline registry preview: printed command, trust gate / blockers, no install possible; invalid inputs rejected",
+      "status": "PASS",
+      "assertions": 17,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Install",
+      "name": "registry mode in the dialog is preview-only here; keyboard reachability of primary controls",
+      "status": "PASS",
+      "assertions": 31,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "no horizontal overflow at 1280px on all five screens (light + dark)",
+      "status": "PASS",
+      "assertions": 10,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "no horizontal overflow at 390px on all five screens (light + dark)",
+      "status": "PASS",
+      "assertions": 10,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "exactly one heading owns focus after navigation on every screen",
+      "status": "PASS",
+      "assertions": 16,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "dark theme: key text meets WCAG AA 4.5:1 on every screen",
+      "status": "PASS",
+      "assertions": 1,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "Escape closes dialogs with focus return (batch, install, validate)",
+      "status": "PASS",
+      "assertions": 4,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "Library batch bar dialog (Disable) returns focus to its opener on Escape; nothing applied",
+      "status": "PASS",
+      "assertions": 4,
+      "detail": "",
+      "screenshot": ""
+    },
+    {
+      "screen": "Cross-cutting",
+      "name": "no unexpected console errors, page errors or failed requests during the run",
+      "status": "PASS",
+      "assertions": 3,
+      "detail": "",
+      "screenshot": ""
+    }
+  ],
+  "notes": [
+    "Profiles/batch: plan_id binds identity+options only (catalog.plan_hash); before-state (disabled flag) shown in preview is not bound, so state drift is not \"stale\" (applied as already-set).",
+    "Profiles/batch: sync plan executed status=200; copied content is the post-review content (reviewed plan did not bind source content)",
+    "Quality: controls in per-skill panel = [\"← Back to Quality\",\"← Hygiene report\",\"Validate\",\"Doctor\",\"Stats\",\"Inspect in Library\"]; hygiene overview reachable after rail click = true",
+    "Workspaces: pressing Enter inside the project field does not run the check (button click required)",
+    "Install: registry browse without token -> HTTP 400 {\"error\":\"registry leaderboard is unavailable: this registry route now requires a skills.sh project token (SKILLS_MANAGER_REGISTRY_TOKEN or VERCEL_OIDC_TOKEN); a binary cannot mint one. The public catalog is still availa",
+    "Install: UI=\"npx skills add vercel-labs/agent-skills/frontend-design -g\" | server dry-run=\"npx skills add vercel-labs/agent-skills/frontend-design -g\" | offline plan=\"npx skills add vercel-labs/agent-skills -g -s frontend-design\"",
+    "deliberate error events observed: 8"
+  ],
+  "defects": [],
+  "events": [
+    {
+      "k": "http400",
+      "u": "http://127.0.0.1:43495/api/catalog/profiles",
+      "t": "",
+      "d": true
+    },
+    {
+      "k": "console.error",
+      "t": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "u": "http://127.0.0.1:43495/api/catalog/profiles",
+      "d": true,
+      "url": "http://127.0.0.1:43495/"
+    },
+    {
+      "k": "http400",
+      "u": "http://127.0.0.1:43495/api/batch/execute",
+      "t": "",
+      "d": true
+    },
+    {
+      "k": "console.error",
+      "t": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "u": "http://127.0.0.1:43495/api/batch/execute",
+      "d": true,
+      "url": "http://127.0.0.1:43495/"
+    },
+    {
+      "k": "http500",
+      "u": "http://127.0.0.1:43495/api/doctor?scope=all&hygiene=1",
+      "t": "",
+      "d": true
+    },
+    {
+      "k": "console.error",
+      "t": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+      "u": "http://127.0.0.1:43495/api/doctor?scope=all&hygiene=1",
+      "d": true,
+      "url": "http://127.0.0.1:43495/"
+    },
+    {
+      "k": "http400",
+      "u": "http://127.0.0.1:43495/api/install",
+      "t": "",
+      "d": true
+    },
+    {
+      "k": "console.error",
+      "t": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "u": "http://127.0.0.1:43495/api/install",
+      "d": true,
+      "url": "http://127.0.0.1:43495/"
+    }
+  ],
+  "assertions": 312,
+  "failed": 0
+}
