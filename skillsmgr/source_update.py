@@ -182,6 +182,7 @@ def _copy_public_preview(record: dict, *, status: str | None = None) -> dict:
         "comparison": copy.deepcopy(preview.get("comparison", {})),
         "validation": copy.deepcopy(preview.get("validation", {})),
         "risk": copy.deepcopy(preview.get("risk", {})),
+        "external_scan": copy.deepcopy(preview.get("external_scan")),
         "activation_preserved": bool(record.get("activation_preserved")),
         "resulting_disabled": bool(record.get("resulting_disabled")),
         "snapshot_required_before_commit": bool(preview.get("snapshot_required_before_commit")),
@@ -412,6 +413,17 @@ def _unpersisted_preview(preview: dict, target: dict, source: dict, disabled: bo
     return result
 
 
+def _with_external_evidence(source_review: dict, staged: Path, options: dict | None) -> dict:
+    """Return the review with advisory external-scanner evidence when opted in."""
+    if options is None:
+        return source_review
+    from .external_scan import skillspector_evidence
+
+    source_review = copy.deepcopy(source_review)
+    source_review["external_scan"] = skillspector_evidence(staged, llm=options["llm"])
+    return source_review
+
+
 def _prepare_from_source(
     data_dir: Path,
     name: str,
@@ -421,6 +433,7 @@ def _prepare_from_source(
     *,
     source_record: dict,
     rollback_from_snapshot: str | None = None,
+    external_scan: dict | None = None,
 ) -> dict:
     target = _resolve_target(data_dir, name, scope, target_path)
     try:
@@ -455,6 +468,7 @@ def _prepare_from_source(
                 }],
                 "warnings": source_review.get("validation", {}).get("warnings", []),
             }
+        source_review = _with_external_evidence(source_review, staged, external_scan)
         review_state = source_review.get("review_state")
         if review_state != "review-required" or not source_review.get("review_id"):
             result = _unpersisted_preview(source_review, target, source_record, target["disabled"])
@@ -503,6 +517,7 @@ def prepare_local_update(
     *,
     target_path: str | Path | None = None,
     source_value: str | None = None,
+    external_scan: dict | None = None,
 ) -> dict:
     """Stage and preview one local candidate without changing the target."""
     data = _data_path(data_dir)
@@ -512,7 +527,8 @@ def prepare_local_update(
         source_record = source_identity("local", value)
     except (SourceLockError, OSError) as exc:
         raise SourceUpdateError("candidate-unsafe", "source identity is not safe to retain") from exc
-    return _prepare_from_source(data, name, scope, source, target_path, source_record=source_record)
+    return _prepare_from_source(data, name, scope, source, target_path, source_record=source_record,
+                                external_scan=external_scan)
 
 
 def _path_digest(target: dict) -> str:
@@ -641,6 +657,7 @@ def prepare_snapshot_update(
     snapshot_id: str,
     *,
     target_path: str | Path | None = None,
+    external_scan: dict | None = None,
 ) -> dict:
     """Prepare a normal update review whose source is a retained snapshot."""
     data = _data_path(data_dir)
@@ -655,6 +672,7 @@ def prepare_snapshot_update(
         target_path,
         source_record=source_record,
         rollback_from_snapshot=snapshot_id,
+        external_scan=external_scan,
     )
 
 

@@ -7,6 +7,19 @@
   const enc = encodeURIComponent;
   function stored(key,fallback){try{return localStorage.getItem(key)||fallback}catch(e){return fallback}}
   function remember(key,value){try{localStorage.setItem(key,value);return true}catch(e){return false}}
+  const SCAN_MODES=['off','static','llm'];
+  // Advisory SkillSpector evidence for one review; every value is rendered as text.
+  const scanPanel=(ev)=>`
+            <section v-if="${ev}" class="tp-scan" aria-label="SkillSpector scan">
+              <div class="tp-sec-h"><h3>SkillSpector scan <small class="tp-count">external · advisory</small></h3><span :class="['pill', scanTone(${ev})]">{{scanStatus(${ev})}}</span></div>
+              <p class="tp-fine">Findings from a separate tool. They do not block or allow anything here; you decide.</p>
+              <p v-if="${ev}.reason" class="tp-fine">{{${ev}.reason}}</p>
+              <p v-if="${ev}.reported" class="tp-fine">SkillSpector's own rating: {{${ev}.reported.recommendation ? human(${ev}.reported.recommendation) : 'none'}}<span v-if="${ev}.reported.score!=null"> (score {{${ev}.reported.score}} of 100)</span>.</p>
+              <p v-if="${ev}.status==='completed' && !(${ev}.findings||[]).length" class="tp-empty">No findings reported.</p>
+              <p v-for="(f,i) in (${ev}.findings||[])" :key="i" :class="['tp-issue', scanSeverity(f.severity)]"><b>{{human(f.severity||'')}} · {{f.id}}</b> {{f.pattern}} <span class="tp-mono">{{f.file||'-'}}:{{f.line||'-'}}</span><span v-if="f.explanation" class="tp-scan-line">{{f.explanation}}</span><span v-if="f.finding" class="tp-scan-line">Matched: <q class="tp-mono">{{f.finding}}</q></span><span v-if="f.remediation" class="tp-scan-line">Fix: {{f.remediation}}</span><span v-if="f.llm_review" class="tp-scan-line">LLM review: {{human(f.llm_review)}}</span></p>
+              <p v-if="${ev}.omitted" class="tp-fine">{{${ev}.omitted}} more findings not shown.</p>
+              <p v-for="(n,i) in (${ev}.egress||[])" :key="'g'+i" class="tp-fine">Data sent: {{n}}.</p>
+            </section>`;
 
   window.SkillsV2ToolCenter = {
     props: {page:String, records:{type:Array,default:()=>[]}, scopes:{type:Array,default:()=>[]}, target:Object},
@@ -18,7 +31,7 @@
       templates:null,templateName:'',templateBody:'',templatePreview:null,creating:false,skill:{name:'',description:'',category:'',version:'',license:'',compatibility:'',allowed_tools:'',body:'',scope:'global'},
       quality:null,severity:'all',search:'',report:null,reportKind:'',validateTarget:'',validationName:'',validationScope:'global',windowSize:'claude',project:'',workspace:null,consumer:'',
       systemDark:matchMedia('(prefers-color-scheme: dark)').matches,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches, theme:stored('skillsmgr-theme','system'),size:stored('skillsmgr-text-size','standard'),locale:stored('skillsmgr-locale','system'),
-      profileFilter:'',profileExtra:'',chosen:'',sourceReview:null,sourceTarget:null,sourceSuccess:null,snapshots:null,historyName:stored('skillsmgr-history-name',''),historyScope:stored('skillsmgr-history-scope','global'),history:null,textSnapshots:null,textSnapshotTarget:null,
+      profileFilter:'',profileExtra:'',chosen:'',sourceReview:null,sourceTarget:null,sourceSuccess:null,snapshots:null,historyName:stored('skillsmgr-history-name',''),externalScan:SCAN_MODES.includes(stored('skillsmgr-external-scan','off'))?stored('skillsmgr-external-scan','off'):'off',historyScope:stored('skillsmgr-history-scope','global'),history:null,textSnapshots:null,textSnapshotTarget:null,
     };
        },
     computed:{
@@ -90,7 +103,7 @@
       async registry(){const operation=this.op;this.review=null;
       this.trust=false;
       this.result=null;
-       await this.task(async()=>{const p={browse:this.op==='browse'||undefined,search:this.op==='search'?this.source.trim():undefined,curated:this.op==='curated'||undefined,fetch:this.op==='fetch'||undefined,source:this.op==='fetch'?this.source.trim():undefined,page:Number(this.pageNo)||0,per_page:25,view:this.view,allow_stale:this.stale};
+       await this.task(async()=>{const p={browse:this.op==='browse'||undefined,search:this.op==='search'?this.source.trim():undefined,curated:this.op==='curated'||undefined,fetch:this.op==='fetch'||undefined,source:this.op==='fetch'?this.source.trim():undefined,external_scan:this.op==='fetch'?this.scanOption():undefined,page:Number(this.pageNo)||0,per_page:25,view:this.view,allow_stale:this.stale};
       const r=await api('/api/install',json(p));
       this.result=r;
       if(operation==='fetch'&&r.review_id)this.review=r})},
@@ -180,6 +193,10 @@
       async explain(){this.reportKind='consumer';
       this.report=null;
       await this.read('/api/doctor?explain='+enc(this.consumer)+(this.project.trim()?'&project='+enc(this.project.trim()):''),'report')},
+      scanOption(){return this.externalScan==='off'?undefined:this.externalScan},
+      scanStatus(e){return {completed:'Scanned',incomplete:'Partial scan',unavailable:'Not available',timeout:'Timed out',error:'Scan failed'}[e.status]||'Unknown'},
+      scanTone(e){if(e.status==='completed')return (e.findings||[]).length?'warn':'ok';return e.status==='incomplete'?'warn':'off'},
+      scanSeverity(s){return ['CRITICAL','HIGH'].includes(String(s).toUpperCase())?'bad':'warn'},
       preference(key,value){if(!remember(key,value)){this.error='Browser storage is unavailable; preferences could not be saved.';return;}
       this.$emit('preference')},
       async maintain(which){if(!confirm((which==='rebuild'?'Rebuild':'Resync')+' the index from the filesystem?'))return;
@@ -191,6 +208,7 @@
       f.append('name',t.name);
       f.append('scope',t.scope);
       f.append('target_path',t.physical_path||t.path);
+      if(this.scanOption())f.append('external_scan',this.scanOption());
       for(const file of this.files)f.append('files',file,file.webkitRelativePath||file.name);
       const r=await api('/api/source-updates/reviews',{method:'POST',body:f});
       if(!this.alive||this.page!=='source-update'||this.selected!==t){if(r.review_id)await api('/api/source-updates/reviews/'+enc(r.review_id),{method:'DELETE'});
@@ -202,7 +220,7 @@
       await this.read('/api/source-updates/snapshots?name='+enc(t.name)+'&scope='+enc(t.scope)+'&target_path='+enc(t.physical_path||t.path),'snapshots')},
       async snapshotReview(s){const t=this.selected;
       if(!t||!s.snapshot_id)return;
-      await this.task(async()=>{const r=await api('/api/source-updates/reviews/from-snapshot',json({name:t.name,scope:t.scope,target_path:t.physical_path||t.path,snapshot_id:s.snapshot_id}));
+      await this.task(async()=>{const r=await api('/api/source-updates/reviews/from-snapshot',json({name:t.name,scope:t.scope,target_path:t.physical_path||t.path,snapshot_id:s.snapshot_id,external_scan:this.scanOption()}));
       if(!this.alive||this.page!=='source-update'||this.selected!==t){if(r.review_id)await api('/api/source-updates/reviews/'+enc(r.review_id),{method:'DELETE'});
       throw Error('Target changed while the review was prepared. Review again.')}this.sourceTarget={name:t.name,scope:t.scope,path:t.physical_path||t.path};
       this.sourceReview=r;
@@ -317,6 +335,7 @@
               <dt>Review expires</dt><dd>{{when(review.review_expires_at)}}</dd>
               <dt>Review ID</dt><dd><code>{{review.review_id}}</code></dd>
             </dl>
+${scanPanel('(review.inspection||{}).external_scan')}
             <details class="tp-more"><summary>Validation and advisory risk evidence</summary><p class="tp-fine">Risk findings are heuristics, not a safety verdict.</p><pre>{{pretty(review.inspection||{})}}</pre></details>
             <div class="tp-confirm">
               <label class="tp-check"><input type="checkbox" v-model="trust"> I explicitly trust this reviewed artifact</label>
@@ -622,6 +641,14 @@
           </div>
           <p class="tp-fine">Reduced motion is {{reducedMotion?'on':'off'}} in your OS; animations follow it automatically.</p>
         </section>
+        <section class="card tp-panel" aria-labelledby="tp-sc-h">
+          <h2 id="tp-sc-h">Security scanner</h2>
+          <p class="tp-fine">Optionally run NVIDIA SkillSpector on a skill while you review a registry fetch or an update. Its findings are shown beside the review and never block or allow anything. It must be installed separately (<code>uv tool install skillspector</code>).</p>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="tp-scan"><b>Scan during reviews</b><small v-if="externalScan==='off'">Off. Nothing extra runs.</small><small v-else-if="externalScan==='static'">Pattern checks on this machine. Dependency names the skill declares may be sent to api.osv.dev.</small><small v-else>Adds SkillSpector's LLM review with your own key. Skill file contents are sent to that provider.</small></label><select id="tp-scan" class="field" aria-label="Scan during reviews" v-model="externalScan" @change="preference('skillsmgr-external-scan',externalScan)"><option value="off">Off</option><option value="static">Static checks</option><option value="llm">Static + your LLM key</option></select></div>
+          </div>
+          <p v-if="externalScan==='llm'" class="tp-fine">Bring your own key: set <code>SKILLSPECTOR_PROVIDER</code> and that provider's key (for example <code>ANTHROPIC_API_KEY</code>) in the terminal before starting <code>skills-mgr webui</code>. The key is passed only to SkillSpector, only for scans you ask for, and is never stored or shown here.</p>
+        </section>
         <section class="card tp-panel" aria-labelledby="tp-ix-h">
           <h2 id="tp-ix-h">Index maintenance</h2>
           <p class="tp-fine">The files on disk are the truth; the index is a cache. Neither action edits a skill or repairs a broken document.</p>
@@ -667,6 +694,7 @@
               <h3>Advisory risk</h3>
               <p class="tp-fine">{{(sourceReview.risk||{}).policy||'Risk findings are evidence, not a safety verdict.'}}</p>
               <p v-for="(f,i) in ((sourceReview.risk||{}).findings||[])" :key="i" class="tp-issue warn">{{f.message||f}}</p>
+${scanPanel('sourceReview.external_scan')}
               <h3>Recovery</h3>
               <p class="tp-fine">The whole folder is snapshotted before replacement. On/off state after applying: {{sourceReview.activation_preserved ? (sourceReview.resulting_disabled ? 'off' : 'on') : 'not confirmed'}}.</p>
               <dl class="tp-dl"><dt>Current tree</dt><dd><code>{{sourceReview.current_hash||'Not returned'}}</code></dd><dt>Candidate tree</dt><dd><code>{{sourceReview.candidate_hash||'Not returned'}}</code></dd></dl>

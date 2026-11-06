@@ -408,6 +408,7 @@ skillsmgr/
   backup_sync.py       # bounded backup/sync manifests and dry-run plans
   bundles.py           # offline HMAC manifest evidence; no archive integration
   registry.py          # bounded registry API, snapshots, cache, provenance
+  external_scan.py     # optional advisory SkillSpector hook, BYOK LLM via env
 tests/test_audit_d1_read_path.py  # §D1 read-path cost regressions
 tests/test_audit_d1_review_regressions.py  # six defects self-review found in §D1/§D3-4
 tests/test_audit_d3_read_purity.py      # reads create nothing; one repairable 404

@@ -45,6 +45,7 @@ TARGET_FILES = (
     "skillsmgr/backup_sync.py",
     "skillsmgr/archive.py",
     "skillsmgr/evals.py",
+    "skillsmgr/external_scan.py",
 )
 DEFAULT_THRESHOLD = 15
 DEFAULT_TOP_N = 10

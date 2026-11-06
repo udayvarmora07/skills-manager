@@ -301,8 +301,8 @@ new persistence or authority.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/api/source-updates/reviews` | bounded `multipart/form-data` with `name`, `scope`, optional `target_path`, and exactly one uploaded skill tree | `201` pending review, or `200` blocked/no-change evidence |
-| POST | `/api/source-updates/reviews/from-snapshot` | JSON `{name, scope, target_path?, snapshot_id}` | rollback review using the same validation/diff pipeline |
+| POST | `/api/source-updates/reviews` | bounded `multipart/form-data` with `name`, `scope`, optional `target_path`, optional `external_scan` (`static`/`llm`), and exactly one uploaded skill tree | `201` pending review, or `200` blocked/no-change evidence |
+| POST | `/api/source-updates/reviews/from-snapshot` | JSON `{name, scope, target_path?, snapshot_id, external_scan?}` | rollback review using the same validation/diff pipeline |
 | GET | `/api/source-updates/reviews/<review_id>` | — | public review evidence; no staged private path |
 | POST | `/api/source-updates/reviews/<review_id>/commit` | JSON `{name, scope, target_path?, approve: true}` | atomic apply result, source-lock evidence, and opaque snapshot id |
 | DELETE | `/api/source-updates/reviews/<review_id>` | — | cancellation of a pending review |
@@ -320,6 +320,20 @@ retain `Cache-Control: no-store` and the existing loopback security headers.
 Global index reconciliation happens only after filesystem success; post-commit
 warnings identify the committed filesystem state and recovery snapshot rather
 than reporting a false rollback.
+
+**[SPEC] Optional SkillSpector evidence (2026-11-06).** The registry fetch
+review and both source-update review routes accept an opt-in `external_scan`
+value: `true` or `"static"`, `"llm"`, or `{"llm": bool}`. Anything else is a
+`400`. When present, the response carries `external_scan` (registry:
+`inspection.external_scan`), produced by `external_scan.skillspector_evidence()`
+on a private copy of the staged candidate. It is advisory only: it never changes
+validation, readiness, `commit_allowed` or the commit/apply path, and commit and
+apply never re-run it. The LLM mode uses the server process's environment
+(`SKILLSPECTOR_PROVIDER` and that provider's key); no key is accepted over HTTP,
+stored, or returned. The v2 Settings page stores the choice in
+`skillsmgr-external-scan` (browser-local), and both review panels render the
+evidence as escaped text with bidi-isolated matched snippets. Data egress is
+stated beside the setting and in every result.
 
 ### Search / maintenance
 
@@ -346,7 +360,7 @@ than reporting a false rollback.
 | POST | `/api/batch/preview` | body `{operation, targets[], options?}` → backend re-resolves exact physical targets and returns target count, plan hash, before-state evidence, and recovery/partial-failure policy |
 | POST | `/api/batch/execute` | body `{operation, targets[], options?, plan_id}` → per-target results; stale or widened plans are rejected |
 | GET | `/api/workspaces?project=DIR` | read-only adapter catalog plus contained project-root observation; outside paths are redacted |
-| POST | `/api/install` | Legacy body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` builds/runs `skills add`; `{preview: true, trust_confirmed?, registry_hash?, description?}` returns the offline bridge plan with no request/execution. Registry body uses one of `{browse: true, page?, per_page?, view?, allow_stale?}`, `{search: QUERY, limit?, owner?, allow_stale?}`, `{curated: true, allow_stale?}`, `{fetch: true, source: ID, registry_hash?, allow_stale?}` for a read-only review, or `{fetch: true, review_id: ID, trust_confirmed: true}` for a no-network commit. Browse/search/curated return bounded catalog data. Fetch is global-store-only, writes a private expiring review artifact after full validation/risk evidence, and only the separate reviewed commit writes credential-free `.skillsmgr-provenance.json` and calls `Store.add`. Cache state is returned under `_registry`; stale fallback is opt-in. |
+| POST | `/api/install` | Legacy body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` builds/runs `skills add`; `{preview: true, trust_confirmed?, registry_hash?, description?}` returns the offline bridge plan with no request/execution. Registry body uses one of `{browse: true, page?, per_page?, view?, allow_stale?}`, `{search: QUERY, limit?, owner?, allow_stale?}`, `{curated: true, allow_stale?}`, `{fetch: true, source: ID, registry_hash?, allow_stale?, external_scan?}` for a read-only review, or `{fetch: true, review_id: ID, trust_confirmed: true}` for a no-network commit. Browse/search/curated return bounded catalog data. Fetch is global-store-only, writes a private expiring review artifact after full validation/risk evidence, and only the separate reviewed commit writes credential-free `.skillsmgr-provenance.json` and calls `Store.add`. Cache state is returned under `_registry`; stale fallback is opt-in. |
 
 ### Trash
 
@@ -432,9 +446,12 @@ pins the contract). What a client must know:
 
 ## Default v2 interface (`/v2/`)
 
-**[SPEC]** `/` and `/index.html` redirect locally to `/v2/`, preserving query
-parameters and browser fragments. Bare `/v2` and `/classic` canonicalize to
-trailing-slash paths. The classic interface and its original assets remain
+**[SPEC]** `/` and `/index.html` redirect locally to `/v2/` with a temporary
+`307`, preserving query parameters and browser fragments. Bare `/v2` and
+`/classic` canonicalize to trailing-slash paths with a permanent `308`. The
+default is temporary on purpose: which interface opens is a product choice a
+browser must not cache forever, and Python 3.10's `urllib` follows `307` but not
+`308` (the `308` broke CI `unit (py3.10)` on `61355a2`). The classic interface and its original assets remain
 available under `/classic/`. The server still binds to loopback by default;
 the localhost binding is the only security boundary for this unauthenticated
 service. Never forward, tunnel or publish its port.
@@ -467,7 +484,7 @@ Styles are in `webui/v2/tools.css` and use only declared v2 tokens.
 | Templates | List/read/create/preview/use stored templates, built-in fallback, create with structured metadata |
 | Quality | Hygiene search/severity/evidence, exact-instance links, manual name/scope validation, Doctor and token statistics with unavailable/degraded states |
 | Workspaces | Project containment observations and consumer adapter explanations; effective loading remains unresolved |
-| Settings | Shared theme, text-size and regional-format preferences, OS preference observations, explicit index rebuild/resync |
+| Settings | Shared theme, text-size and regional-format preferences, the optional SkillSpector scan preference (off / static / static + your LLM key), OS preference observations, explicit index rebuild/resync |
 | Source update | Exact-instance candidate review, per-file comparison, validation/risk evidence, apply/cancel, retained whole-tree snapshots and reviewed rollback |
 | Recovery | Global trash restore/empty, explicit permanent per-copy removal, skill/full archive modes, import outcomes, persistent scoped history and older text-snapshot rollback |
 

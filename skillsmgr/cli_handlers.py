@@ -1423,6 +1423,7 @@ def _registry_operation(args, store: Store) -> int:
                 validated_install_source(args.source),
                 expected_hash=getattr(args, "registry_hash", None),
                 allow_stale=allow_stale,
+                external_scan=_external_scan_flag(args),
             )
         title = "registry fetch"
     if args.json:
@@ -1434,6 +1435,7 @@ def _registry_operation(args, store: Store) -> int:
             print(f"  review id     {result['review_id']}")
             print(f"  snapshot hash {result['registry']['snapshot_hash']}")
             print("  mutation      none (commit only after a separate review)")
+            _external_scan_text(result.get("inspection", {}).get("external_scan"), indent="  ")
         else:
             print(f"installed {result['name']} from {result['registry']['id']}")
             print(f"  path          {result['path']}")
@@ -1460,8 +1462,12 @@ def _registry_operation(args, store: Store) -> int:
 
 
 def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | None,
-                            allow_stale: bool) -> dict:
-    """Fetch and inspect a registry snapshot without touching the managed Store."""
+                            allow_stale: bool, external_scan: dict | None = None) -> dict:
+    """Fetch and inspect a registry snapshot without touching the managed Store.
+
+    ``external_scan`` (from ``external_scan.scan_options``) opts in to advisory
+    SkillSpector evidence on the staged copy; it never changes readiness.
+    """
     from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
     from .insights import risk_scan
     from .registry import (
@@ -1515,6 +1521,7 @@ def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | Non
             "body": validation.body,
             "allowed_tools": validation.data.get("allowed-tools"),
         })
+        external = _external_scan_evidence(staged, external_scan)
     inspection = {
         "validation": {
             "valid": validation.valid,
@@ -1531,6 +1538,7 @@ def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | Non
         "review_required": True,
         "target_scope": "global",
     }
+    _attach_external_scan(inspection, external)
     local_snapshot["remote_hash"] = snapshot.get("hash")
     review = write_registry_review(store.data_dir, local_snapshot, inspection)
     registry = dict(review["registry"])
@@ -1545,6 +1553,21 @@ def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | Non
         "registry": registry,
         "inspection": inspection,
     }
+
+
+def _external_scan_evidence(staged: Path, options: dict | None) -> dict | None:
+    """Run the optional external scanner on a staged candidate when asked."""
+    if options is None:
+        return None
+    from .external_scan import skillspector_evidence
+
+    return skillspector_evidence(staged, llm=options["llm"])
+
+
+def _attach_external_scan(inspection: dict, evidence: dict | None) -> None:
+    """Add external-scanner evidence to a review only when a scan ran."""
+    if evidence is not None:
+        inspection["external_scan"] = evidence
 
 
 def _commit_registry_review(store: Store, review_id: str) -> dict:
@@ -1730,11 +1753,42 @@ def _update_preview_text(result: dict) -> None:
     print(f"risk: {_display(str(risk.get('policy', 'advisory-only')))}")
     for finding in risk.get("findings") or []:
         print(f"  {_display(str(finding))}")
+    _external_scan_text(result.get("external_scan"))
     print(f"activation preserved: {'yes' if result.get('activation_preserved') else 'no'}")
     print(f"snapshot required: {'yes' if result.get('snapshot_required_before_commit') else 'no'}")
     print(f"commit allowed: {'yes' if result.get('commit_allowed') else 'no'}")
     if result.get("review_id"):
         print(f"apply with: skills-mgr update apply {_display(str(target.get('name', 'NAME')))} {result['review_id']} --scope {_display(str(target.get('scope', 'global')))} --yes")
+
+
+def _external_scan_flag(args) -> dict | None:
+    """Map --external-scan / --external-scan-llm onto scan options."""
+    from .external_scan import scan_options
+
+    if getattr(args, "external_scan_llm", False):
+        return scan_options("llm")
+    return scan_options(bool(getattr(args, "external_scan", False)))
+
+
+def _external_scan_text(evidence: dict | None, indent: str = "") -> None:
+    """Print sanitized external-scanner evidence; untrusted text goes through _display."""
+    if not evidence:
+        return
+    status = _display(str(evidence.get("status", "-")))
+    print(f"{indent}external scan: {_display(str(evidence.get('tool', '-')))} {status} ({_display(str(evidence.get('mode', '-')))})")
+    print(f"{indent}  policy: {_display(str(evidence.get('policy', '-')))}")
+    if evidence.get("reason"):
+        print(f"{indent}  reason: {_display(str(evidence['reason']))}")
+    reported = evidence.get("reported") or {}
+    if reported:
+        print(f"{indent}  reported by tool: score {_display(str(reported.get('score', '-')))}, {_display(str(reported.get('recommendation', '-')))}")
+    for finding in evidence.get("findings") or []:
+        where = f"{finding.get('file') or '-'}:{finding.get('line') or '-'}"
+        print(f"{indent}  {_display(str(finding.get('severity', '-')))} {_display(str(finding.get('id', '-')))} {_display(where)} {_display(str(finding.get('finding') or finding.get('pattern') or ''))}")
+    if evidence.get("omitted"):
+        print(f"{indent}  ... {evidence['omitted']} more findings omitted")
+    for note in evidence.get("egress") or []:
+        print(f"{indent}  egress: {_display(str(note))}")
 
 
 def cmd_update(args, store: Store) -> int:
@@ -1748,11 +1802,13 @@ def cmd_update(args, store: Store) -> int:
     if operation == "preview":
         if args.source_dir:
             result = source_update.prepare_local_update(
-                store.data_dir, args.name, scope, args.source_dir, target_path=args.target_path
+                store.data_dir, args.name, scope, args.source_dir, target_path=args.target_path,
+                external_scan=_external_scan_flag(args),
             )
         else:
             result = source_update.prepare_snapshot_update(
-                store.data_dir, args.name, scope, args.snapshot_id, target_path=args.target_path
+                store.data_dir, args.name, scope, args.snapshot_id, target_path=args.target_path,
+                external_scan=_external_scan_flag(args),
             )
         if args.json:
             _print_json(result)

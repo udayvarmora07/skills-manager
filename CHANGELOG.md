@@ -4,6 +4,24 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- **Optional SkillSpector scan during reviews.** When NVIDIA SkillSpector is
+  installed, `install --fetch` and `update preview` accept `--external-scan`
+  (static checks) or `--external-scan-llm` (adds SkillSpector's LLM stage with
+  your own provider key from the environment). The REST review routes take an
+  `external_scan` field, and v2 has a Settings control plus a findings panel in
+  both review screens. The tool runs on a private copy of the candidate, never
+  receives unrelated credentials, and its findings are advisory: they never
+  block or allow an install or update. SkillSpector is not a dependency.
+
+### Fixed
+
+- **`/` no longer breaks Python 3.10 clients.** The redirect to the default
+  interface is now a temporary `307` instead of a permanent `308`, which
+  Python 3.10's `urllib` does not follow and browsers cache indefinitely.
+  Trailing-slash redirects (`/v2`, `/classic`) remain `308`.
+
 ### Changed
 
 - **V2 is now the default web interface.** `/` and `/index.html` redirect to

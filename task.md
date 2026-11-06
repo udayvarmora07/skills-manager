@@ -1,6 +1,6 @@
 # Task Checklist — Skills Manager
 
-**Version 0.9.0**
+**Version 0.9.1**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
@@ -31,13 +31,14 @@
 - [x] Design pass on the tool pages: Tools becomes a primary tab, duplicate
   header search removed, every tool page rebuilt on v2 components with worded
   status and humanized values; 34/34 v2 browser scenarios and 1,386 tests pass.
-- [ ] Human visual sign-off of the redesigned tool pages; commit/integrate the
-  combined parity + design work (still uncommitted).
+- [x] Commit and integrate the combined parity + design work: `61355a2` is on
+  `origin/main` (verified 2026-11-06).
+- [ ] Human visual sign-off of the redesigned tool pages.
 
 Agent-scope in-app trash restore remains outside existing backend capability.
 Live registry fetch/commit and actual external runner execution are not exercised
 by this task's browser checks. Human screen-reader and spoken usability sign-off
-remain unclaimed. Changes are local on `feat/v2-feature-parity`; no commit/push.
+remain unclaimed. The work landed on `main` as `61355a2`.
 
 ## Performance and UX session completion (2026-11-06)
 
@@ -143,6 +144,60 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [x] **Parent REST:** immediate 413 with connection closure; history zero
   and blank-window 400s; independent-template layout contract clarified.
 
+## External skill scanner — SkillSpector (planned 2026-11-06)
+
+Plan: [external skill scanner](docs/superpowers/plans/2026-11-06-external-skill-scanner.md).
+The maintainer chose both phases, hook first.
+
+- [x] Decide D-A and D-B: show SkillSpector's score labelled as its own claim;
+  accept OSV egress with a stated warning (maintainer, 2026-11-06). D-C
+  (Quality integration) stays deferred.
+- [x] Phase A: `skillsmgr/external_scan.py`, wired into registry fetch and
+  source-update reviews; `--external-scan`/`--external-scan-llm`, REST
+  `external_scan`, v2 Settings + review panels. LLM mode is bring-your-own-key
+  from the server/CLI environment only. 19 tests incl. an optional real-tool
+  test; real v2.12.0 output verified through the hook.
+- [ ] Installed SkillSpector under `~/.local/share/uv/tools` is group-writable
+  (umask 002), so the trust check refuses it. Maintainer to run
+  `chmod -R g-w ~/.local/share/uv` or accept the refusal; the policy is unchanged.
+- [x] CI `unit (py3.10)` red on `main` at `61355a2`: `/` answered 308, which
+  3.10's urllib does not follow. Default-interface redirect is now 307; slash
+  canonicalization stays 308; regression test added (2026-11-07).
+- [ ] Pre-existing test leak: `tests.test_registry_integration_contracts` run
+  before `tests.test_cli_contract` fails `test_scope_all_keeps_global_doctor_and_duplicate_summary`
+  (reproduced on unchanged `HEAD`; full discovery order passes).
+- [ ] AI features (BYOK): proposal in @docs/33-ai-features-design-2026-11-06.md;
+  answer D-AI-1…D-AI-7 before any implementation.
+- [ ] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
+  `insights.risk_scan()`, with measured noise on a real library.
+
+## Research roadmap — not yet started (docs/28 R-table, docs/29; recorded 2026-11-06)
+
+These were in the research docs but missing from this checklist. "No" means
+the docs mark them as not needing maintainer approval.
+
+- [ ] **R7** repo hygiene: `git gc`, untracked prototype dirs, archive large
+  root files, remove `AGENTS-1.md` (deleting files is the maintainer's call).
+- [ ] **R8** triage the five Dependabot PRs, the worktrees/branches and issue #14 (no).
+- [ ] **R11** read `skills-lock.json` / `apm.lock.yaml`: declared vs present vs
+  hash (⚠ unless folded into `doctor`; decision D-3).
+- [ ] **R12** consumer rows for Amp, Roo, Cline, Kiro, Copilot, Zed,
+  Windsurf/Devin with cited orders (no).
+- [ ] **R13** residency ranking: skills to demote to name-only (no).
+- [ ] **R15** collapse triplicated install-runner logic onto
+  `insights.install_argv`; share review plumbing; move `StoreError` to
+  `errors.py` (no).
+- [ ] **R16** neutralise git config on fetch in `backup_sync._run_git` (latent, no).
+- [ ] **R17** `skills-ref` as a dev-only differential oracle in tests (no).
+- [ ] **R18** accept NFKC Unicode lowercase names (⚠ locked name rule).
+- [ ] **R19** CycloneDX/SPDX export from source-lock data (⚠ new command).
+- [ ] docs/29 H1: surface per-agent ignored frontmatter (e.g.
+  `disable-model-invocation`) as a finding (no).
+- [ ] docs/29 H1: README "what it will not do" and a verified privacy statement (no).
+- [ ] docs/29 H2: `.agents/skills` → `.claude/skills` bridge, explain-only
+  first (⚠ if a new command); documented Skill CI recipe (no).
+- [ ] Decide docs/29 open questions D-2…D-10 (D-1 and D-7 are tracked above).
+
 ## v2 interface — prototype-final on real data (2026-11-06)
 
 - [x] Combined backend `fbe8ec2` + frontend `7d225dc` verification and durable
@@ -166,11 +221,14 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [x] Undo via backend snapshots verified on disk (sync, edit, on/off).
 - [x] `tests/test_v2_interface_contracts.py` (model, escaping, API set, contrast
   in both themes, served assets, traversal).
-- [ ] Decide: make `/v2/` the default route (classic moves to `/classic/`).
-- [ ] Port Install, Profiles, Quality, Workspaces, Settings into v2.
+- [x] Decide: make `/v2/` the default route (classic moves to `/classic/`).
+  Done in `61355a2` at the maintainer's request (docs/29 D-7).
+- [x] Port Install, Profiles, Quality, Workspaces, Settings into v2 (`61355a2`;
+  see the V2 feature parity section above).
 - [ ] In-app restore for agent-scope trash (needs a backend route; ⚠ approval).
 - [ ] Slim v2's `/api/skills` list payload (22.7 MB in the session's local
-  measurement); v2 still requests full bodies for diffs and editing.
+  measurement). Classic now uses opt-in `body=0`; v2 still requests full
+  bodies for diffs and editing.
 - [ ] Human perceptual review and screen-reader validation of v2. Automated
   forced-colors, keyboard and actual 200%/400% browser-zoom results are recorded separately.
 ## User research follow-ups (2026-10-30)
@@ -178,7 +236,9 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 Proposals from @docs/26-user-research-skills-context-2026-10-30.md — each
 needs a maintainer decision before work starts (⚠ = locked constraint 5).
 
-- [ ] **Defect:** observed state ignores each agent's native switch (Codex
+- [/] **Defect:** observed state ignores each agent's native switch. Claude
+  Code and OpenCode JSON declarations are now read (R4, `native_state`);
+  Codex TOML is blocked on decision D-1 and Gemini is not read. Original note: (Codex
   `[[skills.config]]` in `~/.codex/config.toml`, Claude Code `skillOverrides`,
   OpenCode `permission.skill`, Gemini workspace/user disable), so the UI can
   show **Active** for a skill Codex has disabled. Latent: no disable rule exists
@@ -189,7 +249,9 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
 - [ ] Decide: Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
 - [ ] "What the model sees" listing-budget view per project (1% rule, dropped descriptions).
 - [ ] Before/after resident-token savings on every toggle.
-- [ ] Silent-failure lint: YAML that parses empty, >1,536-char descriptions.
+- [/] Silent-failure lint: the >1,536-char description + `when_to_use` cap is
+  shipped (R6). Still open: YAML that parses to empty frontmatter, and the
+  unquoted-colon failure (docs/29 Horizon 1).
 - [ ] Decide: transcript-based usage counts (⚠) and project skill lockfile (⚠).
 - [ ] Decide on docs/27 monetization questions MON-Q1…MON-Q5 (services-first year; widen scope to MCP + AGENTS.md; public top-skills report; zh-CN UI; which docs/14 tiers stay). Proposals only, nothing approved.
 

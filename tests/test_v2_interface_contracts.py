@@ -485,6 +485,28 @@ class ServedTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"overview", body.lower())
 
+    def test_default_entry_redirect_is_followed_by_every_supported_urllib(self):
+        """Python 3.10's ``HTTPRedirectHandler`` follows 301/302/303/307 only.
+
+        A 308 at ``/`` made every urllib client on 3.10 -- including this
+        repository's own server fixture -- raise ``HTTPError`` instead of
+        reaching the UI (CI ``unit (py3.10)`` on ``61355a2``).
+        """
+        import http.client
+
+        followed_by_py310 = {301, 302, 303, 307}
+        for path in ("/", "/index.html"):
+            with self.subTest(path=path):
+                connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+                try:
+                    connection.request("GET", path)
+                    response = connection.getresponse()
+                    response.read()
+                    self.assertIn(response.status, followed_by_py310)
+                    self.assertNotIn("immutable", response.getheader("Cache-Control") or "")
+                finally:
+                    connection.close()
+
     def test_classic_namespace_cannot_read_files_outside_webui(self):
         for path in ("/classic/../../pyproject.toml", "/classic/%2e%2e/%2e%2e/pyproject.toml", "/classic/static/../../../pyproject.toml"):
             status, _, body = self._get(path)
@@ -494,15 +516,19 @@ class ServedTests(unittest.TestCase):
     def test_entry_redirects_keep_queries_and_use_only_fixed_local_paths(self):
         import http.client
 
-        for path, expected in (("/", "/v2/"), ("/?window=claude&x=1", "/v2/?window=claude&x=1"),
-                               ("/index.html?x=1", "/v2/?x=1"), ("/classic?x=1", "/classic/?x=1"),
-                               ("/v2?x=1", "/v2/?x=1")):
+        # The default-interface choice is temporary (307): a later default must
+        # reach browsers that already visited, and Python 3.10's urllib does not
+        # follow 308. Trailing-slash canonicalization never changes (308).
+        for path, expected, status in (
+                ("/", "/v2/", 307), ("/?window=claude&x=1", "/v2/?window=claude&x=1", 307),
+                ("/index.html?x=1", "/v2/?x=1", 307), ("/classic?x=1", "/classic/?x=1", 308),
+                ("/v2?x=1", "/v2/?x=1", 308)):
             with self.subTest(path=path):
                 connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
                 try:
                     connection.request("GET", path)
                     response = connection.getresponse()
-                    self.assertEqual(response.status, 308)
+                    self.assertEqual(response.status, status)
                     self.assertEqual(response.getheader("Location"), expected)
                     self.assertEqual(response.read(), b"")
                 finally:

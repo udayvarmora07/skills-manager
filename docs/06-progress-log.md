@@ -8,6 +8,77 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — The default-interface redirect broke CI on Python 3.10
+
+**[SPEC]** CI `unit (py3.10)` failed on `main` at `61355a2`. Because the security,
+browser, docs and package jobs depend on it, they were skipped. The cause:
+`/` and `/index.html` answered `308`, and Python 3.10's `HTTPRedirectHandler`
+follows only 301/302/303/307. Every urllib client on 3.10 therefore raised at
+`/`, including `smoke_fixtures.start_server`. That accounts for all 15 failures,
+and the same failures reproduce on an unchanged `HEAD` export. The local ladder
+for that commit did not run 3.10, which is the lesson already recorded in
+SESSION-CONTEXT about testing one interpreter only.
+
+**Fix:** the default-interface redirect is now a temporary `307`, which is also
+the right semantics: which interface opens is a product choice a browser must
+not cache forever. Trailing-slash canonicalization (`/v2`, `/classic`) stays
+`308`. A new test asserts the entry redirect uses a status 3.10 follows. It
+failed on 3.12 before the fix, so it does not depend on having 3.10 to go red.
+
+## 2026-11-06 — SkillSpector hook shipped (Phase A) with bring-your-own-key LLM mode
+
+**[SPEC]** New `skillsmgr/external_scan.py` runs an installed SkillSpector on a
+private copy of the staged candidate during registry fetch and source-update
+reviews, only when asked (`--external-scan`, `--external-scan-llm`, REST
+`external_scan`, v2 Settings). It is never imported. A trusted PATH match is run
+as an argv list with a scrubbed environment. LLM mode passes only an allowlist
+of provider variables, so a user's own key reaches the tool only on request and
+is never stored or returned. Output is bounded and whitelisted, and the
+evidence is advisory. Commit and apply never re-run it.
+
+19 new tests, red-first. They use a fake tool that records argv, environment and
+input, and cover timeout, error, oversized output, hostile text and an unsafe
+PATH. Real v2.12.0 output was parsed through the hook (AR1/PE3/SC2, score 66).
+The optional real-tool test is skipped here because the uv tool directory is
+group-writable and the unchanged trust policy refuses it.
+
+The complexity ratchet flagged +1 on three existing functions; each was
+restored by extracting a helper. `external_scan.py` joined the ratchet targets
+(752 functions, 17 files, nothing raised). Full suite: 1,404 tests, Python 3.12.
+
+**[NOTE]** A pre-existing order-dependent failure was found and **not** fixed:
+running `tests.test_registry_integration_contracts` before
+`tests.test_cli_contract` fails the `--scope all` doctor test on unchanged
+`HEAD` as well. Also, port 8791 belonged to another session's server showing
+real data. It was only viewed, nothing was changed, and verification moved to
+an isolated fixture on 8817.
+
+The maintainer then asked for broader AI features. The proposal, with seven
+open decisions, is @docs/33-ai-features-design-2026-11-06.md. Nothing in it is
+approved or implemented.
+
+## 2026-11-06 — Plan: optional SkillSpector hook, then stdlib risk patterns
+
+**[NOTE]** Plan only; no source changed. NVIDIA SkillSpector cannot be merged
+(about 20 runtime dependencies, Python >= 3.12, LLM/OSV egress, and a
+DO_NOT_INSTALL verdict that conflicts with the advisory-only rule), so the plan
+runs an installed copy as an optional external program in the two existing
+review chokepoints and later rewrites a few static checks with the stdlib.
+Verified locally on v2.12.0: `--format json --no-llm` reported AR1/PE3/SC2 on a
+hostile fixture. SC4 still contacts `api.osv.dev` under `--no-llm`, with no
+offline switch. See the
+[plan](superpowers/plans/2026-11-06-external-skill-scanner.md).
+
+## 2026-11-06 — `task.md` reconciled with `main` and the research roadmap
+
+**[NOTE]** Checklist-only correction; no source changed. Four lines still
+described the v2 parity work as uncommitted or undecided although `61355a2`
+is on `origin/main`; they are now checked off. The R4 native-switch defect and
+the silent-failure lint are marked partial with what remains (Codex TOML via
+D-1; empty-frontmatter and unquoted-colon lint). Ten docs/28 R-items and four
+docs/29 roadmap items were **absent** from the checklist and are now listed —
+the same missing-not-unchecked failure recorded on 2026-10-05.
+
 ## 2026-11-06 — Redesign the v2 tool pages to the Home/Skills standard
 
 **[NOTE]** Continued the uncommitted Codex parity work in a separate worktree

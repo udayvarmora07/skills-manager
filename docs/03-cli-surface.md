@@ -185,7 +185,7 @@ scanning and estimation still occur. Scope ids: `global`, `claude-code`, `codex`
 ### `tokens [NAME] [--scope SCOPE] [--text TEXT] [--window WINDOW] [--json]`
 Estimate token/context usage. `NAME` = a skill; omit to aggregate over `--scope` (default `all`). `--text` estimates raw text instead (`@path` reads a UTF-8 file; missing, unreadable or undecodable paths are errors). `--window` selects the context window (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M). Uses tiktoken when installed, else chars/4 heuristic.
 
-### `install [SOURCE] [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--review REVIEW_ID] [--browse|--search QUERY|--curated|--fetch] [--page N] [--per-page N] [--view VIEW] [--allow-stale] [--json]`
+### `install [SOURCE] [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--review REVIEW_ID] [--browse|--search QUERY|--curated|--fetch] [--page N] [--per-page N] [--view VIEW] [--allow-stale] [--external-scan|--external-scan-llm] [--json]`
 Install skills from the open skills ecosystem via the `skills` npm package (npx/pnpm/yarn/bunx). `SOURCE` like `vercel-labs/agent-skills` or `owner/repo@skill`. `--scope global` passes `-g`; `--agent` targets agent install dirs; `--skill` filters names; `--copy` copies instead of symlinking; `--list-only` executes the runner's list mode and reports its output/exit status; `--dry-run` prints the command without running. Source, agent, and skill values must be non-empty, at most 256 characters, and may not be option-like, traversal-shaped, absolute, or Windows drive-prefixed. `uvx` is rejected (it's an npm package).
 
 `--preview` prints the offline registry bridge preview instead of installing: the parsed registry reference, linkable per-skill audit pages, the `--registry-hash` slot used to detect upstream change, and the exact command this surface would run (`-s <slug>` is added for a registry skill id). It performs no registry request, no cache write, and no execution. `--trust-confirmed` records caller review intent only for the offline plan; that plan still reports `trust_verified: false`, `eligibility_status: "unverified-offline"`, `hash_verified: false`, and `may_install: false` (a supplied hash is `unverified-provided` until an authenticated read and comparison).
@@ -236,7 +236,7 @@ with the advisory `risk_scan()` heuristic. Validation errors fail before any
 managed-file mutation; warnings and risk findings are returned under the JSON
 `inspection` block and are never a safety certification.
 
-### `update preview NAME (--from DIR | --snapshot SNAPSHOT_ID) [--scope SCOPE] [--target-path PATH] [--json]`
+### `update preview NAME (--from DIR | --snapshot SNAPSHOT_ID) [--scope SCOPE] [--target-path PATH] [--external-scan|--external-scan-llm] [--json]`
 
 Create a private, expiring review for one exact observed local skill instance.
 `--from` and `--snapshot` are mutually exclusive and exactly one is required;
@@ -248,6 +248,19 @@ validation errors/warnings, advisory risk findings, activation preservation,
 snapshot policy, and the 32-character review id. Invalid or no-change previews
 are non-committable; valid no-change exits 0, while blocked/unreadable input
 exits 1.
+
+**[SPEC] Optional external scanner (2026-11-06).** `--external-scan` runs an
+installed NVIDIA SkillSpector on a private copy of the staged candidate and adds
+its findings as `external_scan` evidence; `--external-scan-llm` also enables
+SkillSpector's LLM stage with the user's own provider key, read from this
+process's environment (`SKILLSPECTOR_PROVIDER` plus that provider's key). The key
+is passed only to SkillSpector and is never stored, logged or returned. Static
+mode may send declared dependency names to `api.osv.dev`; LLM mode sends skill
+file contents to the configured provider. The evidence is advisory: it never
+changes validation, readiness or exit codes, and the tool's own score and
+recommendation are reported under `reported` as its claim. A missing or
+untrusted executable (`launcher_security.trusted_executable`) reports
+`unavailable` with the reason. See `external_scan.py` in @docs/02-modules.md.
 
 ### `update apply NAME REVIEW_ID [--scope SCOPE] [--target-path PATH] --yes [--json]`
 

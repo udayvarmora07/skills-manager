@@ -138,8 +138,11 @@ def _registry_fetch_result(store: Store, data: dict, allow_stale: bool) -> dict:
     expected_hash = data.get("registry_hash")
     if expected_hash is not None and not isinstance(expected_hash, str):
         raise StoreError("registry_hash must be a string")
+    from .external_scan import scan_options
+
     return _prepare_registry_skill(
-        store, source.strip(), expected_hash=expected_hash, allow_stale=allow_stale
+        store, source.strip(), expected_hash=expected_hash, allow_stale=allow_stale,
+        external_scan=scan_options(data.get("external_scan")),
     )
 
 
@@ -1110,14 +1113,21 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return True
         return False
 
+    # Which interface ``/`` opens is a product choice that may change, so it is
+    # a temporary 307: a browser must not cache it forever, and Python 3.10's
+    # urllib follows 307 but not 308 (it raised on every ``/`` request there).
+    # Adding a slash to ``/classic`` never changes, so that stays a 308.
+    _ENTRY_REDIRECTS = {"/": ("/v2/", 307), "/index.html": ("/v2/", 307), "/classic": ("/classic/", 308)}
+
     def _redirect_document(self, parts: list[str]) -> bool:
         """Promote v2 while preserving explicit classic and v2 entry points."""
         parsed = urlparse(self.path)
-        destination = {"/": "/v2/", "/index.html": "/v2/", "/classic": "/classic/"}.get(parsed.path)
-        if destination is None:
+        entry = self._ENTRY_REDIRECTS.get(parsed.path)
+        if entry is None:
             return self._redirect_v2(parts)
+        destination, status = entry
         location = destination + ("?" + parsed.query if parsed.query else "")
-        self._send(308, b"", "text/plain; charset=utf-8", extra_headers={"Location": location})
+        self._send(status, b"", "text/plain; charset=utf-8", extra_headers={"Location": location})
         return True
 
     def _serve_static(self) -> bool:
@@ -1735,6 +1745,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         return fields, files
 
     def _route_source_update_post(self, parts: list[str]) -> bool:
+        from .external_scan import scan_options
         from .source_update import commit_update_review, prepare_local_update, prepare_snapshot_update
 
         if parts == ["api", "source-updates", "reviews"]:
@@ -1747,11 +1758,12 @@ class WebAppHandler(BaseHTTPRequestHandler):
             fields, files = self._multipart_fields(
                 _parse_multipart(self._read_body(), boundary.group(1).strip('"'))
             )
+            options = scan_options(fields.get("external_scan"))
             with staged_single_skill(files) as source_dir:
                 result = prepare_local_update(
                     self.store.data_dir, fields.get("name", ""), fields.get("scope", "global"),
                     source_dir, target_path=fields.get("target_path") or None,
-                    source_value="browser-upload",
+                    source_value="browser-upload", external_scan=options,
                 )
             self._send_json(result, 201 if result.get("review_state") == "pending" else 200)
             return True
@@ -1760,6 +1772,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             result = prepare_snapshot_update(
                 self.store.data_dir, data.get("name", ""), data.get("scope", "global"),
                 data.get("snapshot_id", ""), target_path=data.get("target_path"),
+                external_scan=scan_options(data.get("external_scan")),
             )
             self._send_json(result, 201 if result.get("review_state") == "pending" else 200)
             return True

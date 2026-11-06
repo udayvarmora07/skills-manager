@@ -282,6 +282,8 @@ def build_parser(commands) -> argparse.ArgumentParser:
     p.add_argument("--per-page", type=int, default=25, help="registry leaderboard page size (default: 25)")
     p.add_argument("--view", choices=("all-time", "trending", "hot"), default="all-time", help="registry leaderboard view")
     p.add_argument("--allow-stale", action="store_true", help="use an expired registry cache if the network is unavailable")
+    p.add_argument("--external-scan", action="store_true", help="also run an installed SkillSpector on the candidate (advisory; static, may contact api.osv.dev)")
+    p.add_argument("--external-scan-llm", action="store_true", help="like --external-scan, with SkillSpector's LLM stage using your own provider key from the environment (sends file contents to that provider)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_install"])
 
@@ -294,6 +296,8 @@ def build_parser(commands) -> argparse.ArgumentParser:
     source_group.add_argument("--snapshot", dest="snapshot_id", metavar="SNAPSHOT_ID", help="retained recovery snapshot")
     add_scope_arg(p)
     p.add_argument("--target-path", metavar="PATH")
+    p.add_argument("--external-scan", action="store_true", help="also run an installed SkillSpector on the candidate (advisory; static, may contact api.osv.dev)")
+    p.add_argument("--external-scan-llm", action="store_true", help="like --external-scan, with SkillSpector's LLM stage using your own provider key from the environment (sends file contents to that provider)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_update"])
     p = update_sub.add_parser("apply", help="apply one reviewed update")

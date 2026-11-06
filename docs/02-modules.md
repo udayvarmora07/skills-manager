@@ -343,6 +343,27 @@ paths, and any host outside `skills.sh`/`github.com`; install sources and
 `-a`/`-s` values must match the ecosystem value allowlist and must not start
 with `-`.
 
+## `external_scan.py`
+
+Optional, advisory evidence from an installed NVIDIA SkillSpector. The program is
+never imported; `skillspector_evidence()` runs a trusted PATH match
+(`launcher_security.trusted_executable`) as an argv list without a shell, on a
+private 0700 copy of the staged candidate (a disabled `SKILL.md.disabled` is
+renamed in the copy only), with `--format json --output` and, in static mode,
+`--no-llm`. It never passes `--transitive`, `--use-shipped-baseline`,
+`--recursive` or `--baseline`. The child environment is scrubbed to
+`PATH/HOME/LANG/LC_ALL/TMPDIR`; LLM mode adds only the documented provider
+variables (`_LLM_ENV`), so a bring-your-own key reaches the tool only when asked
+and is never stored or returned. Bounds: 120 s static / 600 s LLM (process group
+killed on timeout), 4 MiB report, 200 findings with an `omitted` count, 500
+characters per string; `code_snippet` is dropped. Statuses: `completed`,
+`incomplete`, `unavailable` (with the reason, including an untrusted
+group-writable install), `timeout`, `error`. `scan_options()` normalises the
+opt-in (`true`/`"static"`/`"llm"`/`{"llm": bool}`; empty means off) and raises
+`StoreError` otherwise. Wired into `cli_handlers._prepare_registry_skill` and
+`source_update._prepare_from_source` only; commit and apply never re-run it.
+No Store method, SQLite state or runtime dependency.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official
