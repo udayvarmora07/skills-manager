@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import bz2
+import contextlib
+import gzip
+import lzma
 import re
 import shutil
 import tarfile
@@ -27,6 +31,22 @@ MAX_ARCHIVE_MEMBERS = 200
 MAX_ARCHIVE_PATH_LENGTH = 512
 MAX_ARCHIVE_NESTING = 16
 MAX_ARCHIVE_COMPRESSION_RATIO = 1000
+# Hard ceiling on how far into the *decompressed* tar stream any read may
+# reach.  The expanded-size budget counts member payloads only; headers,
+# PAX/GNU long-name records and 512-byte padding ride on top of it.  Each of
+# the 200 permitted members may cost a few header blocks, so 8 MiB of slack is
+# generous for a valid archive and still bounds a hostile one (R1/S1).
+MAX_ARCHIVE_DECOMPRESSED_BYTES = MAX_ARCHIVE_EXPANDED_BYTES + 8 * 1024 * 1024
+
+_TAR_DECOMPRESSION_ERRORS = (
+    tarfile.TarError,
+    OSError,
+    EOFError,
+    zlib.error,
+    lzma.LZMAError,
+    RecursionError,
+    ValueError,
+)
 
 
 def normalize_member_name(name: str) -> str:
@@ -120,6 +140,121 @@ def _validate_archive_layout(normalized: str, is_dir: bool, is_file: bool) -> No
         raise ArchiveError(f"unexpected archive layout: {normalized!r}")
 
 
+class _BoundedReader:
+    """A seekable view of a decompressed stream that refuses to read past a cap.
+
+    ``tarfile`` trusts header size fields: a PAX or GNU long-name record that
+    declares a gigabyte is read with one ``read(size)`` call, and walking
+    member data on a compressed stream means decompressing it.  Checking the
+    *position* before delegating means a hostile size fails before anything
+    is allocated, and no amount of seeking can decompress more than the cap.
+    """
+
+    def __init__(self, raw, limit: int):
+        self._raw = raw
+        self._limit = limit
+
+    def _check(self, end: int) -> None:
+        if end > self._limit:
+            raise ArchiveError(f"archive decompressed size exceeds {self._limit} bytes")
+
+    def read(self, size: int = -1) -> bytes:
+        position = self._raw.tell()
+        if size is None or size < 0:
+            # Unbounded read: ask for one byte past the cap so overflow is seen.
+            size = max(self._limit - position + 1, 0)
+        else:
+            self._check(position + size)
+        data = self._raw.read(size)
+        self._check(position + len(data))
+        return data
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        if whence == 0:
+            self._check(offset)
+        elif whence == 1:
+            self._check(self._raw.tell() + offset)
+        else:  # pragma: no cover - tarfile never seeks from the end
+            raise ArchiveError("unsupported archive seek")
+        return self._raw.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._raw.tell()
+
+    def seekable(self) -> bool:
+        return True
+
+    def readable(self) -> bool:
+        return True
+
+    def close(self) -> None:
+        self._raw.close()
+
+
+def _open_decompressed(path: Path):
+    with path.open("rb") as probe:
+        magic = probe.read(6)
+    if magic.startswith(b"\x1f\x8b"):
+        return gzip.open(path, "rb")
+    if magic.startswith(b"BZh"):
+        return bz2.open(path, "rb")
+    if magic.startswith(b"\xfd7zXZ\x00"):
+        return lzma.open(path, "rb")
+    return path.open("rb")
+
+
+@contextlib.contextmanager
+def open_tar(path: Path):
+    """Open a tar archive (plain, gzip, bzip2 or xz) behind a decompression cap.
+
+    Yields a ``tarfile.TarFile`` reading through ``_BoundedReader``.  Every
+    decompressor or tar-format failure becomes ``ArchiveError``, so a hostile
+    or truncated stream can never escape as a raw ``OSError``/``LZMAError``.
+    """
+    compressed_size = path.stat().st_size
+    if compressed_size > MAX_ARCHIVE_COMPRESSED_BYTES:
+        raise ArchiveError(f"archive compressed size exceeds {MAX_ARCHIVE_COMPRESSED_BYTES} bytes")
+    try:
+        raw = _open_decompressed(path)
+    except _TAR_DECOMPRESSION_ERRORS as exc:
+        raise ArchiveError(f"invalid archive: {exc}") from exc
+    reader = _BoundedReader(raw, MAX_ARCHIVE_DECOMPRESSED_BYTES)
+    try:
+        try:
+            tar = tarfile.open(fileobj=reader, mode="r:")  # type: ignore[arg-type]
+        except _TAR_DECOMPRESSION_ERRORS as exc:
+            raise ArchiveError(f"invalid archive: {exc}") from exc
+        with tar:
+            try:
+                yield tar
+            except ArchiveError:
+                raise
+            except _TAR_DECOMPRESSION_ERRORS as exc:
+                raise ArchiveError(f"invalid archive: {exc}") from exc
+    finally:
+        reader.close()
+
+
+def _iter_tar_members(tar: tarfile.TarFile):
+    """Yield members one header at a time, never materialising the full list.
+
+    ``tar.getmembers()`` reads every header before a single cap applies, so a
+    13 KB bz2 of repeated headers once reached 373 MB RSS and 49 s (R1/S1).
+    The caller validates each member *before* asking for the next, so the
+    member-count, per-member and expanded-size caps stop the walk early.
+    """
+    while True:
+        try:
+            member = tar.next()
+        except ArchiveError:
+            raise
+        except _TAR_DECOMPRESSION_ERRORS as exc:
+            raise ArchiveError(f"invalid archive: {exc}") from exc
+        if member is None:
+            return
+        yield member
+
+
 def validate_members(tar: tarfile.TarFile, compressed_size: int) -> list[tuple[tarfile.TarInfo, str]]:
     if compressed_size > MAX_ARCHIVE_COMPRESSED_BYTES:
         raise ArchiveError(f"archive compressed size exceeds {MAX_ARCHIVE_COMPRESSED_BYTES} bytes")
@@ -127,7 +262,7 @@ def validate_members(tar: tarfile.TarFile, compressed_size: int) -> list[tuple[t
     seen: set[str] = set()
     expanded_size = 0
     manifest_count = 0
-    for member in tar.getmembers():
+    for member in _iter_tar_members(tar):
         if not (member.isdir() or member.isreg()):
             raise ArchiveError(f"unsupported archive member type: {member.name!r}")
         normalized, expanded_size = _validate_archive_limits(

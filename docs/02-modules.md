@@ -238,7 +238,10 @@ Repository-only AST complexity ratchet for the web, CLI, store, and frontmatter 
 Internal policy modules extracted from the former Store/scopes hotspots. They
 own atomic text writes and tree hashes, archive preflight/extraction/staged
 commit behavior, trusted data-root validation, resolved root-containment, and
-physical-root/capability/instance-state observations. `paths.py` remains a
+physical-root/capability/instance-state observations. `archive.open_tar()`
+reads a tar through a position-capped decompressed view (`_BoundedReader`,
+`MAX_ARCHIVE_DECOMPRESSED_BYTES`) and validation walks members one header at a
+time, so no cap waits for a full `getmembers()` listing (R1). `paths.py` remains a
 compatibility adapter for the existing containment function names.
 
 ## `effective.py`

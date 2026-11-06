@@ -4,6 +4,25 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Research roadmap — backend items (docs/28 R-table, docs/29 Horizon 1; 2026-11-06)
+
+Branch `claude/research-roadmap-c0a574`. Only items the roadmap marks as not
+needing maintainer approval; each lands as its own commit with red-first tests.
+
+- [x] **R1 (P0)** — tar members are streamed and capped while reading
+  (`archive.open_tar`, `_BoundedReader`, `MAX_ARCHIVE_DECOMPRESSED_BYTES`).
+  `tests/test_audit_r1_streamed_tar.py`: 2 of 6 fail on the old code
+  (17.4 MB and 101 MB peak traced memory against a 12 MB budget).
+- [ ] **R2 (P0)** — strip manager sidecars at every external intake.
+- [ ] **R5** — lock files under the validated data dir, acquire timeout.
+- [ ] **R9** — JSON content type on bodyless mutating POSTs.
+- [ ] **R14** — deep JSON → 400; `?project=~nouser/x` → clean error.
+- [ ] **R6 / H1** — compatibility dedupe + portability message, unknown-key
+  warning, 1,536-character description cap.
+- [ ] **R4 (read-only, JSON part)** — `native_state` from Claude Code
+  `skillOverrides` and OpenCode `permission.skill`.
+- [ ] **R10** — advisory hidden-Unicode / bidi / tag-character finding.
+
 ## v2 interface — prototype-final on real data (2026-11-06)
 
 - [x] `skillsmgr/webui/v2/` served at `/v2/`: Home, Skills, Skill page + edit,

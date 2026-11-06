@@ -842,9 +842,17 @@ def _extract_import_archive(archive: Path, dest: Path) -> None:
             members = _validate_zip_members(zipped, archive.stat().st_size)
             _extract_zip_members(zipped, dest, members)
         return
-    with tarfile.open(archive, "r:*") as tar:
-        members = _validate_archive_members(tar, archive.stat().st_size)
-        _extract_archive_members(tar, dest, members)
+    _extract_tar_archive(archive, dest)
+
+
+def _extract_tar_archive(archive: Path, dest: Path) -> None:
+    """Walk a tar behind the streamed caps in ``archive.open_tar`` (R1/S1)."""
+    try:
+        with _archive.open_tar(archive) as tar:
+            members = _validate_archive_members(tar, archive.stat().st_size)
+            _extract_archive_members(tar, dest, members)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _has_skill_document(source: Path) -> bool:

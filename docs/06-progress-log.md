@@ -137,6 +137,7 @@ entries that introduced them:
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | Research-roadmap backend items (docs/28, docs/29) |
 | 2026-11-06 | The prototype-final design shipped as a v2 interface on real data |
 | 2026-10-08 | The UI was redesigned against a contract, and the redesign found a product defect |
 | 2026-10-06 | TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong |
@@ -167,6 +168,22 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-11-06 — Research-roadmap backend items (docs/28, docs/29)
+
+**[SPEC] R1 / S1 — tar caps now apply while reading.** `archive.validate_members`
+called `tar.getmembers()` before any cap, so a 13 KB bz2 of repeated headers
+reached 373 MB RSS. Imports now open the tar through `archive.open_tar()`: the
+decompressor is chosen by magic bytes and wrapped in `_BoundedReader`, which
+refuses any read or seek past `MAX_ARCHIVE_DECOMPRESSED_BYTES` (expanded budget
++ 8 MiB of header slack) *before* delegating, and members are pulled one
+`tar.next()` at a time so the 200-member, per-member and expanded caps stop the
+walk early. A PAX header declaring 64 MB is refused before it is allocated.
+Every decompressor failure (bz2 `OSError`, `LZMAError`, `EOFError`,
+`RecursionError` from chained headers) becomes `StoreError`. Red-first: the
+many-headers and PAX-bomb tests measured 17.4 MB and 101 MB peak traced memory
+on the old code against a 12 MB budget; both pass now, and valid plain/gz/bz2/xz
+exports still import.
 
 ## 2026-11-06 — The prototype-final design shipped as a v2 interface on real data
 
