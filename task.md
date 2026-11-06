@@ -44,8 +44,8 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   before implementing `[[skills.config]]`, rather than a partial TOML parser.
 - [x] **Parent P1/P2 findings:** serialize scoped edit/toggle/restore/sync;
   preserve damaged target bytes before force sync; fix per-entry search and
-  doctor encoding classification. CLI contracts and corrections are
-  documented in @docs/03-cli-surface.md.
+  doctor encoding classification. See @docs/30-backend-continuation-2026-11-06.md
+  for all triage dispositions, verification and integration requirements.
 
 - [x] **Parent REST:** immediate 413 with connection closure; history zero
   and blank-window 400s; independent-template layout contract clarified.

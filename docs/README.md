@@ -73,3 +73,5 @@
   @docs/15-product-ux-delivery-plan-2026-09-15.md. Architecture-specific
   questions remain in their ADRs. Resolved questions are recorded in
   06-progress-log.md.
+
+Continuation implementation, triage and integration: @docs/30-backend-continuation-2026-11-06.md.

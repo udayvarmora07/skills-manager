@@ -53,7 +53,20 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
-## Current state (measured 2026-10-08 on the UI redesign pass)
+## Current state (measured 2026-11-06 on backend continuation)
+
+**[SPEC]** On the final backend source tree, all **1,324 tests** pass on each
+of **Python 3.10, 3.11, 3.12, 3.13 and 3.14**. Complexity: **721 functions
+across 16 files**, passed with no ratchet increase. Compilation, docs, design
+tokens, both smokes, Ruff and Bandit passed. Pinned wheel/sdist builds and
+archive inspection passed; wheel clean install passed, and a separate fresh
+sdist environment seeded with pinned build tools passed the full asset probe.
+The automated sdist clean-install gate still reports unavailable because its
+fresh environment lacks setuptools. No combined frontend or Windows execution
+is claimed. Full findings, commits, limits and parent integration checks:
+@docs/30-backend-continuation-2026-11-06.md.
+
+## Historical state (measured 2026-10-08 on the UI redesign pass)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.
 
@@ -168,6 +181,18 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-11-06 — Continuation verified and prepared for parent integration
+
+**[SPEC]** Seven coherent implementation commits complete R14/R6/R4/R10 and
+the reproduced parent backend fixes; the source tree passes 1,324 tests on
+each supported Python version, the repository ladder and static checks. The
+handoff at @docs/30-backend-continuation-2026-11-06.md lists every fixed,
+doc-clarified and unconfirmed finding, actual packaging evidence, remaining
+approval decisions and exact combined-tree retests. No frontend tree, original
+dirty checkout, remote branch or release was mutated. Both writers are idle;
+parent should merge normally and retest both interfaces with frontend R9
+header commit `fe46552` present.
 
 ## 2026-11-06 — Continuation: prompt HTTP rejection and parameter errors
 
