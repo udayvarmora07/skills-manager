@@ -1,6 +1,6 @@
 # User Demand and Competitor Analysis — skills-manager
 
-**Version 0.1.0**
+**Version 0.2.0**
 
 **AI manifest**: Evidence-led analysis dated 2026-11-06 of what users of AI coding-agent skills ask for, what competing tools ship, and what skills-manager should do about it. It merges four research passes (GitHub issue trackers, community channels, a competitor feature matrix, a spec and security review) with the earlier user-research and monetization notes (docs/26 and docs/27, which exist only in the main checkout and are cited in prose). Proposals only: nothing here is approved, and every item that touches a locked constraint is flagged for the maintainer. Evidence and opinion are labelled separately.
 
@@ -273,3 +273,51 @@ Conventions: **[SPEC]** marks a measured or sourced fact, **[NOTE]** context or 
 ## 9. Method and limits
 
 **[NOTE]** Four research passes on 2026-11-05 and 2026-11-06 supplied this document: GitHub issue mining (reaction-sorted and title-scoped), a community pass (Hacker News, YouTube, blogs), a feature matrix from competitor READMEs and docs, and a specification and security review. The earlier docs/26 and docs/27 supplied Reddit, X and monetization evidence and were not re-verified. Gaps: Reddit, X, Instagram and Chinese forums were not read in this pass; competitor claims were not run locally; thumbs-up counts were read at one moment; "coverage today" for skills-mgr comes from documentation and was not re-executed; several secondary sources are marked [?]. No number in this document is a forecast.
+
+## 10. Addendum: Reddit, X and Chinese communities (2026-11-06, second pass)
+
+**[NOTE] Channels.** Reddit was read through the maintainer's signed-in Chrome
+profile via `opencli browser`, read-only (about 24 pages). X via `opencli
+twitter search` (about 14 queries, mostly promotional results). V2EX public API
+and search, Juejin, Zhihu and Tencent Security via Exa and Jina Reader, and the
+Bilibili public search API. XiaoHongShu timed out and Instagram pages returned
+no content, so both remain gaps. Counts are threads read, not platform totals.
+
+**[SPEC] What this pass changes.**
+
+1. **The user framing of the folder problem is "which copy does the agent load".**
+   Eight threads (Reddit r/ClaudeCode 1ubdz8g, r/claudeskills 1xd3ql5, r/codex
+   1x2wkid; V2EX t/1239048, t/1228460, t/1236972, t/1247023) describe several
+   copies on disk with no way to tell which is stale or which is loaded. One
+   V2EX user: five copies on disk, three stale, unknown which loads. This is
+   exactly the `/v2/` "Copies differ" view plus `doctor --explain`; the gap is
+   joining them into one answer per skill.
+2. **Leaner skills deserves "strong", not "medium".** V2EX t/1200628 alone has
+   56 replies arguing fewer skills choose better; Reddit r/ClaudeCode 1xl8klo
+   blames skills for token burn. New detail: Codex prints that skill
+   descriptions were shortened to fit its 2% budget, and users work around it
+   with one router skill.
+3. **Security demand is for re-checking, not only pre-install.** Nine threads,
+   including Reddit r/codex 1w2e1wy (an injected "ignore all previous
+   instructions" line in a copied `SKILL.md`), Juejin 7683443642279084047 and
+   Tencent Zhuque Lab's scan of 50,000+ ClawHub skills. Users want a skill that
+   was fine yesterday flagged if it changed. Users also ask for a clear
+   yes/no; this document still advises evidence over a verdict label, and that
+   tension is now an open question for the maintainer.
+4. **Many users write their own skills and avoid third-party ones**
+   (r/ClaudeAI 1xltysk, V2EX t/1200628). That shrinks the audience for
+   install-centred features and enlarges it for authoring, linting and drift.
+5. **Bundles that need hooks are a named fear** (V2EX t/1228460, t/1236972):
+   installing a suite that also needs hooks, then removing it cleanly.
+6. **Chinese-language users bring regional agents and generic sync.** Trae,
+   CodeBuddy and WorkBuddy appear alongside Claude Code and Codex; sync through
+   OneDrive, Dropbox or GitHub is common, with reported conflicts. Skill
+   managers are a crowded V2EX genre: at least eight were posted Jan–Oct 2026.
+7. **Recovery (row 16) found no direct demand** in these channels. Users ask
+   "which copy is stale" and "delete cleanly", not "roll back". Recovery stays
+   valuable as safety, but it is not a headline.
+
+**[?] Unverified claims seen in this pass:** that Claude Code `/doctor` now
+audits skills for stale rules (r/ClaudeAI 1v5mhhl), and that Claude Code 2.1.277
+auto-loads AGENTS.md. Either would overlap this tool and should be checked
+against primary release notes before planning around it.
