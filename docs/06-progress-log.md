@@ -192,15 +192,17 @@ entries that introduced them:
 - **The 1.0.2 artifact hashes of record are those built from `522b81f`.** The
   `6733da9` hashes remain only inside the superseded 2026-09-23 entry.
 
-## Resident entry index (2026-09-23 … 2026-10-08)
+## Resident entry index (2026-09-23 … 2026-11-06)
 
-**[NOTE]** 28 dated entries; full text follows.
+**[NOTE]** 34 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
 | 2026-11-06 | Classic screens, 10,000-instance scale and screen-reader checks closed three gaps |
 | 2026-11-06 | Research-roadmap backend items (docs/28, docs/29) |
 | 2026-11-06 | The prototype-final design shipped as a v2 interface on real data |
+| 2026-10-30 | Monetization: sell the outcome, not the manager |
+| 2026-10-30 | User research: the real pain is skills the model cannot see |
 | 2026-10-08 | The UI was redesigned against a contract, and the redesign found a product defect |
 | 2026-10-06 | TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong |
 | 2026-10-06 | A search body cost one document read per row, to compute nothing |
@@ -402,6 +404,39 @@ prototype's muted text at 4.41:1 on the sunken surface; it is now ≥ 4.5:1.
 **[?] Open.** v2 is not the default route; the maintainer decides when to flip
 it. `GET /api/skills?scope=all` is 22.7 MB on this machine and both interfaces
 pay it on every load.
+## 2026-10-30 — Monetization: sell the outcome, not the manager
+
+**[NOTE]** Research only; no product source changed. Recorded in
+@docs/27-monetization-five-pass-analysis-2026-10-30.md, which challenges the
+Pro/Team model in @docs/14-competitive-product-business-strategy-2026-09-15.md.
+Measured starting point: 1 GitHub star, 121 PyPI downloads last month, while
+the 7,079-star category leader is funded by a tip jar. Platforms now cover the
+single-agent on/off job (Claude org provisioning, managed settings,
+`skillOverrides`), so the proposal is a services-first year. It starts with a
+fixed-price Agent Setup Audit delivered with this tool. Skill CI and team setup
+profiles would follow only if paid audits ask for them, with written kill
+criteria. Reddit and X evidence (475 tweets, 14 threads) shows users describe
+the pain as skills, MCP servers and AGENTS.md drifting across several agents
+and machines. Widening scope that way needs maintainer decision MON-Q2.
+
+## 2026-10-30 — User research: the real pain is skills the model cannot see
+
+**[NOTE]** Research only; no product source changed. Recorded in
+@docs/26-user-research-skills-context-2026-10-30.md. Key findings: Claude
+Code's skill listing gets 1% of the context window and silently drops
+descriptions on overflow (users report 12 of 91 skills never firing for that
+reason); Claude Code now ships native per-project `skillOverrides`
+(`on`/`name-only`/`user-invocable-only`/`off`), so the global
+`SKILL.md.disabled` rename is the wrong default for that consumer; the most
+upvoted adjacent requests are private skill sources (82 👍), symlinked skill
+dirs (53 👍) and a restorable skill lockfile (49 👍). Twelve ranked
+recommendations are proposals only — several need approval under locked
+constraint 5. A same-day v1.1.0 pass read X on a logged-in session and
+found a **defect in this app**: observed state ignores each agent's native
+switch, so a skill Codex disabled in `config.toml` would be shown as Active.
+Verified latent, not live: this machine's only `[[skills.config]]` entry is
+`enabled = true`. Instagram and Hacker News remain
+unread and are listed as gaps.
 
 ## 2026-10-08 — The UI was redesigned against a contract, and the redesign found a product defect
 

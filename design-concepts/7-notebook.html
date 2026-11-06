@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept 7 · Notebook</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  body { font-family: "Figtree", system-ui, sans-serif; background: #fdfcfa; color: #23211e; font-size: 14.5px; height: 100vh; overflow: hidden; }
+  .app { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
+  .tree { background: #f6f4f0; border-right: 1px solid #ebe7e0; padding: 18px 12px; overflow: auto; }
+  .who { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; font-weight: 700; }
+  .who i { width: 24px; height: 24px; border-radius: 6px; background: #23211e; color: #fdfcfa; display: grid; place-items: center; font-style: normal; font-family: "Newsreader", serif; font-size: 15px; }
+  .find { margin: 0 4px 16px; height: 34px; border-radius: 8px; background: #fff; border: 1px solid #e6e1d9; display: flex; align-items: center; padding: 0 10px; color: #9b948a; gap: 8px; }
+  .grp { color: #8a8378; font-size: 12px; font-weight: 700; padding: 14px 10px 4px; }
+  .page { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 6px; color: #4a463f; }
+  .page.on { background: #ebe7df; color: #23211e; font-weight: 600; }
+  .page .d { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; }
+  .ok { background: #5c9a6e; } .warn { background: #d18a2c; } .bad { background: #c9472f; } .off { background: transparent; border: 1.5px solid #b5ada2; }
+  .main { overflow: auto; }
+  .bar { position: sticky; top: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 28px; background: rgb(253 252 250 / .92); border-bottom: 1px solid #f0ece5; color: #8a8378; }
+  .bar b { color: #23211e; font-weight: 600; }
+  .bar .sp { margin-left: auto; display: flex; gap: 8px; }
+  .bar button { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #e6e1d9; background: #fff; font-weight: 600; font-size: 13.5px; }
+  .bar button.p { background: #23211e; color: #fdfcfa; border-color: #23211e; }
+  .sheet { display: grid; grid-template-columns: minmax(0, 680px) 260px; gap: 56px; padding: 56px 72px 80px; justify-content: center; }
+  .cat { font-size: 13px; font-weight: 700; color: #8a8378; display: flex; gap: 8px; align-items: center; }
+  h1 { font-family: "Newsreader", serif; font-size: 50px; font-weight: 500; letter-spacing: -.02em; line-height: 1.05; margin-top: 10px; }
+  .lead { font-family: "Newsreader", serif; font-size: 22px; color: #5d584f; margin-top: 12px; line-height: 1.45; font-style: italic; }
+  .doc { font-family: "Newsreader", serif; font-size: 19px; line-height: 1.7; color: #33302b; margin-top: 30px; }
+  .doc h2 { font-family: "Figtree", sans-serif; font-size: 13px; letter-spacing: .02em; font-weight: 800; color: #8a8378; margin: 30px 0 8px; }
+  .doc ol, .doc ul { padding-left: 24px; margin: 0; }
+  .doc li { margin: 4px 0; }
+  .hl { background: linear-gradient(transparent 55%, #fbe3c0 55%); }
+  .doc blockquote { margin: 24px 0 0; padding-left: 18px; border-left: 2px solid #23211e; font-style: italic; color: #5d584f; }
+  .margin { font-size: 13.5px; display: flex; flex-direction: column; gap: 22px; padding-top: 120px; }
+  .note { border-left: 2px solid #e6e1d9; padding-left: 14px; }
+  .note b { display: block; font-size: 12px; color: #8a8378; font-weight: 700; margin-bottom: 4px; }
+  .note.w { border-left-color: #d18a2c; }
+  .note.w p { color: #7a4d10; }
+  .note a { color: #23211e; font-weight: 700; display: inline-block; margin-top: 6px; }
+  .agents { display: flex; flex-direction: column; gap: 6px; }
+  .agents span { display: flex; align-items: center; gap: 8px; color: #4a463f; }
+  .agents i { width: 7px; height: 7px; border-radius: 50%; }
+</style></head>
+<body>
+<div class="app">
+  <aside class="tree">
+    <div class="who"><i>S</i>My skills</div>
+    <div class="find">⌕ Search pages</div>
+    <div class="grp">ENGINEERING</div>
+    <div class="page on">code-review<i class="d warn"></i></div>
+    <div class="page">explain-error<i class="d ok"></i></div>
+    <div class="page">perf-profiler<i class="d ok"></i></div>
+    <div class="page">refactor-safely<i class="d ok"></i></div>
+    <div class="page">regex-builder<i class="d ok"></i></div>
+    <div class="page">test-writer<i class="d warn"></i></div>
+    <div class="grp">DATA &amp; OPS</div>
+    <div class="page">docker-basics<i class="d off"></i></div>
+    <div class="page">k8s-debug<i class="d warn"></i></div>
+    <div class="page">migration-planner<i class="d ok"></i></div>
+    <div class="page">sql-helper<i class="d bad"></i></div>
+    <div class="grp">WRITING</div>
+    <div class="page">brand-voice<i class="d ok"></i></div>
+    <div class="page">changelog-keeper<i class="d off"></i></div>
+    <div class="page">onboarding-guide<i class="d ok"></i></div>
+    <div class="page">release-notes<i class="d ok"></i></div>
+    <div class="grp">+ New page</div>
+  </aside>
+  <main class="main">
+    <div class="bar">Engineering / <b>code-review</b><span class="sp"><button>History</button><button>Share to agent</button><button class="p">Edit</button></span></div>
+    <div class="sheet">
+      <article>
+        <div class="cat">Engineering · Edited 2 hours ago</div>
+        <h1>Code review</h1>
+        <p class="lead">Reviews a change for bugs, risky edits and missing tests before you merge it.</p>
+        <div class="doc">
+          <p>Use this skill when someone asks you to review a change, a pull request, or a diff before it is merged.</p>
+          <h2>WHAT TO LOOK AT</h2>
+          <ol><li>Does the change do what the description says?</li><li>Could it break something that worked before?</li><li><span class="hl">Are there tests for the new behaviour?</span></li><li>Is anything risky: passwords, deletes, database changes?</li></ol>
+          <h2>HOW TO ANSWER</h2>
+          <ul><li><span class="hl">Start with the most serious problem.</span></li><li>Point to the exact file and line.</li><li>Suggest a fix, not just the problem.</li></ul>
+          <blockquote>If the change is very large, ask which part matters most first.</blockquote>
+        </div>
+      </article>
+      <aside class="margin">
+        <div class="note w"><b>NOTE</b><p>The highlighted lines are missing from Codex's copy. Codex may skip these checks.</p><a href="#">Update Codex →</a></div>
+        <div class="note"><b>USED BY</b><div class="agents"><span><i style="background:#d97757"></i>Claude Code</span><span><i style="background:#2f6f5e"></i>Codex · older</span><span><i style="background:#23211e"></i>Cursor</span><span><i style="background:#8a8378"></i>Your library</span></div></div>
+        <div class="note"><b>LENGTH</b><p>About 1,610 words · 1% of Claude Code's reading space</p></div>
+      </aside>
+    </div>
+  </main>
+</div>
+</body></html>

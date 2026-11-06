@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept 3 · Skill shelf</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  body { font-family: "Figtree", system-ui, sans-serif; background: #faf6ef; color: #2a2420; font-size: 15px; }
+  .top { display: flex; align-items: center; gap: 22px; padding: 22px 48px; }
+  .brand { font-family: "Fraunces", serif; font-weight: 700; font-size: 24px; letter-spacing: -.02em; }
+  .brand em { font-style: italic; color: #c2552d; font-weight: 500; }
+  nav { display: flex; gap: 6px; margin-left: 24px; }
+  nav a { padding: 8px 14px; border-radius: 99px; color: #6d625a; font-weight: 600; text-decoration: none; }
+  nav a.on { background: #2a2420; color: #faf6ef; }
+  .search { margin-left: auto; width: 320px; height: 44px; border-radius: 99px; background: #fff; border: 1px solid #ece3d6; display: flex; align-items: center; gap: 10px; padding: 0 18px; color: #9b8f84; }
+  .new { height: 44px; padding: 0 20px; border-radius: 99px; border: 0; background: #c2552d; color: #fff; font-weight: 700; }
+  .hero { padding: 18px 48px 6px; display: flex; align-items: end; justify-content: space-between; }
+  h1 { font-family: "Fraunces", serif; font-size: 52px; font-weight: 600; letter-spacing: -.03em; line-height: 1; }
+  h1 em { font-style: italic; font-weight: 400; color: #c2552d; }
+  .hero p { color: #6d625a; margin-top: 10px; font-size: 16.5px; }
+  .ribbon { margin: 22px 48px 0; padding: 14px 18px; border-radius: 18px; background: #fff3e4; border: 1px solid #f3dcbd; display: flex; align-items: center; gap: 14px; }
+  .ribbon b { font-weight: 800; }
+  .ribbon .chips { display: flex; gap: 8px; margin-left: auto; }
+  .ribbon .chips span { background: #fff; border: 1px solid #f3dcbd; border-radius: 99px; padding: 6px 12px; font-size: 13.5px; font-weight: 700; }
+  section { padding: 28px 48px 0; }
+  .sh { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .sh h2 { font-family: "Fraunces", serif; font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+  .sh span { color: #9b8f84; font-weight: 600; }
+  .sh a { margin-left: auto; color: #2a2420; font-weight: 700; font-size: 14px; }
+  .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; }
+  .card { background: #fff; border-radius: 20px; overflow: hidden; border: 1px solid #efe6d9; box-shadow: 0 1px 2px rgb(42 36 32 / .04); position: relative; }
+  .cover { height: 108px; display: grid; place-items: center; position: relative; }
+  .cover svg { width: 46px; height: 46px; stroke-width: 1.6; }
+  .badge { position: absolute; top: 10px; right: 10px; font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 99px; background: #fff; }
+  .b-warn { color: #a2510a; } .b-bad { color: #b42318; } .b-off { color: #6d625a; }
+  .cbody { padding: 14px 16px 16px; }
+  .cbody b { font-size: 16px; display: block; }
+  .cbody p { font-size: 13.5px; color: #6d625a; margin-top: 4px; line-height: 1.45; height: 39px; overflow: hidden; }
+  .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+  .ag { display: flex; gap: 4px; }
+  .ag i { width: 9px; height: 9px; border-radius: 50%; }
+  .foot small { font-size: 12.5px; color: #9b8f84; font-weight: 600; }
+  .off { opacity: .55; }
+</style></head>
+<body>
+<header class="top">
+  <div class="brand">Skills <em>shelf</em></div>
+  <nav><a class="on" href="#">Shelf</a><a href="#">Agents</a><a href="#">Trash</a></nav>
+  <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search 20 skills</div>
+  <button class="new">+ New skill</button>
+</header>
+<div class="hero"><div><h1>Your skills, <em>all in one place.</em></h1><p>20 skills, shared across 6 AI tools. Pick one to read it, share it or fix it.</p></div></div>
+<div class="ribbon"><svg class="i" viewBox="0 0 24 24" style="color:#a2510a"><path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 10v4M12 17v.01"/></svg><span><b>3 skills need a little care.</b> Tap a card with a badge to fix it.</span>
+  <div class="chips"><span>✕ sql-helper</span><span>▲ code-review</span><span>▲ k8s-debug</span></div></div>
+
+<section>
+  <div class="sh"><h2>Engineering</h2><span>7 skills</span><a href="#">See all →</a></div>
+  <div class="row">
+    <article class="card"><div class="cover" style="background:#e5eefc;color:#2c5ae9"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M8.5 11h5M11 8.5v5"/></svg><span class="badge b-warn">▲ Copies differ</span></div>
+      <div class="cbody"><b>code-review</b><p>Reviews a change for bugs and missing tests before you merge.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#2f6f5e"></i><i style="background:#1b1d22"></i><i style="background:#8a7f75"></i></span><small>4 tools</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#e3f3e8;color:#1c7a47"><svg class="i" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L5 19a1.5 1.5 0 0 0 1.3 2h11.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/></svg></div>
+      <div class="cbody"><b>test-writer</b><p>Writes focused unit tests for the function you point at.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#2f6f5e"></i><i style="background:#3d7be0"></i><i style="background:#b04a7a"></i></span><small>5 tools</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#fdebe1;color:#c2552d"><svg class="i" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19Z"/><path d="M12 10v4M12 17v.01"/></svg></div>
+      <div class="cbody"><b>explain-error</b><p>Reads an error and explains the likely cause in plain words.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#2f6f5e"></i><i style="background:#1b1d22"></i><i style="background:#3d7be0"></i><i style="background:#b04a7a"></i></span><small>6 tools</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#efe8fb;color:#6d3fd6"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M4 12h16M4 17h7"/><path d="m16 15 3 3-3 3"/></svg></div>
+      <div class="cbody"><b>refactor-safely</b><p>Improves code in small steps and keeps tests passing.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#2f6f5e"></i><i style="background:#1b1d22"></i><i style="background:#8a7f75"></i></span><small>4 tools</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#fff1d6;color:#a2510a"><svg class="i" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0"/><path d="m12 13 4-4"/></svg></div>
+      <div class="cbody"><b>perf-profiler</b><p>Finds the slow part of a page or script and suggests a fix.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#3d7be0"></i><i style="background:#8a7f75"></i></span><small>3 tools</small></div></div></article>
+  </div>
+</section>
+<section>
+  <div class="sh"><h2>Data &amp; Ops</h2><span>5 skills</span><a href="#">See all →</a></div>
+  <div class="row">
+    <article class="card"><div class="cover" style="background:#fde7e5;color:#b42318"><svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg><span class="badge b-bad">✕ Can't be read</span></div>
+      <div class="cbody"><b>sql-helper</b><p>Explains slow database queries and suggests fixes.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#2f6f5e"></i></span><small>2 tools</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#e1f1f6;color:#0e7490"><svg class="i" viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7Z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg><span class="badge b-warn">▲ Copies differ</span></div>
+      <div class="cbody"><b>k8s-debug</b><p>Walks through why a Kubernetes app is crashing or stuck.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#b04a7a"></i></span><small>2 tools</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#e8eef7;color:#334f7a"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m17 15 2 2 3-3"/></svg></div>
+      <div class="cbody"><b>migration-planner</b><p>Plans database changes that can be safely undone.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i></span><small>1 tool</small></div></div></article>
+    <article class="card off"><div class="cover" style="background:#efebe5;color:#6d625a"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="10" rx="2"/><path d="M7 9V5h4v4M13 9V6h4v3"/></svg><span class="badge b-off">Turned off</span></div>
+      <div class="cbody"><b>docker-basics</b><p>Builds small, safe Docker setups.</p><div class="foot"><span class="ag"><i style="background:#c9bfb4"></i><i style="background:#c9bfb4"></i></span><small>Off everywhere</small></div></div></article>
+    <article class="card"><div class="cover" style="background:#e3f3e8;color:#1c7a47"><svg class="i" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+      <div class="cbody"><b>security-check</b><p>Looks for leaked passwords and risky defaults.</p><div class="foot"><span class="ag"><i style="background:#d97757"></i><i style="background:#2f6f5e"></i><i style="background:#8a7f75"></i></span><small>3 tools</small></div></div></article>
+  </div>
+</section>
+</body></html>

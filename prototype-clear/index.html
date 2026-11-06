@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skills Manager · Clear prototype</title>
+  <meta name="description" content="Frontend-only design prototype: Home and Skills pages for Skills Manager.">
+  <script>
+    // Apply the saved theme before first paint so there is no flash.
+    try {
+      var t = localStorage.getItem("clear-theme");
+      if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Main">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2" opacity=".45"/><rect x="3" y="13" width="8" height="8" rx="2" opacity=".45"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+        </span>
+        <span class="brand-name">Skills Manager</span>
+      </div>
+
+      <nav class="nav">
+        <a href="#/home" data-route="home"><span data-icon="home"></span><span>Home</span></a>
+        <a href="#/skills" data-route="skills"><span data-icon="layers"></span><span>Skills</span><span class="nav-count" id="nav-skill-count"></span></a>
+        <div class="nav-label">Coming next</div>
+        <span class="nav-soon" aria-disabled="true"><span data-icon="download"></span><span>Get new skills</span></span>
+        <span class="nav-soon" aria-disabled="true"><span data-icon="undo"></span><span>Trash &amp; backups</span></span>
+        <span class="nav-soon" aria-disabled="true"><span data-icon="settings"></span><span>Settings</span></span>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span class="prototype-flag">Prototype · demo data</span>
+        <div class="local-badge" title="Skills Manager only runs on this computer. Nothing is uploaded.">
+          <span class="dot ok" aria-hidden="true"></span>
+          <span>Running on this computer only</span>
+        </div>
+        <button class="theme-btn" type="button" id="theme-btn" aria-label="Switch to dark theme">
+          <span data-icon="moon"></span><span class="theme-label">Dark mode</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="main" tabindex="-1"></main>
+  </div>
+
+  <!-- Mobile bottom navigation -->
+  <nav class="tabbar" aria-label="Main">
+    <a href="#/home" data-route="home"><span data-icon="home"></span><span>Home</span></a>
+    <a href="#/skills" data-route="skills"><span data-icon="layers"></span><span>Skills</span></a>
+    <button type="button" id="tab-theme" aria-label="Switch theme"><span data-icon="moon"></span><span>Theme</span></button>
+  </nav>
+
+  <div class="toast-region" role="status" aria-live="polite" id="toasts"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

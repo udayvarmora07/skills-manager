@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept 1 · Agent rooms</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  body { font-family: "Jakarta", system-ui, sans-serif; background: #f6f5f2; color: #1b1d22; font-size: 15px; }
+  .top { height: 68px; display: flex; align-items: center; gap: 28px; padding: 0 40px; background: #fff; border-bottom: 1px solid #ebe8e2; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px; }
+  .brand span { width: 30px; height: 30px; border-radius: 9px; background: #1b1d22; color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs a { padding: 9px 14px; border-radius: 10px; color: #5c5f68; font-weight: 600; text-decoration: none; }
+  .tabs a.on { background: #f1efe9; color: #1b1d22; }
+  .search { margin-left: auto; width: 340px; height: 42px; border-radius: 12px; background: #f6f5f2; border: 1px solid #e6e2da; display: flex; align-items: center; gap: 10px; padding: 0 14px; color: #8a8c93; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 40px 40px; display: grid; grid-template-columns: 1fr 340px; gap: 32px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -.03em; }
+  .lede { color: #5c5f68; margin-top: 6px; font-size: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 28px; }
+  .room { background: #fff; border: 1px solid #ebe8e2; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 16px; position: relative; box-shadow: 0 1px 2px rgb(0 0 0 / .03); }
+  .room:hover { border-color: #cfc9bd; }
+  .rhead { display: flex; align-items: center; gap: 14px; }
+  .logo { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-weight: 800; font-size: 17px; color: #fff; }
+  .rname { font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
+  .rmeta { color: #8a8c93; font-size: 13px; }
+  .health { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; padding: 6px 11px; border-radius: 99px; width: fit-content; }
+  .ok { background: #e7f4ec; color: #1c7a47; } .warn { background: #fdf0de; color: #9a5300; } .bad { background: #fde9e7; color: #b42318; }
+  .skl { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skl span { font-size: 12.5px; font-weight: 600; padding: 4px 9px; border-radius: 8px; background: #f4f2ed; color: #44474f; }
+  .skl span.more { background: none; color: #8a8c93; }
+  .meter { display: flex; flex-direction: column; gap: 6px; }
+  .ml { display: flex; justify-content: space-between; font-size: 13px; color: #5c5f68; }
+  .ml b { color: #1b1d22; }
+  .track { height: 8px; border-radius: 99px; background: #f1efe9; overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 99px; }
+  .add { border: 2px dashed #ddd8ce; background: transparent; box-shadow: none; align-items: center; justify-content: center; color: #8a8c93; text-align: center; }
+  .add b { color: #1b1d22; display: block; font-size: 16px; }
+  .plus { width: 52px; height: 52px; border-radius: 16px; background: #f1efe9; display: grid; place-items: center; margin: 0 auto 8px; color: #1b1d22; }
+  aside .card { background: #fff; border: 1px solid #ebe8e2; border-radius: 20px; padding: 22px; }
+  aside h2 { font-size: 18px; font-weight: 800; }
+  aside .sub { color: #8a8c93; font-size: 13.5px; margin-top: 2px; }
+  .item { display: grid; grid-template-columns: 36px 1fr; gap: 12px; padding: 16px 0; border-top: 1px solid #f1efe9; }
+  .item:first-of-type { border-top: 0; margin-top: 10px; }
+  .dot { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; }
+  .item b { display: block; font-size: 14.5px; }
+  .item p { font-size: 13.5px; color: #5c5f68; margin-top: 2px; }
+  .btn { margin-top: 10px; height: 34px; padding: 0 14px; border-radius: 10px; border: 0; background: #1b1d22; color: #fff; font-weight: 700; font-size: 13.5px; }
+  .btn.ghost { background: #f1efe9; color: #1b1d22; }
+  .shared { margin-top: 18px; }
+  .shared .row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid #f1efe9; font-size: 14px; font-weight: 600; }
+  .faces { display: flex; }
+  .faces { gap: 4px; }
+  .faces i { width: 26px; height: 26px; border-radius: 8px; font-style: normal; font-size: 9px; font-weight: 800; color: #fff; display: grid; place-items: center; }
+</style></head>
+<body>
+<header class="top">
+  <div class="brand"><span>SM</span>Skills Manager</div>
+  <nav class="tabs"><a class="on" href="#">Agents</a><a href="#">All skills</a><a href="#">Trash</a></nav>
+  <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Find a skill…</div>
+</header>
+<main class="wrap">
+  <section>
+    <h1>Your agents</h1>
+    <p class="lede">Each AI tool on this computer and the skills it knows. Open one to see or change its skills.</p>
+    <div class="grid">
+      <article class="room">
+        <div class="rhead"><span class="logo" style="background:#d97757">CC</span><div><div class="rname">Claude Code</div><div class="rmeta">~/.claude/skills</div></div></div>
+        <span class="health warn">▲ 1 skill is out of date</span>
+        <div class="skl"><span>code-review</span><span>test-writer</span><span>api-design</span><span>sql-helper</span><span class="more">+11 more</span></div>
+        <div class="meter"><div class="ml"><span>Reading space used</span><b>24%</b></div><div class="track"><i style="width:24%;background:#d4880f"></i></div></div>
+      </article>
+      <article class="room">
+        <div class="rhead"><span class="logo" style="background:#2f6f5e">CX</span><div><div class="rname">Codex</div><div class="rmeta">~/.codex/skills</div></div></div>
+        <span class="health bad">✕ 1 skill can't be read</span>
+        <div class="skl"><span>explain-error</span><span>regex-builder</span><span>test-writer</span><span class="more">+6 more</span></div>
+        <div class="meter"><div class="ml"><span>Reading space used</span><b>3%</b></div><div class="track"><i style="width:3%;background:#2c5ae9"></i></div></div>
+      </article>
+      <article class="room">
+        <div class="rhead"><span class="logo" style="background:#1b1d22">CU</span><div><div class="rname">Cursor</div><div class="rmeta">~/.cursor/skills</div></div></div>
+        <span class="health ok">● All 7 skills working</span>
+        <div class="skl"><span>frontend-a11y</span><span>refactor-safely</span><span>regex-builder</span><span class="more">+4 more</span></div>
+        <div class="meter"><div class="ml"><span>Reading space used</span><b>5%</b></div><div class="track"><i style="width:5%;background:#2c5ae9"></i></div></div>
+      </article>
+      <article class="room">
+        <div class="rhead"><span class="logo" style="background:#3d7be0">GE</span><div><div class="rname">Gemini</div><div class="rmeta">~/.gemini/skills</div></div></div>
+        <span class="health ok">● All 6 skills working</span>
+        <div class="skl"><span>brand-voice</span><span>perf-profiler</span><span>explain-error</span><span class="more">+3 more</span></div>
+        <div class="meter"><div class="ml"><span>Reading space used</span><b>1%</b></div><div class="track"><i style="width:1.5%;background:#2c5ae9"></i></div></div>
+      </article>
+      <article class="room">
+        <div class="rhead"><span class="logo" style="background:#b04a7a">OC</span><div><div class="rname">OpenCode</div><div class="rmeta">~/.config/opencode/skills</div></div></div>
+        <span class="health ok">● All 4 skills working</span>
+        <div class="skl"><span>k8s-debug</span><span>test-writer</span><span>frontend-a11y</span><span class="more">+1 more</span></div>
+        <div class="meter"><div class="ml"><span>Reading space used</span><b>7%</b></div><div class="track"><i style="width:7%;background:#2c5ae9"></i></div></div>
+      </article>
+      <article class="room add">
+        <div><div class="plus"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div><b>Connect another agent</b>Point us at its skills folder</div>
+      </article>
+    </div>
+  </section>
+  <aside>
+    <div class="card">
+      <h2>Needs a look</h2><p class="sub">2 things, most important first</p>
+      <div class="item"><span class="dot bad">✕</span><div><b>Codex can't read sql-helper</b><p>The file is damaged, so Codex skips it.</p><button class="btn">Replace with working copy</button></div></div>
+      <div class="item"><span class="dot warn">▲</span><div><b>code-review is older in Codex</b><p>It may answer differently from your other agents.</p><button class="btn ghost">Compare and update</button></div></div>
+    </div>
+    <div class="card shared">
+      <h2>Shared by most agents</h2><p class="sub">Your most-used skills</p>
+      <div class="row" style="margin-top:10px;border-top:0">explain-error<span class="faces"><i style="background:#d97757">CC</i><i style="background:#2f6f5e">CX</i><i style="background:#1b1d22">CU</i><i style="background:#3d7be0">GE</i><i style="background:#b04a7a">OC</i></span></div>
+      <div class="row">test-writer<span class="faces"><i style="background:#d97757">CC</i><i style="background:#2f6f5e">CX</i><i style="background:#3d7be0">GE</i><i style="background:#b04a7a">OC</i></span></div>
+      <div class="row">code-review<span class="faces"><i style="background:#d97757">CC</i><i style="background:#2f6f5e">CX</i><i style="background:#1b1d22">CU</i></span></div>
+    </div>
+  </aside>
+</main>
+</body></html>
