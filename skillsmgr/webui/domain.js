@@ -56,9 +56,38 @@ function esc(s) {
   }[c]));
 }
 
+/* Intl formatters are expensive to construct (each one resolves locale data)
+ * and cheap to reuse. The Library renders a count per row, so building a new
+ * formatter per call constructed ~740 of them on every re-render of a
+ * 700-row list -- including re-renders caused by unrelated state such as a
+ * toast. A formatter is a pure function of (locale, options), so sharing one
+ * changes no output. Bounded so a stream of distinct options cannot grow it. */
+const FORMATTER_CACHE_LIMIT = 64;
+const numberFormatters = new Map();
+const dateFormatters = new Map();
+
+function cachedFormatter(cache, Ctor, locale, options) {
+  const key = (locale || "") + "|" + JSON.stringify(options || {});
+  let formatter = cache.get(key);
+  if (!formatter) {
+    formatter = new Ctor(locale || undefined, options);
+    if (cache.size >= FORMATTER_CACHE_LIMIT) cache.clear();
+    cache.set(key, formatter);
+  }
+  return formatter;
+}
+
+function numberFormatter(locale, options = {}) {
+  return cachedFormatter(numberFormatters, Intl.NumberFormat, locale, options);
+}
+
+function dateFormatter(locale, options = {}) {
+  return cachedFormatter(dateFormatters, Intl.DateTimeFormat, locale, options);
+}
+
 function localizedNumber(value, locale, options = {}) {
   try {
-    return new Intl.NumberFormat(locale || undefined, options).format(value);
+    return numberFormatter(locale, options).format(value);
   } catch (e) {
     return String(value);
   }
@@ -426,6 +455,8 @@ window.SkillManagerDomain = Object.freeze({
   formatTokens,
   tokenPctClass,
   tokenBarWidth,
+  numberFormatter,
+  dateFormatter,
   renderMarkdown,
   parseFrontmatter,
   formatCompat,

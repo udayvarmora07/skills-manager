@@ -7,6 +7,7 @@ shape instead of implementing duplicate/similarity rules independently.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import re
@@ -79,15 +80,37 @@ def normalize_instruction_body(body: str) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+# Per-report memo of resolved instance paths.  ``_identity`` is the sort key
+# of most orderings in this module, so one report resolved the same ~1,760
+# paths about 16,000 times (one ``realpath`` walk each, ~1.9 s of a 7 s
+# report).  The memo lives only for one ``hygiene_report`` call -- it is never
+# a cache across requests, so a symlink changed between two reports is seen by
+# the second one.  Outside a report (``None``) every call resolves afresh.
+_RESOLVED_IDENTITIES: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "hygiene_resolved_identities", default=None
+)
+
+
+def _resolve_identity(value) -> str:
+    try:
+        return str(Path(str(value)).expanduser().resolve())
+    except (OSError, RuntimeError, ValueError):
+        return _bounded(value)
+
+
 def _identity(record: dict) -> str:
     value = record.get("physical_path") or record.get("path")
     if not value and isinstance(record.get("provenance"), dict):
         value = record["provenance"].get("path")
     if value:
-        try:
-            return str(Path(str(value)).expanduser().resolve())
-        except (OSError, RuntimeError, ValueError):
-            return _bounded(value)
+        memo = _RESOLVED_IDENTITIES.get()
+        if memo is None:
+            return _resolve_identity(value)
+        key = str(value)
+        hit = memo.get(key)
+        if hit is None:
+            hit = memo[key] = _resolve_identity(value)
+        return hit
     scope = _bounded(record.get("scope", ""), 128)
     name = _bounded(record.get("name", ""), 128)
     return f"<missing-path>/{scope}/{name}"
@@ -816,6 +839,14 @@ def _summary(findings: list[dict], observed_records: int, physical_count: int, l
 
 def hygiene_report(records: list[dict], *, scope: str, max_instances: int = 10_000) -> dict:
     """Build a stable JSON-safe read-only hygiene report."""
+    token = _RESOLVED_IDENTITIES.set({})
+    try:
+        return _hygiene_report(records, scope=scope, max_instances=max_instances)
+    finally:
+        _RESOLVED_IDENTITIES.reset(token)
+
+
+def _hygiene_report(records: list[dict], *, scope: str, max_instances: int) -> dict:
     prepared, degraded = _prepare_records(records, max_instances)
     unavailable = _unavailable_signals()
     findings = _validation_findings(prepared)

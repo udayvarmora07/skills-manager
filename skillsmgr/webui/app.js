@@ -20,7 +20,7 @@ if (!SkillManagerDomain) {
 
 const {
   api, apiText, apiBlob,
-  formatBytes, formatTokens, tokenPctClass, tokenBarWidth,
+  formatBytes, formatTokens, tokenPctClass, tokenBarWidth, numberFormatter, dateFormatter,
   renderMarkdown, parseFrontmatter, formatCompat, formatTools,
   groupLogicalSkills, deriveLogicalSkillIdentity, observedIdentity,
   observeRecord, observedStateFor, observedStateKeys,
@@ -29,6 +29,9 @@ const {
 /* ------------------------------------------------------------------ app */
 
 const { createApp, nextTick } = Vue;
+// Row caches key on the raw record so a reactive proxy and its target hit the
+// same entry. Fallback keeps non-browser test harnesses working.
+const toRaw = typeof Vue.toRaw === "function" ? Vue.toRaw : (value) => value;
 
 createApp({
   data() {
@@ -153,6 +156,31 @@ createApp({
     },
     logicalSkills() { return groupLogicalSkills(this.filteredSkills, this.scopes); },
     visibleSkills() { return this.libraryMode === "instances" ? this.filteredSkills : this.logicalSkills; },
+
+    /* Per-row presentation derived once per list change, not once per render.
+     *
+     * The whole app is one component, so any reactive change -- a toast, a
+     * keystroke in a dialog -- re-renders the Library template. Each row used
+     * to re-group its identities (a Map, a sort, localeCompare) and rebuild
+     * its badge list on every such render: ~60-115 ms per unrelated update on
+     * a 716-row library. This computed is invalidated only by what the rows
+     * actually depend on (the visible rows, the mode, the scope labels), and
+     * the row methods below read through it with an uncached fallback, so
+     * their output is unchanged. */
+    libraryRowMeta() {
+      const meta = new Map();
+      for (const row of this.visibleSkills) {
+        meta.set(toRaw(row), {
+          groups: this.computeGroupedIdentities(row),
+          badges: this.computeRowBadgeItems(row),
+        });
+      }
+      return meta;
+    },
+
+    /* O(1) membership for row checkboxes; `Array.includes` per instance made
+     * "Select visible" on a 2,000-instance library quadratic per render. */
+    selectedKeySet() { return new Set(this.selectedKeys); },
 
     /* Every observation the Library rows render, read through the same seam the
      * badges use. The uniform checks below only decide whether a value is
@@ -737,7 +765,7 @@ createApp({
       const numeric = typeof value === "number" ? value : Number(value);
       if (!Number.isFinite(numeric)) return String(value);
       try {
-        return new Intl.NumberFormat(this.resolvedLocale || undefined, options).format(numeric);
+        return numberFormatter(this.resolvedLocale, options).format(numeric);
       } catch (e) {
         return String(value);
       }
@@ -749,7 +777,7 @@ createApp({
       if (Number.isNaN(date.getTime())) return String(value);
       const dateOptions = { dateStyle: "medium", timeStyle: "short", ...options };
       try {
-        return new Intl.DateTimeFormat(this.resolvedLocale || undefined, dateOptions).format(date);
+        return dateFormatter(this.resolvedLocale, dateOptions).format(date);
       } catch (e) {
         return String(value);
       }
@@ -797,7 +825,17 @@ createApp({
      * This is presentation only. It groups values the seam already returned
      * and asserts nothing the backend did not report.
      */
+    cachedRowMeta(item) {
+      const meta = item ? this.libraryRowMeta : null;
+      return meta && typeof meta.get === "function" ? meta.get(toRaw(item)) || null : null;
+    },
+
     groupedIdentities(item) {
+      const hit = this.cachedRowMeta(item);
+      return hit ? hit.groups : this.computeGroupedIdentities(item);
+    },
+
+    computeGroupedIdentities(item) {
       const items = this.identityItems(item);
       if (!items.length) return [];
       const groups = new Map();
@@ -840,7 +878,9 @@ createApp({
     },
 
     isSelected(record) {
-      return this.selectedKeys.includes(this.targetKey(record));
+      const keys = this.selectedKeySet;
+      const key = this.targetKey(record);
+      return keys instanceof Set ? keys.has(key) : this.selectedKeys.includes(key);
     },
 
     groupSelectionState(group) {
@@ -856,6 +896,11 @@ createApp({
     /* The row badge row is omitted entirely when it would be empty, so a list
      * without tags or multi-copy groups does not reserve a blank grid track. */
     rowBadgeItems(s) {
+      const hit = this.cachedRowMeta(s);
+      return hit ? hit.badges : this.computeRowBadgeItems(s);
+    },
+
+    computeRowBadgeItems(s) {
       if (!s) return [];
       if (this.libraryMode === "library") {
         const tags = this.groupTags(s);
@@ -1012,12 +1057,16 @@ createApp({
     },
 
     async loadInitialData() {
-      // The list is useful before secondary stats are ready. Keep the first
-      // paint independent while fetching each required source once.
-      await Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash()]);
-      await this.loadOverviewHistory();
-      await this.loadCatalog();
-      await this.loadStatsTokens();
+      // Every source is requested at once and each loader paints its own part
+      // as soon as it lands, so the list never waits on stats. The order used
+      // to be three awaited stages; scopes, skills and stats each walk the
+      // same merged snapshot, and requesting them together lets the server
+      // share one in-flight scan instead of running three (~4.1 s to a full
+      // Overview on a 2,000-instance library, now one scan's worth).
+      await Promise.all([
+        this.loadScopes(), this.loadSkills(), this.loadTrash(),
+        this.loadOverviewHistory(), this.loadCatalog(), this.loadStatsTokens(),
+      ]);
     },
 
     openInstallCenter() {
@@ -1368,7 +1417,10 @@ createApp({
       this.banner = null;
       try {
         const s = scopeAtCall;
-        const rows = await api("/api/skills?scope=" + encodeURIComponent(s));
+        // body=0: the list never renders a document body (the detail pane
+        // reads it from /api/skills/<name>), and bodies were ~83% of this
+        // response -- 18.9 of 22.7 MB on a 2,061-instance library.
+        const rows = await api("/api/skills?scope=" + encodeURIComponent(s) + "&body=0");
         if (mySeq !== this.listSeq || (this.activeScope || "all") !== scopeAtCall) return;
         this.skills = rows;
         this.allSkills = rows.slice();
@@ -1700,7 +1752,12 @@ createApp({
       this.selected = record;
       this.switchView("skills");
       this.$nextTick(() => {
-        this.selectSkill(record);
+        // `record` is a list row, which carries no document body (the list is
+        // requested with body=0). selectSkill() would treat the pre-assigned
+        // row as already loaded and skip the read, so load the detail here.
+        this.mobileReturnKey = (record.scope || "") + "/" + record.name;
+        this.mobileDetailOpen = true;
+        this.loadDetail(record.name, record.scope);
         if (finding && finding.category === "broken-reference") this.openValidate();
       });
     },
@@ -2211,6 +2268,12 @@ createApp({
     async openEdit() {
       if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
+      // Never seed the editor from a list row: list rows carry no body, and an
+      // editor opened on an empty body invites saving one.
+      if (this.selected && typeof this.selected.body !== "string") {
+        await this.loadDetail(this.selectedName, this.selected.scope);
+        if (!this.selected || !this.selectedName) return;
+      }
       this.modals.skill = {
         mode: this.selectedName,
         form: {

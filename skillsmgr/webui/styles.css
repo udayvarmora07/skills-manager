@@ -837,6 +837,13 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   min-width: 0;
   padding: 7px 14px;
   border-left-width: 3px;
+  /* A 700-row Library spent ~250 ms in layout and paint for rows far below
+     the fold. Off-screen rows now skip both until they scroll near the
+     viewport; `auto` remembers each row's last real height so the scrollbar
+     does not jump. Rows stay in the accessibility tree, in tab order, and
+     findable with Ctrl+F. Grid cards already do the same. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
 }
 .skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) .row-select { grid-column: 1; grid-row: 1; margin-top: 0; }
 .skilllist > li:not(.batchbar):not(.selection-hint):not(.skeleton):not(.empty) > .dot { grid-column: 2; grid-row: 1; }

@@ -573,6 +573,25 @@ def _int_param(qs: dict[str, list[str]], name: str, default: int, *, maximum: in
     return value
 
 
+def _body_param(qs: dict[str, list[str]]) -> bool:
+    """Return whether list rows keep their document ``body`` (default yes).
+
+    ``GET /api/skills?body=0`` is an opt-in for callers that render a list and
+    fetch the document separately -- the web UI's Library does exactly that.
+    On a 2,061-instance library the bodies were 18.9 MB of a 22.7 MB response,
+    every one of them discarded by the client.  The default stays ``body=1`` so
+    every existing client is unaffected.  Only ``0`` and ``1`` are accepted; any
+    other value is a clean 400 rather than a silent default (docs/24 §D3-8).
+    """
+    raw = qs.get("body", [None])[0]
+    if raw is None:
+        return True
+    text = raw.strip()
+    if text not in ("0", "1"):
+        raise StoreError(f"body must be 0 or 1, got {raw!r}")
+    return text == "1"
+
+
 def _window_param(qs: dict[str, list[str]], name: str = "window") -> str:
     """Return the requested context window, or raise a clean 400.
 
@@ -856,7 +875,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
         The header is set before the body so ``HEAD`` reports the size of the
         page a ``GET`` would have returned.
         """
+        include_body = _body_param(qs)
         page, total = _page_rows(rows, qs)
+        if not include_body:
+            # The rows are private to this request, so drop in place.
+            for row in page:
+                if isinstance(row, dict):
+                    row.pop("body", None)
         self._send_json(page, extra_headers={"X-Total-Count": str(total)})
 
     def _send_error(self, status: int, message: str, code: str | None = None) -> None:
@@ -1062,9 +1087,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
         share a shape and a purpose, not because they share code.
         """
         if parts == ["api", "scopes"]:
+            from .scopes import list_all as _list_all
             from .scopes import list_scopes as _list_scopes
 
-            self._send_json(_list_scopes())
+            # Summarize the one merged snapshot ``/api/skills?scope=all`` and
+            # ``/api/stats`` also read, instead of walking every root again.
+            # The UI requests all three at start-up, so concurrent requests now
+            # share one in-flight scan (``_coalesced_read``) instead of three.
+            self._send_json(_list_scopes(records=_list_all()))
             return True
         if parts == ["api", "catalog"]:
             from .catalog import load_catalog
@@ -1111,6 +1141,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         if parts != ["api", "skills"]:
             return False
+        _body_param(qs)  # reject a malformed ``body`` before scanning anything
         scope = (qs.get("scope", [""])[0] or "").strip()
         q = (qs.get("q", [""])[0] or "").strip()
         if scope == "all":

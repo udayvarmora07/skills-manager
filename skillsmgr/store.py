@@ -182,18 +182,26 @@ def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
     the returned dictionaries after the read completes.
 
     The copy handed to a *waiting* caller exists so two callers never share
-    objects.  The caller that ran the read is handed the same single copy it
-    published to the flight: copying its own freshly-built result a second time
-    on the way out was a full extra traversal of every row (docs/24 §D1), and
-    the read's result is already private to this flight.
+    objects.  The caller that ran the read keeps the object ``func()`` built:
+    that result is private to this flight, so copying it on the way out was a
+    full traversal of every row for nobody (docs/24 §D1).  When no caller
+    joined the flight -- the ordinary single-request case -- nothing is copied
+    at all.  When callers did join, one private snapshot is taken *before* the
+    owner can annotate its result, and each waiter copies from that snapshot,
+    so no two callers ever share a dictionary.
+
+    The waiter count is exact because joining and retiring a flight happen
+    under the same lock: once the owner pops the flight, nobody can join it.
+    At 2,000 rows the copy this removes was ~22% of ``scopes.list_all()``.
     """
     with flights_lock:
         flight = flights.get(key)
         if flight is None:
-            flight = {"event": threading.Event()}
+            flight = {"event": threading.Event(), "waiters": 0}
             flights[key] = flight
             owner = True
         else:
+            flight["waiters"] = flight.get("waiters", 0) + 1
             owner = False
     if owner:
         try:
@@ -210,10 +218,19 @@ def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
                 flight["event"].set()
             raise
         with flights_lock:
-            flight["result"] = result
             flights.pop(key, None)
+            waiters = flight.get("waiters", 0)
+        # The flight is retired, so the count cannot grow; the copy runs
+        # outside the shared lock so it never stalls an unrelated flight.
+        try:
+            if waiters:
+                flight["result"] = copy.deepcopy(result)
+        except BaseException as exc:
+            flight["error"] = exc
+            raise
+        finally:
             flight["event"].set()
-        return copy.deepcopy(result)
+        return result
     flight["event"].wait()
     if flight.get("error") is not None:
         raise flight["error"]
