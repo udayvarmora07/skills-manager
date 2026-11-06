@@ -6,7 +6,17 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Changed
 
-- **The web UI was redesigned.** The visual system is now specified in
+- **V2 is now the default web interface.** `/` and `/index.html` redirect to
+  `/v2/`, preserving queries and hash routes; classic remains at `/classic/`.
+  The selected v2 design now includes Install, Profiles, Templates, Quality,
+  Workspaces, Settings, exact-copy batch actions, logical tags, rich editing,
+  source updates/snapshots, scoped history and full-archive recovery. No build
+  step or new runtime dependency is required. New template reads are contained;
+  PATCH supports explicit optional-field/body clearing while preserving omitted
+  values. Folder review approval is bound to the selected files, and exact-copy
+  editing starts from that copy's description and scope.
+
+- **The classic web UI was redesigned.** The visual system is now specified in
   `DESIGN.md` at the repository root — tokens, their measured contrast ratios,
   and the reasoning — and enforced by `check_design_tokens.py`, which
   re-derives every ratio from the shipped stylesheet on each run. The palette

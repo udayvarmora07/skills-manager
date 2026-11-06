@@ -8,6 +8,74 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-06 — Redesign the v2 tool pages to the Home/Skills standard
+
+**[NOTE]** Continued the uncommitted Codex parity work in a separate worktree
+(the original checkout was not edited). A rendered review on an isolated
+fixture found the new tool pages read as stacked admin forms: dropdown-driven
+registry actions, a raw page-number field, comma-separated skill entry,
+undifferentiated finding rows, raw API slugs and ISO timestamps, colliding
+headings, and a Tools entry hidden below 1200px beside a duplicate search
+button. The tool-center template and `tools.css` were rewritten on v2's own
+components; data flow, review gates and API calls are unchanged (see the
+@docs/08-web-ui.md design rules). Profiles now pick observed skills from a
+filterable list and add absent names explicitly. Two suspected defects were
+checked and are not defects: the Skill page sidebar is sticky at viewport
+height (a full-page capture artifact), and categories come from
+`metadata.category`, so the test fixture was wrong, not the model.
+
+**[SPEC] Verified on this tree:** 1,386 unit tests (Python 3.12); v2 test
+modules on 3.11/3.13/3.14 (3.10 not installed locally); 34/34 v2 browser
+scenarios including all tool routes at 320/768/1280 in both themes; header fit
+measured at 14 widths from 320 to 1920 px; both smokes, docs and complexity
+gates. Browser assertions pinned to replaced labels were updated to the new
+labels, not removed. Classic browser suite and packaging were not re-run (no
+classic or packaged-path change beyond the shared CSS file selector).
+
+## 2026-11-06 — Complete v2 feature parity and promote the default
+
+**[NOTE]** The maintainer first approved clickable mockups, then explicitly
+requested production integration using the existing v2 design and default
+promotion after verification. Work is local on `feat/v2-feature-parity`.
+The [design inventory](superpowers/specs/2026-11-06-v2-feature-parity-design.md)
+records the source baseline; the
+[implementation plan](superpowers/plans/2026-11-06-v2-feature-parity.md)
+records acceptance evidence. The
+[earlier mockup](../prototype-v2-parity/README.md) remains an isolated design aid.
+
+V2 now contains the remaining classic workflows: registry/runner/folder install,
+profiles, templates, hygiene/validation/diagnostics, workspaces, preferences and
+index maintenance, exact-copy source update/whole-tree rollback, logical tags,
+reviewed batch operations, rich metadata editing, persistent scoped history and
+full archive recovery. `/` and `/index.html` redirect to `/v2/`, preserving
+query/hash; classic remains at `/classic/`. Existing v2 fonts, colours, document
+reader, daily navigation and dark theme remain the visual authority. Inspo's
+configured HTTPS MCP endpoint supplied recommendations/searches and three
+archived captures; it was not enabled globally. UI/UX Craft, Design Taste
+Frontend, Better Accessibility and Frontend UI Engineering informed the work.
+
+The backend additions are contained template reads and explicit PATCH optional
+field/body clears. Omission preserves values; empty descriptions are rejected.
+The shared field guard's complexity budget tightened from 7 to 6. No public
+Store method, application CLI command, schema or runtime dependency changed.
+Luna/Terra reviews found races and copy-identity problems; fixes bind folder
+approval to File identities, use the selected copy's description/scope, send
+only changed editor fields and isolate independent read results. Behavioral
+and real-HTTP regressions cover these cases. The final narrow Terra review
+reported no unresolved defects in those fixes.
+
+All write checks use temporary HOME/data roots. The classic browser suite
+passed 38 scenarios / 318 assertions; the expanded v2 suite passed 34 scenarios,
+including real template/profile operations, retry and 320/768/1280 layouts in
+both themes. The six-viewport classic smoke harness also passed after moving
+its probes to `/classic/`. The final current-tree suite passed 1,386 tests on Python 3.12; both smokes,
+syntax/compilation, docs, design tokens, complexity, Ruff and the medium/high
+Bandit scan passed. The final v2 browser repeat again passed all 34 scenarios. Packaging with the pinned hash-checked
+toolchain includes all three new v2 assets in wheel and sdist. Live registry
+fetch/commit, actual external runner execution and human screen-reader sign-off
+are not claimed. Agent-scope trash has no in-app restore, and the interface
+states that limit. No personal skills were changed; no commit or push was made.
+
 ## 2026-11-06 — Integrate the verified performance work into main
 
 **[NOTE]** The maintainer authorized main integration after the performance

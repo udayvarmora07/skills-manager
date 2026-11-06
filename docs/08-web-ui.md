@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.11.0**
+**Version 0.12.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -14,7 +14,8 @@
 ## Architecture
 
 **[NOTE] 2026-11-06 combined continuation.** `/v2/` retains the selected
-cream/serif/terracotta interface; `/` remains classic. Skill detail exposes
+cream/serif/terracotta interface. The default `/` now redirects to `/v2/`;
+classic is available at `/classic/`. Skill detail exposes
 partial native-settings declarations from existing `native_state` records.
 These are read-only evidence, not effective loading or filesystem toggle state.
 File switches rename documents and do not edit native settings. Unreadable-byte
@@ -360,6 +361,7 @@ than reporting a false rollback.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/templates` | `{templates: [names]}` |
+| GET | `/api/templates/<name>` | `{name, body}` for a canonical stored template; read-only, UTF-8, confined to the manager data root, regular files only. Missing is 404; unsafe names, linked templates, unreadable or corrupt text are clean errors. |
 | POST | `/api/templates` | body `{name, body?}` → created path (201) |
 
 ### Import / export
@@ -428,27 +430,68 @@ pins the contract). What a client must know:
   security headers — do not use them as a reachability probe; use `HEAD` (which
   mirrors `GET`, headers only) or `/api/stats`.
 
-## v2 interface (`/v2/`, prototype-final design)
+## Default v2 interface (`/v2/`)
 
-**[SPEC]** `skillsmgr/webui/v2/` is a second presentation of the same backend,
-served at `http://127.0.0.1:<port>/v2/`. It implements the maintainer-selected
-`prototype-final` design on real data: **Home** (one card per agent with health,
-skills and a full-text reading-window meter), **Skills** (a shelf grouped by
-category when skills carry categories, otherwise A–Z, with All / Needs care /
-Turned off and per-agent filters), the **Skill page** (escaped document, margin
-notes, per-agent on/off switches, folder locations, edit with Write/Preview and
-"save to" targets), the **Sync map**, the **Inbox** (one problem at a time with
-a side-by-side diff), **Recovery** (global trash restore/empty, backup download,
-archive import), **New skill**, a measured warm dark theme that shares the
-classic `skillsmgr-theme` preference, and a `?` shortcut list. Install, Profiles,
-Quality, Workspaces and Settings stay in the classic interface, linked as
-"All tools & settings". The classic interface at `/` is unchanged.
+**[SPEC]** `/` and `/index.html` redirect locally to `/v2/`, preserving query
+parameters and browser fragments. Bare `/v2` and `/classic` canonicalize to
+trailing-slash paths. The classic interface and its original assets remain
+available under `/classic/`. The server still binds to loopback by default;
+the localhost binding is the only security boundary for this unauthenticated
+service. Never forward, tunnel or publish its port.
 
-- **No new surface.** It calls only existing routes (`/api/scopes`, `/api/skills`,
-  `/api/history`, `/api/sync`, `/api/trash`, `/api/import`, `/api/export`). The
-  static handler serves files under `webui/v2/`. Bare `/v2` returns a local
-  308 redirect to `/v2/`, preserving query parameters and the browser's hash
-  route, so relative asset URLs load the v2 app correctly.
+The maintainer-selected v2 uses warm paper, Jakarta UI text, Newsreader headings
+and the existing measured dark palette. Its primary navigation is **Home**,
+**Skills**, **Sync map**, **Inbox**, **Recovery**, **Tools**. Home, the document
+reader, copy comparison and the Inbox retain their established compositions.
+Tools provides secondary navigation and contextual links from exact instances.
+
+**[SPEC] Tools pages share one composition (2026-11-06 design pass).** Tools is a
+real primary tab at every width (the former floating "Tools & settings" link was
+hidden below 1200px and is gone, as is the header's second search button; the
+command palette stays on Ctrl/Cmd K). The index groups destinations and drops the
+side navigation; each tool page keeps it. Only the page title is serif; section
+titles use the Home side-card voice. Settings-like forms are label-left /
+control-right rows; Profiles and Templates are list + detail panes; Quality is a
+severity filter that doubles as the count summary over one findings list, with
+Doctor, validation and context use as three diagnostic cards; Update from folder
+is a numbered three-step flow. Status is always a worded pill, API slugs pass
+through a humanizer (`outside-managed-roots` -> "Outside managed roots"), dates
+use the regional-format preference, and raw JSON lives only behind a disclosure.
+Styles are in `webui/v2/tools.css` and use only declared v2 tokens.
+
+| Area | Integrated workflows |
+|---|---|
+| Skills | Shelf or exact Instances view, agent/state/tag filters, logical tags and profiles, bounded exact-copy selection, reviewed batch enable/disable/sync/trash, rich create/edit metadata and stored-template creation |
+| Install | Registry inventory, browse/search/curated/fetch, stale-cache choice, reviewed artifact and explicit trust; package-runner preview/copy/run; local folder filename/text review and explicit destination approval |
+| Profiles | Metadata CRUD, observed/missing/divergent membership, enable-only exact-target plan; absent members are not installed and contents are not reconciled |
+| Templates | List/read/create/preview/use stored templates, built-in fallback, create with structured metadata |
+| Quality | Hygiene search/severity/evidence, exact-instance links, manual name/scope validation, Doctor and token statistics with unavailable/degraded states |
+| Workspaces | Project containment observations and consumer adapter explanations; effective loading remains unresolved |
+| Settings | Shared theme, text-size and regional-format preferences, OS preference observations, explicit index rebuild/resync |
+| Source update | Exact-instance candidate review, per-file comparison, validation/risk evidence, apply/cancel, retained whole-tree snapshots and reviewed rollback |
+| Recovery | Global trash restore/empty, explicit permanent per-copy removal, skill/full archive modes, import outcomes, persistent scoped history and older text-snapshot rollback |
+
+**[SPEC] Operation identity.** Batch previews freeze target identities/options,
+not source bytes; per-target failures remain visible. Exact-instance editing
+starts from that copy's description/body/metadata and selects its scope. PATCH
+omission preserves a field; an explicit empty optional field/body clears it.
+Empty descriptions are rejected. Folder import approval is bound to the selected
+File objects; changing selection invalidates pending/completed review. Text
+previews are bounded to 20 skill documents of at most 512 KiB each, with
+unpreviewed companion files disclosed. Source reviews are cancelled on target
+changes or route departure. Registry fetch/commit installs into the global
+store only. Agent-scope trash still has no in-app restore. Full archives cover
+manager data, not every external agent directory.
+
+**[NOTE] Frontend modules.** `v2/app.js` owns shell/routing and ordinary skill
+flows; `v2/model.js` owns derived state and safe document rendering;
+`v2/library-tools.js` owns exact-copy selection and reviewed batch work;
+`v2/tool-center.js` owns secondary tools; `v2/tools.css` extends existing v2
+tokens. Scripts use vendored Vue without a build step or new runtime dependency.
+The API is shared with classic; the contained `GET /api/templates/<name>` read
+supports stored-template previews. The searchable action launcher is available
+with Ctrl/Cmd K and from the desktop header.
+
 - **Honesty rules** (`v2/model.js`): there is no version order, so a skill whose
   copies differ is "Copies differ" and the reference copy is the content most
   copies hold; a tie is reported as ambiguous and the Inbox asks which copy to
@@ -473,7 +516,7 @@ Quality, Workspaces and Settings stay in the classic interface, linked as
   contrast (text ≥ 4.5:1, control boundary ≥ 3:1), assets present, and served
   routes including traversal refusal.
 
-## Frontend map (app.js)
+## Classic frontend map (`/classic/`, app.js)
 
 ### Overview-first shell
 

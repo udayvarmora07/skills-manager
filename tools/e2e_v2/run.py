@@ -78,7 +78,7 @@ def main():
                     with urllib.request.urlopen(env['BROWSER_TEST_BASE']+'/v2/', timeout=.25): break
                 except OSError: time.sleep(.1)
             else: raise RuntimeError('Server did not start; inspect server.log')
-            result = subprocess.run([node, str(Path(__file__).with_name('browser.cjs'))], cwd=REPO, env=env, timeout=240)
+            result = subprocess.run([node, str(Path(__file__).with_name('browser.cjs'))], cwd=REPO, env=env, timeout=360)
             return result.returncode
         finally:
             server.terminate()

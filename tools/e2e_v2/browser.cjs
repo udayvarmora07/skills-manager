@@ -16,9 +16,10 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
   const page = await context.newPage(); page.setDefaultTimeout(5000);
   page.on('pageerror', e => exceptions.push(e.message));
   let navigation = 0;
-  async function go(route) { await page.goto(base+'/v2/?fixture-step='+(++navigation)+'#/'+route); await page.locator('main').waitFor(); await page.waitForLoadState('networkidle'); if (route.startsWith('skill/')) await page.locator('.use').first().waitFor(); await page.waitForTimeout(200); }
+  async function go(route) { await page.goto(base+'/?fixture-step='+(++navigation)+'#/'+route); await page.locator('main').waitFor(); await page.waitForLoadState('networkidle'); if (route.startsWith('skill/')) await page.locator('.use').first().waitFor(); await page.waitForTimeout(200); }
   async function theme(t) { for (let i=0;i<3 && await page.locator('html').getAttribute('data-theme')!==t;i++) await page.locator('.themebtn').first().click(); assert.equal(await page.locator('html').getAttribute('data-theme'),t); }
   const file=(scope,name='same-everywhere')=>path.join(home,scope,'skills',name,'SKILL.md');
+  await test('Default entry preserves query and hash and opens v2',async()=>{await page.goto(base+'/?window=claude#/skills');await page.waitForLoadState('networkidle');assert.equal(page.url(),base+'/v2/?window=claude#/skills');assert(await page.locator('.sk').count()>0);});
   await test('Slashless v2 entry keeps query and hash and loads its own app', async () => {
     await page.goto(base + '/v2?window=claude#/skills');
     await page.locator('.shelf').first().waitFor();
@@ -38,8 +39,8 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
   await test('Native setting evidence is partial and file switch Undo preserves files',async()=>{await go('skill/same-everywhere');await page.locator('.native-settings summary').click();let t=await page.locator('.native-settings').innerText();assert.match(t,/partial/i);assert.match(t,/loading is unknown/i);assert.match(t,/Declared setting: off/);assert.match(t,/Declared setting: deny/);const f=file('.codex');await page.locator('.use').filter({hasText:'Codex'}).locator('label.switch').click();await page.waitForTimeout(500);assert(fs.existsSync(f+'.disabled'));await page.locator('.toast button').filter({hasText:'Undo'}).last().click();await page.waitForTimeout(600);assert(fs.existsSync(f));assert(!fs.existsSync(f+'.disabled'));});
   await test('Native invalid and unavailable settings render without exposing values',async()=>{let config=path.join(home,'.config/opencode/opencode.json'),saved=fs.readFileSync(config),claude=path.join(home,'.claude/settings.json'),oldClaude=fs.readFileSync(claude);fs.writeFileSync(config,'{"private":"fixture-secret",');fs.writeFileSync(claude,JSON.stringify({skillOverrides:{'majority-minor':'invalid-fixture-value'}}));try{await go('skill/majority-minor');await page.locator('.native-settings summary').click();let t=await page.locator('.native-settings').innerText();assert.match(t,/invalid/);assert.match(t,/unavailable/);assert.doesNotMatch(t,/fixture-secret|invalid-fixture-value/);}finally{fs.writeFileSync(config,saved);fs.writeFileSync(claude,oldClaude);}});
   await test('Discard navigation, dialog focus trap and cancellation',async()=>{await go('skill/same-everywhere');await page.locator('.acts button').filter({hasText:'Edit'}).click();assert(await page.locator('#ed-desc').evaluate(e=>e===document.activeElement));await page.locator('.ed-area').fill('Unsaved browser fixture');await page.locator('.tabs a').filter({hasText:'Home'}).click();await page.locator('.dlg').waitFor();for(let i=0;i<10;i++){await page.keyboard.press('Tab');assert(await page.evaluate(()=>document.querySelector('.dlg').contains(document.activeElement)));}await page.getByRole('button',{name:'Keep editing'}).click();assert(await page.locator('.ed-area').isVisible());await page.locator('.tabs a').filter({hasText:'Home'}).click();await page.getByRole('button',{name:'Discard changes'}).click();await page.waitForTimeout(300);assert(page.url().endsWith('#/home'));});
-  await test('Global Recovery restores a trashed fixture',async()=>{await go('skill/library-fixture');await page.locator('.btn-danger').click();assert.equal(await page.locator('.pick input:checked').count(),1);await page.locator('.dlg-f .btn-danger').click();await page.waitForTimeout(700);let f=path.join(root,'data/skills-manager/skills/library-fixture/SKILL.md');assert(!fs.existsSync(f));await go('recovery');assert.match(await page.locator('.rec-list').innerText(),/last changed/);await page.locator('.rec-list button').filter({hasText:'Restore'}).click();await page.waitForTimeout(700);assert(fs.existsSync(f));});
-  await test('Classic disable and enable send bodyless POST requests',async()=>{await page.goto(base+'/');await page.waitForTimeout(700);await page.getByRole('button',{name:'Library',exact:true}).first().click();await page.waitForTimeout(400);await page.locator('[data-skill-key$="/library-fixture"]').click();await page.waitForTimeout(400);let requests=[];page.on('request', req=>{if(req.method()==='POST'&&/\/api\/skills\/library-fixture\/(disable|enable)/.test(req.url())) requests.push({url:req.url(),body:req.postData()});});await page.getByRole('button',{name:'Disable',exact:true}).click();await page.waitForTimeout(600);await page.getByRole('button',{name:'Enable',exact:true}).click();await page.waitForTimeout(600);assert.equal(requests.length,2);assert(requests.every(r=>!r.body));let f=path.join(root,'data/skills-manager/skills/library-fixture/SKILL.md');assert(fs.existsSync(f));});
+  await test('Global Recovery restores a trashed fixture',async()=>{await go('skill/library-fixture');await page.getByRole('button',{name:'Move to trash',exact:true}).click();assert.equal(await page.locator('.pick input:checked').count(),1);await page.locator('.dlg-f .btn-danger').click();await page.waitForTimeout(700);let f=path.join(root,'data/skills-manager/skills/library-fixture/SKILL.md');assert(!fs.existsSync(f));await go('recovery');assert.match(await page.locator('.rec-list').innerText(),/last changed/);await page.locator('.rec-list button').filter({hasText:'Restore'}).click();await page.waitForTimeout(700);assert(fs.existsSync(f));});
+  await test('Classic disable and enable send bodyless POST requests',async()=>{await page.goto(base+'/classic/');await page.waitForTimeout(700);await page.getByRole('button',{name:'Library',exact:true}).first().click();await page.waitForTimeout(400);await page.locator('[data-skill-key$="/library-fixture"]').click();await page.waitForTimeout(400);let requests=[];page.on('request', req=>{if(req.method()==='POST'&&/\/api\/skills\/library-fixture\/(disable|enable)/.test(req.url())) requests.push({url:req.url(),body:req.postData()});});await page.getByRole('button',{name:'Disable',exact:true}).click();await page.waitForTimeout(600);await page.getByRole('button',{name:'Enable',exact:true}).click();await page.waitForTimeout(600);assert.equal(requests.length,2);assert(requests.every(r=>!r.body));let f=path.join(root,'data/skills-manager/skills/library-fixture/SKILL.md');assert(fs.existsSync(f));});
   for (const [name,sourceDisabled,targetDisabled] of [['target-disabled',false,true],['source-disabled',true,false]]) {
     await test(`Sync Undo restores ${name} bytes and disabled state`,async()=>{
       await go('inbox');let focus=await page.locator('#focus-t').innerText();if(!focus.includes(name))await page.locator('.qi').filter({hasText:name}).click();
@@ -127,7 +128,7 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
     await go('map');assert.equal(Number((await page.locator('.hub .num').innerText()).replace(/,/g,'')),total);
     assert.doesNotMatch(await page.locator('main').innerText(),/1 copy differ(?!s)/);
     await page.setViewportSize({width:1280,height:900});
-    const box=await page.locator('.top .classic').boundingBox();assert(box.height>=24);assert(box.width>=24);
+    const box=await page.locator('.top .tabs a[href="#/tools"]').boundingBox();assert(box.height>=24);assert(box.width>=24);
   });
   await test('Responsive layouts in both themes',async()=>{for(const [label,w,h] of [['desktop',1280,900],['phone',390,844]])for(const t of ['light','dark']){await page.setViewportSize({width:w,height:h});await go('home');await theme(t);for(const r of ['home','skills','skill/same-everywhere','map','inbox','recovery']){await go(r);assert.equal(await page.locator('html').getAttribute('data-theme'),t);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1),false,`${label} ${t} ${r}`);await page.screenshot({path:path.join(root,`${label}-${t}-${r.replace('/','-')}.png`)});}}});
   await test('Phone dark Sync map sampled text contrast',async()=>{
@@ -179,6 +180,64 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
     }
     fs.writeFileSync(path.join(root,'browser-zoom.json'),JSON.stringify(samples,null,2)+'\n');
     execFileSync('xdotool',['key','--clearmodifiers','ctrl+0']);
+  });
+  await test('V2 Templates creates a real stored template and a skill with metadata',async()=>{
+    await go('tools/templates');
+    const form=page.locator('form').filter({has:page.getByRole('heading',{name:'New template',exact:true})});
+    await form.getByLabel('Name',{exact:true}).fill('v2-browser-template');
+    await form.getByLabel('Document body',{exact:true}).fill('# Browser template\n\nUse this fixture for checks.');
+    await form.getByRole('button',{name:'Save template',exact:true}).click();
+    await page.getByRole('button',{name:'v2-browser-template',exact:true}).click();
+    await page.getByRole('button',{name:'Use template',exact:true}).click();
+    const create=page.locator('form').filter({has:page.getByRole('heading',{name:'Create skill from template',exact:true})});
+    await create.getByLabel('Name',{exact:true}).fill('v2-browser-created');
+    await create.getByLabel('Description',{exact:true}).fill('Use when running v2 browser verification.');
+    await create.getByLabel('Category',{exact:true}).fill('quality');
+    await create.getByRole('button',{name:'Create skill',exact:true}).click();
+    await page.waitForResponse(r=>r.url().includes('/api/skills?scope=all')).catch(()=>{});
+    const doc=path.join(root,'data/skills-manager/skills/v2-browser-created/SKILL.md');
+    assert(fs.existsSync(doc));assert.match(fs.readFileSync(doc,'utf8'),/Browser template/);assert.match(fs.readFileSync(doc,'utf8'),/category: quality/);
+  });
+  await test('V2 Profiles stores metadata and executes an exact enable-only plan',async()=>{
+    await go('tools/profiles');const form=page.locator('form').filter({has:page.getByRole('heading',{name:'Profile details',exact:true})});
+    await form.getByLabel('Name',{exact:true}).fill('v2-browser-profile');
+    await form.getByLabel('Description',{exact:true}).fill('Browser fixture profile.');
+    await form.getByLabel('Filter skills',{exact:true}).fill('v2-browser-created');await form.locator('.tp-pick-list label').filter({hasText:'v2-browser-created'}).locator('input').check();
+    await form.getByPlaceholder('Add a name not installed yet').fill('absent-member');await form.getByRole('button',{name:'Add',exact:true}).click();
+    await form.getByRole('button',{name:'Save profile',exact:true}).click();
+    const row=page.locator('.v2-tool-row').filter({has:page.locator('strong').filter({hasText:'v2-browser-profile'})});
+    await row.getByRole('button',{name:'Preview',exact:true}).click();
+    await page.getByText('absent-member',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Review enable-only plan',exact:true}).click();
+    const response=page.waitForResponse(r=>r.url().endsWith('/api/batch/execute'));
+    await page.getByRole('button',{name:'Execute reviewed plan',exact:true}).click();
+    assert.equal((await response).status(),200);
+    assert(fs.existsSync(path.join(root,'data/skills-manager/skills/v2-browser-created/SKILL.md')));
+  });
+  await test('V2 Workspace evidence and settings persist through navigation',async()=>{
+    await go('tools/workspaces');await page.getByLabel('Project path',{exact:true}).fill(root);await page.getByRole('button',{name:'Inspect project',exact:true}).click();
+    await page.getByText(/Status: Outside managed roots/).waitFor();
+    await go('tools/settings');await page.getByLabel('Theme',{exact:true}).selectOption('dark');
+    await page.getByLabel('Text size',{exact:true}).selectOption('large');await page.getByLabel('Regional format',{exact:true}).selectOption('en-IN');
+    assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');assert.match(await page.locator('main').innerText(),/12,34,567.89/);
+    await go('tools/settings');assert.equal(await page.getByLabel('Regional format',{exact:true}).inputValue(),'en-IN');
+    await page.getByLabel('Text size',{exact:true}).selectOption('standard');await page.getByLabel('Theme',{exact:true}).selectOption('light');
+    await page.keyboard.press('Control+k');await page.locator('#command-q').fill('templates');await page.locator('.command-list').getByRole('button',{name:'Templates',exact:true}).click();await page.getByRole('heading',{name:'Templates',exact:true}).waitFor();
+  });
+  await test('V2 tool read failure stays visible and a retry recovers',async()=>{
+    await page.route('**/api/catalog',r=>r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Fixture catalog unavailable'})}));
+    try{await go('tools/profiles');await page.getByRole('alert').filter({hasText:'Fixture catalog unavailable'}).waitFor();assert(await page.getByRole('button',{name:'Retry profiles',exact:true}).isVisible());}
+    finally{await page.unroute('**/api/catalog');}
+    await page.getByRole('button',{name:'Retry profiles',exact:true}).click();await page.getByText('v2-browser-profile',{exact:true}).waitFor();
+  });
+  await test('All v2 tool routes fit desktop and small phone in both themes',async()=>{
+    for(const width of [320,768,1280])for(const mode of ['light','dark']){
+      await page.setViewportSize({width,height:900});await go('tools/settings');await page.getByLabel('Theme',{exact:true}).selectOption(mode);
+      for(const route of ['tools','tools/install','tools/profiles','tools/templates','tools/quality','tools/workspaces','tools/settings','tools/source-update','skills','recovery']){
+        await go(route);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${route} ${width} ${mode}`);
+      }
+    }
+    await page.setViewportSize({width:1280,height:900});await go('tools');await page.screenshot({path:path.join(root,'final-tools-desktop.png')});
   });
   await test('No uncaught page errors',async()=>assert.deepEqual(exceptions,[]));
   record('Coverage limit','NOTE','No screen-reader validation; real browser zoom is checked only in isolated headed mode. CSS magnification is not browser zoom. Screenshots and overflow checks do not constitute a complete accessibility audit.');

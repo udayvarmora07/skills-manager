@@ -4,6 +4,41 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## V2 feature parity and default interface (2026-11-06)
+
+- [x] Audit classic and v2; create the [source-backed design and inventory](docs/superpowers/specs/2026-11-06-v2-feature-parity-design.md).
+- [x] Use UI/UX Craft, Design Taste Frontend, Better Accessibility and Frontend
+  UI Engineering; inspect three archived Inspo captures. Preserve v2's existing
+  warm-paper/serif design. Luna/Terra provided scoped implementation and review.
+- [x] Build the approved [demo-only mockups](prototype-v2-parity/README.md), then
+  follow the user's expanded instruction to integrate production workflows.
+- [x] Integrate Install, Profiles, Templates, Quality, Workspaces, Settings,
+  source updates/snapshots, scoped history, full-archive modes, exact-instance
+  batch actions, logical tags and rich create/edit into v2.
+- [x] Add contained stored-template reads and explicit PATCH field clearing;
+  preserve unknown/omitted metadata on ordinary edits. No schema, public Store
+  API, application CLI or runtime dependency change.
+- [x] Promote `/` and `/index.html` to `/v2/`; retain `/classic/` and query/hash
+  behavior. Update classic browser harnesses for the explicit compatibility URL.
+- [x] Fix review-discovered stale folder approval, mixed-copy description,
+  omitted-metadata overwrite and independent read-state races; add regressions.
+- [x] Verify real API/filesystem flows in private HOME/data fixtures, both
+  themes, phone/tablet/desktop, keyboard dialogs and retry/error states.
+- [x] Finish the final current-tree ladder: 1,386 unittest cases on Python 3.12,
+  34 v2 browser scenarios, 38 classic scenarios / 318 assertions, both smokes,
+  viewport harness, static/security/design/docs gates and pinned packaging.
+  Evidence is in the [implementation plan](docs/superpowers/plans/2026-11-06-v2-feature-parity.md).
+- [x] Design pass on the tool pages: Tools becomes a primary tab, duplicate
+  header search removed, every tool page rebuilt on v2 components with worded
+  status and humanized values; 34/34 v2 browser scenarios and 1,386 tests pass.
+- [ ] Human visual sign-off of the redesigned tool pages; commit/integrate the
+  combined parity + design work (still uncommitted).
+
+Agent-scope in-app trash restore remains outside existing backend capability.
+Live registry fetch/commit and actual external runner execution are not exercised
+by this task's browser checks. Human screen-reader and spoken usability sign-off
+remain unclaimed. Changes are local on `feat/v2-feature-parity`; no commit/push.
+
 ## Performance and UX session completion (2026-11-06)
 
 Prepared on `claude/project-perf-ux-review-4da40d`; the maintainer subsequently

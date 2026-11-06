@@ -523,7 +523,7 @@ def run() -> int:
         try:
             results = [
                 _run_probe(
-                    server.url,
+                    server.url + "classic/",
                     width,
                     height,
                     port,
@@ -532,7 +532,7 @@ def run() -> int:
                 for width, height in VIEWPORTS
             ]
             scenario_results = {
-                scenario: _run_probe(server.url, 1280, 900, port, scenario=scenario)
+                scenario: _run_probe(server.url + "classic/", 1280, 900, port, scenario=scenario)
                 for scenario in ("scope-failure", "inventory-failure", "unavailable-root")
             }
 
@@ -551,7 +551,7 @@ def run() -> int:
             empty_thread.start()
             try:
                 scenario_results["empty"] = _run_probe(
-                    empty_server.url, 1280, 900, port, scenario="empty"
+                    empty_server.url + "classic/", 1280, 900, port, scenario="empty"
                 )
             finally:
                 empty_server.shutdown()

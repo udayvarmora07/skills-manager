@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tools · Skills Manager preview</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+<script defer src="../skillsmgr/webui/static/vendor/vue.global.prod.js">
+</script>
+<script defer src="../skillsmgr/webui/domain.js"></script>
+<script defer src="../skillsmgr/webui/v2/model.js"></script>
+<script defer src="app.js">
+</script>
+</head>
+<body>
+<div id="app" v-cloak :data-theme="theme" :class="{large:textSize==='large'}">
+<a class="skip" href="#main">Skip to content</a>
+<div class="preview">Design preview <span>·</span> sample data <span>·</span> no files changed</div>
+<header>
+<a class="brand" href="#/home">
+<span class="mark">SM</span> Skills Manager</a>
+<button class="mobile-toggle" @click="mobileMenu=!mobileMenu" :aria-expanded="mobileMenu" aria-controls="primary-nav">Menu</button>
+<nav id="primary-nav" class="mainnav" :class="{expanded:mobileMenu}" aria-label="Main navigation">
+<a v-for="n in mainNav" :href="'#/'+n[0]" @click.prevent="go(n[0])" :aria-current="page===n[0]?'page':null">{{n[1]}}</a>
+</nav>
+<button class="command-button" @click="openCommands" aria-label="Find tools and actions">Find a tool <kbd>Ctrl K</kbd></button>
+<a class="tools-link" href="#/tools" :aria-current="isTool?'page':null">Tools <span aria-hidden="true">↗</span>
+</a>
+</header>
+<main id="main" tabindex="-1">
+<div class="layout" :class="{wide: !isTool || page==='tools'}">
+<aside v-if="isTool && page!=='tools'" class="side">
+<a href="#/tools" class="back">← All tools</a>
+<p class="eyebrow">TOOLS</p>
+<nav aria-label="Tools">
+<a v-for="n in toolNav" :href="'#/tools/'+n[0]" :aria-current="page===n[0]?'page':null">{{n[1]}}</a>
+</nav>
+</aside>
+<div class="content">
+<div v-if="result" class="result" role="status">
+<span>
+<b>Sample result</b> · {{result}}</span>
+<button @click="result=''; resultRows=[]" aria-label="Dismiss result">×</button>
+</div>
+<div v-if="resultRows.length" class="panel outcome-list"><div v-for="r in resultRows" class="row"><b>{{r.name}}</b><span>{{r.state}}</span></div></div>
+<template v-if="page==='tools'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Tools</p>
+<h1 tabindex="-1">Tools & settings</h1>
+<p class="lede">Install skills, organize a working set, inspect your files, and recover past changes.</p>
+</div>
+</div>
+<div class="hub">
+<div>
+<section v-for="group in groups" class="directory">
+<div>
+<h2>{{group.title}}</h2>
+<p>{{group.note}}</p>
+</div>
+<div>
+<a v-for="item in group.items" :href="item.href" class="task">
+<span>
+<b>{{item.name}}</b>
+<small>{{item.desc}}</small>
+</span>
+<span aria-hidden="true">↗</span>
+</a>
+</div>
+</section>
+</div>
+<aside class="hubside">
+<p class="eyebrow">Scope</p>
+<h2>Know what changes</h2>
+<dl class="scope-guide"><dt>Skill files</dt><dd>Install, update, enable, remove and restore.</dd><dt>Library metadata</dt><dd>Tags and profiles. Templates are stored separately.</dd><dt>Read-only evidence</dt><dd>Quality reports and workspace discovery.</dd></dl>
+<a href="#/tools/install" class="button dark">Explore installation <span>→</span>
+</a>
+<div class="recent">
+<p class="eyebrow">RECENT TOOL TASKS <span>· SAMPLE</span>
+</p>
+<p>
+<b>Frontend review</b>
+<small>Profile reviewed · today</small>
+</p>
+<p>
+<b>code-review</b>
+<small>Registry source inspected · yesterday</small>
+</p>
+<p>
+<b>Index resynced</b>
+<small>Global library · 3 days ago</small>
+</p>
+</div>
+</aside>
+</div>
+</template>
+<template v-else-if="page==='install'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Tools / Add & organize</p>
+<h1 tabindex="-1">Install a skill</h1>
+<p class="lede">Choose a source, then review exactly what would be added.</p>
+</div>
+<label class="state">Preview state <select v-model="installState">
+<option>Ready</option>
+<option>Loading</option>
+<option>Offline</option>
+<option>Blocked</option>
+<option>Expired</option>
+</select>
+</label>
+</div>
+<div class="segments" role="group" aria-label="Install method">
+<button v-for="t in ['Registry','Local folder','CLI runner']" :aria-pressed="installTab===t" @click="installTab=t">{{t}}</button>
+</div>
+<label class="destination" v-if="installTab!=='CLI runner'">Install into<select v-model="installTarget"><option>Codex</option><option>Claude Code</option><option>Global library</option></select></label>
+<div v-if="installTab==='Registry'" class="split">
+<section>
+<div class="sectionhead">
+<div>
+<h2>Browse registry</h2>
+<p>Sample results from a community source.</p>
+</div>
+</div>
+<label class="fieldlabel">Search registry<input v-model="registryQuery" type="search" placeholder="Search by name or purpose">
+</label>
+<div class="actions registry-controls"><label>Browse<select v-model="registryMode"><option>Search</option><option>Leaderboard</option><option>Curated</option></select></label><label><input type="checkbox" v-model="allowCached"> Allow stale cached results</label></div><p class="hint" v-if="allowCached">Cached sample results may be out of date. Installation still requires artifact review.</p>
+<div v-if="installState==='Loading'" class="notice">Loading sample registry results…</div>
+<div v-else-if="installState==='Offline'" class="notice error">Registry unavailable. Check the connection and try again. <button @click="installState='Ready'">Retry</button>
+</div>
+<div v-else class="list">
+<div v-for="s in filteredRegistry" class="row">
+<div>
+<b>{{s.name}}</b>
+<p>{{s.desc}}</p>
+<small class="mono">{{s.source}} · {{s.version}}</small>
+</div>
+<button @click="reviewInstall(s.name)">Review</button>
+</div>
+<p v-if="!filteredRegistry.length" class="notice">No matches. Try a different search.</p>
+</div>
+</section>
+<aside class="note">
+<p class="eyebrow">Source review</p>
+<h2>Read the source</h2>
+<p>Skills can contain instructions and scripts. Review the files and their origin before adding them to an agent.</p>
+<p class="mono">Registry → review → target</p>
+</aside>
+</div>
+<div v-else-if="installTab==='Local folder'" class="panel narrow">
+<h2>Choose a local folder</h2>
+<p>Inspect a folder containing a skill before choosing where it goes.</p>
+<label class="fieldlabel">Skill folder <input type="file" webkitdirectory multiple @change="chooseFolder($event)">
+</label>
+<p class="hint">Selected file names only; contents are not read. Use the supplied example to explore the review.</p>
+<div class="inset">
+<b>{{folderPicked?'Selected folder':'Example folder'}}</b>
+<pre v-if="!folderPicked">code-review/
+├── SKILL.md
+└── references/
+    └── checklist.md</pre>
+<pre v-else>{{chosenFolderFiles.join('\n')}}</pre>
+</div>
+<button class="dark" @click="reviewInstall('code-review', 'local folder')">Review supplied sample folder</button><p v-if="folderPicked" class="hint">Your selection is not the review input. The review uses the supplied code-review sample below.</p>
+</div>
+<div v-else class="panel narrow">
+<h2>CLI runner</h2>
+<p>Build a command to run separately. CLI output is untrusted; inspect it before acting on it.</p>
+<div class="formgrid">
+<label>Package manager<select v-model="pkg">
+<option>npx</option>
+<option>pnpm dlx</option>
+<option>yarn dlx</option>
+<option>bunx</option>
+</select>
+</label>
+<label>Agent<select v-model="runnerAgent">
+<option>codex</option>
+<option>claude-code</option>
+</select>
+</label>
+<label>Destination<select v-model="runnerScope">
+<option>global</option>
+<option>project</option>
+</select>
+</label>
+<label>Source<input v-model="runnerSource">
+</label>
+<label>Skill filter<input v-model="runnerFilter" placeholder="Optional skill name">
+</label>
+<label>Install mode<select v-model="runnerMode"><option value="copy">Copy files</option><option value="link">Link to source</option></select></label>
+</div>
+<div class="checks">
+<label>
+<input type="checkbox" v-model="dryRun"> Preview command only (no process)</label>
+<label>
+<input type="checkbox" v-model="listOnly"> List only</label>
+</div>
+<pre>{{command}}</pre><p class="hint">Copying this command does not add a dry-run flag. Preview-only controls whether the app would start a process.</p>
+<div class="actions">
+<button @click="copyCommand">Copy command</button>
+<button class="dark" @click="openDialog(dryRun?'Preview command':'Run simulation', dryRun?'Dry run returns the command without starting a process.':'The production runner starts this command. Output is untrusted. This preview does not execute it.', command, dryRun?'Finish preview':'Simulate run')">{{dryRun?'Preview command':'Run simulation'}}</button>
+</div>
+</div>
+</template>
+<template v-else-if="page==='profiles'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Tools / Add & organize</p>
+<h1 tabindex="-1">Profiles</h1>
+<p class="lede">Keep a named set of skills ready for the work you do.</p>
+</div>
+<button @click="profileForm=true; profileEdit=false; profileName=''; profileDescription=''; profilePicked=[]; profileAdditional=''; formError=''">+ New profile</button>
+</div>
+<form v-if="profileForm" class="panel profileform" @submit.prevent="newProfile">
+<h2>{{profileEdit?'Edit profile':'New profile'}}</h2><p v-if="formError" class="notice error" role="alert">{{formError}}</p>
+<label>Profile name<input v-model="profileName" :readonly="profileEdit" required>
+</label>
+<label>Description<textarea v-model="profileDescription"></textarea></label>
+<fieldset><legend>Desired skill names</legend><label v-for="name in [...new Set(skills.map(s=>s.name))]"><input type="checkbox" :value="name" v-model="profilePicked">{{name}}</label></fieldset>
+<label>Additional desired skill names<input v-model="profileAdditional" placeholder="e.g. web-accessibility, api-review"><small>Comma-separated names. Missing members stay visible; they are not installed automatically.</small></label><fieldset><legend>Target scopes</legend><label v-for="name in ['Codex','Claude Code']"><input type="checkbox" :value="name" v-model="profileTargets">{{name}}</label></fieldset>
+<div class="actions">
+<button class="dark">Save profile</button>
+<button type="button" @click="profileForm=false">Cancel</button>
+</div>
+</form>
+<div class="split profile">
+<aside class="panel">
+<p class="eyebrow">Saved profiles</p>
+<button v-for="p in profiles" class="profileitem" :class="{active:profile===p}" @click="profile=p">
+<b>{{p}}</b>
+<small>{{p==='Frontend review'&&!profileMembers[p]?'3 desired skill names':(profileMembers[p]||[]).length+' desired skill names'}}</small>
+</button>
+</aside>
+<section class="panel">
+<div class="sectionhead">
+<div>
+<h2>{{profile||'No profiles yet'}}</h2>
+<p>{{profileDescriptions[profile] || 'A saved set of desired skill names and targets.'}}</p>
+</div>
+<div class="actions"><button :disabled="!profile" @click="profileEdit=true; profileForm=true; profileName=profile; profileDescription=profileDescriptions[profile]||''; profilePicked=currentMembers.map(m=>m[0]); profileTargets=[...(profileScopeMap[profile]||[])]; profileAdditional=currentMembers.map(m=>m[0]).filter(n=>!skills.some(s=>s.name===n)).join(', ')">Edit</button><button :disabled="!profile" @click="deleteProfile">Delete profile</button></div>
+</div>
+<div class="metadata">
+<span>Targets <b>{{(profileScopeMap[profile]||[]).join(', ')||'None yet'}}</b>
+</span>
+<span>Members <b>{{currentMembers.length}} skill names</b>
+</span>
+</div>
+<div class="list">
+<div class="row" v-for="m in profileInstanceRows">
+<div>
+<b>{{m.name}}</b>
+<small class="mono">{{m.scope}} · {{m.path}}</small>
+</div>
+<span class="status">{{m.status}}</span>
+</div>
+</div>
+<p v-if="profile!=='Frontend review' && !(profileMembers[profile]||[]).length" class="notice">This sample profile has no members yet. Select skills and save them as a profile.</p>
+<p class="hint">Missing skills are not installed. Unrelated skills are never disabled.</p>
+<div class="actions">
+<label class="state">Preview state <select v-model="profileState">
+<option>Ready</option>
+<option>Partial</option>
+</select>
+</label>
+<button class="dark" :disabled="!currentMembers.length" @click="reviewProfile">Review enable-only set</button>
+</div>
+</section>
+</div>
+</template>
+<template v-else-if="page==='quality'">
+  <div class="pagehead">
+    <div>
+      <p class="eyebrow">Tools / Inspect</p>
+      <h1 tabindex="-1">Quality</h1>
+      <p class="lede">Inspect individual files, index differences and estimated reading size. These views use sample data.</p>
+    </div>
+    <label class="state">Preview state
+      <select v-model="qualityState">
+        <option>Ready</option><option>Loading</option><option>Error</option><option>Empty</option><option>Partial</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="segments" role="group" aria-label="Quality view">
+    <button v-for="t in ['Findings','Validate','Doctor','Stats']" :key="t"
+      :aria-pressed="qualityTab===t" @click="qualityTab=t">{{t}}</button>
+  </div>
+
+  <div v-if="qualityState==='Loading'" class="notice" role="status">Loading this sample view…</div>
+  <div v-else-if="qualityState==='Error'" class="notice error" role="alert">
+    This sample view is unavailable. No conclusions can be drawn from an incomplete read.
+    <button @click="qualityState='Ready'">Retry</button>
+  </div>
+  <template v-else>
+    <div v-if="qualityState==='Partial'" class="notice" role="status">
+      Partial sample: Claude Code could not be read. Results below cover the available Codex sample only.
+    </div>
+
+    <section v-if="qualityTab==='Findings'" aria-labelledby="findings-title">
+      <div class="sectionhead">
+        <div><h2 id="findings-title">Findings</h2><p>Evidence grouped by what was observed, not an overall quality score.</p></div>
+      </div>
+      <div class="filters">
+        <label>Search findings<input v-model="qualityQuery" type="search" placeholder="Skill or finding"></label>
+        <label>Severity<select v-model="severity"><option>All severities</option><option>Error</option><option>Warning</option><option>Info</option></select></label>
+      </div>
+      <div class="list panel">
+        <details v-for="f in qualityVisibleFindings" :key="f.title">
+          <summary><span><b>{{f.title}}</b><small>{{f.name}} · {{f.scope}}</small></span><span class="status" :class="f.severity.toLowerCase()">{{f.severity}}</span></summary>
+          <p>{{f.evidence}}</p><p class="mono">{{f.path}}</p>
+          <a href="#/skills" @click="skillSearch=f.path">Open exact instance in Skills →</a>
+        </details>
+        <p v-if="!qualityVisibleFindings.length">{{qualityState==='Empty' ? 'No findings in this sample.' : 'No findings match these filters or the available scopes.'}}</p>
+      </div>
+    </section>
+
+    <section v-else-if="qualityTab==='Validate'" aria-labelledby="validate-title">
+      <div class="split">
+        <form class="panel" @submit.prevent="runQualityValidation">
+          <h2 id="validate-title">Validate one instance</h2>
+          <p>Check the sample file’s structure and frontmatter. This does not assess whether its instructions are safe or useful.</p>
+          <label>Skill name
+            <input v-model.trim="qualitySkillName" required placeholder="e.g. code-review" autocomplete="off">
+          </label>
+          <label>Scope
+            <select v-model="qualityScope"><option>Codex</option><option>Claude Code</option></select>
+          </label>
+          <p class="hint">The name and scope identify one exact sample instance. Available examples: code-review, incident-notes, frontend-patterns.</p>
+          <button class="dark">Validate sample</button>
+        </form>
+        <aside class="note"><p class="eyebrow">What is checked</p><h2>Structure & fields</h2><p>File readability, frontmatter syntax and required fields are reported separately from copy differences and source provenance.</p></aside>
+      </div>
+      <div v-if="qualityValidation" class="panel below" aria-live="polite">
+        <div class="sectionhead"><div><h2>Validation result</h2><p class="mono">{{qualityValidation.path}}</p></div><span class="status">{{qualityValidation.status}}</span></div>
+        <div class="row" v-for="check in qualityValidation.checks" :key="check[0]">
+          <div><b>{{check[0]}}</b><small>{{check[1]}}</small></div><span class="status">{{check[2]}}</span>
+        </div>
+        <p v-if="qualityValidation.status==='Unavailable'" class="hint">No validation result is inferred for an unavailable instance.</p>
+        <a v-else href="#/skills" @click="skillSearch=qualityValidation.path">Open exact instance in Skills →</a>
+      </div>
+    </section>
+
+    <section v-else-if="qualityTab==='Doctor'" aria-labelledby="doctor-title">
+      <div class="sectionhead"><div><h2 id="doctor-title">Index and disk</h2><p>A sample comparison of the rebuildable index with observed files. Disk remains the source of truth.</p></div><button @click="qualityState='Ready'">Refresh sample</button></div>
+      <div v-if="qualityState==='Empty'" class="panel"><p>No differences in this sample comparison. This is not a guarantee that every folder was readable.</p></div>
+      <div v-else class="panel list">
+        <details v-for="d in qualityVisibleDoctor" :key="d.title">
+          <summary><span><b>{{d.title}}</b><small>{{d.kind}} · {{d.scope}}</small></span><span class="status">{{d.status}}</span></summary>
+          <p>{{d.evidence}}</p><p class="mono">{{d.path}}</p>
+          <a v-if="d.link==='map'" href="#/map">Inspect copies in Sync map →</a>
+          <a v-else href="#/tools/settings">Review index maintenance →</a>
+        </details>
+        <p v-if="!qualityVisibleDoctor.length">No differences were reported in the available scopes.</p>
+      </div>
+      <p class="hint">An unreadable folder is unknown, not evidence that its files are missing. Rebuild and resync update the index; review their scope in Settings.</p>
+    </section>
+
+    <section v-else aria-labelledby="stats-title">
+      <div class="sectionhead"><div><h2 id="stats-title">Estimated reading size</h2><p>Compare the sample skill bodies with a context window you choose.</p></div></div>
+      <div class="filters">
+        <label>Context window<select v-model.number="qualityWindow"><option :value="32000">32,000 tokens</option><option :value="128000">128,000 tokens</option><option :value="200000">200,000 tokens</option></select></label>
+      </div>
+      <div v-if="qualityState==='Empty'" class="panel"><p>No skill sizes are available in this sample.</p></div>
+      <template v-else>
+        <div class="panel">
+          <h3>By scope</h3><p class="hint">Estimated tokens and the share of your selected window, if all listed skill bodies were read in full.</p>
+          <div class="row" v-for="r in qualityScopeStats" :key="r.scope">
+            <div><b>{{r.scope}}</b><small>{{r.count}} {{r.count===1?'instance':'instances'}} · {{r.characters.toLocaleString()}} characters</small></div>
+            <div><b>{{r.tokens.toLocaleString()}} estimated tokens</b><small>{{r.percent}}% of {{qualityWindow.toLocaleString()}}</small></div>
+          </div>
+        </div>
+        <div class="panel below">
+          <h3>Largest sample instances</h3><p class="hint">Size is separate from validity, provenance and whether copies differ.</p>
+          <div class="row" v-for="s in qualityLargest" :key="s.scope+s.name">
+            <div><b>{{s.name}}</b><small class="mono">{{s.scope}} · {{s.path}}</small></div>
+            <span>{{s.characters.toLocaleString()}} characters · {{Math.ceil(s.characters/4).toLocaleString()}} est. tokens</span>
+          </div>
+        </div>
+      </template>
+      <p class="hint">Estimator: one token per four characters, rounded up per scope or instance. Actual tokenization varies by model and content; this is not measured usage or a claim that all skills will be loaded.</p>
+    </section>
+  </template>
+</template>
+<template v-else-if="page==='workspaces'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Tools / Inspect</p>
+<h1 tabindex="-1">Workspaces</h1>
+<p class="lede">See where a project declares and discovers skills.</p>
+</div>
+<label class="state">Preview state <select v-model="workspaceState">
+<option>Ready</option>
+<option>Loading</option>
+<option>Outside root</option>
+</select>
+</label>
+</div>
+<form class="pathform" @submit.prevent="inspectWorkspace">
+<label>Project path<input v-model="workspacePath" class="mono" required>
+</label>
+<button class="dark">Inspect workspace</button>
+</form>
+<p class="hint">This is a discovery view, not an activation control.</p>
+<div v-if="workspaceState==='Outside root'" class="notice error">This path is outside the allowed project root. Choose a contained path to continue.</div>
+<div v-else-if="workspaceState==='Loading'" class="notice">Reading workspace sample…</div>
+<div v-else class="workspace">
+<section class="panel">
+<div class="sectionhead">
+<div>
+<h2>Agent consumers</h2>
+<p>What the sample project can see.</p>
+</div>
+</div>
+<div class="row">
+<div>
+<b>Codex</b>
+<small>Observed · project skill folder found</small>
+</div>
+<span class="mono">.agents/skills</span>
+</div>
+<div class="row">
+<div>
+<b>Claude Code</b>
+<small>Declared · configured project location</small>
+</div>
+<span class="mono">.claude/skills</span>
+</div>
+<div class="row">
+<div>
+<b>Cursor</b>
+<small>Unknown · discovery has not been checked</small>
+</div>
+<span>—</span>
+</div>
+</section>
+<aside class="note">
+<p class="eyebrow">Discovery roots</p>
+<h2>Where to look</h2>
+<p class="mono">{{workspacePath}}/.agents/skills</p>
+<p class="mono">{{workspacePath}}/.claude/skills</p>
+<p>Effective loading is unknown. This shows discovery evidence, not a running agent.</p>
+</aside>
+</div>
+</template>
+<template v-else-if="page==='templates'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Tools / Add & organize</p>
+<h1 tabindex="-1">Templates</h1>
+<p class="lede">Start with a useful structure and make it your own.</p>
+</div>
+<button @click="templateCreate=true">+ New stored template</button>
+</div>
+<div class="split">
+<section class="panel">
+<p class="eyebrow">Built-in and stored</p>
+<button class="templateitem" v-for="t in templates" @click="template=t">
+<b>{{t}}</b>
+<small>{{t==='Blank skill'?'Built-in · A minimal starting point':'Stored · A repeatable review workflow'}}</small>
+<span>→</span>
+</button>
+</section>
+<section class="panel">
+<p class="eyebrow">Document preview</p>
+<h2>{{template}}</h2>
+<p>A starting structure for a skill's instructions.</p>
+<pre>{{templateContent}}</pre>
+<button class="dark" @click="templateUse=true; editingId=null; newSkillName=''; newSkillDescription=''; skillBody=templateContent">Use template</button>
+</section>
+</div>
+<form v-if="templateCreate" class="panel narrow below" @submit.prevent="saveTemplate">
+<h2>New stored template</h2>
+<p v-if="formError" class="notice error" role="alert">{{formError}}</p>
+<label>Template name<input v-model="newTemplate" required>
+</label>
+<label>Markdown<textarea v-model="templateMarkdown">
+</textarea>
+</label>
+<div class="actions">
+<button>Save template</button>
+<button type="button" @click="templateCreate=false">Cancel</button>
+</div>
+</form>
+<form v-if="templateUse" class="panel narrow below" @submit.prevent="previewCreate">
+<h2>New skill from {{template}}</h2>
+<label>Name<input v-model="newSkillName" required>
+</label>
+<label>Description<textarea v-model="newSkillDescription" required>
+</textarea>
+</label>
+<label>Target<select v-model="newSkillTarget">
+<option>Global library</option>
+<option>Codex</option>
+<option>Claude Code</option>
+</select>
+</label>
+<label>Instructions<textarea v-model="skillBody" rows="6"></textarea></label>
+<p v-if="formError" class="notice error" role="alert">{{formError}}</p>
+<button class="dark">Preview creation</button>
+</form>
+</template>
+<template v-else-if="page==='settings'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Tools / Maintain</p>
+<h1 tabindex="-1">Settings</h1>
+<p class="lede">Adjust how Skills Manager looks and maintains its index.</p>
+</div>
+</div>
+<div class="settings">
+<section>
+<h2>Appearance</h2>
+<p>Make the interface comfortable for your environment.</p>
+</section>
+<div class="panel">
+<label>Color theme<select v-model="theme">
+<option value="system">System</option>
+<option value="light">Light</option>
+<option value="dark">Dark</option>
+</select>
+</label>
+<label>Text size<select v-model="textSize">
+<option value="standard">Standard</option>
+<option value="large">Large</option>
+</select>
+</label>
+<p class="hint">System preference: {{systemDark?'dark':'light'}} appearance. Reduced motion: {{reducedMotion?'requested':'not requested'}}.</p>
+</div>
+<section>
+<h2>Regional formats</h2>
+<p>Dates and numbers in this interface.</p>
+</section>
+<div class="panel">
+<label>Format<select v-model="locale">
+<option value="">System</option>
+<option>en-US</option>
+<option>en-GB</option>
+<option>en-IN</option>
+</select>
+</label>
+<p>Preview: {{formatPreview}}</p>
+</div>
+<section>
+<h2>Index maintenance</h2>
+<p>The index is a rebuildable view of files on disk.</p>
+</section>
+<div class="panel">
+<div class="row">
+<div>
+<b>Rebuild index</b>
+<small>Recreate the global library index from its files.</small>
+</div>
+<button @click="maintenance('Rebuild')">Review</button>
+</div>
+<div class="row">
+<div>
+<b>Resync index</b>
+<small>Refresh the global library index against its files.</small>
+</div>
+<button @click="maintenance('Resync')">Review</button>
+</div>
+</div>
+</div>
+</template>
+<template v-else-if="page==='skills'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Library</p>
+<h1 tabindex="-1">Skills</h1>
+<p class="lede">Find skills and work with the exact copies in your agents.</p>
+</div>
+<div class="actions"><a class="button" href="#/tools/install" @click="installTab='Local folder'">Add folder</a><button @click="openSkill()">+ New skill</button></div>
+</div>
+<div class="filters">
+<label>Search skills<input type="search" v-model="skillSearch" placeholder="Name or purpose">
+</label>
+<label>Tag<select v-model="tag">
+<option>All tags</option>
+<option value="Untagged">Untagged</option><option v-for="t in allTags">{{t}}</option>
+</select>
+</label>
+<div class="segments">
+<button v-for="v in ['Cards','Instances']" :aria-pressed="skillView===v" @click="skillView=v">{{v}}</button>
+</div>
+<label class="state">Batch preview state<select v-model="batchState"><option>Ready</option><option>Stale</option><option>Partial</option></select></label>
+</div>
+<div v-if="selected.length" class="selection">
+<b>{{selected.length}} selected</b>
+<span>Exact instances selected</span>
+<p class="hint" v-if="hiddenSelected">{{hiddenSelected}} selected copies are hidden by the current filters.</p>
+<div class="actions">
+<button @click="saveSelectionProfile">Save as profile</button>
+<button v-for="a in ['Tag','Enable','Disable','Sync','Remove']" @click="reviewBulk(a)">{{a}}</button>
+<button @click="selected=[]">Clear</button>
+</div>
+</div>
+<div class="actions"><button @click="selected=[...new Set([...selected,...filteredSkills.map(s=>s.id)])]">Select shown copies</button><span class="hint">{{filteredSkills.length}} shown · {{new Set(filteredSkills.map(s=>s.name)).size}} skill names</span></div>
+<div class="list panel" :class="{cards:skillView==='Cards'}">
+<div class="skillrow" v-for="s in filteredSkills" :key="s.id">
+<label>
+<input type="checkbox" :value="s.id" v-model="selected">
+<span>
+<b>{{s.name}}</b>
+<small>{{s.desc}}</small>
+<span class="mono">{{s.scope}} · {{s.path}}</span>
+<span class="tags"><span v-for="t in s.tags">{{t}}</span></span>
+</span>
+</label>
+<div class="actions">
+<span class="status" :class="s.state==='Invalid'?'error':''">{{s.state}}</span>
+<button @click="reviewSource(s)">Review source update</button>
+<button @click="openSkill(s)">Edit</button>
+</div>
+</div>
+<p v-if="!filteredSkills.length">No skills match these filters.</p>
+</div>
+<form v-if="editSkill" class="panel narrow below editor" @submit.prevent="reviewSkill">
+<h2>{{editingId?'Edit exact copy':'New skill'}}</h2><p v-if="formError" class="notice error" role="alert">{{formError}}</p>
+<div class="formgrid">
+<label>Name<input v-model="newSkillName" required>
+</label>
+<label>Target<select v-model="newSkillTarget">
+<option>Global library</option>
+<option>Codex</option>
+<option>Claude Code</option>
+</select>
+</label>
+<label>Category<input v-model="category">
+</label>
+<label>Version<input v-model="version">
+</label>
+<label>License<input v-model="license">
+</label>
+<label>Compatibility<input v-model="compatibility">
+</label>
+<label>Allowed tools<input v-model="allowedTools">
+</label>
+</div>
+<label>Description<textarea v-model="newSkillDescription">
+</textarea>
+</label>
+<div class="segments" role="group" aria-label="Instructions view"><button type="button" v-for="tab in ['Write','Preview']" :aria-pressed="editorView===tab" @click="editorView=tab">{{tab}}</button></div>
+<label v-if="editorView==='Write'">Instructions<textarea rows="8" v-model="skillBody"></textarea></label><article class="document-preview" v-else v-html="previewHtml"></article>
+<div class="actions">
+<button class="dark">Review changes</button>
+<button type="button" @click="editSkill=false">Cancel</button>
+</div>
+</form>
+</template>
+<template v-else-if="page==='recovery'">
+<div class="pagehead">
+<div>
+<p class="eyebrow">Library / Maintain</p>
+<h1 tabindex="-1">Recovery</h1>
+<p class="lede">Review past changes and recover from the global library.</p>
+</div>
+<label class="state">Preview state <select v-model="recoveryState">
+<option>Ready</option>
+<option>Loading</option>
+<option>Error</option>
+<option>Empty</option>
+</select>
+</label>
+</div>
+<div class="segments">
+<button v-for="t in ['Trash','History','Source snapshots','Backups']" :aria-pressed="recoveryTab===t" @click="recoveryTab=t">{{t}}</button>
+</div>
+<div v-if="recoveryState!=='Ready'" class="notice">{{recoveryState==='Loading'?'Loading recovery sample…':recoveryState==='Error'?'Recovery data unavailable.':'Nothing here in this sample.'}} <button v-if="recoveryState==='Error'" @click="recoveryState='Ready'">Retry</button>
+</div>
+<section v-else-if="recoveryTab==='Trash'" class="panel">
+<div class="sectionhead">
+<div>
+<h2>Global trash</h2>
+<p>Items removed from the global library. Agent-scope trash is not supported.</p>
+</div>
+<button :disabled="!trashItems.length" @click="emptySampleTrash">Empty trash</button>
+</div>
+<p v-if="!trashItems.length" class="notice">Global trash is empty. History and backups remain available.</p>
+<div class="row" v-for="n in trashItems">
+<div>
+<b>{{n}}</b>
+<small>Removed from global library · sample</small>
+</div>
+<button @click="restoreSample(n)">Restore</button>
+</div>
+</section>
+<section v-else-if="recoveryTab==='History'" class="panel">
+<div class="sectionhead">
+<div>
+<h2>Change history</h2>
+<p>Recorded activity in the sample library.</p>
+</div>
+<label>Scope<select v-model="historyScope">
+<option>All scopes</option>
+<option>Global</option>
+<option>Codex</option>
+</select>
+</label>
+<label>Skill name<input type="search" v-model="historyName"></label>
+</div>
+<div class="row" v-for="h in visibleHistory">
+<div>
+<b>{{h[0]}}</b>
+<small>{{h[1]}}</small>
+</div>
+<span>{{h[2]}}</span>
+</div>
+<p v-if="!visibleHistory.length" class="notice">No recorded changes match these filters.</p>
+<section class="below"><h3>Text-document snapshots</h3><p class="hint">These restore a saved SKILL.md document only. Companion files and binary data require source snapshots.</p><div class="row"><div><b>code-review · before edit</b><small>Codex · text document snapshot</small></div><button @click="openDialog('Restore text snapshot','This older rollback action restores the saved document directly. It does not use whole-tree source validation.','Codex · ~/.codex/skills/code-review/SKILL.md','Simulate text restore')">Review text restore</button></div></section>
+</section>
+<section v-else-if="recoveryTab==='Source snapshots'" class="panel">
+<h2>Source snapshots</h2>
+<p>Review a retained snapshot and its exact target before rollback. A fresh validation is required.</p>
+<div class="row">
+<div>
+<b>code-review · before update</b>
+<small class="mono">Codex · ~/.codex/skills/code-review</small>
+</div>
+<button @click="rollbackSource">Review rollback</button>
+</div>
+</section>
+<section v-else class="panel">
+<div class="sectionhead">
+<div>
+<h2>Backups & import</h2>
+<p>Archives cover the global library, not all agent folders.</p>
+</div>
+</div>
+<div class="row">
+<div>
+<b>Regular backup</b>
+<small>Global skills archive.</small>
+</div>
+<button @click="announce('Regular backup simulated. No archive was created.')">Simulate export</button>
+</div>
+<div class="row">
+<div>
+<b>Full archive</b>
+<small>Global skills, trash, templates and catalog metadata.</small>
+</div>
+<button @click="announce('Full archive export simulated. No archive was created.')">Simulate export</button>
+</div>
+<form class="import" @submit.prevent="importPreview">
+<h3>Import archive</h3>
+<div class="formgrid">
+<label>Archive type<select v-model="importType">
+<option>Regular backup</option>
+<option>Full archive</option>
+</select>
+</label>
+<label>Archive file<input type="file" @change="archiveName=$event.target.files[0]?.name||''">
+</label>
+</div>
+<label>
+<input type="checkbox" v-model="overwrite"> Overwrite existing entries</label>
+<p class="hint">Sample result: 2 added, 1 skipped.</p>
+<button>Review sample import</button>
+</form>
+</section>
+</template>
+<template v-else>
+<div class="pagehead">
+<div>
+<p class="eyebrow">Skills Manager</p>
+<h1 tabindex="-1">{{page==='home'?'Your agents':page==='map'?'Sync map':'Inbox'}}</h1>
+<p class="lede">{{page==='home'?'A view of your agents and the skills found in their folders.':page==='map'?'Explore where skill copies live and how they differ.':'Review observations that need your attention.'}}</p>
+</div>
+</div>
+<div class="panel overview">
+<h2>{{page==='home'?'Your library at a glance':page==='map'?'Copies across agents':'Needs a look'}}</h2>
+<p>This overview is sample data for the design preview. Continue to Skills or explore the tools directory.</p>
+<div class="actions">
+<a class="button dark" href="#/skills">Browse skills</a>
+<a class="button" href="#/tools">Open tools</a>
+</div>
+</div>
+</template>
+</div>
+</div>
+</main>
+<div class="toast" role="status" aria-live="polite" v-show="message">{{message}}</div>
+<dialog ref="dialog" aria-labelledby="review-title" aria-describedby="review-description" @close="dialogClosed">
+<div class="dialoghead">
+<div>
+<p class="eyebrow">Design preview</p>
+<h2 id="review-title">{{dialogTitle}}</h2>
+</div>
+<button class="close" @click="closeDialog" aria-label="Close dialog">×</button>
+</div>
+<p id="review-description">{{dialogText}}</p>
+<dl v-if="reviewFacts.length" class="review-facts"><div v-for="f in reviewFacts"><dt>{{f[0]}}</dt><dd>{{f[1]}}</dd></div></dl>
+<pre v-if="dialogDetail" :class="{diff:reviewDiff}">{{dialogDetail}}</pre>
+<div v-if="dialogKind==='source'" class="below"><label>Candidate folder<input type="file" webkitdirectory multiple @change="candidateFiles=Array.from($event.target.files).map(f=>f.webkitRelativePath||f.name)"></label><p class="hint">Showing a supplied example diff. Selected file names only: {{candidateFiles.join(', ')||'No folder selected'}}</p><label>Review scenario<select v-model="sourceScenario"><option>Ready</option><option>Stale</option><option>Blocked</option></select></label><p class="hint">A recovery snapshot is retained for this simulated whole-tree update.</p></div>
+<div v-if="dialogKind==='Sync'" class="below"><fieldset><legend>Copy to these scopes</legend><label v-for="scope in ['Codex','Claude Code']"><input type="checkbox" v-model="bulkTargets" :value="scope" @change="bulkReviewed=false">{{scope}}</label></fieldset><label><input type="checkbox" v-model="bulkOverwrite" @change="bulkReviewed=false"> Overwrite existing targets after review</label><button :disabled="!bulkTargets.length||!!dialogBlocked" @click="bulkReviewed=true; reviewFacts=[['Destination scopes',bulkTargets.join(', ')],['Existing copies',bulkOverwrite?'Overwrite reviewed copies':'Skip existing copies']]">Review target plan</button><p class="hint" v-if="bulkReviewed">Target plan reviewed. Changing an option requires review again.</p></div>
+<div v-if="dialogKind==='commands'" class="below"><label>Find a tool<input type="search" v-model="commandQuery" autofocus></label><div class="command-results"><button v-for="n in commandResults" @click="openCommand(n[0])">{{n[1]}} <span>→</span></button><p v-if="!commandResults.length">No tools match.</p></div></div>
+<div v-if="dialogTitle==='Review tag'" class="formgrid">
+<label>Operation<select v-model="tagOperation">
+<option>Add</option>
+<option>Remove</option>
+</select>
+</label>
+<label>Tag name<input v-model="tagName" placeholder="e.g. review">
+</label>
+</div>
+<label v-if="dialogNeedsCheck" class="confirm">
+<input type="checkbox" v-model="confirmed"> I reviewed the source and target</label>
+<div v-if="dialogBlocked" class="notice error">{{dialogBlocked}}</div>
+<div class="actions end">
+<button @click="closeDialog">Cancel</button>
+<button v-if="dialogKind!=='commands'" class="dark" :disabled="(dialogNeedsCheck&&!confirmed)||!!dialogBlocked||(dialogTitle==='Review tag'&&!tagName.trim())||(dialogKind==='Sync'&&(!bulkTargets.length||!bulkReviewed))" @click="finishDialog">{{dialogAction}}</button>
+</div>
+</dialog>
+</div>
+</body>
+</html>

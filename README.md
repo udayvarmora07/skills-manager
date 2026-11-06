@@ -7,9 +7,9 @@
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 [![PyPI](https://img.shields.io/pypi/v/skill-control-plane.svg)](https://pypi.org/project/skill-control-plane/)
 
-![Skills Manager first-scan guide with synthetic observed roots, scope state, and a local update-preview route](docs/images/overview-2026-09-23-1280x900.png)
+![Skills Manager v2 Tools with the existing warm-paper design and integrated workflows](docs/images/v2-tools-2026-11-06.png)
 
-*First-scan guide at 1280 × 900, captured 2026-09-23 from a worktree based on `6733da9` with synthetic browser-harness fixtures. No personal skills are shown.*
+*V2 Tools at 1280 × 900, captured from the local feature-parity implementation with synthetic fixtures. No personal skills are shown.*
 
 > `skills-manager` on GitHub: `udayvarmora07/skills-manager`. The `skill-control-plane` distribution is available on PyPI; install it with `pip` or `pipx`. The Python import package remains `skillsmgr`, and the CLI entry point remains `skills-mgr`.
 
@@ -99,7 +99,15 @@ skills-mgr webui --no-browser # server only
 skills-mgr webui --port 9000  # custom port
 ```
 
-Stdlib `ThreadingHTTPServer` backend + vendored Vue 3 (no npm, no CDN, works offline). Scope switcher, live search, trash with undo, validate/doctor/stats/history, read-only hygiene evidence, templates, tar export plus tar/ZIP import, sync modal. Binds loopback only — never expose it; there is no auth (see [Threat model](skills-manager-threat-model.md)).
+V2 is the default interface at `/` (redirects to `/v2/`); classic remains at
+`/classic/`. The existing v2 design now includes Install, Profiles, Templates,
+Quality, Workspaces and Settings, plus exact-copy batch actions, tags, rich
+editing, source updates, history and backup/recovery. The backend is stdlib
+`ThreadingHTTPServer` with vendored Vue 3: no npm, CDN, build step or runtime
+dependency. Local workflows work offline; registry reads and package runners
+need their own network/tooling. There is no authentication: the localhost
+binding is the only security boundary. Never forward, tunnel or publish the
+port (see [Threat model](skills-manager-threat-model.md)).
 
 Want a window instead of a tab? The optional, unbundled `desktop_launcher.py` opens the same UI in a chromeless Chromium app window (zero new dependencies, loopback-only, falls back to your browser):
 

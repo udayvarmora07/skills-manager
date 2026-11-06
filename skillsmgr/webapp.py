@@ -744,19 +744,16 @@ def _batch_plan(operation: str, targets: list[dict], data: dict) -> dict:
     }
 
 
-def _validated_skill_fields(data: dict) -> dict:
-    """Select skill fields while enforcing the Store/scopes string contract."""
+def _validated_skill_fields(data: dict, *, keep_empty: bool = False) -> dict:
+    """Select string fields; PATCH may explicitly clear optional values/body."""
     fields = {}
     for field in _SKILL_FIELDS:
         if field not in data:
             continue
         value = data[field]
-        if field == "allowed_tools":
-            if not isinstance(value, str):
-                raise StoreError("allowed_tools must be a string")
-        elif not isinstance(value, str):
+        if not isinstance(value, str):
             raise StoreError(f"{field} must be a string")
-        if value != "":
+        if value != "" or keep_empty:
             fields[field] = value
     return fields
 
@@ -1079,12 +1076,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
     # -- static -----------------------------------------------------------
 
     @staticmethod
+    def _classic_parts(parts: list[str]) -> list[str]:
+        """Keep classic's relative assets together under its explicit URL."""
+        return parts[1:] if parts[:1] == ["classic"] else parts
+
+    @staticmethod
     def _static_rel(parts: list[str]) -> str:
         """Map URL segments to a path under the web UI directory.
 
-        ``v2`` is the prototype-final interface; it lives in its own directory
-        so the classic UI's files and contracts stay untouched.
+        Both interfaces retain their existing asset directories. The classic
+        URL prefix is an alias for the original files, not a second copy.
         """
+        parts = WebAppHandler._classic_parts(parts)
         rel = parts[0] if parts else "index.html"
         if rel in ("static", "v2") and len(parts) >= 2:
             return rel + "/" + "/".join(parts[1:])
@@ -1107,11 +1110,21 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _redirect_document(self, parts: list[str]) -> bool:
+        """Promote v2 while preserving explicit classic and v2 entry points."""
+        parsed = urlparse(self.path)
+        destination = {"/": "/v2/", "/index.html": "/v2/", "/classic": "/classic/"}.get(parsed.path)
+        if destination is None:
+            return self._redirect_v2(parts)
+        location = destination + ("?" + parsed.query if parsed.query else "")
+        self._send(308, b"", "text/plain; charset=utf-8", extra_headers={"Location": location})
+        return True
+
     def _serve_static(self) -> bool:
         parts = self._parts()
         if parts and parts[0] == "api":
             return False
-        if self._redirect_v2(parts):
+        if self._redirect_document(parts):
             return True
         rel = self._static_rel(parts)
         candidate = (_WEBUI_DIR / rel).resolve()
@@ -1356,6 +1369,32 @@ class WebAppHandler(BaseHTTPRequestHandler):
         self._send_json(rec)
         return True
 
+    def _route_templates_get(self, parts: list[str]) -> bool:
+        """Read stored templates without allowing a template link to escape data."""
+        if parts == ["api", "templates"]:
+            from .templates import list_templates
+
+            self._send_json({"templates": list_templates(self.store.templates_dir)})
+            return True
+        if len(parts) != 3 or parts[:2] != ["api", "templates"]:
+            return False
+        from .paths import contained_path
+        from .templates import read_template, template_path
+
+        name = parts[2]
+        entry = template_path(self.store.templates_dir, name)
+        try:
+            contained_path(self.store.data_dir, "templates", entry.name)
+            if entry.is_symlink():
+                raise StoreError("Linked templates cannot be read; use a regular template file.")
+            body = read_template(self.store.templates_dir, name)
+        except FileNotFoundError:
+            raise RequestError(404, "Template not found.") from None
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise StoreError("Template could not be read as a contained UTF-8 document.") from exc
+        self._send_json({"name": name, "body": body})
+        return True
+
     def _route_collection_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
         """Serve the small exact-path reads: trash, templates, doctor, export.
 
@@ -1367,10 +1406,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if parts == ["api", "trash"]:
             self._send_json(self.store.trash_list())
             return True
-        if parts == ["api", "templates"]:
-            from .templates import list_templates
-
-            self._send_json({"templates": list_templates(self.store.templates_dir)})
+        if self._route_templates_get(parts):
             return True
         if parts == ["api", "doctor"]:
             self._send_json(
@@ -2088,7 +2124,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             data = self._body_json()
-            fields = _validated_skill_fields(data)
+            fields = _validated_skill_fields(data, keep_empty=True)
             if scope != "global":
                 from .scopes import edit_skill as _edit_skill
 

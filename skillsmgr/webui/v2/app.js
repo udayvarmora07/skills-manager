@@ -35,6 +35,7 @@ const PATHS = {
   list: '<path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
   map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/>',
   inbox: '<path d="M4 13h4l2 3h4l2-3h4"/><path d="M5 5h14l1 8v6H4v-6Z"/>',
+  tools: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/>',
@@ -49,22 +50,26 @@ function parseRoute() {
   const h = location.hash.replace(/^#\/?/, "");
   const [p, ...rest] = h.split("/");
   if (p === "skill" && rest.length) { try { return { page: "skill", name: decodeURIComponent(rest.join("/")) }; } catch (e) { return { page: "skills" }; } }
+  if (p === "tools") return { page: "tools", tool: ["install", "profiles", "quality", "workspaces", "templates", "settings", "source-update"].includes(rest[0]) ? rest[0] : "tools" };
   return ["skills", "map", "inbox", "recovery"].includes(p) ? { page: p } : { page: "home" };
 }
-const TITLES = { home: "Home", skills: "Skills", map: "Sync map", inbox: "Inbox", recovery: "Recovery" };
+const TITLES = { home: "Home", skills: "Skills", map: "Sync map", inbox: "Inbox", recovery: "Recovery", tools: "Tools" };
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const THEMES = ["system", "light", "dark"];
+function savedPreference(key, choices, fallback) {try{const value=localStorage.getItem(key);return choices.includes(value)?value:fallback;}catch(e){return fallback;}}
 
 const app = createApp({
   data() {
     return {
       route: parseRoute(), m: null, loading: true, loadError: "", history: [], busy: false,
+      records: [], scopes: [], catalog: {tags:{}, profiles:{}}, catalogError: "", tagFilter: "", libraryView: savedPreference("skillsmgr-v2-library-view",["shelf","instances"],"shelf"), toolTarget: null, readCopyPath: "",
+      historyError: "", skillHistoryError: "", trashError: "", trashLoading: false, importFull: false, importResult: null, createTemplates: [], commandQuery: "",
       query: "", filter: "all", agentFilter: "all", extra: {}, sortBy: "name",
       front: null, skipped: [], dismissed: [], done: 0, srcChoice: "",
       treeQuery: "", edit: null, highlight: true, compareWith: "",
       mapSelId: "", mapPicked: [], peek: null,
       trash: [], importFile: null, importForce: false,
-      theme: THEMES.includes(localStorage.getItem("skillsmgr-theme")) ? localStorage.getItem("skillsmgr-theme") : "system",
+      theme: savedPreference("skillsmgr-theme",THEMES,"system"),formatLocale:savedPreference("skillsmgr-locale",["system","en-US","en-GB","en-IN"],"system"),
       dialog: null, toasts: [], live: "", toastSeq: 0, skillHistory: [], opener: null,
     };
   },
@@ -85,6 +90,9 @@ const app = createApp({
     },
     shelfTotal() { return this.m ? this.m.skills.filter((s) => s.status.key !== "note").length : 0; },
     careCount() { return this.m ? this.m.skills.filter((s) => s.status.key === "warn" || s.status.key === "bad").length : 0; },
+    catalogTags() { return [...new Set(Object.values(this.catalog.tags || {}).flat())].sort(); },
+    visibleNames() { return this.visible.map(s => s.name); },
+    commandChoices() {const items=[{label:"New skill",action:"create"},{label:"Refresh files",action:"refresh"},...[['Skills','#/skills'],['Install','#/tools/install'],['Profiles','#/tools/profiles'],['Quality and validation','#/tools/quality'],['Workspaces','#/tools/workspaces'],['Templates','#/tools/templates'],['Settings and index maintenance','#/tools/settings'],['Recovery and history','#/recovery']].map(([label,path])=>({label,path}))];return items.filter(item=>item.label.toLowerCase().includes(this.commandQuery.toLowerCase()));},
     visible() {
       if (!this.m) return [];
       const q = this.query.trim().toLowerCase();
@@ -94,6 +102,9 @@ const app = createApp({
         if (this.filter === "care" && k !== "warn" && k !== "bad") return false;
         if (this.filter === "off" && k !== "off") return false;
         if (this.agentFilter !== "all" && !s.copies.some((c) => c.scope === this.agentFilter)) return false;
+        const tags = (this.catalog.tags || {})[s.name] || [];
+        if (this.tagFilter === "__untagged" && tags.length) return false;
+        if (this.tagFilter && this.tagFilter !== "__untagged" && !tags.includes(this.tagFilter)) return false;
         return !q || `${s.name} ${s.description} ${s.category}`.toLowerCase().includes(q);
       });
     },
@@ -131,7 +142,7 @@ const app = createApp({
       if (!s || !s.differing.length) return null;
       return s.differing.find((c) => c.scope === this.compareWith) || s.differing[0];
     },
-    refCopy() { const s = this.skill; return s ? (s.ref.holders[0] || s.primary) : null; },
+    refCopy() { const s = this.skill; return s ? (s.copies.find(c=>c.path===this.readCopyPath) || s.ref.holders[0] || s.primary) : null; },
     docHtml() {
       const s = this.skill;
       if (!s) return "";
@@ -151,7 +162,7 @@ const app = createApp({
       if (this.edit.desc.length > 1024) return "Keep the description under 1024 characters.";
       return "";
     },
-    editDirty() { return !!this.edit && (this.edit.desc !== this.edit.baseDesc || this.edit.body !== this.edit.baseBody); },
+    editDirty() { return !!this.edit && (this.edit.desc !== this.edit.baseDesc || this.edit.body !== this.edit.baseBody || JSON.stringify(this.edit.metadata)!==JSON.stringify(this.edit.baseMetadata)); },
     shareTargets() {
       if (!this.skill || !this.m) return [];
       const have = new Set(this.skill.copies.map((c) => c.scope));
@@ -233,13 +244,22 @@ const app = createApp({
     progressBars() { return Math.min(this.done + this.queue.length, 12); },
   },
   watch: {
+    libraryView(value) {try{localStorage.setItem("skillsmgr-v2-library-view",value);}catch(e){}},
     cur: { immediate: true, handler(c) { this.srcChoice = c && c.key === "warn" && this.m && this.m.byName.get(c.skill) ? (this.m.byName.get(c.skill).ref.ambiguous ? "" : (this.m.byName.get(c.skill).ref.holders[0] || {}).scope || "") : ""; } },
     "route.name"() { this.compareWith = ""; this.loadSkillHistory(); },
     skill(s) { if (!s && this.edit) this.edit = null; },
   },
   methods: {
     enc: encodeURIComponent, plural, join, words, titleCase, shortPath, plainLine, renderDoc,
-    fmt(n) { return Number(n).toLocaleString("en-US"); },
+    fmt(n) {return Domain.numberFormatter(this.formatLocale==="system"?undefined:this.formatLocale).format(Number(n));},
+    fmtDate(value) {const date=new Date(value);return Number.isNaN(date.getTime())?String(value||"Date unavailable"):Domain.dateFormatter(this.formatLocale==="system"?undefined:this.formatLocale,{dateStyle:"medium",timeStyle:"short"}).format(date);},
+    preferencesChanged() {this.theme=savedPreference("skillsmgr-theme",THEMES,"system");this.formatLocale=savedPreference("skillsmgr-locale",["system","en-US","en-GB","en-IN"],"system");document.documentElement.dataset.textSize=savedPreference("skillsmgr-text-size",["standard","large"],"standard");this.applyTheme(); },
+    skillTags(name) {return (this.catalog.tags || {})[name] || [];},
+    openSource(record) { this.toolTarget=markRaw(record);location.hash="#/tools/source-update"; },
+    inspectRecord(record) { this.query=record.name;this.filter="all";this.tagFilter="";this.agentFilter=record.scope||"all";this.libraryView="instances";location.hash="#/skills"; },
+    openRecord(record) {this.toolTarget=markRaw(record);this.readCopyPath=record.physical_path||record.path||"";location.hash="#/skill/"+encodeURIComponent(record.name);},
+    openCommands() {this.commandQuery="";this.openDialog({title:"Find a tool or action",commands:true,cancel:"Close"}); },
+    commandGo(item) {const opener=this.opener;this.closeDialog();if(item.action==="create"){this.openCreate();this.opener=opener;}else if(item.action==="refresh")this.refresh();else location.hash=item.path;},
     agentOf(id) { return (this.m && this.m.agent(id)) || { ...FALLBACK_AGENT, name: id || "Unknown" }; },
 
     /* ----- loading ----- */
@@ -247,30 +267,33 @@ const app = createApp({
       this.loading = true; this.loadError = "";
       try {
         const [scopes, records, history] = await Promise.all([
-          api("/api/scopes"), api("/api/skills?scope=all"), api("/api/history?limit=8").catch(() => []),
+          api("/api/scopes"), api("/api/skills?scope=all"), api("/api/history?limit=8").then(r=>{this.historyError="";return r;}).catch(e => {this.historyError=this.friendly(e.message);return []; }),
         ]);
+        this.scopes=markRaw(scopes);this.records=markRaw(records);
         this.m = markRaw(Model.build(records, scopes, { suggested: 100 }));
         this.history = Array.isArray(history) ? history : (history && history.history) || [];
         this.loadTrash();
+        this.loadCatalog();
       } catch (e) {
         this.loadError = this.friendly(e.message || "The skills could not be read.");
       } finally { this.loading = false; }
     },
     async loadSkillHistory() {
-      this.skillHistory = [];
+      this.skillHistory = [];this.skillHistoryError="";
       if (this.route.page !== "skill") return;
       try {
         const rows = await api("/api/history?limit=20&name=" + encodeURIComponent(this.route.name));
         this.skillHistory = (Array.isArray(rows) ? rows : []).slice(0, 3);
-      } catch (e) { this.skillHistory = []; }
+      } catch (e) { this.skillHistoryError=this.friendly(e.message); }
     },
+    async loadCatalog() { try {this.catalog=await api("/api/catalog");this.catalogError="";} catch(e){this.catalogError=this.friendly(e.message);} },
 
     /* ----- search / filter ----- */
     searchInput(v) { this.query = v; if (this.route.page !== "skills" && v.trim()) location.hash = "#/skills"; this.extra = {}; },
     searchSubmit() { if (this.route.page !== "skills") location.hash = "#/skills"; },
     capReset() { this.extra = {}; },
     showMore(id) { this.extra = { ...this.extra, [id]: (this.extra[id] || 0) + 96 }; },
-    clearFilters() { this.query = ""; this.filter = "all"; this.agentFilter = "all"; this.extra = {}; this.$nextTick(() => { const q = document.getElementById("q"); if (q) q.focus(); }); },
+    clearFilters() { this.query = ""; this.filter = "all"; this.agentFilter = "all"; this.tagFilter="";this.extra = {}; this.$nextTick(() => { const q = document.getElementById("q"); if (q) q.focus(); }); },
     pickAgent(id) { this.agentFilter = id; this.filter = "all"; this.query = ""; this.extra = {}; },
     skipToContent() { const h = document.getElementById("h1") || this.$refs.main; if (h) h.focus(); },
     focusH1() { this.$nextTick(() => { const h = document.getElementById("h1"); if (h) h.focus({ preventScroll: true }); }); },
@@ -306,17 +329,18 @@ const app = createApp({
       try { await t.undo(); await this.refresh(); if (t.onUndo) t.onUndo(); this.toast("Undone"); } catch (e) { await this.refresh(); if (t.onUndo) t.onUndo(); this.toast("Couldn't undo: " + e.message, { err: true }); } finally { this.busy = false; }
     },
     openDialog(d) { this.opener = document.activeElement; this.dialog = { cancel: "Cancel", ...d }; this.$nextTick(() => { const d = this.$refs.dlg; const b = d && (d.querySelector("input:not(.sr-only), select") || d.querySelector("button:not(.sr-only)")); if (b) b.focus(); }); },
-    closeDialog() { this.dialog = null; this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
+    closeDialog() { if(this.busy)return;this.dialog = null; this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
     async confirmDialog() {
+      if(this.busy || this.dialog?.templateLoading)return;
       if (this.dialog && this.dialog.form && this.formInvalid) {
         const f = this.dialog.form;
         this.live = this.formErrors.name || this.formErrors.desc || (!f.name.trim() ? "Add a name." : "Add a description.");
         return;
-      } const d = this.dialog; this.dialog = null; if (d && d.onConfirm) await d.onConfirm(d); this.$nextTick(() => { if (this.opener && this.opener.isConnected) this.opener.focus(); }); },
+      } const d = this.dialog; if(!d?.form)this.dialog = null; if (d && d.onConfirm) await d.onConfirm(d); this.$nextTick(() => { if (!this.dialog && this.opener && this.opener.isConnected) this.opener.focus(); }); },
     dialogKeys(e) {
       if (e.key === "Escape") { e.stopPropagation(); this.closeDialog(); return; }
       if (e.key !== "Tab") return;
-      const f = [...this.$refs.dlg.querySelectorAll("button:not([disabled]), input:not([disabled])")];
+      const f = [...this.$refs.dlg.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]")].filter(el=>el.offsetParent!==null);
       if (!f.length) return;
       const first = f[0], last = f[f.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -449,25 +473,30 @@ const app = createApp({
         },
       });
     },
+    openPermanentDelete() {const skill=this.skill;if(!skill)return;this.openDialog({title:`Permanently delete “${skill.name}”?`,danger:true,confirm:"Delete permanently",lines:["This removes the selected copies without moving them to trash. There is no Undo or trash restore for this action."],picks:skill.copies.filter(c=>c.record.addressable!==false&&c.state!=="link"&&this.agentOf(c.scope).writable).map(c=>({id:c.scope,label:this.agentOf(c.scope).name,path:shortPath(c.path)})),chosen:[],onConfirm:async d=>{this.busy=true;try{for(const scope of d.chosen)await api(`/api/skills/${encodeURIComponent(skill.name)}?scope=${encodeURIComponent(scope)}&purge=1`,{method:"DELETE"});await this.refresh();this.toast("Selected copies permanently deleted.");if(!this.m.byName.get(skill.name))location.hash="#/skills";}catch(e){await this.refresh();this.toast(e.message,{err:true});}finally{this.busy=false;}}});},
 
     /* ----- create, recovery, theme, help ----- */
     openCreate() {
       const first = this.createTargets.find((x) => !x.library) || this.createTargets[0];
       this.openDialog({
-        title: "New skill", form: { name: "", desc: "", scope: first ? first.id : "global" }, confirm: "Create skill",
+        title: "New skill", form: { name: "", desc: "", scope: first ? first.id : "global", category:"",version:"",license:"",compatibility:"",allowed_tools:"",body:"## When to use\n\nDescribe the situations where an agent should use this skill.\n\n## Steps\n\n1. \n",template:"" }, confirm: "Create skill",
         onConfirm: async (d) => {
           const f = d.form; this.busy = true;
           try {
             await api("/api/skills?scope=" + encodeURIComponent(f.scope), { method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: f.name.trim(), description: f.desc.trim(), body: "## When to use\n\nDescribe the situations where an agent should use this skill.\n\n## Steps\n\n1. \n" }) });
+              body: JSON.stringify({ name: f.name.trim(), description: f.desc.trim(), category:f.category,version:f.version,license:f.license,compatibility:f.compatibility,allowed_tools:f.allowed_tools,body:f.body.replaceAll("{name}",f.name.trim()) }) });
+            this.dialog=null;
             await this.refresh();
             this.toast(`${f.name.trim()} created in ${this.agentOf(f.scope).name}.`);
             location.hash = "#/skill/" + encodeURIComponent(f.name.trim());
-          } catch (e) { this.toast(e.message, { err: true }); } finally { this.busy = false; }
+          } catch (e) { d.error=this.friendly(e.message);this.live=d.error; } finally { this.busy = false; }
         },
       });
+      const dialog=this.dialog;
+      api("/api/templates").then(r=>{if(this.dialog===dialog)this.createTemplates=r.templates||[];}).catch(e=>{if(this.dialog===dialog)dialog.error="Templates unavailable: "+this.friendly(e.message);});
     },
-    async loadTrash() { try { this.trash = await api("/api/trash"); } catch (e) { this.trash = []; } },
+    async loadCreateTemplate() {const d=this.dialog;if(!d?.form?.template)return;const name=d.form.template;d.templateLoading=true;try{const t=await api("/api/templates/"+encodeURIComponent(name));if(this.dialog===d&&d.form.template===name)d.form.body=stripFrontmatter(t.body||"");}catch(e){if(this.dialog===d)d.error=this.friendly(e.message);}finally{if(this.dialog===d)d.templateLoading=false;}},
+    async loadTrash() { this.trashLoading=true;try { this.trash = await api("/api/trash");this.trashError=""; } catch (e) { this.trashError=this.friendly(e.message); } finally {this.trashLoading=false;} },
     async restoreTrash(t) {
       this.busy = true;
       try { await api("/api/trash/" + encodeURIComponent(t.name), { method: "POST" }); await this.refresh(); this.toast(`${t.name} restored to your library.`); }
@@ -488,10 +517,11 @@ const app = createApp({
       } catch (e) { this.toast(e.message, { err: true }); } finally { this.busy = false; }
     },
     async doImport() {
-      const f = this.importFile; if (!f) return;
+      const f = this.importFile; if (!f || this.busy) return;
       this.busy = true;
       try {
-        const r = await api(`/api/import?filename=${encodeURIComponent(f.name)}&force=${this.importForce ? 1 : 0}&full=0`, { method: "PUT", body: f });
+        const r = await api(`/api/import?filename=${encodeURIComponent(f.name)}&force=${this.importForce ? 1 : 0}&full=${this.importFull ? 1 : 0}`, { method: "PUT", body: f });
+        this.importResult=r;
         await this.refresh(); this.importFile = null;
         const input = document.getElementById("imp-file"); if (input) input.value = "";
         const n = (r.imported || []).length, k = (r.skipped || []).length;
@@ -512,6 +542,7 @@ const app = createApp({
     openHelp() {
       this.openDialog({ title: "Keyboard shortcuts", cancel: "Close", keys: [
         [["/"], "Find a skill"], [["?"], "Show this list"], [["Esc"], "Close a dialog"],
+        [["Ctrl/Cmd", "K"], "Find tools and actions"],
         [["Ctrl", "S"], "Save while editing"], [["Enter"], "Fix the item in the Inbox"], [["S"], "Skip it for now"],
       ] });
     },
@@ -520,7 +551,8 @@ const app = createApp({
     startEdit() {
       const s = this.skill, c = this.refCopy;
       const body = stripFrontmatter(c.body || "");
-      this.edit = { name: s.name, desc: s.description, baseDesc: s.description, body, baseBody: body, tab: "write", targets: this.editTargets.map((x) => x.scope) };
+      const metadata={category:c.record.category||"",version:c.record.version||"",license:c.record.license||"",compatibility:Domain.formatCompat(c.record.compatibility),allowed_tools:Domain.formatTools(c.record.allowed_tools)};
+      this.edit = { name: s.name, desc: c.description, baseDesc: c.description, body, baseBody: body, metadata,baseMetadata:{...metadata},tab: "write", targets: this.readCopyPath ? [c.scope] : this.editTargets.map((x) => x.scope) };
       this.$nextTick(() => { this.growArea(); const d = document.getElementById("ed-desc"); if (d) d.focus(); });
     },
     async cancelEdit() {
@@ -531,10 +563,14 @@ const app = createApp({
       const e = this.edit; if (!e || this.editError) return;
       this.busy = true; const saved = [];
       try {
+        const fields = {};
+        if(e.desc!==e.baseDesc)fields.description=e.desc;
+        if(e.body!==e.baseBody)fields.body=e.body;
+        for(const key of Object.keys(e.metadata))if(e.metadata[key]!==e.baseMetadata[key])fields[key]=e.metadata[key];
         const snaps = {};
         for (const sc of e.targets) snaps[sc] = new Set(await this.snapshotIds(e.name, sc));
         for (const sc of e.targets) {
-          await api(`/api/skills/${encodeURIComponent(e.name)}?scope=${encodeURIComponent(sc)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description: e.desc, body: e.body }) });
+          await api(`/api/skills/${encodeURIComponent(e.name)}?scope=${encodeURIComponent(sc)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields) });
           const fresh = (await this.snapshotIds(e.name, sc)).find((id) => !snaps[sc].has(id));
           if (fresh) saved.push([sc, fresh]);
         }
@@ -627,6 +663,8 @@ const app = createApp({
     window.addEventListener("beforeunload", (e) => { if (this.editDirty) { e.preventDefault(); e.returnValue = ""; } });
     document.addEventListener("keydown", (e) => {
       const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      if(document.querySelector("dialog[open]"))return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==="k" && !this.dialog && !document.querySelector("dialog[open]")) {e.preventDefault();this.openCommands();}
       if (e.key === "?" && !typing && !this.dialog) { e.preventDefault(); this.openHelp(); }
       if (e.key === "/" && !typing && !this.dialog && !e.ctrlKey && !e.metaKey) { e.preventDefault(); this.$refs.gsearch.focus(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s" && this.edit) { e.preventDefault(); this.saveEdit(); }
@@ -642,6 +680,7 @@ const app = createApp({
       }
     });
     document.title = (this.route.page === "skill" ? this.route.name : TITLES[this.route.page]) + " · Skills Manager";
+    window.addEventListener("storage",event=>{if(["skillsmgr-theme","skillsmgr-text-size","skillsmgr-locale"].includes(event.key))this.preferencesChanged();});
     this.loadSkillHistory();
     this.applyTheme();
     /* The filesystem is the source of truth and other tools edit it, so re-read
@@ -670,5 +709,8 @@ app.component("logo", {
   props: { agent: Object, size: { type: String, default: "" } },
   template: '<span :class="[\'logo\', size]" :style="{ background: agent.color }" aria-hidden="true">{{ agent.initials }}</span>',
 });
+
+app.component("library-tools", window.SkillsV2LibraryTools);
+app.component("tool-center", window.SkillsV2ToolCenter);
 
 app.mount("#app");

@@ -8,6 +8,7 @@
   <script src="../preferences.js"></script>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="tools.css">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -20,6 +21,7 @@
       <a href="#/map" :aria-current="route.page === 'map' ? 'page' : null">Sync map</a>
       <a href="#/inbox" :aria-current="route.page === 'inbox' ? 'page' : null">Inbox <span class="badge" v-if="inboxCount" :aria-label="inboxCount + ' items'">{{ inboxCount > 99 ? '99+' : inboxCount }}</span></a>
       <a href="#/recovery" :aria-current="route.page === 'recovery' ? 'page' : null">Recovery</a>
+      <a href="#/tools" :aria-current="route.page === 'tools' ? 'page' : null">Tools</a>
     </nav>
     <form class="gsearch" role="search" @submit.prevent="searchSubmit">
       <ic name="search"></ic>
@@ -30,12 +32,12 @@
     <button type="button" class="themebtn" @click="cycleTheme()" :aria-label="'Theme: ' + themeLabel + '. Activate to switch.'" :title="'Theme: ' + themeLabel">
       <svg class="i" viewBox="0 0 24 24" aria-hidden="true" v-html="themeIcon"></svg></button>
     <button type="button" class="themebtn help" @click="openHelp()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><span aria-hidden="true" style="font-weight:800">?</span></button>
-    <a class="classic" href="/" title="Install, backups, profiles, quality checks and settings">All tools &amp; settings</a>
   </header>
 
   <main id="main" ref="main" tabindex="-1" :inert="!!dialog">
     <!-- loading / failure -->
-    <div class="page" v-if="loading && !m">
+    <tool-center v-if="route.page === 'tools'" :page="route.tool || 'tools'" :records="records" :scopes="scopes" :target="toolTarget" @changed="refresh()" @inspect="inspectRecord($event)" @preference="preferencesChanged()"></tool-center>
+    <div class="page" v-else-if="loading && !m">
       <h1 class="h1" id="h1" tabindex="-1">Looking at your agents…</h1>
       <p class="lede">Reading the skill folders on this computer.</p>
       <div class="rooms" style="margin-top:28px" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
@@ -86,8 +88,9 @@
           </div>
           <div class="card">
             <h2>Recent changes</h2>
-            <ul class="hist" style="margin-top:12px" v-if="history.length"><li v-for="(h, i) in history.slice(0, 4)" :key="i">{{ h.name }} · {{ h.action }}<small>{{ h.at }}</small></li></ul>
-            <p class="sub" v-else style="margin-top:12px">Changes made here will be listed.</p>
+            <p class="state-note err" v-if="historyError">{{historyError}} <button class="btn btn-line btn-sm" @click="refresh()">Retry</button></p>
+            <ul class="hist" style="margin-top:12px" v-if="history.length"><li v-for="(h, i) in history.slice(0, 4)" :key="i">{{ h.name }} · {{ h.action }}<small>{{ fmtDate(h.at) }}</small></li></ul>
+            <p class="sub" v-else-if="!historyError" style="margin-top:12px">Changes made here will be listed.</p>
           </div>
         </aside>
       </div>
@@ -98,7 +101,7 @@
       <div class="shelf-head">
         <div><h1 class="h1" id="h1" tabindex="-1">Skills</h1>
           <p class="lede">{{ fmt(shelfTotal) }} skills across {{ agentInfos.length }} tools, {{ grouping === 'category' ? 'grouped by category' : 'A to Z' }}. Open one to read, change or copy it.</p></div>
-        <button type="button" class="btn btn-ink" @click="openCreate()"><ic name="plus"></ic>New skill</button>
+        <div class="instance-actions"><a class="btn btn-line" href="#/tools/install">Add from source</a><button type="button" class="btn btn-ink" @click="openCreate()"><ic name="plus"></ic>New skill</button></div>
       </div>
       <div class="tools">
         <div class="searchf"><ic name="search"></ic><label class="sr-only" for="q">Search skills</label><input class="field" id="q" type="search" placeholder="Search by name or what it does" :value="query" @input="searchInput($event.target.value)" autocomplete="off"></div>
@@ -111,15 +114,18 @@
         <select class="field" id="sort-f" v-model="sortBy" @change="capReset()"><option value="name">A to Z</option><option value="size">Largest first</option><option value="shared">In most tools</option></select>
         <span class="count" aria-live="polite">{{ visible.length === shelfTotal ? fmt(visible.length) + ' skills' : 'Showing ' + fmt(visible.length) + ' of ' + fmt(shelfTotal) }}</span>
       </div>
+      <div class="instance-filters"><label>Tag<select class="field" v-model="tagFilter"><option value="">All tags</option><option value="__untagged">Untagged</option><option v-for="tag in catalogTags" :key="tag" :value="tag">{{tag}}</option></select></label><div class="seg" role="group" aria-label="Library view"><button type="button" :aria-pressed="libraryView==='shelf'" @click="libraryView='shelf'">Shelf</button><button type="button" :aria-pressed="libraryView==='instances'" @click="libraryView='instances'">Exact instances</button></div><button class="btn btn-line btn-sm" @click="refresh()" :disabled="loading">Refresh files</button></div>
+      <p class="state-note err" role="alert" v-if="catalogError">Tags and profiles are unavailable: {{catalogError}} <button class="btn btn-line btn-sm" @click="loadCatalog()">Retry</button></p>
       <div class="ribbon" v-if="careCount && filter !== 'care'"><ic name="warn"></ic><span><b>{{ plural(careCount, 'skill needs', 'skills need') }} a little care.</b> Cards with a badge have a problem.</span><a class="btn btn-ink btn-sm" href="#/inbox">Fix them in Inbox</a></div>
-      <template v-if="groups.length">
+      <library-tools v-if="libraryView==='instances'" :records="records" :scopes="scopes" :names="visibleNames" :agent-filter="agentFilter" :catalog="catalog" @changed="refresh()" @inspect="openRecord($event)" @source="openSource($event)"></library-tools>
+      <template v-else-if="groups.length">
         <section class="cat" v-for="g in groups" :key="g.id" role="group" :aria-label="grouping === 'letter' && sortBy === 'name' ? 'Skills starting with ' + g.id : g.id">
           <div class="cat-h"><h2 class="h2" :id="'cat-' + g.key">{{ g.id }}</h2><span>{{ plural(g.items.length, 'skill') }}</span></div>
           <div class="shelf">
             <a v-for="s in g.shown" :key="s.name" :class="['card sk', 'st-' + s.status.key, { faded: s.status.key === 'off' }]" :href="'#/skill/' + enc(s.name)" :aria-label="s.name + '. ' + s.status.label + '. ' + s.description">
               <div class="sk-top"><small class="kbd-hint">{{ s.status.key === 'off' ? 'Off everywhere' : 'In ' + plural(s.tools.length, 'tool') }}</small>
                 <span v-if="s.status.key !== 'ok'" :class="['pill', s.status.key]"><ic :name="s.status.icon"></ic>{{ s.status.label }}</span></div>
-              <div class="sk-b"><b>{{ s.name }}</b><p>{{ s.description || 'No description yet.' }}</p>
+              <div class="sk-b"><b>{{ s.name }}</b><p>{{ s.description || 'No description yet.' }}</p><span class="instance-tags"><span v-for="tag in skillTags(s.name)" :key="tag">{{tag}}</span></span>
                 <div class="sk-f"><span class="dots"><i v-for="c in s.tools" :key="c.scope" :class="{ 'is-off': c.state === 'off', 'is-bad': c.state === 'broken' }" :style="{ background: agentOf(c.scope).color }" :title="agentOf(c.scope).name"></i></span>
                   </div></div>
             </a>
@@ -160,7 +166,7 @@
               <p class="doc-lead">{{ skill.description || 'No description yet.' }}</p>
               <div class="inline-note bad" v-if="skill.status.key === 'bad'"><b>Problem:</b> {{ brokenText }}<br><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
               <div class="inline-note warn" v-if="skill.status.key === 'warn' && cmp"><b>{{ agentOf(cmp.scope).name }} has a different copy.</b> The highlighted lines are not in it. Sync also copies file enabled state and companion files. Undo restores document text and file enabled state only.<br><button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
-              <div class="doc" v-html="docHtml"></div>
+              <p class="state-note" v-if="readCopyPath && refCopy.path===readCopyPath">Reading the exact copy in {{agentOf(refCopy.scope).name}} · {{shortPath(refCopy.path)}}</p><div class="doc" v-html="docHtml"></div>
             </article>
             <aside class="margin" aria-label="About this skill">
               <div class="note warn" v-if="skill.status.key === 'warn' && cmp"><h2 class="note-h">Note</h2>
@@ -189,9 +195,10 @@
               <div class="note" v-if="skill.ref.groups.length > 1"><b>Copies</b>
                 <ul class="hist"><li v-for="g in skill.ref.groups" :key="g[0].hash"><span class="ver-tag" :class="{ odd: g[0].hash !== skill.ref.hash }">Copy {{ g[0].version }}</span> {{ join(g.map((c) => agentOf(c.scope).name)) }}<small>{{ g[0].hash === skill.ref.hash && !skill.ref.ambiguous ? 'Held by the most places' : plural(g.length, 'place') }} · {{ fmt(words(g[0].tokens)) }} words</small></li></ul></div>
               <div class="note"><h2 class="note-h">Length</h2><p>About {{ fmt(words(skill.tokens)) }} words · {{ lengthPct }}% of a reading window</p></div>
-              <div class="note"><h2 class="note-h">History</h2><ul class="hist"><li v-for="(h, i) in skillHistory" :key="i">{{ h.action }}<small>{{ h.at }}</small></li><li v-if="!skillHistory.length">No recorded changes<small>Edits made here are listed</small></li></ul></div>
-              <div class="note"><details class="paths"><summary>Folder locations</summary><code v-for="c in skill.copies" :key="c.path">{{ shortPath(c.path) }}</code></details></div>
+              <div class="note"><h2 class="note-h">History</h2><p class="state-note err" v-if="skillHistoryError">{{skillHistoryError}} <button class="btn btn-line btn-sm" @click="loadSkillHistory()">Retry</button></p><ul class="hist"><li v-for="(h, i) in skillHistory" :key="i">{{ h.action }}<small>{{ fmtDate(h.at) }}</small></li><li v-if="!skillHistory.length && !skillHistoryError">No recorded changes<small>Edits made here are listed</small></li></ul><a href="#/recovery">Open history and snapshots</a></div>
+              <div class="note"><details class="paths"><summary>Folder locations and source updates</summary><div v-for="c in skill.copies" :key="c.path"><code>{{ shortPath(c.path) }}</code><button class="btn btn-line btn-sm" v-if="c.record.addressable !== false && agentOf(c.scope).writable && c.state !== 'link'" @click="openSource(c.record)">Review local update</button></div></details></div>
               <div><button type="button" class="btn btn-danger btn-sm" @click="openTrash()"><ic name="trash" cls="i-s"></ic>Move to trash</button></div>
+              <details><summary>Permanent removal</summary><p class="sub">Deletes selected copies without trash or Undo.</p><button type="button" class="btn btn-danger btn-sm" @click="openPermanentDelete()">Delete permanently</button></details>
             </aside>
           </div>
 
@@ -205,6 +212,7 @@
                 <input class="ed-input" id="ed-desc" v-model="edit.desc" :aria-invalid="editError ? 'true' : null" :aria-describedby="editError ? 'ed-err' : null">
                 <p class="ed-err" id="ed-err" v-if="editError"><ic name="bad" cls="i-s"></ic>{{ editError }}</p>
                 <p class="ed-hint num" v-else>{{ edit.desc.length }} / 1024</p>
+                <details class="instance-metadata"><summary>Additional metadata</summary><div class="instance-fields"><label v-for="field in ['category','version','license','compatibility','allowed_tools']" :key="field">{{field==='allowed_tools'?'Allowed tools':titleCase(field)}}<input class="field" v-model="edit.metadata[field]"></label></div></details>
                 <div class="ed-tabs" role="tablist" aria-label="Editor">
                   <button type="button" role="tab" :aria-selected="edit.tab === 'write'" @click="edit.tab = 'write'">Write</button>
                   <button type="button" role="tab" :aria-selected="edit.tab === 'preview'" @click="edit.tab = 'preview'">Preview</button>
@@ -294,10 +302,10 @@
           <h2 id="rec-trash">Trash <span class="sub num">{{ trash.length }}</span></h2>
           <p class="sub">Skills removed from your library. Each agent keeps its own trash folder, which is not listed here.</p>
           <ul class="rec-list" v-if="trash.length">
-            <li v-for="t in trash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · last changed {{ t.modified.replace('T', ' ').replace('Z', ' UTC') }}</small></span>
+            <li v-for="t in trash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · last changed {{fmtDate(t.modified)}}</small></span>
               <button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="restoreTrash(t)">Restore</button></li>
           </ul>
-          <p class="state-note" v-else>The trash is empty.</p>
+          <p class="state-note" v-else-if="trashLoading" role="status">Reading global trash…</p><p class="state-note" v-else-if="!trashError">The trash is empty.</p><p class="state-note err" v-if="trashError" role="alert">{{trashError}} <button class="btn btn-line btn-sm" @click="loadTrash()">Retry</button></p>
           <div class="rec-acts" v-if="trash.length"><button type="button" class="btn btn-danger btn-sm" :disabled="busy" @click="openPurge()"><ic name="trash" cls="i-s"></ic>Empty the trash</button></div>
         </section>
         <section class="card rec-card" aria-labelledby="rec-backup">
@@ -312,9 +320,12 @@
           <label class="ed-label" for="imp-file">Backup file</label>
           <input class="field" id="imp-file" type="file" accept=".tar.gz,.tgz,.tar,.zip" @change="importFile = $event.target.files[0] || null" style="height:auto;padding:10px 12px;width:100%">
           <label class="hl-row"><input type="checkbox" v-model="importForce"> Replace skills that already exist</label>
+          <label class="hl-row"><input type="checkbox" v-model="importFull"> Full manager archive: include global trash, templates and catalog metadata</label>
           <div class="rec-acts"><button type="button" class="btn btn-ink" :disabled="!importFile || busy" @click="doImport()">Load skills</button></div>
         </section>
       </div>
+      <p class="state-note" v-if="importResult" role="status">{{(importResult.imported || []).length}} imported · {{(importResult.skipped || []).length}} skipped. Global store only.</p>
+      <tool-center page="recovery-extra" :records="records" :scopes="scopes" :target="toolTarget" @changed="refresh()" @inspect="inspectRecord($event)"></tool-center>
     </div>
 
     <!-- ========== INBOX ========== -->
@@ -368,6 +379,7 @@
     <a href="#/map" :aria-current="route.page === 'map' ? 'page' : null"><ic name="map"></ic>Map</a>
     <a href="#/inbox" :aria-current="route.page === 'inbox' ? 'page' : null"><span class="bn-ic"><ic name="inbox"></ic><span class="badge" v-if="inboxCount" aria-hidden="true">{{ inboxCount > 99 ? '99+' : inboxCount }}</span></span>Inbox<span class="sr-only" v-if="inboxCount">, {{ inboxCount }} items</span></a>
     <a href="#/recovery" :aria-current="route.page === 'recovery' ? 'page' : null"><ic name="undo"></ic>Recovery</a>
+    <a href="#/tools" :aria-current="route.page === 'tools' ? 'page' : null"><ic name="tools"></ic>Tools</a>
   </nav>
 
   <!-- dialog -->
@@ -386,13 +398,18 @@
           <p :class="formErrors.desc ? 'ed-err' : 'ed-hint'" id="nf-dhint" style="text-align:left">{{ formErrors.desc || 'Start with “Use this when…”.' }}</p>
           <label class="ed-label" for="nf-scope">Create it in</label>
           <select class="field" id="nf-scope" v-model="dialog.form.scope" style="width:100%"><option v-for="a in createTargets" :key="a.id" :value="a.id">{{ a.name }}</option></select>
+          <label class="ed-label" for="nf-template">Start from a stored template</label><select class="field" id="nf-template" v-model="dialog.form.template" @change="loadCreateTemplate()"><option value="">Default structure</option><option v-for="name in createTemplates" :key="name" :value="name">{{name}}</option></select>
+          <details class="instance-metadata"><summary>Additional metadata</summary><div class="instance-fields"><label v-for="field in ['category','version','license','compatibility','allowed_tools']" :key="field">{{field==='allowed_tools'?'Allowed tools':titleCase(field)}}<input class="field" v-model="dialog.form[field]"></label></div></details>
+          <label class="ed-label" for="nf-body">Instructions</label><textarea class="field instance-create-body" id="nf-body" rows="8" v-model="dialog.form.body" :disabled="dialog.templateLoading"></textarea>
+          <p class="state-note err" v-if="dialog.error" role="alert">{{dialog.error}}</p>
           <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Create</button>
         </form>
         <ul class="keylist" v-if="dialog.keys"><li v-for="k in dialog.keys" :key="k[1]"><span><kbd v-for="x in k[0]" :key="x">{{ x }}</kbd></span>{{ k[1] }}</li></ul>
+        <div v-if="dialog.commands"><label class="ed-label" for="command-q">Search tools and actions</label><input class="field" id="command-q" type="search" v-model="commandQuery" style="width:100%"><div class="command-list"><button v-for="item in commandChoices" :key="item.label" class="btn btn-line" @click="commandGo(item)">{{item.label}}</button><p v-if="!commandChoices.length">No matching tools or actions.</p></div></div>
         <div class="pick-list" v-if="dialog.picks"><label class="pick" v-for="p in dialog.picks" :key="p.id"><input type="checkbox" :value="p.id" v-model="dialog.chosen"><logo :agent="agentOf(p.id)" size="xs"></logo><span>{{ p.label }}<small>{{ p.path }}</small></span></label></div>
       </div>
       <div class="dlg-f"><button type="button" class="btn btn-line" @click="closeDialog()">{{ dialog.cancel || 'Cancel' }}</button>
-        <button type="button" :class="['btn', dialog.danger ? 'btn-danger' : 'btn-ink']" v-if="dialog.confirm" :disabled="(dialog.picks && !dialog.chosen.length) || (dialog.form && !!formInvalid)" @click="confirmDialog()">{{ dialog.confirm }}</button></div>
+        <button type="button" :class="['btn', dialog.danger ? 'btn-danger' : 'btn-ink']" v-if="dialog.confirm" :disabled="busy || dialog.templateLoading || (dialog.picks && !dialog.chosen.length) || (dialog.form && !!formInvalid)" @click="confirmDialog()">{{ busy ? 'Working…' : dialog.confirm }}</button></div>
     </div>
   </div>
 
@@ -402,6 +419,8 @@
 <script src="../static/vendor/vue.global.prod.js"></script>
 <script src="../domain.js"></script>
 <script src="model.js"></script>
+<script src="library-tools.js"></script>
+<script src="tool-center.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

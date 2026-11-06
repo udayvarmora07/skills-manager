@@ -22,6 +22,15 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 
 ## `webui/` (frontend)
 
+**[NOTE] 2026-11-06 v2 default.** `/` redirects to `/v2/`; the classic frontend
+below remains at `/classic/`. V2's `app.js` owns the shell and ordinary skill
+flows, `model.js` derived state/document rendering, `library-tools.js` exact-copy
+selection and reviewed batches, and `tool-center.js` the remaining secondary
+workflows. `tools.css` extends the selected v2 tokens. Stored-template reads and
+PATCH explicit optional/body clears live in `webapp.py`; omitted fields are
+preserved. See @docs/08-web-ui.md for the current route and workflow map.
+
+
 `index.html` (Vue templates for all screens/modals), `styles.css` (design tokens + components), `domain.js` (transport, formatting, frontmatter, escaped Markdown renderer), `app.js` (Vue state, actions, dialogs, focus/keyboard lifecycle, and toasts), `static/vendor/vue.global.prod.js` (Vue 3.5.13 vendored, no build step). Scope switcher in the topbar (`activeScope` persisted to localStorage), scope-aware create/edit/remove/disable/sync. Full map: @docs/08-web-ui.md.
 
 ## `store.py`

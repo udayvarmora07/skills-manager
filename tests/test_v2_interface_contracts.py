@@ -366,9 +366,12 @@ class InterfaceSourceTests(unittest.TestCase):
         for rel in re.findall(r'url\("([^")]+\.woff2)"\)', self.css):
             self.assertTrue((V2 / rel).exists(), f"missing font {rel}")
 
-    def test_it_uses_the_existing_api_only(self):
-        called = set(re.findall(r'(?:api\(|`|")(/api/[a-z-]+)', self.app))
-        self.assertLessEqual(called, {"/api/scopes", "/api/skills", "/api/history", "/api/sync", "/api/trash", "/api/import", "/api/export"})
+    def test_tooling_uses_only_the_documented_api_families(self):
+        modules = self.app + (V2 / "library-tools.js").read_text(encoding="utf-8") + (V2 / "tool-center.js").read_text(encoding="utf-8")
+        called = set(re.findall(r"[\"'`](/api/[a-z-]+)", modules))
+        self.assertLessEqual(called, {"/api/scopes", "/api/skills", "/api/history", "/api/sync", "/api/trash", "/api/import", "/api/export", "/api/catalog", "/api/templates", "/api/batch", "/api/install", "/api/doctor", "/api/stats", "/api/tokens", "/api/workspaces", "/api/source-updates", "/api/validate"})
+        self.assertIn("/api/templates", called)
+        self.assertIn("/api/batch", called)
 
     def test_every_css_variable_it_uses_is_declared(self):
         declared = set(re.findall(r"(--[a-z0-9-]+)\s*:", self.css))
@@ -460,6 +463,8 @@ class ServedTests(unittest.TestCase):
     def test_the_interface_and_its_assets_are_served(self):
         for path, kind in (("/v2/", "text/html"), ("/v2/index.html", "text/html"), ("/v2/app.js", "javascript"),
                            ("/v2/model.js", "javascript"), ("/v2/styles.css", "text/css"),
+                           ("/v2/library-tools.js", "javascript"), ("/v2/tool-center.js", "javascript"), ("/v2/tools.css", "text/css"),
+                           ("/classic/", "text/html"), ("/classic/app.js", "javascript"), ("/classic/domain.js", "javascript"), ("/classic/styles.css", "text/css"),
                            ("/v2/fonts/Newsreader-var.woff2", "font/woff2")):
             status, ctype, body = self._get(path)
             self.assertEqual(status, 200, path)
@@ -472,10 +477,36 @@ class ServedTests(unittest.TestCase):
             self.assertEqual(status, 404, path)
             self.assertNotIn(b"[project]", body)
 
-    def test_the_classic_interface_is_untouched(self):
+    def test_v2_is_default_and_classic_remains_available_explicitly(self):
         status, _, body = self._get("/")
         self.assertEqual(status, 200)
+        self.assertIn(b'src="model.js"', body)
+        status, _, body = self._get("/classic/")
+        self.assertEqual(status, 200)
         self.assertIn(b"overview", body.lower())
+
+    def test_classic_namespace_cannot_read_files_outside_webui(self):
+        for path in ("/classic/../../pyproject.toml", "/classic/%2e%2e/%2e%2e/pyproject.toml", "/classic/static/../../../pyproject.toml"):
+            status, _, body = self._get(path)
+            self.assertEqual(status, 404, path)
+            self.assertNotIn(b"[project]", body)
+
+    def test_entry_redirects_keep_queries_and_use_only_fixed_local_paths(self):
+        import http.client
+
+        for path, expected in (("/", "/v2/"), ("/?window=claude&x=1", "/v2/?window=claude&x=1"),
+                               ("/index.html?x=1", "/v2/?x=1"), ("/classic?x=1", "/classic/?x=1"),
+                               ("/v2?x=1", "/v2/?x=1")):
+            with self.subTest(path=path):
+                connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+                try:
+                    connection.request("GET", path)
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 308)
+                    self.assertEqual(response.getheader("Location"), expected)
+                    self.assertEqual(response.read(), b"")
+                finally:
+                    connection.close()
 
 
 if __name__ == "__main__":

@@ -3556,7 +3556,7 @@
       "lineno": 162
     },
     "skillsmgr/webapp.py::_validated_skill_fields": {
-      "complexity": 7,
+      "complexity": 6,
       "end_lineno": 702,
       "lineno": 688
     },

@@ -122,7 +122,7 @@ class ContentSecurityPolicyTests(BatchFiveCase):
         # SEC-5: `form-action` does not fall back to `default-src`, so an
         # injected <form action="https://attacker/"> was unconstrained.
         server = self._live_server()
-        status, _, headers = self._request(server.port, "GET", "/")
+        status, _, headers = self._request(server.port, "GET", "/v2/")
         self.assertEqual(status, 200)
         csp = headers["content-security-policy"]
         self.assertIn("form-action 'none'", csp)

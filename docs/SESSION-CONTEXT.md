@@ -2,6 +2,16 @@
 
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
 
+**Current UI anchor — 2026-11-06.** V2 is the default: `/` and `/index.html`
+redirect to `/v2/`; classic remains at `/classic/`. The maintainer explicitly
+selected the existing warm-paper v2 design. Its visual authority is
+`skillsmgr/webui/v2/styles.css`, not classic's root `DESIGN.md`. Remaining
+classic workflows are integrated in `v2/tool-center.js` and
+`v2/library-tools.js`; the shell retains Home/Skills/Sync map/Inbox/Recovery and
+adds Tools. See @docs/08-web-ui.md and the newest progress/task entries for
+current implementation and acceptance evidence. The version blocks below are
+dated historical checkpoints, not current UI defaults.
+
 **Version 1.16.0** (2026-10-08: the Warm Instrument redesign landed.
 **1,232 tests, 689 complexity-tracked functions**, both measured on `8017cb5`.
 **The design contract is now `DESIGN.md` at the repository root**, and

@@ -139,7 +139,7 @@ GET_ROUTES = (
 GET_UNROUTED = (
     "/api/skill", "/api/skillsx", "/api/searchx", "/api/doctorx", "/api/tokensx",
     "/api/trashx", "/api/scopes/extra", "/api/stats/extra", "/api/history/extra",
-    "/api/export/extra", "/api/workspaces/extra", "/api/templates/extra",
+    "/api/export/extra", "/api/workspaces/extra", "/api/templates/example/extra",
     "/api/resync/extra", "/api/rebuild/extra", "/api/search/extra",
     "/api/validate/extra", "/api/skills/demo/bogus", "/api/trash/x/y/z",
     "/api/catalog/profiles/nope", "/api/catalog/profiles/nope/preview/extra",

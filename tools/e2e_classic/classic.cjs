@@ -59,7 +59,7 @@ async function api(method, url, body) {
 }
 async function shot(name) { try { await page.screenshot({path: path.join(screens, slug(name) + '.png'), fullPage: false}); } catch (e) {} return 'screens/' + slug(name) + '.png'; }
 async function ready() { await page.locator('#app').waitFor(); await page.waitForFunction(() => !document.querySelector('#app[v-cloak]')); await page.waitForLoadState('networkidle'); await sleep(150); }
-async function load(url = '/') { await page.goto(base + url); await ready(); }
+async function load(url = '/classic/') { await page.goto(base + url); await ready(); }
 const NAV = {overview: 'Overview', skills: 'Library', profiles: 'Profiles', workspaces: 'Workspaces', install: 'Install', recovery: 'Recovery', quality: 'Quality', settings: 'Settings'};
 async function nav(view) {
   await page.locator('nav').getByRole('button', {name: NAV[view], exact: true}).click();
@@ -135,7 +135,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
   });
 
   /* ============================== SETTINGS ============================== */
-  await load('/');
+  await load('/classic/');
   await test('Settings', 'defaults, theme radios persist across reload (no flash), system follows OS live', async () => {
     let t = await theme();
     eq([t.p, t.s], ['system', 'standard'], 'fresh profile defaults'); eq(t.ls, null, 'nothing stored before a choice');
@@ -197,7 +197,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     eq(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), 'dark', 'v2 reads the classic dark choice');
     for (let i = 0; i < 3 && (await page.evaluate(() => localStorage.getItem('skillsmgr-theme'))) !== 'light'; i++) { await page.locator('.themebtn').first().click(); await sleep(120); }
     eq(await page.evaluate(() => localStorage.getItem('skillsmgr-theme')), 'light', 'v2 wrote light');
-    await load('/'); await nav('settings');
+    await load('/classic/'); await nav('settings');
     ok(await page.locator('input[name=theme-preference][value=light]').isChecked(), 'classic radio reflects the v2 choice');
     eq((await theme()).t, 'light');
     await page.locator('.settings-option').filter({has: page.locator('input[value=system]')}).click();
@@ -217,7 +217,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
   });
 
   /* ============================== PROFILES ============================== */
-  await load('/');
+  await load('/classic/');
   const MEMBERS = ['prof-observed', 'prof-disabled', 'prof-mixed', 'prof-divergent', 'prof-missing'];
   const expectedTargets = [];
   for (const n of ['prof-observed', 'prof-disabled', 'prof-mixed', 'prof-divergent']) for (const s of ['claude', 'codex']) expectedTargets.push(sk(s, n, state(s, n) === 'enabled' ? 'SKILL.md' : 'SKILL.md.disabled').replace(/\/SKILL\.md(\.disabled)?$/, ''));
@@ -363,7 +363,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     tags = catalog().tags; eq([tags['prof-observed'], tags['global-skill']], [['alpha'], ['alpha', 'beta']], 'remove only on selected');
     const r = await api('POST', '/api/catalog/tags', {operation: 'replace', names: ['global-skill'], tags: ['gamma']});
     eq(r.status, 200); eq(catalog().tags['global-skill'], ['gamma'], 'replace'); eq(catalog().tags['prof-observed'], ['alpha']);
-    await load('/'); await nav('skills');
+    await load('/classic/'); await nav('skills');
     await page.locator('.tag-filter-details summary').click();
     await page.locator('.tag-filter .chip', {hasText: 'gamma'}).click(); await sleep(300);
     eq(await page.locator('ul.skilllist > li[data-skill-key]').count(), 1, 'tag filter shows only the gamma skill');
@@ -388,7 +388,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
   });
 
   /* ============================== QUALITY ============================== */
-  await load('/');
+  await load('/classic/');
   const hyg = async (scope) => (await api('GET', `/api/doctor?scope=${scope}&hygiene=1`)).json.hygiene;
   const metric = async (label) => { const t = await page.locator('.quality-hygiene-metrics div').filter({has: page.locator('dt', {hasText: new RegExp('^' + label + '$')})}).locator('dd').innerText(); return Number(t.replace(/[^0-9]/g, '').slice(0, t.match(/^[\d,]+/) ? t.match(/^[\d,]+/)[0].replace(/,/g, '').length : 1)); };
   let hygAll;
@@ -438,7 +438,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     match(await page.locator('.detail').first().innerText(), /prof-divergent/, 'Library detail shows the clicked skill; label: ' + label);
   });
   await test('Quality', 'hygiene report stays reachable after a skill is selected (rail click returns to the overview)', async () => {
-    await load('/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
+    await load('/classic/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
     await page.locator('.sidepanel-row').filter({hasText: 'prof-observed'}).first().click(); await sleep(600);
     match(await page.locator('#view-title').innerText(), /^Quality: prof-observed/, 'per-skill panel opens');
     eq(await page.locator('.quality-hygiene-metrics').count(), 0, 'precondition: overview replaced by the per-skill panel');
@@ -449,7 +449,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     ok(back > 0, 'clicking Quality in the rail again must return to the Skill Hygiene Report; instead the per-skill panel persists and no control returns to the report');
   });
   await test('Quality', 'one scope: scope switch re-queries with that scope and matches API', async () => {
-    await load('/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
+    await load('/classic/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
     const reqP = page.waitForRequest(r => /\/api\/doctor\?scope=claude-code&hygiene=1/.test(r.url()));
     await page.locator('.scope-link', {hasText: 'Claude'}).first().click(); await reqP;
     await page.waitForFunction(() => !document.querySelector('.quality-hygiene .skeleton')); await sleep(300);
@@ -460,7 +460,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     await page.locator('.scope-link', {hasText: 'All scopes'}).click(); await sleep(500);
   });
   await test('Quality', 'forced failure shows an alert; Retry recovers', async () => {
-    await load('/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
+    await load('/classic/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
     let hit = 0;
     await page.route(/\/api\/doctor\?.*hygiene=1/, r => { hit++; return r.fulfill({status: 500, contentType: 'application/json', body: JSON.stringify({error: 'forced failure for e2e', code: 'internal_error'})}); });
     await allowFailures(async () => { await page.getByRole('button', {name: 'Refresh'}).click(); await page.locator('.quality-hygiene [role=alert]').waitFor(); });
@@ -473,7 +473,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     eq(await page.locator('.quality-hygiene [role=alert]').count(), 0);
   });
   await test('Quality', 'keyboard: filter + refresh reachable; side-list item opens per-skill Quality', async () => {
-    await load('/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
+    await load('/classic/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
     ok(await tabTo('#quality-severity-filter') >= 0, 'severity filter reachable');
     await page.keyboard.press('ArrowDown'); await sleep(200);
     ok(await page.locator('#quality-severity-filter').inputValue() !== 'all', 'keyboard changes the filter');
@@ -484,7 +484,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
   });
 
   /* ============================== WORKSPACES ============================== */
-  await load('/');
+  await load('/classic/');
   const ws = async (p) => { await page.locator('#workspace-project').fill(p); await page.getByRole('button', {name: 'Check project'}).click(); await page.locator('.workspace-observation').waitFor(); await sleep(250); return page.locator('.workspace-observation').innerText(); };
   const inside = path.join(store, 'projects', 'inside-project'), outside = path.join(root, 'outside-project');
   await test('Workspaces', 'adapter catalog matches API; read-only; heading focus', async () => {
@@ -530,7 +530,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
   });
 
   /* ============================== INSTALL ============================== */
-  await load('/'); installRequests = [];
+  await load('/classic/'); installRequests = [];
   await test('Install', 'registry browse without a token fails cleanly (400 naming the token), no cache, no runner', async () => {
     await nav('install'); eq((await active()).id, 'view-title');
     match(await page.locator('#view-title').innerText(), /Install \/ update inbox/);
@@ -628,7 +628,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     await test('Cross-cutting', `no horizontal overflow at ${w}px on all five screens (light + dark)`, async () => {
       await page.setViewportSize({width: w, height: h});
       for (const th of ['light', 'dark']) {
-        await load('/'); await page.evaluate(t => { localStorage.setItem('skillsmgr-theme', t); }, th); await load('/');
+        await load('/classic/'); await page.evaluate(t => { localStorage.setItem('skillsmgr-theme', t); }, th); await load('/classic/');
         for (const v of SCREENS) {
           if (w < 600) { const t = page.locator('.mobile-controls-toggle'); }
           await nav(v);
@@ -644,7 +644,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
   }
   await page.setViewportSize({width: 1280, height: 900});
   await test('Cross-cutting', 'exactly one heading owns focus after navigation on every screen', async () => {
-    await load('/');
+    await load('/classic/');
     for (const v of ['overview', 'skills', ...SCREENS, 'recovery']) {
       await nav(v);
       const a = await active(); const h1s = await page.locator('h1').evaluateAll(l => l.filter(e => e.offsetParent !== null || e.classList.contains('sr-only')).map(e => e.id + ':' + e.textContent.trim().slice(0, 30)));
@@ -653,7 +653,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     }
   });
   await test('Cross-cutting', 'dark theme: key text meets WCAG AA 4.5:1 on every screen', async () => {
-    await page.evaluate(() => localStorage.setItem('skillsmgr-theme', 'dark')); await load('/');
+    await page.evaluate(() => localStorage.setItem('skillsmgr-theme', 'dark')); await load('/classic/');
     const checks = {settings: ['.lead', '.hint', '.settings-option strong', '.settings-option small', 'h2'], profiles: ['.lead', '.hint', 'label', '.profile-editor .btn-primary', '.profile-editor h2'], quality: ['.hint', '.quality-hygiene-metrics dt', '.quality-hygiene-metrics small', '.btn-secondary', '.sidepanel-row span'], workspaces: ['.adapter-card h3', '.adapter-card .hint', '.badge', 'label[for=workspace-project]'], install: ['.lead', '.hint', '.install-center label', '.btn-secondary']};
     const low = [];
     for (const v of SCREENS) { await nav(v); await sleep(300); if (v === 'quality') await page.locator('.quality-hygiene-metrics').waitFor().catch(() => {}); for (const s of checks[v]) { const c = await contrastOf(s); if (c.missing) { note(`contrast: ${v} ${s} not visible`); continue; } if (c.ratio < 4.5) low.push(`${v} ${s} ${c.ratio} fg${c.fg} bg${c.bg} "${c.text}"`); } await shot('dark-' + v); }
@@ -661,7 +661,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     await page.evaluate(() => localStorage.removeItem('skillsmgr-theme'));
   });
   await test('Cross-cutting', 'Escape closes dialogs with focus return (batch, install, validate)', async () => {
-    await load('/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
+    await load('/classic/'); await nav('quality'); await page.locator('.quality-hygiene-metrics').waitFor();
     await nav('install'); const o = page.getByRole('button', {name: 'Open full install workflow'}); await o.focus(); await page.keyboard.press('Enter'); await page.locator('[data-modal=install]').waitFor();
     await page.keyboard.press('Escape'); eq(await page.locator('[data-modal]').count(), 0); eq((await focusIs('Open full install workflow')).text, 'Open full install workflow');
     await nav('quality');
@@ -670,7 +670,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     await page.keyboard.press('Escape'); eq(await page.locator('[data-modal]').count(), 0); eq((await focusIs('Validate')).text, 'Validate', 'focus returns to the Validate opener');
   });
   await test('Cross-cutting', 'Library batch bar dialog (Disable) returns focus to its opener on Escape; nothing applied', async () => {
-    await load('/'); await nav('skills'); await sleep(300);
+    await load('/classic/'); await nav('skills'); await sleep(300);
     const snap = diskSnapshot();
     await page.locator('li[data-skill-key$="/global-skill"] input.row-select').check();
     const opener = page.locator('.batchbar').getByRole('button', {name: 'Disable', exact: true});
@@ -697,7 +697,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
         const url = new URL(response.url());
         return url.pathname === '/api/skills' && url.searchParams.get('body') === '0';
       });
-      await load('/');
+      await load('/classic/');
       const list = await (await listResponse).json();
       ok(list.filter(row => row.name.startsWith('zz-perf-')).length === 300, 'all fixture rows are present');
       ok(list.every(row => !Object.hasOwn(row, 'body')), 'classic list omits document bodies');
