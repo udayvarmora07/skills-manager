@@ -35,7 +35,7 @@ import urllib.request
 from contextlib import redirect_stderr
 from pathlib import Path
 
-from skillsmgr import store as store_mod
+from skillsmgr import scopes as scopes_mod, store as store_mod
 from skillsmgr.store import Store, StoreError, StoreLayoutError, _coalesced_read
 
 MINIMAL_SKILLS_TABLE = """
@@ -63,6 +63,8 @@ class ReviewTestCase(unittest.TestCase):
         os.environ["SKILLS_MANAGER_DATA"] = str(self.data_dir)
         self.store = Store()
         self.store.init_db()
+        store_token = scopes_mod._GLOBAL_STORE.set(self.store)
+        self.addCleanup(scopes_mod._GLOBAL_STORE.reset, store_token)
 
     def _restore(self):
         for key, value in self._saved.items():

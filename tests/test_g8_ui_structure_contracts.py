@@ -388,7 +388,7 @@ const id = (scope, state, problem) => ({
   key: scope + state, label: scope + ' · consumer: ' + scope, scopeLabel: scope,
   stateLabel: state, stateKeys: [state.toLowerCase()], problem, count: 1,
 });
-const groups = m.groupedIdentities.call({ identityItems: () => [
+const groups = m.groupedIdentities.call({ ...m, identityItems: () => [
   id('global', 'Active', false), id('codex', 'Active', false),
   id('gemini', 'Active', false), id('claude-code', 'Linked', true),
 ]});

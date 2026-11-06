@@ -98,19 +98,22 @@ def _resolve_identity(value) -> str:
         return _bounded(value)
 
 
+def _memoized_identity(value) -> str:
+    memo = _RESOLVED_IDENTITIES.get()
+    if memo is None:
+        return _resolve_identity(value)
+    key = str(value)
+    if key not in memo:
+        memo[key] = _resolve_identity(value)
+    return memo[key]
+
+
 def _identity(record: dict) -> str:
     value = record.get("physical_path") or record.get("path")
     if not value and isinstance(record.get("provenance"), dict):
         value = record["provenance"].get("path")
     if value:
-        memo = _RESOLVED_IDENTITIES.get()
-        if memo is None:
-            return _resolve_identity(value)
-        key = str(value)
-        hit = memo.get(key)
-        if hit is None:
-            hit = memo[key] = _resolve_identity(value)
-        return hit
+        return _memoized_identity(value)
     scope = _bounded(record.get("scope", ""), 128)
     name = _bounded(record.get("name", ""), 128)
     return f"<missing-path>/{scope}/{name}"

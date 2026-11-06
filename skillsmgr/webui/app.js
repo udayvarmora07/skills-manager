@@ -2283,17 +2283,40 @@ createApp({
 
     async openEdit() {
       if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
+      // While a detail request is active, `selectedName` may still describe a
+      // previous row and `selected` may be null. In an all-scopes view that
+      // does not identify which same-name copy is loading, so don't guess and
+      // start a competing request for the first matching list row.
+      if (this.loadingDetail) {
+        this.toast("Wait for the selected skill to finish loading before editing.", "info");
+        return;
+      }
       if (!this.selectedName) { this.toast("Select a skill first.", "err"); return; }
+      const editName = this.selectedName;
+      const listed = (this.skills || []).find((record) => record.name === editName);
+      const editScope = (this.selected && this.selected.name === editName && this.selected.scope)
+        || (this.activeScope !== "all" ? this.activeScope : (listed && listed.scope))
+        || null;
       // Never seed the editor from a list row: list rows carry no body, and an
       // editor opened on an empty body invites saving one.
-      if (this.selected && typeof this.selected.body !== "string") {
-        await this.loadDetail(this.selectedName, this.selected.scope);
-        if (!this.selected || !this.selectedName) return;
+      if (!this.selected || this.selected.name !== editName
+          || (editScope && this.selected.scope !== editScope)
+          || typeof this.selected.body !== "string") {
+        await this.loadDetail(editName, editScope || "all");
       }
-      this.modals.skill = {
-        mode: this.selectedName,
+      // The detail request may have failed, or another selection may have
+      // superseded it while it was in flight. Never open an editor for a
+      // different row or seed it from a body-less list record.
+      if (this.selectedName !== editName || !this.selected
+          || this.selected.name !== editName
+          || (editScope && this.selected.scope !== editScope)
+          || typeof this.selected.body !== "string") {
+        return;
+      }
+      const modal = {
+        mode: editName,
         form: {
-          name: this.selectedName,
+          name: editName,
           description: this.selected.description || "",
           category: this.selected.category || "",
           version: this.selected.version || "",
@@ -2304,12 +2327,13 @@ createApp({
         },
         errors: {},
       };
+      this.modals.skill = modal;
       try {
-        const sc = (this.selected && this.selected.scope) ? this.selected.scope : (this.activeScope !== "all" ? this.activeScope : "global");
+        const sc = editScope || this.selected.scope || (this.activeScope !== "all" ? this.activeScope : "global");
         const qp = "?scope=" + encodeURIComponent(sc);
-        const text = await apiText("/api/skills/" + encodeURIComponent(this.selectedName) + "/raw" + qp);
+        const text = await apiText("/api/skills/" + encodeURIComponent(editName) + "/raw" + qp);
         const fm = parseFrontmatter(text);
-        if (!this.modals.skill) return;
+        if (this.modals.skill !== modal) return;
         if (fm.compatibility && !this.modals.skill.form.compatibility) this.modals.skill.form.compatibility = fm.compatibility;
         if (fm.allowed_tools && !this.modals.skill.form.allowed_tools) this.modals.skill.form.allowed_tools = fm.allowed_tools;
       } catch (e) { /* optional */ }

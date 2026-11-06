@@ -680,6 +680,46 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     eq((await focusIs('Disable')).text, 'Disable', 'focus returns to the batch-bar opener (docs/08: focus returns to its opener)');
     eq(diffSnap(snap, diskSnapshot()), [], 'previewing a batch writes nothing');
   });
+  await test('Performance', 'body-less rows retain full detail and off-screen keyboard access', async () => {
+    const fixtureDirs = [];
+    try {
+      for (let i = 0; i < 300; i++) {
+        const name = 'zz-perf-' + String(i).padStart(4, '0');
+        const directory = path.join(home, '.codex', 'skills', name);
+        fs.mkdirSync(directory, {recursive: true}); fixtureDirs.push(directory);
+        fs.writeFileSync(path.join(directory, 'SKILL.md'), `---\nname: ${name}\ndescription: Use only for the isolated performance browser check.\n---\nOFFSCREEN_DOCUMENT_${i}\n`);
+      }
+      await page.evaluate(() => {
+        localStorage.setItem('skillsmgr-scope', 'all');
+        localStorage.setItem('skillsmgr-library-mode', 'instances');
+      });
+      const listResponse = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/skills' && url.searchParams.get('body') === '0';
+      });
+      await load('/');
+      const list = await (await listResponse).json();
+      ok(list.filter(row => row.name.startsWith('zz-perf-')).length === 300, 'all fixture rows are present');
+      ok(list.every(row => !Object.hasOwn(row, 'body')), 'classic list omits document bodies');
+      await nav('skills');
+      const row = page.locator('li[data-skill-key="codex/zz-perf-0299"]');
+      const originalBytes = fs.readFileSync(path.join(fixtureDirs[299], 'SKILL.md'));
+      const before = await row.boundingBox();
+      ok(before.y > 900, 'last row starts beyond the viewport');
+      await row.focus();
+      ok(await row.evaluate(element => element === document.activeElement), 'off-screen row can receive keyboard focus');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelector('.detail .body')?.textContent.includes('OFFSCREEN_DOCUMENT_299'));
+      await page.getByRole('button', {name: 'Edit', exact: true}).first().click();
+      await page.locator('#f-body').waitFor();
+      ok((await page.locator('#f-body').inputValue()).includes('OFFSCREEN_DOCUMENT_299'), 'editor loads the real document instead of an empty list body');
+      await page.keyboard.press('Escape');
+      eq(fs.readFileSync(path.join(fixtureDirs[299], 'SKILL.md')), originalBytes, 'opening and cancelling the editor leaves bytes unchanged');
+      await shot('performance-offscreen-detail');
+    } finally {
+      for (const directory of fixtureDirs) fs.rmSync(directory, {recursive: true, force: true});
+    }
+  });
   await test('Cross-cutting', 'no unexpected console errors, page errors or failed requests during the run', async () => {
     const bad = events.filter(e => !e.d);
     ok(bad.length === 0, 'unexpected: ' + JSON.stringify(bad.slice(0, 6)));

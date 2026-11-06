@@ -4,6 +4,30 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Performance and UX session completion (2026-11-06)
+
+Branch `claude/project-perf-ux-review-4da40d`; kept separate from `main`.
+Current main `d00cb78` was merged into this branch before verification.
+
+- [x] Add backend regressions for concurrent snapshot isolation, failures,
+  independent read keys and report-scoped hygiene memo lifetime.
+- [x] Cover opt-in `body=0` list projection, unchanged default/detail behavior,
+  body-aware search, paging/HEAD, invalid flags and shared startup HTTP scans.
+- [x] Preserve global scope counts for unindexed documents and missing/corrupt
+  indexes; keep `/api/scopes` read-only and independent of index health.
+- [x] Preserve query parameters and browser hash routes on `/v2` redirects.
+- [x] Add behavioral frontend checks for parallel startup, bounded formatters,
+  Vue row-cache invalidation, selection Sets and body-less list editing.
+- [x] Refactor private helpers without raising existing complexity budgets.
+- [x] Document the list flag and performance behavior in @docs/08-web-ui.md.
+- [x] Finish editor race review, including same-name copies in different
+  scopes and Edit invoked while detail is loading.
+- [x] Full matrix: 1,363 tests on each Python 3.10–3.14; both smokes,
+  compilation, docs, design tokens, complexity, pinned Ruff/Bandit and
+  pinned wheel/sdist build and package-data inspection.
+- [x] Final browser verification: classic 38 scenarios / 318 assertions,
+  v2 28 scenarios and the six-viewport smoke harness; zero failures.
+
 ## CI blocker — extended tar headers (2026-11-06)
 
 - [x] Reproduce the roughly 25 MB allocation with CPython 3.13.18's tarfile
@@ -30,8 +54,9 @@ See @docs/32-continuation-verification-2026-11-06.md.
   SR-1 (P0, Enter on "Open skill" ran the fix), SR-2/3/4 (P1) and SR-5–13,
   15, 16; v2 browser suite 27/27 twice.
 - [ ] Human spoken screen-reader sign-off using the docs/32 walkthrough.
-- [ ] Decide: body-less list projection (R3); `/api/scopes` without token
-  totals; capping classic Library rows (changes "exact visible-set").
+- [ ] Decide: `/api/scopes` without token totals; capping classic Library
+  rows (changes "exact visible-set"). Opt-in body-less projection is covered
+  by the performance completion above.
 - [ ] Decide: batch plan binding of before-state and sync source content (P3).
 - [ ] P3: Enter in Workspaces project field; classic Install shows API trust
   blockers.
@@ -107,7 +132,8 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [ ] Decide: make `/v2/` the default route (classic moves to `/classic/`).
 - [ ] Port Install, Profiles, Quality, Workspaces, Settings into v2.
 - [ ] In-app restore for agent-scope trash (needs a backend route; ⚠ approval).
-- [ ] Slim `/api/skills` list payload (22.7 MB on the maintainer's machine).
+- [ ] Slim v2's `/api/skills` list payload (22.7 MB in the session's local
+  measurement); v2 still requests full bodies for diffs and editing.
 - [ ] Human perceptual review and screen-reader validation of v2. Automated
   forced-colors, keyboard and actual 200%/400% browser-zoom results are recorded separately.
 ## User research follow-ups (2026-10-30)

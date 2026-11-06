@@ -560,8 +560,6 @@ const context = {
         css = _read(ROOT / "skillsmgr" / "webui" / "styles.css")
         self.assertIn('localStorage.getItem("skillsmgr-locale")', source)
         self.assertIn('resolvedLocale: "en-US"', source)
-        self.assertIn("new Intl.NumberFormat", source)
-        self.assertIn("new Intl.DateTimeFormat", source)
         self.assertIn("document.documentElement.lang = \"en\"", source)
         self.assertIn("function localizedNumber", domain)
         self.assertIn("Regional formats", html)
@@ -576,13 +574,15 @@ const fs = require('fs'), vm = require('vm');
 const store = {};
 const sandbox = {
   navigator: {language: 'en-IN'},
-  window: {SkillManagerDomain: {api(){}, formatBytes(){}, formatTokens(){}, tokenPctClass(){}, tokenBarWidth(){}, renderMarkdown(){}, parseFrontmatter(){}, formatCompat(){}, formatTools(){}, groupLogicalSkills(){}, deriveLogicalSkillIdentity(){}, observedIdentity(){}}},
+  window: {},
   Vue: {createApp(app){sandbox.app = app; return {mount(){}};}, nextTick(){}},
   localStorage: {getItem(k){return store[k] || null;}, setItem(k,v){store[k]=String(v);}},
   document: {addEventListener(){}, removeEventListener(){}, documentElement:{dataset:{}, lang:'en'}, querySelectorAll(){return [];}, querySelector(){return null;}},
   setTimeout, clearTimeout
 };
-vm.runInNewContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), sandbox);
+const context = vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync('skillsmgr/webui/domain.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('skillsmgr/webui/app.js', 'utf8'), context);
 const ctx = {...sandbox.app.data(), ...sandbox.app.methods, $nextTick(){}};
 ctx.applyLocale('en-IN');
 const expectedDate = new Intl.DateTimeFormat('en-IN', {dateStyle:'medium', timeStyle:'short'}).format(new Date('2026-09-22T13:45:00Z'));
@@ -801,11 +801,12 @@ console.log(JSON.stringify(sandbox.window.SkillManagerDomain.groupLogicalSkills(
         self.assertIn("observedIdentity(selected, scopes).label", html)
         self.assertIn("targetKey(record)", source)
 
-    def test_startup_fetches_each_source_once_and_stats_are_secondary(self):
+    def test_mount_starts_the_initial_data_loader(self):
+        # Ordering and independent list readiness are exercised by the real
+        # loader behavior in test_performance_frontend. Keep the mount wiring
+        # covered too, since manually calling the loader cannot test that.
         source = _read(APP_JS)
         self.assertIn("this.loadInitialData();", source)
-        self.assertIn("Promise.all([this.loadScopes(), this.loadSkills(), this.loadTrash()])", source)
-        self.assertIn("await this.loadStatsTokens();", source)
 
     def test_mobile_detail_has_back_navigation_and_focus_return(self):
         source = _read(APP_JS)

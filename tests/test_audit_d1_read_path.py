@@ -85,7 +85,7 @@ class CoalescedReadCopyTests(ReadPathTestCase):
     else can reach, so the library's most-experienced request paid it twice.
     """
 
-    def test_a_single_list_copies_the_result_exactly_once(self):
+    def test_a_single_list_does_not_copy_the_result(self):
         self.seed(3)
         real_deepcopy = copy.deepcopy
         calls = []
@@ -101,7 +101,7 @@ class CoalescedReadCopyTests(ReadPathTestCase):
             rows = self.store.list()
 
         self.assertEqual(3, len(rows))
-        self.assertEqual([3], calls, "list() deep-copied its whole result more than once")
+        self.assertEqual([], calls, "uncontended list() copied its whole result")
 
     def test_every_caller_still_receives_an_independent_copy(self):
         """The optimisation must not hand two callers the same dicts."""

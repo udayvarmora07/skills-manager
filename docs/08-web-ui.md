@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.10.1**
+**Version 0.11.0**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -26,6 +26,33 @@ remaining coverage limits are in @docs/31-combined-e2e-verification-2026-11-06.m
 The optional developer runner is `tools/e2e_v2/run.py` (external Playwright,
 no runtime dependency). It isolates fixtures and server lifetime, checks both
 UI transports and supports measured browser zoom on isolated X11.
+
+**[SPEC] Startup and list projection (2026-11-06).** The classic UI starts
+scopes, skills, trash, history, catalog and stats loaders together. Each paints
+its own result without waiting for the other sources. Overlapping scopes,
+all-skills and stats reads can share an in-flight merged scan for agent rows.
+Scope summaries separately scan the global filesystem root, so unindexed
+documents are still counted and a missing or corrupt index is not repaired
+or required by `/api/scopes`. Completed reads are never cached. An uncontended scan avoids copying its
+result. When there are waiters, a private snapshot is published outside the
+shared lock and every waiter receives an independent copy. Hygiene path
+resolution is memoized only within one report, including cleanup on failure.
+
+The classic list requests `GET /api/skills?scope=all&body=0` (or its selected
+scope). `body=0` omits document bodies from response rows, after body-aware
+search and pagination; `body=1` or an absent flag preserves the existing
+response fields. This does not add bodies to metadata-only global rows.
+Blank, invalid or repeated flags are a clean 400 before scanning. Detail and
+raw-document routes still return full content. Opening an editor fetches the
+detail when necessary and refuses a missing or superseded selection. The v2
+UI retains its existing full-body list requests for diffs and editing.
+
+Bounded locale formatter caches and Vue-derived row metadata avoid repeated
+work during unrelated renders. Checkbox membership uses a Set; off-screen
+classic rows use `content-visibility: auto` while retaining keyboard access.
+Regression coverage: `tests/test_performance_backend.py`,
+`tests/test_performance_http.py`, `tests/test_performance_frontend.py` and the
+optional classic/v2 browser runners.
 
 ```text
 Browser (Vue 3, no build step)
@@ -260,7 +287,7 @@ new persistence or authority.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/api/skills[?scope=SCOPE][&q=TERM][&limit=N][&offset=N]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata. **Opt-in paging:** `limit`/`offset` bound the page and every response carries `X-Total-Count` (the unpaged total). An unpaged request still returns every row, because the web UI depends on it. Paging parameters this API does not implement (`page`, `per_page`, `cursor`, `before`, `after`, `start`, `skip`, `first`) are a `400` naming `limit`/`offset`, not silently ignored; `limit` is capped at 500 (docs/24 §D3-9) |
+| GET | `/api/skills[?scope=SCOPE][&q=TERM][&limit=N][&offset=N][&body=FLAG]` | — | list of skills (scope-aware; default global), including root availability, consumer, discovery recursion, `addressable`, observed instance state, and unresolved effective-state metadata. `body=0` omits bodies; absent or `body=1` preserves existing fields. Invalid, blank or repeated body flags are 400s before scanning. Search remains body-aware. **Opt-in paging:** `limit`/`offset` bound the page and every response carries `X-Total-Count` (the unpaged total). An unpaged request still returns every row, because the web UI depends on it. Paging parameters this API does not implement (`page`, `per_page`, `cursor`, `before`, `after`, `start`, `skip`, `first`) are a `400` naming `limit`/`offset`, not silently ignored; `limit` is capped at 500 (docs/24 §D3-9) |
 | GET | `/api/skills/<name>[?scope=SCOPE]` | — | full record incl. body + path. A row whose directory is gone answers `404 skill_not_found` rather than `200` with the stored body — `list()` already omits it and `doctor()` still reports it as a stale row, so serving it here was the one route returning content the filesystem does not have (docs/24 §D3-6) |
 | GET | `/api/skills/<name>/raw[?scope=SCOPE]` | — | raw SKILL.md text (text/plain) |
 | POST | `/api/skills[?scope=SCOPE]` | `{name, description, category?, version?, license?, compatibility?, allowed_tools?, body?}` | created record (201) |
@@ -419,7 +446,9 @@ Quality, Workspaces and Settings stay in the classic interface, linked as
 
 - **No new surface.** It calls only existing routes (`/api/scopes`, `/api/skills`,
   `/api/history`, `/api/sync`, `/api/trash`, `/api/import`, `/api/export`). The
-  only backend change is that `_serve_static` serves files under `webui/v2/`.
+  static handler serves files under `webui/v2/`. Bare `/v2` returns a local
+  308 redirect to `/v2/`, preserving query parameters and the browser's hash
+  route, so relative asset URLs load the v2 app correctly.
 - **Honesty rules** (`v2/model.js`): there is no version order, so a skill whose
   copies differ is "Copies differ" and the reference copy is the content most
   copies hold; a tie is reported as ambiguous and the Inbox asks which copy to

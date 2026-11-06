@@ -583,13 +583,46 @@ def _body_param(qs: dict[str, list[str]]) -> bool:
     every existing client is unaffected.  Only ``0`` and ``1`` are accepted; any
     other value is a clean 400 rather than a silent default (docs/24 §D3-8).
     """
-    raw = qs.get("body", [None])[0]
+    values = qs.get("body", [None])
+    if len(values) != 1:
+        raise StoreError("body must be supplied once as 0 or 1")
+    raw = values[0]
     if raw is None:
         return True
     text = raw.strip()
     if text not in ("0", "1"):
         raise StoreError(f"body must be 0 or 1, got {raw!r}")
     return text == "1"
+
+
+def _list_page(rows: list, qs: dict[str, list[str]]) -> tuple[list, int]:
+    include_body = _body_param(qs)
+    page, total = _page_rows(rows, qs)
+    if not include_body:
+        # Coalesced reads give every caller independent rows, so removing a
+        # response field cannot alter another request's document snapshot.
+        for row in page:
+            if isinstance(row, dict):
+                row.pop("body", None)
+    return page, total
+
+
+def _scope_summary(store: Store) -> list[dict]:
+    """Reuse merged agent rows while keeping global counts filesystem-based."""
+    from .loader import scan_dir
+    from .scopes import list_all, list_scopes
+
+    try:
+        records = list_all()
+    except StoreError:
+        # Scope discovery previously needed no readable SQLite index. Keep
+        # that behavior, without rebuilding it as a side effect of this GET.
+        return list_scopes()
+    # Global list rows come through the index and can omit newly added,
+    # unindexed documents. The scope descriptor must still count those files.
+    summary_rows = [record for record in records if record.get("scope") != "global"]
+    summary_rows.extend({**record, "scope": "global"} for record in scan_dir(store.skills_dir))
+    return list_scopes(records=summary_rows)
 
 
 def _window_param(qs: dict[str, list[str]], name: str = "window") -> str:
@@ -882,13 +915,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         The header is set before the body so ``HEAD`` reports the size of the
         page a ``GET`` would have returned.
         """
-        include_body = _body_param(qs)
-        page, total = _page_rows(rows, qs)
-        if not include_body:
-            # The rows are private to this request, so drop in place.
-            for row in page:
-                if isinstance(row, dict):
-                    row.pop("body", None)
+        page, total = _list_page(rows, qs)
         self._send_json(page, extra_headers={"X-Total-Count": str(total)})
 
     def _send_error(self, status: int, message: str, code: str | None = None) -> None:
@@ -1065,16 +1092,30 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return "v2/index.html"
         return rel or "index.html"
 
+    def _redirect_v2(self, parts: list[str]) -> bool:
+        if parts == ["v2"] and not urlparse(self.path).path.endswith("/"):
+            # The v2 page loads ``styles.css``, ``model.js`` and ``app.js`` by
+            # relative path. Served at ``/v2`` the browser resolves those
+            # against ``/`` and mounts the *classic* app into v2's markup -- a
+            # blank page. Redirect to a fixed local directory, preserving
+            # the query. The v2 UI routes by ``#fragment``,
+            # which browsers carry across a redirect.
+            query = urlparse(self.path).query
+            location = "/v2/" + ("?" + query if query else "")
+            self._send(308, b"", "text/plain; charset=utf-8",
+                       extra_headers={"Location": location})
+            return True
+        return False
+
     def _serve_static(self) -> bool:
         parts = self._parts()
         if parts and parts[0] == "api":
             return False
+        if self._redirect_v2(parts):
+            return True
         rel = self._static_rel(parts)
         candidate = (_WEBUI_DIR / rel).resolve()
-        try:
-            inside = candidate.is_relative_to(_WEBUI_DIR)
-        except AttributeError:
-            inside = str(candidate).startswith(str(_WEBUI_DIR) + os.sep)
+        inside = candidate.is_relative_to(_WEBUI_DIR)
         if not inside or not candidate.is_file():
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return True
@@ -1113,14 +1154,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         share a shape and a purpose, not because they share code.
         """
         if parts == ["api", "scopes"]:
-            from .scopes import list_all as _list_all
-            from .scopes import list_scopes as _list_scopes
-
-            # Summarize the one merged snapshot ``/api/skills?scope=all`` and
-            # ``/api/stats`` also read, instead of walking every root again.
-            # The UI requests all three at start-up, so concurrent requests now
-            # share one in-flight scan (``_coalesced_read``) instead of three.
-            self._send_json(_list_scopes(records=_list_all()))
+            self._send_json(_scope_summary(self.store))
             return True
         if parts == ["api", "catalog"]:
             from .catalog import load_catalog

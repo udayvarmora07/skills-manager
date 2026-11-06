@@ -174,13 +174,24 @@ def _db_file_identity(db_path: Path) -> tuple[int, int] | None:
     return stat_result.st_dev, stat_result.st_ino
 
 
+def _publish_read_snapshot(flight: dict, result, waiters: int) -> None:
+    try:
+        if waiters:
+            flight["result"] = copy.deepcopy(result)
+    except BaseException as exc:
+        flight["error"] = exc
+        raise
+    finally:
+        flight["event"].set()
+
+
 def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
     """Share one identical read while it is in flight, never after it ends.
 
     Filesystem-backed reads remain authoritative: this is deliberately an
-    in-flight fan-in only, not a completed-result cache.  Each caller receives
-    its own deep copy because scope enrichment and UI serialization annotate
-    the returned dictionaries after the read completes.
+    in-flight fan-in only, not a completed-result cache. Each caller receives
+    independent dictionaries because scope enrichment and UI serialization
+    annotate the results after the read completes.
 
     The copy handed to a *waiting* caller exists so two callers never share
     objects.  The caller that ran the read keeps the object ``func()`` built:
@@ -223,14 +234,7 @@ def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
             waiters = flight.get("waiters", 0)
         # The flight is retired, so the count cannot grow; the copy runs
         # outside the shared lock so it never stalls an unrelated flight.
-        try:
-            if waiters:
-                flight["result"] = copy.deepcopy(result)
-        except BaseException as exc:
-            flight["error"] = exc
-            raise
-        finally:
-            flight["event"].set()
+        _publish_read_snapshot(flight, result, waiters)
         return result
     flight["event"].wait()
     if flight.get("error") is not None:

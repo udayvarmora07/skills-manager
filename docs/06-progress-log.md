@@ -8,6 +8,53 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-06 — Complete the performance session's missing verification
+
+**[SPEC]** Continued `claude/project-perf-ux-review-4da40d` with its WIP
+performance commit preserved, including the previously uncommitted `/v2`
+redirect. Current main `d00cb78` was merged into the performance branch; no
+performance work was integrated into main or pushed. The initial three
+targeted failures were the uncontended-copy expectation, a startup source
+assertion and an incomplete locale-test stub. Tests now exercise parallel
+startup and real domain/Vue behavior rather than pinning the old source shape.
+
+The body-less list option preserves existing default fields and full detail
+reads; body search and pagination run before projection. Repeated body flags
+now fail before scanning. `/v2` redirects to the local `/v2/` directory while
+preserving queries and browser hash navigation. Editor guards wait for a full
+body and reject missing or superseded selections; Edit during a detail load
+shows a wait message and keeps the editor closed. Scope summaries
+reuse merged agent rows but scan the global root separately: the initial
+optimization missed unindexed global documents, and red-first tests now cover
+that case and unchanged counts with a missing/corrupt index. Snapshots stay isolated per caller;
+the hygiene memo is per report and resets even on failure. New regressions live
+in `tests/test_performance_backend.py`, `tests/test_performance_http.py` and
+`tests/test_performance_frontend.py`. Private helper extraction keeps every
+existing complexity budget unchanged or lower; two stale-high hygiene budgets
+were tightened instead of raised.
+
+The first full matrix exposed a G8 test context missing the new row helper;
+it now binds the actual app methods. A deliberately reordered subset also
+exposed an existing Store-context leak in the review fixture (reproduced on
+unchanged main); the fixture now binds and restores its own Store context.
+
+**[NOTE]** The original Claude session's timings were single local browser
+captures, not repeated benchmarks: classic startup 5.3 → 2.55 s, list transfer
+22.7 → 4.2 MB, Library opening 846 → 288 ms, and v2 startup 5.35 → 2.54 s.
+They are historical observations, not new measurements from this completion.
+v2 still requests full document bodies; lazy v2 loading remains deferred.
+The six-viewport browser smoke and a 300-row off-screen keyboard/detail/editor
+probe have passed. Final verification: **1,363 tests on each Python 3.10.20,
+3.11.15, 3.12.3, 3.13.13 and 3.14.3**; both smokes, compilation, docs, design
+tokens, complexity (730 functions), Ruff 0.16.8 and Bandit 1.9.4; pinned,
+hash-verified wheel/sdist builds with all 25 UI assets and both example files.
+Browser results: **38 classic scenarios / 318 assertions**, **28 v2
+scenarios** (including query/hash-preserving redirects), and the six-viewport
+smoke harness all pass, with no unexpected console errors, failed requests
+or horizontal overflow. The deliberately reordered fixture subset also passes.
+These are Linux/Chromium checks; non-Chromium engines, newer Python patch
+releases and human spoken screen-reader sign-off are not claimed here.
+
 ## 2026-11-06 — Refuse oversized tar metadata before chunked reads
 
 **[NOTE]** CI on `5a2f0ce` failed the oversized-PAX memory regression on Python
@@ -222,10 +269,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-11-06)
 
-**[NOTE]** 35 indexed entries; full text follows.
+**[NOTE]** 36 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | Complete the performance session's missing verification |
 | 2026-11-06 | Refuse oversized tar metadata before chunked reads |
 | 2026-11-06 | Classic screens, 10,000-instance scale and screen-reader checks closed three gaps |
 | 2026-11-06 | Research-roadmap backend items (docs/28, docs/29) |

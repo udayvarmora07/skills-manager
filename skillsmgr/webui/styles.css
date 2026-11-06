@@ -873,11 +873,11 @@ html[data-text-size="large"] { font-size: 1.125rem; }
   padding: 7px 14px;
   border-left-width: 3px;
   border-bottom: 1px solid var(--border);
-  /* A 700-row Library spent ~250 ms in layout and paint for rows far below
-     the fold. Off-screen rows now skip both until they scroll near the
-     viewport; `auto` remembers each row's last real height so the scrollbar
-     does not jump. Rows stay in the accessibility tree, in tab order, and
-     findable with Ctrl+F. Grid cards already do the same. */
+  /* Skip layout and paint for rows far below the fold until they approach the
+     viewport. The browser uses 56px as the initial estimate, then reuses a
+     row's measured size while it is skipped. Rows stay in the accessibility
+     tree, in tab order, and findable with Ctrl+F. Grid cards use the same
+     containment behavior. */
   content-visibility: auto;
   contain-intrinsic-size: auto 56px;
 }
