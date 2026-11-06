@@ -6,8 +6,10 @@
 
 ## Performance and UX session completion (2026-11-06)
 
-Branch `claude/project-perf-ux-review-4da40d`; kept separate from `main`.
-Current main `d00cb78` was merged into this branch before verification.
+Prepared on `claude/project-perf-ux-review-4da40d`; the maintainer subsequently
+authorized integration into `main` and a normal push. Main `d00cb78` was merged
+into the performance branch before verification, and main was then
+fast-forwarded to the verified performance commit `68e50f0`.
 
 - [x] Add backend regressions for concurrent snapshot isolation, failures,
   independent read keys and report-scoped hygiene memo lifetime.

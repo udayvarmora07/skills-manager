@@ -8,6 +8,17 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-06 — Integrate the verified performance work into main
+
+**[NOTE]** The maintainer authorized main integration after the performance
+session's verification completed. The canonical checkout was clean apart from
+the existing untracked `.claude/` directory; main fast-forwarded from `d00cb78`
+to the verified performance tip `68e50f0`. This follow-up updates the integration
+record only; it makes no runtime changes. The performance entry below records
+the earlier branch-only state and its full Python/browser/package evidence.
+The exact pushed commit's CI result is verified separately from those local
+checks.
+
 ## 2026-11-06 — Complete the performance session's missing verification
 
 **[SPEC]** Continued `claude/project-perf-ux-review-4da40d` with its WIP
@@ -269,10 +280,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-11-06)
 
-**[NOTE]** 36 indexed entries; full text follows.
+**[NOTE]** 37 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | Integrate the verified performance work into main |
 | 2026-11-06 | Complete the performance session's missing verification |
 | 2026-11-06 | Refuse oversized tar metadata before chunked reads |
 | 2026-11-06 | Classic screens, 10,000-instance scale and screen-reader checks closed three gaps |
