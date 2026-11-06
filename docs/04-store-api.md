@@ -149,3 +149,10 @@ CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status);
 ## Open questions
 
 - `[?]` None currently.
+
+**[SPEC] Byte-preserving sync snapshots (2026-11-06).** Force sync saves the
+exact prior document bytes at `<data>/snapshots/SCOPE/NAME/ID.md` before
+replacement. Undecodable snapshots are retained for manual byte recovery;
+`read_snapshot` and ordinary text restore refuse a lossy rewrite. Retention
+still keeps the newest five document snapshots, not a whole-tree archive.
+A failed snapshot leaves the destination unchanged.

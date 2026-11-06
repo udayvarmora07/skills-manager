@@ -234,3 +234,21 @@ adding new public entities or SQLite state. Discovery research is recorded in
 3. CLI stdlib-only.
 4. Web UI: stdlib backend, vendored Vue, no build step, loopback bind by default.
 5. No new CLI commands or Store methods without approval (see AGENTS.md judgment boundaries).
+
+## Scoped mutation continuation (2026-11-06)
+
+**[SPEC]** Scoped create/edit/toggle/restore and sync destination replacement
+use the physical skill directory's canonical `SKILL.md` lock identity. Edit
+and restore test existence and read/write under that lock. Mutating a document
+symlink is refused before key selection and again inside the lock, because a
+rename otherwise changes its identity. Contained directory aliases still share
+the physical key. Force sync snapshots exact prior document bytes before
+replacement. A successful install is not rolled back when backup cleanup fails;
+the backup is retained for manual review and later sync refuses to discard it.
+Policy refusal on one target does not abort other destinations.
+
+**[NOTE]** Advisory locking does not constrain external non-cooperating
+writers. Different data roots still do not coordinate on one agent folder;
+source-update directory locks differ from document locks, and recursive
+name-based lookup remains ambiguous during a directory replacement. A broader
+identity/locking design remains open; these fixes do not claim to solve it.

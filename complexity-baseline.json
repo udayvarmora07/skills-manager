@@ -2886,7 +2886,7 @@
       "lineno": 529
     },
     "skillsmgr/store.py::write_snapshot": {
-      "complexity": 4,
+      "complexity": 1,
       "end_lineno": 514,
       "lineno": 497
     },

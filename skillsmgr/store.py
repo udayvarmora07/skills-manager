@@ -496,6 +496,11 @@ def _check_snapshot_target(scope: str, name: str) -> None:
 
 def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
     """Save pre-write skill content and retain only the newest five snapshots."""
+    return _write_snapshot_bytes(data_dir, scope, name, text.encode("utf-8"))
+
+
+def _write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes) -> str:
+    """Preserve exact bytes in the ordinary snapshot location."""
     _check_snapshot_target(scope, name)
     snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
     snap_dir.mkdir(parents=True, exist_ok=True)
@@ -507,7 +512,7 @@ def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
             snap_id = f"{base}-{counter}"
             counter += 1
         snapshot_path = snap_dir / f"{snap_id}.md"
-        _atomic_write_text(snapshot_path, text)
+        _atomic_write_text(snapshot_path, content.decode("latin-1"), encoding="latin-1")
         files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
         while len(files) > SNAPSHOT_KEEP:
             files.pop(0).unlink()

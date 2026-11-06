@@ -40,6 +40,8 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
   escaped code points, bounded output and no safe verdict or text rewriting.
 
+- [x] **Parent P1:** scoped mutation serialization and byte-preserving force
+  sync recovery, including rollback/cleanup fault handling and lossy raw reads.
 - [ ] **Decide (R4 / D-1):** Codex TOML parsing remains deferred. Keep Python
   >=3.10 and dependencies unchanged; choose a maintained parser/floor policy
   before implementing `[[skills.config]]`, rather than a partial TOML parser.

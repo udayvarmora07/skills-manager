@@ -169,6 +169,21 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: scoped mutation and damaged-copy recovery
+
+**[SPEC]** The reproduced edit/toggle race now serializes read/validation/write,
+toggle, restore and sync destinations on one canonical document lock. Document
+symlinks are refused for mutation; contained directory aliases share the key.
+Force sync preserves undecodable old bytes before replacement, with manual
+binary-snapshot recovery and unchanged source-state semantics. Scoped raw reads
+are lossy reports, while rewrites remain strict, and detail no longer logs the
+strict decoder's document-byte repr. A cleanup fault no longer rolls back a
+successfully installed copy; retained backups survive retries and one refusal
+allows other destinations to complete. Thirteen regressions cover processes,
+thread storms, aliases, corrupt input, snapshot failure, rollback and partial
+cleanup. Full five-version suite: 1,324 tests each; Store and web smokes passed.
+Broader source-update/data-root/recursive-identity locking limits remain open.
+
 ## 2026-11-06 — Continuation: R4 native JSON observations
 
 **[SPEC]** Scoped list/search/detail adds fresh `native_state` without changing
