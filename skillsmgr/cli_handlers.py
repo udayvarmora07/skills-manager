@@ -619,6 +619,12 @@ def search_output_row(match: dict, scope: str) -> dict:
 
 def search_full_record(match: dict, scope: str, store: Store, get_skill) -> dict:
     """Rehydrate one search match through the public detail seam."""
+    return _search_detail_or_observation(match, scope, store, get_skill)
+
+
+def _search_detail_or_observation(match: dict, scope: str, store: Store, get_skill) -> dict:
+    if match.get("link_escape") or match.get("addressable") is False:
+        return dict(match)
     match_scope = match.get("scope", scope)
     if match_scope == "global":
         return store.get(match["name"])
@@ -744,7 +750,7 @@ def _doctor_scope_report(scope_id: str) -> dict:
     undecodable = sorted(
         str(entry["name"])
         for entry in entries
-        if entry.get("decode_error")
+        if entry.get("encoding_error")
     )
     conflicting = sorted(
         str(entry["name"])
@@ -1186,7 +1192,7 @@ def cmd_scopes(args, store: Store) -> int:
 
     scopes = _list_scopes()
     if args.json:
-        _print_json(scopes)
+        _print_json(_scope_json_rows(scopes, getattr(args, "no_tokens", False)))
         return EXIT_OK
     if not scopes:
         print("no scopes found")
@@ -1202,6 +1208,22 @@ def cmd_scopes(args, store: Store) -> int:
     return EXIT_OK
 
 
+def _scope_json_rows(rows: list[dict], no_tokens: bool) -> list[dict]:
+    if not no_tokens:
+        return rows
+    return [{key: value for key, value in row.items()
+             if key not in {"tokens", "avg_tokens", "max_tokens"}} for row in rows]
+
+
+def _token_input_text(text: str) -> str:
+    if not text.startswith("@"):
+        return text
+    try:
+        return Path(text[1:]).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeError, RuntimeError, ValueError):
+        raise StoreError("cannot read --text file as UTF-8; check the path and encoding") from None
+
+
 def cmd_tokens(args, store: Store) -> int:
     from .tokens import WINDOWS as _WINDOWS, estimate as _est, format_tokens as _fmt
 
@@ -1210,10 +1232,7 @@ def cmd_tokens(args, store: Store) -> int:
         raise StoreError(f"unknown window {window!r}; choose from {', '.join(_WINDOWS)}")
     scope = scope_from_args(args)
     if args.text:
-        raw = args.text
-        if raw.startswith("@"):
-            p = Path(raw[1:]).expanduser()
-            raw = p.read_text(encoding="utf-8") if p.is_file() else raw
+        raw = _token_input_text(args.text)
         est = _est(raw, window=window)
         if args.json:
             _print_json(est)

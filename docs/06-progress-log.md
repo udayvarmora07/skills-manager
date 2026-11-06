@@ -169,6 +169,19 @@ entries that introduced them:
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
 
+## 2026-11-06 — Continuation: CLI findings and precise contracts
+
+**[SPEC]** Reproduced CLI search aborts on a refused link and doctor encoding
+misclassification now have per-entry handling and explicit decode evidence.
+Bare `db` requires an action, ports are range-checked before bootstrap, `@file`
+token input must be readable UTF-8, and no-tokens also applies to JSON totals.
+Directory export destinations return a clean error; explicit file replacement
+remains supported. Docs correct exact-scope view, command-local JSON flags,
+add-name matching, global-view token fields, archive preflight and doctor's
+limited aggregate headline/project behavior. Seven new CLI tests pass along
+with the 1,324-test suite on each supported interpreter; no command, Store
+method, dependency, Python-floor or schema change was added.
+
 ## 2026-11-06 — Continuation: scoped mutation and damaged-copy recovery
 
 **[SPEC]** The reproduced edit/toggle race now serializes read/validation/write,

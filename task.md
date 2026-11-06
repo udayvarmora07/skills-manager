@@ -39,12 +39,13 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   partial/unknown effective state; batched reads, no settings writes.
 - [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
   escaped code points, bounded output and no safe verdict or text rewriting.
-
-- [x] **Parent P1:** scoped mutation serialization and byte-preserving force
-  sync recovery, including rollback/cleanup fault handling and lossy raw reads.
 - [ ] **Decide (R4 / D-1):** Codex TOML parsing remains deferred. Keep Python
   >=3.10 and dependencies unchanged; choose a maintained parser/floor policy
   before implementing `[[skills.config]]`, rather than a partial TOML parser.
+- [x] **Parent P1/P2 findings:** serialize scoped edit/toggle/restore/sync;
+  preserve damaged target bytes before force sync; fix per-entry search and
+  doctor encoding classification. CLI contracts and corrections are
+  documented in @docs/03-cli-surface.md.
 
 ## v2 interface — prototype-final on real data (2026-11-06)
 

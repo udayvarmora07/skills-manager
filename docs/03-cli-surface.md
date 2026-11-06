@@ -24,14 +24,14 @@ against the canonical `NAME_RE` contract. Invalid names, path fragments, and
 encoded traversal-style values therefore fail with exit code 1 without creating
 or mutating the data directory.
 
-## Global flags
+## Global and command flags
 
 **[SPEC]**
 
-- `--json` — machine-readable output on all data commands; `_print_json(data)` with indent=2.
+- `--json` — a per-command flag, placed after the command, for machine-readable output; `_print_json(data)` with indent=2.
 - `--color` — force color output.
 - `--no-color` — disable color output. The default is automatic terminal detection.
-- `--scope SCOPE` — scope selector on `list`, `view`, `search`, `doctor`, `stats`. Values: `global` (default; the Store + DB), `all` (merge every scope), or an agent scope id (`claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`). `agents` is the Command Code skills dir (`~/.agents/skills`).
+- `--scope SCOPE` — scope selector on `list`, `view`, `search`, `doctor`, `stats`. Values: `global` (default; the Store + DB), `all` (aggregate commands only; `view` requires one scope), or an agent scope id (`claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`). `agents` is the Command Code skills dir (`~/.agents/skills`).
 
 **[NOTE]** The scope flag is a **per-command flag**, not a global flag — each scope-aware command declares its own `--scope`. `tokens` and `install` also accept `--scope` with their own semantics (see below).
 
@@ -51,10 +51,13 @@ Create a skill in the global store. Name must match `NAME_RE`; description requi
 **[NOTE]** `create` is global-only in the CLI — agent-scope creates go through the web UI (`POST /api/skills?scope=`) or `scopes.create_skill()`.
 
 ### `add PATH [--name NAME] [--json]`
-Add an existing skill directory (or SKILL.md file) from `PATH` (optional `--name` override) to the global store.
+Add an existing skill directory (or SKILL.md file) from `PATH` to the global store. `--name` chooses the target directory name; existing
+frontmatter `name` must already match it, so this flag does not rename the document.
 
 ### `view NAME [--raw|--json] [--scope SCOPE]`
-Print a skill. `--raw` prints the full `SKILL.md` file (frontmatter + body, not body-only, and verbatim — `--raw` is deliberately unsanitized); `--json` shows structured data (incl. `tokens` estimate and scope fields). The output modes are incompatible: passing both `--raw` and `--json` is rejected with a clean exit-1 `StoreError`; neither mode silently overrides the other. In the default text form every field value is sanitized (see *Untrusted display text*); `--json` and `--raw` emit the stored bytes unchanged, so pipe JSON through a formatter rather than to a raw terminal.
+Print a skill. `--raw` prints the full `SKILL.md` file (frontmatter + body, not body-only, and verbatim — `--raw` is deliberately unsanitized); `--json` shows structured data (agent-scope detail includes token estimates;
+global JSON is the Store record and does not add tokens). `--scope all` is
+unsupported for this name-addressed command; choose one exact scope. The output modes are incompatible: passing both `--raw` and `--json` is rejected with a clean exit-1 `StoreError`; neither mode silently overrides the other. In the default text form every field value is sanitized (see *Untrusted display text*); `--json` and `--raw` emit the stored bytes unchanged, so pipe JSON through a formatter rather than to a raw terminal.
 
 ### `edit NAME [-d TEXT] [--license LIC] [--category CAT] [--compatibility SPEC] [--version VER] [--allowed-tools TOOLS] [--metadata KEY=VALUE] [--body TEXT] [--body-file PATH] [--json]`
 Edit a skill in the global store. All fields optional; partial update. Repeated `--metadata` appends.
@@ -104,7 +107,9 @@ existing names with staged per-skill recovery.
 `--full` restores trash and templates from a full export.
 
 ### `export [--dest PATH] [--full] [--json]`
-Export all skills (global scope only) to an archive (default `backups/`).
+Export all skills (global scope only) to an archive. `--dest` names a file,
+not a directory; an explicit existing file is atomically replaced. With no
+`--dest`, a unique filename is generated under `backups/`.
 `--full` includes trash and templates. Alias: `backup`.
 
 ### `backup [--dest PATH] [--full] [--json]`
@@ -118,7 +123,10 @@ Show recent history. When `NAME` is supplied, JSON output includes retained
 snapshot IDs and text output lists them after the history table.
 
 ### `doctor [--json] [--scope SCOPE] [--hygiene] [--explain CONSUMER [--project DIR] [--skill NAME]]`
-Health check: data dir, DB, skill files, consistency between FS and index, content drift, incomplete transaction artifacts, temporary files, and stale snapshots. `global` (the default) runs the Store/DB doctor; an agent scope scans that scope's filesystem directly and reports malformed documents; unknown scope ids are clean errors with exit 1. With `--scope all`, the global Store report also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key.
+Health check: data dir, DB, skill files, consistency between FS and index, content drift, incomplete transaction artifacts, temporary files, and stale snapshots. `global` (the default) runs the Store/DB doctor; an agent scope scans that scope's filesystem directly and reports malformed documents; unknown scope ids are clean errors with exit 1. With `--scope all`, the global Store report also lists per-scope counts and same-name duplicates (`scopes.find_duplicates()`: name, scopes, descriptions-differ flag — converge with `sync`); `--json` adds a `duplicates` key. The historical “all filesystem is healthy”
+headline reflects the global Store report only; it is not an aggregate
+validation of every agent document. Use named-scope doctor or hygiene for
+those findings. `--project` is evaluated only with `--explain`.
 
 `--explain CONSUMER` switches to the read-only effective-resolution diagnostic
 (issue #12): it derives, at read time, which instance of a skill that consumer
@@ -160,16 +168,22 @@ number of purged skills; `--json` preserves the structured `purged` name list.
 List templates; create a skill from a template.
 
 ### `db rebuild [--json] | db resync [--json]`
-`rebuild` drops and re-creates the index from the filesystem; `resync` syncs the index with FS without dropping. Both leave the filesystem untouched.
+`rebuild` drops and re-creates the index from the filesystem; `resync` syncs the index with FS without dropping. Both leave skill documents untouched. A bare `db` is a usage error.
 
 ### `sync NAME [--from SCOPE] [--to SCOPE ...] [--force] [--json]`
-Copy a skill from one scope to others. Default: `--from global` → every writable existing agent scope. `--to` is repeatable (target scope ids); `--force` overwrites existing names.
+Copy a skill from one scope to others. Default: `--from global` → every writable existing agent scope. `--to` is repeatable (target scope ids); `--force` overwrites existing names after preserving the target document
+bytes in `<data>/snapshots/SCOPE/NAME/ID.md`. An undecodable snapshot requires
+manual byte recovery from that file; text restore refuses to rewrite it
+lossily. Sync copies the source enabled/disabled state. Failed backup cleanup
+leaves the installed copy intact and retains `.NAME.skillsmgr-backup` for
+manual review; another sync refuses to discard that backup.
 
 ### `scopes [--json] [--no-tokens]`
-List known skill scopes and their counts (id, label, path, kind, exists, count, tokens). `--no-tokens` skips token totals for speed. Scope ids: `global`, `claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`, plus project-local scopes when present.
+List known skill scopes and their counts (id, label, path, kind, exists, count, tokens). `--no-tokens` omits token totals from both text and JSON output; document
+scanning and estimation still occur. Scope ids: `global`, `claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`, plus project-local scopes when present.
 
 ### `tokens [NAME] [--scope SCOPE] [--text TEXT] [--window WINDOW] [--json]`
-Estimate token/context usage. `NAME` = a skill; omit to aggregate over `--scope` (default `all`). `--text` estimates raw text instead (`@path` reads a file). `--window` selects the context window (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M). Uses tiktoken when installed, else chars/4 heuristic.
+Estimate token/context usage. `NAME` = a skill; omit to aggregate over `--scope` (default `all`). `--text` estimates raw text instead (`@path` reads a UTF-8 file; missing, unreadable or undecodable paths are errors). `--window` selects the context window (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M). Uses tiktoken when installed, else chars/4 heuristic.
 
 ### `install [SOURCE] [--runner RUNNER] [--scope SCOPE] [--agent AGENT ...] [--skill SKILL ...] [--copy] [--list-only] [--dry-run] [--preview] [--trust-confirmed] [--registry-hash HEX] [--review REVIEW_ID] [--browse|--search QUERY|--curated|--fetch] [--page N] [--per-page N] [--view VIEW] [--allow-stale] [--json]`
 Install skills from the open skills ecosystem via the `skills` npm package (npx/pnpm/yarn/bunx). `SOURCE` like `vercel-labs/agent-skills` or `owner/repo@skill`. `--scope global` passes `-g`; `--agent` targets agent install dirs; `--skill` filters names; `--copy` copies instead of symlinking; `--list-only` executes the runner's list mode and reports its output/exit status; `--dry-run` prints the command without running. Source, agent, and skill values must be non-empty, at most 256 characters, and may not be option-like, traversal-shaped, absolute, or Windows drive-prefixed. `uvx` is rejected (it's an npm package).

@@ -71,6 +71,8 @@ write paths, so the condition has one name wherever a user meets it.
   lists each purged skill once even when several timestamped copies existed.
 - `stats(self) -> dict` — counts and summary.
 - `export(self, dest=None, full=False) -> Path` / `backup(self, dest=None, full=False) -> Path` — slim skills-only archive by default; `full=True` adds validated trash and templates.
+  An explicit destination is a file path and atomically replaces an existing
+  file; default destinations use unique names under backups.
 - Export manifests include a SHA-256 content hash for each skill tree; imports verify hashes in staging and after commit when present. Hashes are verification metadata, not SQLite state.
 - `import_(self, archive, force=False, full=False) -> dict` — imports `.tar.gz`/`.tgz`/`.tar`
   and ZIP content (sniffed by content, not only filename). Resource-budget
@@ -78,7 +80,10 @@ write paths, so the condition has one name wherever a user meets it.
   versions/names/paths, and invalid extracted documents raise `StoreError`.
   ZIP members are manually extracted to contained paths and symlink-bit entries
   are rejected. Each skill is staged independently before replacement;
-  successful names appear in `imported`, failures/already-present names in
+  Preflight failures abort the entire import before any skill is installed,
+  including malformed documents previously exported from the filesystem. At
+  the per-skill commit stage, successful names appear in `imported`,
+  commit failures/already-present names in
   `skipped`, and failed replacements restore the previous destination. A failed
   staging copy leaves the existing skill directory untouched.
 - Archive imports strip both manager sidecars from the whole extracted tree

@@ -297,6 +297,17 @@ def _unique_dest(directory: Path, stem: str, suffix: str) -> Path:
     return target
 
 
+def _explicit_export_destination(dest: str | Path) -> Path:
+    try:
+        target = Path(dest).expanduser()
+        if target.is_dir():
+            raise StoreError("archive destination must be a file path, not a directory")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return target
+    except (OSError, RuntimeError, ValueError):
+        raise StoreError("cannot prepare archive destination; check the path and permissions") from None
+
+
 def _move_within_tree(source: Path, dest: Path) -> None:
     """Move *source* to *dest*, falling back to copy+delete across devices."""
     try:
@@ -2343,8 +2354,7 @@ class Store:
             # not create `backups/` either: the web route stages a download in a
             # private temporary directory and would otherwise leave an empty
             # directory behind on every request (docs/24 §D3-3).
-            dest = Path(dest).expanduser()
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest = _explicit_export_destination(dest)
         entries = self._scan_dir(self.skills_dir)
         manifest = {
             "app": "skills-mgr",

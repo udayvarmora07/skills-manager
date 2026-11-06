@@ -516,7 +516,7 @@
       "lineno": 1108
     },
     "skillsmgr/cli_handlers.py::cmd_tokens": {
-      "complexity": 26,
+      "complexity": 24,
       "end_lineno": 1276,
       "lineno": 1205
     },
@@ -571,7 +571,7 @@
       "lineno": 101
     },
     "skillsmgr/cli_handlers.py::search_full_record": {
-      "complexity": 2,
+      "complexity": 1,
       "end_lineno": 625,
       "lineno": 620
     },
