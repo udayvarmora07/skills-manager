@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept 6 · Pro instrument</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  body { font-family: "Jakarta", system-ui, sans-serif; background: #0b0d10; color: #e7e9ee; font-size: 13.5px; height: 100vh; overflow: hidden; }
+  .app { display: grid; grid-template-columns: 220px 1fr 340px; grid-template-rows: 1fr 30px; height: 100vh; }
+  .nav { border-right: 1px solid #1d2128; padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; background: #0e1014; }
+  .ws { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 4px 8px 16px; }
+  .ws i { width: 20px; height: 20px; border-radius: 6px; background: linear-gradient(135deg,#f97316,#ef4444); }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; color: #9aa1ad; text-decoration: none; font-weight: 600; }
+  .nav a.on { background: #1a1e25; color: #fff; }
+  .nav a span { margin-left: auto; font-family: "Geist Mono", monospace; font-size: 11.5px; color: #6b7280; }
+  .nav .lab { color: #5b626e; font-size: 11.5px; font-weight: 700; padding: 18px 10px 6px; }
+  .nav .ag { width: 8px; height: 8px; border-radius: 2px; }
+  .list { display: flex; flex-direction: column; min-width: 0; }
+  .lh { height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border-bottom: 1px solid #1d2128; }
+  .lh b { font-size: 14px; }
+  .lh .f { padding: 4px 9px; border-radius: 6px; border: 1px solid #262b33; color: #9aa1ad; font-weight: 600; font-size: 12.5px; }
+  .lh .f.on { background: #1a1e25; color: #fff; }
+  .lh .r { margin-left: auto; font-family: "Geist Mono", monospace; color: #6b7280; font-size: 12px; }
+  .cols, .row { display: grid; grid-template-columns: 22px 1fr repeat(6, 26px) 70px; gap: 10px; align-items: center; padding: 0 18px; }
+  .cols { height: 32px; color: #5b626e; font-size: 11px; font-weight: 700; border-bottom: 1px solid #1d2128; font-family: "Geist Mono", monospace; }
+  .cols span { text-align: center; }
+  .row { height: 38px; border-bottom: 1px solid #14171c; color: #c9ced8; }
+  .row.sel { background: #161b24; box-shadow: inset 2px 0 0 #f97316; color: #fff; }
+  .row b { font-weight: 600; }
+  .row small { color: #6b7280; margin-left: 8px; font-weight: 500; }
+  .c { width: 10px; height: 10px; border-radius: 3px; justify-self: center; }
+  .on { background: #22c55e; } .old { background: #f59e0b; } .bad { background: #ef4444; } .off { background: transparent; border: 1.5px solid #4b5563; } .no { background: #1d2128; width: 4px; height: 4px; border-radius: 50%; }
+  .tok { font-family: "Geist Mono", monospace; font-size: 12px; color: #9aa1ad; text-align: right; }
+  .st { width: 14px; height: 14px; border-radius: 50%; border: 2px solid; }
+  .detail { border-left: 1px solid #1d2128; background: #0e1014; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+  .detail h2 { font-size: 18px; font-weight: 800; }
+  .detail p { color: #9aa1ad; }
+  .props { display: grid; grid-template-columns: 90px 1fr; row-gap: 10px; font-size: 13px; }
+  .props dt { color: #6b7280; } .props dd { margin: 0; }
+  .alert { border: 1px solid #4a3410; background: #1f1709; color: #fbbf24; padding: 10px 12px; border-radius: 8px; font-weight: 600; }
+  .mono { font-family: "Geist Mono", monospace; font-size: 12px; color: #9aa1ad; background: #14171c; border: 1px solid #1d2128; border-radius: 8px; padding: 10px; line-height: 1.7; }
+  .mono .a { color: #4ade80; } .mono .d { color: #f87171; }
+  .status { grid-column: 1 / -1; border-top: 1px solid #1d2128; display: flex; align-items: center; gap: 18px; padding: 0 14px; font-family: "Geist Mono", monospace; font-size: 11.5px; color: #6b7280; background: #0e1014; }
+  .status b { color: #22c55e; font-weight: 600; }
+  kbd { font-family: "Geist Mono", monospace; font-size: 11px; padding: 1px 5px; border-radius: 4px; border: 1px solid #2a2f38; color: #9aa1ad; }
+  .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .55); display: flex; justify-content: center; padding-top: 140px; }
+  .k { width: 620px; height: fit-content; background: #15181e; border: 1px solid #2a2f38; border-radius: 14px; box-shadow: 0 30px 80px rgb(0 0 0 / .6); overflow: hidden; }
+  .kin { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid #23272f; font-size: 16px; }
+  .kin .crumb { background: #23272f; padding: 3px 8px; border-radius: 6px; font-size: 12.5px; color: #c9ced8; }
+  .kin .cur::after { content: ""; display: inline-block; width: 2px; height: 18px; background: #f97316; vertical-align: -3px; }
+  .kg { padding: 6px; }
+  .kg .lab { color: #5b626e; font-size: 11.5px; font-weight: 700; padding: 8px 12px 4px; }
+  .ki { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; color: #c9ced8; font-weight: 600; }
+  .ki.on { background: #23272f; color: #fff; }
+  .ki span:not(.ico) { margin-left: auto; display: flex; gap: 4px; }
+  .ki .ico { width: 26px; height: 26px; border-radius: 7px; background: #1d2128; display: grid; place-items: center; color: #f97316; font-size: 13px; }
+</style></head>
+<body>
+<div class="app">
+  <nav class="nav">
+    <div class="ws"><i></i>skills.local</div>
+    <a href="#">Inbox<span>3</span></a>
+    <a class="on" href="#">All skills<span>20</span></a>
+    <a href="#">Needs attention<span>5</span></a>
+    <a href="#">Turned off<span>2</span></a>
+    <div class="lab">AGENTS</div>
+    <a href="#"><i class="ag" style="background:#d97757"></i>Claude Code<span>15</span></a>
+    <a href="#"><i class="ag" style="background:#10b981"></i>Codex<span>9</span></a>
+    <a href="#"><i class="ag" style="background:#e5e7eb"></i>Cursor<span>7</span></a>
+    <a href="#"><i class="ag" style="background:#3b82f6"></i>Gemini<span>6</span></a>
+    <a href="#"><i class="ag" style="background:#ec4899"></i>OpenCode<span>4</span></a>
+    <div class="lab">VIEWS</div>
+    <a href="#">Largest first</a><a href="#">Changed this week</a>
+  </nav>
+  <section class="list">
+    <div class="lh"><b>All skills</b><span class="f on">All</span><span class="f">Attention 5</span><span class="f">Off 2</span><span class="r">20 · sorted by status</span></div>
+    <div class="cols"><span></span><span style="text-align:left">NAME</span><span>LB</span><span>CC</span><span>CX</span><span>CU</span><span>GE</span><span>OC</span><span style="text-align:right">TOKENS</span></div>
+    <div class="row"><i class="st" style="border-color:#ef4444"></i><b>Design Notes<small>Design</small></b><i class="c no"></i><i class="c no"></i><i class="c no"></i><i class="c bad"></i><i class="c no"></i><i class="c no"></i><span class="tok">420</span></div>
+    <div class="row"><i class="st" style="border-color:#ef4444"></i><b>sql-helper<small>Data</small></b><i class="c no"></i><i class="c on"></i><i class="c bad"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><span class="tok">2,950</span></div>
+    <div class="row sel"><i class="st" style="border-color:#f59e0b"></i><b>code-review<small>Engineering</small></b><i class="c on"></i><i class="c on"></i><i class="c old"></i><i class="c on"></i><i class="c no"></i><i class="c no"></i><span class="tok">2,140</span></div>
+    <div class="row"><i class="st" style="border-color:#f59e0b"></i><b>k8s-debug<small>Ops</small></b><i class="c no"></i><i class="c old"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><i class="c on"></i><span class="tok">6,890</span></div>
+    <div class="row"><i class="st" style="border-color:#f59e0b"></i><b>test-writer<small>Engineering</small></b><i class="c on"></i><i class="c on"></i><i class="c old"></i><i class="c no"></i><i class="c on"></i><i class="c on"></i><span class="tok">1,870</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>api-design<small>Engineering</small></b><i class="c on"></i><i class="c on"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><span class="tok">3,880</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>brand-voice<small>Writing</small></b><i class="c on"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><i class="c on"></i><i class="c no"></i><span class="tok">1,160</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>explain-error<small>Engineering</small></b><i class="c on"></i><i class="c on"></i><i class="c on"></i><i class="c on"></i><i class="c on"></i><i class="c on"></i><span class="tok">880</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>frontend-a11y<small>Design</small></b><i class="c on"></i><i class="c on"></i><i class="c no"></i><i class="c on"></i><i class="c no"></i><i class="c on"></i><span class="tok">4,420</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>migration-planner<small>Data</small></b><i class="c no"></i><i class="c on"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><span class="tok">3,370</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>onboarding-guide<small>Writing</small></b><i class="c no"></i><i class="c on"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><span class="tok">7,450</span></div>
+    <div class="row"><i class="st" style="border-color:#22c55e"></i><b>perf-profiler<small>Engineering</small></b><i class="c on"></i><i class="c on"></i><i class="c no"></i><i class="c no"></i><i class="c on"></i><i class="c no"></i><span class="tok">3,010</span></div>
+    <div class="row"><i class="st" style="border-color:#6b7280"></i><b>docker-basics<small>Ops</small></b><i class="c off"></i><i class="c no"></i><i class="c off"></i><i class="c no"></i><i class="c no"></i><i class="c no"></i><span class="tok">2,210</span></div>
+  </section>
+  <aside class="detail">
+    <div><h2>code-review</h2><p>Reviews a change for bugs, risky edits and missing tests.</p></div>
+    <div class="alert">▲ Codex has an older copy (v1 of 2)</div>
+    <dl class="props"><dt>Status</dt><dd>Copies differ</dd><dt>Agents</dt><dd>4 on · 0 off</dd><dt>Size</dt><dd>2,140 tokens</dd><dt>Changed</dt><dd>2 hours ago</dd><dt>Path</dt><dd style="font-family:'Geist Mono';font-size:11.5px;color:#9aa1ad">~/.codex/skills/code-review</dd></dl>
+    <div class="mono"><span class="d">- 3. Is anything risky?</span><br><span class="a">+ 3. Are there tests for the new behaviour?</span><br><span class="a">+ 4. Is anything risky: passwords, deletes…</span></div>
+  </aside>
+  <footer class="status"><b>● 6 folders watched</b><span>Last scan 4s ago</span><span style="margin-left:auto"><kbd>⌘K</kbd> commands</span><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>S</kbd> sync</span><span><kbd>E</kbd> edit</span><span><kbd>⌫</kbd> trash</span></footer>
+</div>
+<div class="scrim"><div class="k">
+  <div class="kin"><span class="crumb">code-review</span><span class="cur">sync</span></div>
+  <div class="kg"><div class="lab">ACTIONS</div>
+    <div class="ki on"><span class="ico">⟳</span>Sync newest version to Codex<span><kbd>↵</kbd></span></div>
+    <div class="ki"><span class="ico">⟳</span>Sync to all agents<span><kbd>⇧</kbd><kbd>↵</kbd></span></div>
+    <div class="ki"><span class="ico">⇄</span>Compare Codex with library<span><kbd>C</kbd></span></div>
+    <div class="ki"><span class="ico">＋</span>Add to Gemini…</div>
+  </div></div></div>
+</body></html>

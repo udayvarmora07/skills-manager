@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f3f1">
+  <title>Skills Manager — Library prototype</title>
+  <meta name="description" content="A standalone design prototype for the Skills Manager library.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230d6a63'/%3E%3Ctext x='16' y='24' text-anchor='middle' font-family='sans-serif' font-size='24' font-weight='bold' fill='white'%3ES%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="app-shell" id="app">
+    <header class="topbar">
+      <div class="brand" aria-label="Skills Manager">
+        <span class="brand-mark" aria-hidden="true">S<span class="brand-mark-rule"></span></span>
+        <span class="brand-wordmark">Skills Manager <small>local</small></span>
+      </div>
+      <label class="search-field" for="search">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+        <span class="sr-only">Search skills</span>
+        <input id="search" type="search" placeholder="Search skills, tasks, or paths…" autocomplete="off">
+        <kbd class="search-shortcut">/</kbd>
+      </label>
+      <div class="header-actions">
+        <span class="local-label"><span class="live-dot"></span>Local workspace</span>
+        <button class="button button-primary" id="create-trigger" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span>New skill</span></button>
+        <button class="button icon-button" id="theme-trigger" type="button" aria-label="Switch to dark theme" title="Toggle theme"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+      </div>
+    </header>
+
+    <main class="workspace" id="main">
+      <aside class="rail" aria-label="Workspace navigation">
+        <nav aria-label="Views">
+          <p class="rail-caption">Workspace</p>
+          <button class="rail-nav" data-view="overview" type="button"><svg class="icon" aria-hidden="true"><use href="#i-overview"></use></svg>Overview</button>
+          <button class="rail-nav is-active" data-view="library" type="button" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-library"></use></svg>Library <span class="nav-count" id="library-nav-count">8</span></button>
+          <p class="rail-caption rail-caption-space">Inspect</p>
+          <button class="rail-nav" data-view="quality" type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>Quality</button>
+          <button class="rail-nav" data-view="recovery" type="button"><svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>Recovery</button>
+        </nav>
+
+        <div class="rail-divider"></div>
+        <div class="rail-section-head"><span>Agent scopes</span><span id="scope-total">12 instances</span></div>
+        <div class="scope-list" id="scope-list" role="group" aria-label="Filter by agent scope"></div>
+
+        <div class="budget">
+          <div class="budget-top"><strong>Context budget</strong><span class="budget-value">23.8k / 128k</span></div>
+          <div class="meter" role="meter" aria-label="Observed context budget" aria-valuemin="0" aria-valuemax="125" aria-valuenow="18.6" aria-valuetext="18.6 percent of a 128 thousand token context window"><span class="meter-fill"></span><span class="meter-limit"></span></div>
+          <div class="budget-scale"><span>0</span><span>100% window</span><span>125%</span></div>
+          <p>Estimated from observed files. The model may count tokens differently.</p>
+        </div>
+        <div class="rail-footer"><span class="live-dot"></span> Filesystem is the source of truth</div>
+      </aside>
+
+      <section class="library-pane" id="library-pane" aria-labelledby="library-heading">
+        <div class="pane-heading">
+          <div><p class="overline">Your collection</p><h1 id="library-heading">Library</h1></div>
+          <span class="pane-count" id="visible-count">8 skills</span>
+        </div>
+        <p class="pane-intro">One row per skill. Open it to inspect the copies your agents can see.</p>
+        <label class="mobile-scope-label" for="mobile-scope">Agent scope</label>
+        <select id="mobile-scope" class="mobile-scope"></select>
+        <div class="filter-bar" role="group" aria-label="Filter skills by state">
+          <button class="filter-chip is-active" type="button" data-filter="all" aria-pressed="true">All <span id="count-all">8</span></button>
+          <button class="filter-chip" type="button" data-filter="attention" aria-pressed="false">Needs attention <span id="count-attention">2</span></button>
+          <button class="filter-chip" type="button" data-filter="active" aria-pressed="false">Active <span id="count-active">6</span></button>
+        </div>
+        <div class="list-meta"><span id="list-context">All agent scopes</span><span>Sorted by name</span></div>
+        <ul class="skill-list" id="skill-list" aria-label="Skills"></ul>
+        <div class="list-bottom">Demo data · no files are changed in this prototype</div>
+      </section>
+
+      <section class="detail-pane" id="detail-pane" aria-labelledby="detail-title">
+        <div class="mobile-back-wrap"><button class="text-button mobile-back" id="mobile-back" type="button"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>Back to library</button></div>
+        <div id="detail-content"></div>
+      </section>
+    </main>
+    <footer class="statusbar"><span>Skills Manager <span class="statusbar-sep">/</span> Design prototype</span><span id="status-message" role="status">Sample workspace, read-only to your files</span></footer>
+  </div>
+
+  <dialog id="create-dialog" aria-labelledby="create-title">
+    <form id="create-form" novalidate>
+      <div class="dialog-heading"><div><p class="overline">Library / create</p><h2 id="create-title">New skill</h2></div><button class="icon-button dialog-close" type="button" id="dialog-close" aria-label="Close dialog"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+      <p class="dialog-intro">Add a sample skill to explore the Library layout. This prototype does not create a file.</p>
+      <label class="field-label" for="skill-name">Skill name <span>Required</span></label>
+      <input class="field" id="skill-name" name="name" autocomplete="off" placeholder="e.g. release-notes" maxlength="48" aria-describedby="name-help name-error" required>
+      <p class="field-help" id="name-help">Lowercase letters, numbers, and hyphens.</p>
+      <p class="field-error" id="name-error" aria-live="polite"></p>
+      <label class="field-label" for="skill-description">Description <span>Required</span></label>
+      <textarea class="field" id="skill-description" name="description" rows="3" maxlength="180" placeholder="What should an agent use this skill for?" aria-describedby="description-error" required></textarea>
+      <p class="field-error" id="description-error" aria-live="polite"></p>
+      <div class="dialog-actions"><button class="button button-quiet" id="create-cancel" type="button">Cancel</button><button class="button button-primary" id="create-submit" type="submit">Add sample skill</button></div>
+    </form>
+  </dialog>
+
+  <svg xmlns="http://www.w3.org/2000/svg" class="svg-symbols" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.7" cy="10.7" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.5A8.7 8.7 0 0 1 9.5 3.5 8.7 8.7 0 1 0 20.5 14.5Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-overview" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9.5 20v-6h5v6"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V4Zm3 0v16M5 17h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16 9"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 5-7 7 7 7M5 12h14"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m12 5 7 7-7 7M19 12H5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5 19 19M19 5 5 19"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></symbol>
+  </svg>
+</body>
+</html>

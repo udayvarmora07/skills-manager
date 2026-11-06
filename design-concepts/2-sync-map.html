@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept 2 · Sync map</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  body { font-family: "Figtree", system-ui, sans-serif; color: #15181f; background: #fff; font-size: 15px; height: 100vh; overflow: hidden; }
+  .top { height: 64px; display: flex; align-items: center; gap: 24px; padding: 0 28px; border-bottom: 1px solid #eceef2; }
+  .brand { font-weight: 800; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+  .brand i { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #15181f; display: block; position: relative; }
+  .brand i::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: #15181f; }
+  .seg { display: flex; background: #f3f4f7; padding: 4px; border-radius: 10px; }
+  .seg a { padding: 7px 14px; border-radius: 7px; font-weight: 700; font-size: 14px; color: #5d6372; text-decoration: none; }
+  .seg a.on { background: #fff; color: #15181f; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  .legend { margin-left: auto; display: flex; gap: 20px; font-size: 13.5px; color: #5d6372; font-weight: 600; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend svg { width: 30px; height: 8px; }
+  .body { display: grid; grid-template-columns: 1fr 420px; height: calc(100vh - 64px); }
+  .canvas { position: relative; background-color: #fafbfc; background-image: radial-gradient(#dde1e8 1.2px, transparent 1.2px); background-size: 22px 22px; }
+  .title { position: absolute; left: 32px; top: 28px; }
+  .title h1 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+  .title p { color: #5d6372; margin-top: 4px; font-size: 15.5px; }
+  .title p b { color: #b45309; }
+  svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .node { position: absolute; transform: translate(-50%, -50%); background: #fff; border: 1.5px solid #e1e4ea; border-radius: 18px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; box-shadow: 0 6px 20px -8px rgb(21 24 31 / .18); min-width: 190px; }
+  .node .lg { width: 42px; height: 42px; border-radius: 12px; color: #fff; display: grid; place-items: center; font-weight: 800; }
+  .node b { display: block; font-size: 16px; }
+  .node small { color: #5d6372; font-size: 13px; font-weight: 600; }
+  .node.sel { border-color: #b45309; box-shadow: 0 0 0 4px #fdecd6, 0 6px 20px -8px rgb(21 24 31 / .18); }
+  .hub { position: absolute; left: 50%; top: 54%; transform: translate(-50%, -50%); width: 200px; height: 200px; border-radius: 50%; background: #15181f; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 0 0 12px #fff, 0 0 0 13px #e1e4ea, 0 20px 50px -10px rgb(21 24 31 / .4); }
+  .hub b { font-size: 46px; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+  .hub span { font-size: 14px; opacity: .8; margin-top: 6px; font-weight: 600; }
+  .hub em { font-style: normal; font-size: 12px; opacity: .6; margin-top: 2px; }
+  .pill { position: absolute; transform: translate(-50%, -50%); font-size: 12.5px; font-weight: 800; padding: 5px 10px; border-radius: 99px; background: #fff; border: 1.5px solid; white-space: nowrap; }
+  .p-ok { color: #15803d; border-color: #bfe5cc; } .p-warn { color: #b45309; border-color: #f5cf9f; } .p-bad { color: #c2261b; border-color: #f6c3be; }
+  .panel { border-left: 1px solid #eceef2; padding: 28px; display: flex; flex-direction: column; gap: 18px; overflow: auto; }
+  .crumb { font-size: 13px; font-weight: 700; color: #5d6372; text-transform: none; }
+  .panel h2 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+  .panel .s { color: #5d6372; margin-top: 4px; }
+  .flow { display: flex; align-items: center; gap: 10px; padding: 14px; background: #fafbfc; border: 1px solid #eceef2; border-radius: 14px; font-weight: 700; }
+  .flow .lg { width: 32px; height: 32px; border-radius: 9px; color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+  .flow .ar { flex: 1; height: 2px; background: repeating-linear-gradient(90deg, #b45309 0 6px, transparent 6px 11px); position: relative; }
+  .list { border: 1px solid #eceef2; border-radius: 14px; overflow: hidden; }
+  .li { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: center; padding: 14px 16px; border-top: 1px solid #eceef2; }
+  .li:first-child { border-top: 0; }
+  .li b { display: block; font-size: 15px; }
+  .li small { color: #5d6372; font-size: 13px; }
+  .li input { width: 18px; height: 18px; accent-color: #15181f; }
+  .peek { font-size: 13px; font-weight: 700; color: #2c5ae9; }
+  .diff { font-size: 13.5px; border-radius: 12px; overflow: hidden; border: 1px solid #eceef2; }
+  .diff div { padding: 7px 12px; }
+  .diff .a { background: #e9f8ef; color: #166534; } .diff .d { background: #fdeeee; color: #9f1239; text-decoration: line-through; }
+  .cta { display: flex; gap: 10px; margin-top: auto; }
+  .btn { flex: 1; height: 46px; border-radius: 12px; border: 0; font-weight: 800; font-size: 15px; background: #15181f; color: #fff; }
+  .btn.g { flex: 0 0 auto; padding: 0 18px; background: #f3f4f7; color: #15181f; }
+  .note { font-size: 13px; color: #5d6372; display: flex; gap: 8px; align-items: center; }
+</style></head>
+<body>
+<header class="top">
+  <div class="brand"><i></i>Skills Manager</div>
+  <nav class="seg"><a class="on" href="#">Map</a><a href="#">List</a></nav>
+  <div class="legend">
+    <span><svg viewBox="0 0 30 8"><path d="M0 4h30" stroke="#22a05a" stroke-width="3"/></svg>In sync</span>
+    <span><svg viewBox="0 0 30 8"><path d="M0 4h30" stroke="#d97706" stroke-width="3" stroke-dasharray="5 4"/></svg>Out of date</span>
+    <span><svg viewBox="0 0 30 8"><path d="M0 4h11M19 4h11" stroke="#dc2626" stroke-width="3"/></svg>Broken</span>
+  </div>
+</header>
+<div class="body">
+  <section class="canvas">
+    <div class="title"><h1>Everything is connected to your library</h1><p>4 agents are in sync. <b>2 connections need fixing.</b> Click a line to see why.</p></div>
+    <svg class="map" viewBox="0 0 1020 836" preserveAspectRatio="none" aria-hidden="true">
+      <!-- hub at 510,452 -->
+      <path d="M510 452 L250 250" stroke="#22a05a" stroke-width="4" fill="none"/>
+      <path d="M510 452 L770 250" stroke="#d97706" stroke-width="4" stroke-dasharray="10 8" fill="none"/>
+      <path d="M510 452 L190 560" stroke="#22a05a" stroke-width="4" fill="none"/>
+      <path d="M510 452 L640 520" stroke="#dc2626" stroke-width="4" fill="none"/><path d="M700 552 L830 620" stroke="#dc2626" stroke-width="4" fill="none"/>
+      <path d="M510 452 L330 720" stroke="#22a05a" stroke-width="4" fill="none"/>
+      <path d="M510 452 L690 740" stroke="#c9ced8" stroke-width="2" stroke-dasharray="3 6" fill="none"/>
+    </svg>
+    <div class="hub"><b>20</b><span>skills in your library</span><em>the master copies</em></div>
+    <div class="node" style="left:24.5%;top:30%"><span class="lg" style="background:#d97757">CC</span><div><b>Claude Code</b><small>15 skills</small></div></div>
+    <div class="node sel" style="left:75.5%;top:30%"><span class="lg" style="background:#2f6f5e">CX</span><div><b>Codex</b><small>9 skills</small></div></div>
+    <div class="node" style="left:18.6%;top:67%"><span class="lg" style="background:#3d7be0">GE</span><div><b>Gemini</b><small>6 skills</small></div></div>
+    <div class="node" style="left:83%;top:74%"><span class="lg" style="background:#1b1d22">CU</span><div><b>Cursor</b><small>7 skills</small></div></div>
+    <div class="node" style="left:32%;top:86%"><span class="lg" style="background:#b04a7a">OC</span><div><b>OpenCode</b><small>4 skills</small></div></div>
+    <div class="node" style="left:67.5%;top:88.5%"><span class="lg" style="background:#f3f4f7;color:#15181f;border:1.5px dashed #c9ced8">+</span><div><b>Add an agent</b><small>Connect a folder</small></div></div>
+    <span class="pill p-warn" style="left:63%;top:42%">2 older</span>
+    <span class="pill p-bad" style="left:66.5%;top:64%">✕ 1 can't be read</span>
+    <span class="pill p-ok" style="left:37%;top:42%">✓ in sync</span>
+  </section>
+  <aside class="panel">
+    <span class="crumb">Library → Codex</span>
+    <div><h2>Codex has 2 older skills</h2><p class="s">Codex will answer differently from your other agents until these match.</p></div>
+    <div class="flow"><span class="lg" style="background:#15181f">LB</span>Library<span class="ar"></span><span class="lg" style="background:#2f6f5e">CX</span>Codex</div>
+    <div class="list">
+      <label class="li"><input type="checkbox" checked><div><b>code-review</b><small>4 lines newer in your library</small></div><span class="peek">Peek</span></label>
+      <label class="li"><input type="checkbox" checked><div><b>test-writer</b><small>3 lines newer in your library</small></div><span class="peek">Peek</span></label>
+    </div>
+    <div class="diff">
+      <div class="d">3. Is anything risky?</div>
+      <div class="a">3. Are there tests for the new behaviour?</div>
+      <div class="a">4. Is anything risky: passwords, deletes, database changes?</div>
+    </div>
+    <p class="note">↺ A backup is saved first. You can undo for 30 days.</p>
+    <div class="cta"><button class="btn g">Not now</button><button class="btn">Update 2 skills in Codex</button></div>
+  </aside>
+</div>
+</body></html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-text-size="standard">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Skills Manager · Folio prototype</title>
+  <meta name="description" content="Folio is a frontend-only prototype of a local reading room for AI coding-agent skill documents: catalogue, context budget, evidence, and recovery.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eff0ec">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23141712'/%3E%3Cpath d='M9 7h9l5 5v13H9z' fill='none' stroke='%23c9f24d' stroke-width='1.8'/%3E%3Cpath d='M18 7v5h5' fill='none' stroke='%23c9f24d' stroke-width='1.8'/%3E%3C/svg%3E">
+  <link rel="preload" href="assets/fonts/instrument-sans-normal-400-700-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/newsreader-normal-300-700-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="preferences.js?v=20261025c"></script>
+  <link rel="stylesheet" href="fonts.css?v=20261025c">
+  <link rel="stylesheet" href="styles.css?v=20261025c">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div class="app" id="app">
+    <header class="masthead">
+      <div class="masthead-start">
+        <button class="icon-button drawer-toggle" id="drawer-toggle" type="button" data-action="toggle-rail" aria-label="Open navigation" aria-expanded="false" aria-controls="rail">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+        </button>
+        <button class="brand" type="button" data-go="overview" aria-label="Skills Manager, go to overview">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3.5h8l4 4v13H6z"/>
+              <path d="M14 3.5v4h4"/>
+              <path d="M9 12h6M9 15.5h4"/>
+            </svg>
+          </span>
+          <span class="brand-word">Skills Manager</span>
+          <span class="brand-pill">local</span>
+          <span class="brand-pill brand-pill-quiet">prototype</span>
+        </button>
+      </div>
+
+      <button class="command-field" type="button" data-action="palette" aria-label="Search skills, paths, and commands" aria-keyshortcuts="Control+K Meta+K">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        <span class="command-text">Search skills, paths, commands</span>
+        <kbd>⌘ K</kbd>
+      </button>
+
+      <div class="masthead-end">
+        <span class="local-stamp" title="Every record in this prototype is local sample data.">
+          <span class="status-dot" aria-hidden="true"></span>Local only
+        </span>
+        <button class="icon-button" id="theme-toggle" type="button" data-action="theme" aria-label="Switch to dark theme">
+          <span id="theme-icon" aria-hidden="true"></span>
+        </button>
+        <button class="icon-button" type="button" data-action="help" aria-label="Keyboard shortcuts" aria-keyshortcuts="Shift+?">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.3"/><path d="M12 16.6h.01"/></svg>
+        </button>
+        <button class="button button-primary" id="new-skill" type="button" data-action="create" aria-label="Create a new skill">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="button-label">New skill</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="rail" id="rail" aria-label="Workspace navigation">
+        <div class="rail-drawer-head">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3.5h8l4 4v13H6z" />
+              <path d="M14 3.5v4h4" />
+              <path d="M9 12h6M9 15.5h4" />
+            </svg>
+          </span>
+          <span class="rail-drawer-title">Skills Manager</span>
+          <button class="icon-button" type="button" data-action="close-rail" aria-label="Close navigation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="rail-inner">
+          <nav class="rail-nav" id="rail-nav" aria-label="Views"></nav>
+          <section id="rail-scopes" aria-label="Observed roots"></section>
+        </div>
+        <div class="rail-foot" id="rail-foot"></div>
+      </aside>
+      <div class="rail-backdrop" data-action="close-rail" aria-hidden="true"></div>
+
+      <main id="main" class="stage" tabindex="-1">
+        <div id="stage"></div>
+      </main>
+    </div>
+
+    <footer class="statusbar" id="statusbar" aria-label="Workspace status"></footer>
+  </div>
+
+  <div id="overlay-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="false"></div>
+
+  <noscript>
+    <div style="padding:24px;font-family:system-ui,sans-serif">
+      Folio is a frontend prototype and needs JavaScript to render its sample inventory.
+    </div>
+  </noscript>
+
+  <script src="data.js?v=20261025c"></script>
+  <script src="core.js?v=20261025c"></script>
+  <script src="views.js?v=20261025c"></script>
+  <script src="views2.js?v=20261025c"></script>
+  <script src="overlays.js?v=20261025c"></script>
+  <script src="app.js?v=20261025c"></script>
+</body>
+</html>

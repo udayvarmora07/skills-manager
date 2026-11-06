@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home · Skills Manager</title>
+  <meta name="description" content="Final frontend prototype of Skills Manager: agents home, skills shelf, sync map, inbox and notebook skill pages.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <a class="brand" href="#/home"><span class="mark" aria-hidden="true">SM</span><span class="brand-t">Skills Manager</span></a>
+    <nav class="tabs" aria-label="Main">
+      <a href="#/home" data-nav="home">Home</a>
+      <a href="#/skills" data-nav="skills">Skills</a>
+      <a href="#/map" data-nav="map">Sync map</a>
+      <a href="#/inbox" data-nav="inbox">Inbox <span class="badge" id="inbox-n" aria-label="items"></span></a>
+    </nav>
+    <form class="gsearch" role="search" id="gsearch">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <label class="sr-only" for="gq">Find a skill</label>
+      <input id="gq" type="search" placeholder="Find a skill…" autocomplete="off">
+      <kbd aria-hidden="true">/</kbd>
+    </form>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <div class="sr-only" role="status" aria-live="polite" id="live"></div>
+  <div class="toasts" id="toasts"></div>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

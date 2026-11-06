@@ -4,6 +4,19 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## CI blocker — extended tar headers (2026-11-06)
+
+- [x] Reproduce the roughly 25 MB allocation with CPython 3.13.18's tarfile
+  module: chunked metadata reads reached the decompressed-stream cap before
+  rejection. The existing 12 MiB regression budget remains unchanged.
+- [x] Check declared PAX/GNU extension payloads, including padding and stream
+  position, against the existing cap before tarfile reads them. Cover all five
+  extension types initially and recursively, reader cleanup, and valid PAX/GNU
+  long-name imports.
+- [x] Full local verification: 1,339 tests on each Python 3.10–3.14, both
+  smokes, compilation, complexity, docs, design tokens, pinned Ruff/Bandit,
+  and pinned wheel/sdist build and package-data inspection.
+
 ## Continuation verification — classic screens, scale, screen reader (2026-11-06)
 
 See @docs/32-continuation-verification-2026-11-06.md.
@@ -97,6 +110,25 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [ ] Slim `/api/skills` list payload (22.7 MB on the maintainer's machine).
 - [ ] Human perceptual review and screen-reader validation of v2. Automated
   forced-colors, keyboard and actual 200%/400% browser-zoom results are recorded separately.
+## User research follow-ups (2026-10-30)
+
+Proposals from @docs/26-user-research-skills-context-2026-10-30.md — each
+needs a maintainer decision before work starts (⚠ = locked constraint 5).
+
+- [ ] **Defect:** observed state ignores each agent's native switch (Codex
+  `[[skills.config]]` in `~/.codex/config.toml`, Claude Code `skillOverrides`,
+  OpenCode `permission.skill`, Gemini workspace/user disable), so the UI can
+  show **Active** for a skill Codex has disabled. Latent: no disable rule exists
+  on this machine today (the one entry is `enabled = true`). Read-only fix first (§4b).
+- [ ] Decide: per-project profiles that translate one toggle into each agent's
+  native setting (⚠); Codex's switch is user-level only and must say so.
+- [ ] Decide: interoperate with Microsoft APM `apm.yml` instead of a new lockfile.
+- [ ] Decide: Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
+- [ ] "What the model sees" listing-budget view per project (1% rule, dropped descriptions).
+- [ ] Before/after resident-token savings on every toggle.
+- [ ] Silent-failure lint: YAML that parses empty, >1,536-char descriptions.
+- [ ] Decide: transcript-based usage counts (⚠) and project skill lockfile (⚠).
+- [ ] Decide on docs/27 monetization questions MON-Q1…MON-Q5 (services-first year; widen scope to MCP + AGENTS.md; public top-skills report; zh-CN UI; which docs/14 tiers stay). Proposals only, nothing approved.
 
 ## UI redesign — Warm Instrument (2026-10-08)
 

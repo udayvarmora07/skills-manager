@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overview · Skills Manager</title>
+  <meta name="description" content="Compass: a frontend-only design prototype of the Skills Manager Overview and Skills pages.">
+  <script>
+    try { var t = localStorage.getItem("compass-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <div class="app">
+    <aside class="side" aria-label="Main">
+      <a class="logo" href="#/overview" aria-label="Skills Manager, go to Overview">
+        <svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m18.5 9.5-2.8 6.2-6.2 2.8 2.8-6.2z" fill="currentColor"/></svg>
+        <span>Skills Manager</span>
+      </a>
+
+      <nav class="nav" aria-label="Pages">
+        <a href="#/overview" data-nav="overview"><span data-i="compass"></span>Overview</a>
+        <a href="#/skills" data-nav="skills"><span data-i="stack"></span>Skills<span class="nav-n" id="nav-n"></span></a>
+      </nav>
+
+      <div class="side-foot">
+        <div class="demo">
+          <label for="demo-state">Prototype: preview a state</label>
+          <select id="demo-state">
+            <option value="normal">Normal (demo data)</option>
+            <option value="loading">Scanning</option>
+            <option value="first-run">First run, no skills</option>
+            <option value="scan-error">One folder can't be read</option>
+            <option value="all-good">Everything fixed</option>
+          </select>
+        </div>
+        <p class="local"><span data-i="lock"></span>Runs only on this computer</p>
+        <button class="theme" type="button" id="theme"><span data-i="moon"></span><span class="theme-t">Dark theme</span></button>
+      </div>
+    </aside>
+
+    <header class="mtop">
+      <a class="logo" href="#/overview" aria-label="Skills Manager, go to Overview">
+        <svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m18.5 9.5-2.8 6.2-6.2 2.8 2.8-6.2z" fill="currentColor"/></svg>
+        <span>Skills Manager</span>
+      </a>
+      <nav class="mtabs" aria-label="Pages">
+        <a href="#/overview" data-nav="overview">Overview</a>
+        <a href="#/skills" data-nav="skills">Skills</a>
+      </nav>
+      <button class="icon-btn" type="button" id="theme-m" aria-label="Switch theme"><span data-i="moon"></span></button>
+    </header>
+
+    <main id="main" tabindex="-1"></main>
+  </div>
+
+  <div class="sr-only" role="status" aria-live="polite" id="live"></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

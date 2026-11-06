@@ -180,11 +180,10 @@ def _validate_archive_layout(normalized: str, is_dir: bool, is_file: bool) -> No
 class _BoundedReader:
     """A seekable view of a decompressed stream that refuses to read past a cap.
 
-    ``tarfile`` trusts header size fields: a PAX or GNU long-name record that
-    declares a gigabyte is read with one ``read(size)`` call, and walking
-    member data on a compressed stream means decompressing it.  Checking the
-    *position* before delegating means a hostile size fails before anything
-    is allocated, and no amount of seeking can decompress more than the cap.
+    Walking member data on a compressed stream means decompressing it.
+    Checking the *position* before delegating bounds each read or seek.
+    ``_BoundedTarInfo`` also checks entire metadata payloads up front, so
+    chunked tarfile reads cannot accumulate the budget before rejection.
     """
 
     def __init__(self, raw, limit: int):
@@ -228,6 +227,22 @@ class _BoundedReader:
         self._raw.close()
 
 
+class _BoundedTarInfo(tarfile.TarInfo):
+    """Check extension sizes before tarfile accumulates their payloads.
+
+    Newer tarfile versions read PAX/GNU metadata in chunks, so bounding each
+    read alone allows the stream budget to accumulate in memory before the
+    final read is refused.  ``_proc_member`` is tarfile's subclass dispatch
+    hook, including for recursively processed extension headers.
+    """
+
+    def _proc_member(self, tar):
+        if self.type in (tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.SOLARIS_XHDTYPE,
+                         tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK):
+            tar.fileobj._check(tar.fileobj.tell() + self._block(self.size))
+        return super()._proc_member(tar)
+
+
 def _open_decompressed(path: Path):
     with path.open("rb") as probe:
         magic = probe.read(6)
@@ -258,7 +273,7 @@ def open_tar(path: Path):
     reader = _BoundedReader(raw, MAX_ARCHIVE_DECOMPRESSED_BYTES)
     try:
         try:
-            tar = tarfile.open(fileobj=reader, mode="r:")  # type: ignore[arg-type]
+            tar = tarfile.open(fileobj=reader, mode="r:", tarinfo=_BoundedTarInfo)  # type: ignore[arg-type]
         except _TAR_DECOMPRESSION_ERRORS as exc:
             raise ArchiveError(f"invalid archive: {exc}") from exc
         with tar:

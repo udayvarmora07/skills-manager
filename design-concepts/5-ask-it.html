@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concept 5 · Ask it</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  body { font-family: "Figtree", system-ui, sans-serif; color: #10203a; font-size: 15px; min-height: 100vh;
+    background: radial-gradient(1200px 500px at 50% -120px, #dcefff 0%, rgba(220,239,255,0) 70%), #ffffff; }
+  .top { display: flex; align-items: center; padding: 22px 40px; gap: 20px; }
+  .brand { font-weight: 800; font-size: 16px; display: flex; gap: 10px; align-items: center; }
+  .brand span { width: 28px; height: 28px; border-radius: 50%; background: conic-gradient(#0ea5e9, #22c55e, #0ea5e9); }
+  .top nav { margin-left: auto; display: flex; gap: 18px; color: #4b5d78; font-weight: 600; }
+  .center { max-width: 820px; margin: 0 auto; padding: 40px 24px 60px; text-align: center; }
+  .hello { color: #4b5d78; font-weight: 600; }
+  h1 { font-size: 46px; font-weight: 800; letter-spacing: -.035em; line-height: 1.1; margin-top: 8px; }
+  .box { margin-top: 30px; background: #fff; border: 1.5px solid #cfe0f5; border-radius: 22px; box-shadow: 0 0 0 6px #eef6ff, 0 20px 50px -20px rgb(16 32 58 / .25); padding: 10px 10px 10px 22px; display: flex; align-items: center; gap: 14px; text-align: left; }
+  .box .i { width: 22px; height: 22px; color: #0284c7; }
+  .box .q { flex: 1; font-size: 19px; font-weight: 600; }
+  .box .q::after { content: ""; display: inline-block; width: 2px; height: 22px; background: #0284c7; vertical-align: -4px; margin-left: 2px; }
+  .box button { height: 48px; padding: 0 22px; border-radius: 14px; border: 0; background: #0f172a; color: #fff; font-weight: 800; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+  .chips span { padding: 8px 14px; border-radius: 99px; background: #f1f6fc; border: 1px solid #dde8f5; font-weight: 600; font-size: 14px; color: #2b4466; }
+  .answer { margin-top: 34px; text-align: left; background: #fff; border: 1px solid #e3ebf5; border-radius: 22px; overflow: hidden; box-shadow: 0 1px 2px rgb(16 32 58 / .04); }
+  .ah { padding: 22px 24px; border-bottom: 1px solid #edf2f8; display: flex; gap: 14px; align-items: start; }
+  .ah .ic { width: 40px; height: 40px; border-radius: 12px; background: #fde9e7; color: #b42318; display: grid; place-items: center; font-weight: 800; flex: none; }
+  .ah b { font-size: 20px; font-weight: 800; letter-spacing: -.015em; display: block; }
+  .ah p { color: #4b5d78; margin-top: 3px; }
+  .res { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 18px 24px; border-bottom: 1px solid #edf2f8; }
+  .res b { font-size: 16px; }
+  .res p { color: #4b5d78; font-size: 14px; margin-top: 3px; }
+  .tags { display: flex; gap: 6px; margin-top: 8px; }
+  .tags span { font-size: 12.5px; font-weight: 700; padding: 3px 9px; border-radius: 7px; background: #f1f6fc; color: #2b4466; }
+  .tags span.r { background: #fde9e7; color: #b42318; }
+  .fix { height: 40px; padding: 0 16px; border-radius: 12px; border: 0; background: #0284c7; color: #fff; font-weight: 800; }
+  .af { padding: 14px 24px; display: flex; justify-content: space-between; color: #4b5d78; font-size: 14px; background: #f8fbfe; }
+  .af a { color: #0284c7; font-weight: 700; text-decoration: none; }
+  .also { margin-top: 26px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: left; }
+  .also div { padding: 16px; border-radius: 16px; background: #f8fbfe; border: 1px solid #e3ebf5; }
+  .also b { display: block; font-size: 22px; font-weight: 800; }
+  .also small { color: #4b5d78; font-weight: 600; }
+</style></head>
+<body>
+<header class="top"><div class="brand"><span></span>Skills Manager</div><nav><span>Library</span><span>Agents</span><span>Trash</span></nav></header>
+<div class="center">
+  <p class="hello">Good afternoon</p>
+  <h1>What would you like to know about your skills?</h1>
+  <div class="box"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="q">Which skills are broken?</span><button>Ask</button></div>
+  <div class="chips"><span>What does Cursor know?</span><span>Which copies don't match?</span><span>Show my biggest skills</span><span>What changed this week?</span><span>Is anything turned off?</span></div>
+
+  <div class="answer">
+    <div class="ah"><span class="ic">✕</span><div><b>2 skills can't be read right now</b><p>The agents listed skip these skills, so they won't use them until they're fixed.</p></div></div>
+    <div class="res"><div><b>sql-helper</b><p>The top of Codex's copy is damaged. Claude Code's copy is fine.</p><div class="tags"><span class="r">Codex: can't read</span><span>Claude Code: working</span></div></div><button class="fix">Replace with working copy</button></div>
+    <div class="res"><div><b>Design Notes</b><p>The folder name has spaces and capitals, so no agent can find it.</p><div class="tags"><span class="r">Cursor: can't find</span></div></div><button class="fix">Rename to design-notes</button></div>
+    <div class="af"><span>Everything else (18 skills) can be read.</span><a href="#">Show all 20 →</a></div>
+  </div>
+  <div class="also"><div><b>13</b><small>skills working everywhere</small></div><div><b>3</b><small>with copies that don't match</small></div><div><b>2</b><small>turned off</small></div></div>
+</div>
+</body></html>
