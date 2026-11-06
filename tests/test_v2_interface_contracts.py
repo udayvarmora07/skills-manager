@@ -31,7 +31,7 @@ def _node(body: str):
     """Load domain.js and model.js into a Node vm and return ``body``'s JSON."""
     script = (
         "const vm=require('vm'),fs=require('fs');"
-        "const ctx={window:{},console};ctx.window.window=ctx.window;vm.createContext(ctx);"
+        "const ctx={window:{},console,Blob,FormData};ctx.window.window=ctx.window;vm.createContext(ctx);"
         f"vm.runInContext(fs.readFileSync({json.dumps(str(DOMAIN_JS))},'utf8'),ctx);"
         f"vm.runInContext(fs.readFileSync({json.dumps(str(V2 / 'model.js'))},'utf8'),ctx);"
         "const M=ctx.window.SkillsV2Model;"
@@ -177,6 +177,31 @@ class RenderSafetyTests(unittest.TestCase):
         self.assertIn("del:b", out["small"])
         self.assertIn("add:x", out["small"])
         self.assertLess(out["ms"], 5000)  # the cell budget degrades to a plain replace, never a hang
+
+
+@unittest.skipUnless(NODE, "node is required")
+class TransportTests(unittest.TestCase):
+    """R9: mutating requests declare JSON; forms and files keep their own type."""
+
+    def test_content_type_is_added_only_where_it_belongs(self):
+        out = _node("""
+        const D = ctx.window.SkillManagerDomain, ct = (o) => (o.headers || {})["Content-Type"] || null;
+        return {
+          get: ct(D.withJsonType({})),
+          bodylessPost: ct(D.withJsonType({ method: "POST" })),
+          del: ct(D.withJsonType({ method: "DELETE" })),
+          kept: ct(D.withJsonType({ method: "POST", headers: { "content-type": "text/x" } })) ,
+          keptLower: D.withJsonType({ method: "POST", headers: { "content-type": "text/x" } }).headers["content-type"],
+          blob: ct(D.withJsonType({ method: "PUT", body: new Blob(["x"]) })),
+          form: ct(D.withJsonType({ method: "POST", body: new FormData() })),
+        };""")
+        self.assertIsNone(out["get"])
+        self.assertEqual(out["bodylessPost"], "application/json")
+        self.assertEqual(out["del"], "application/json")
+        self.assertIsNone(out["kept"])
+        self.assertEqual(out["keptLower"], "text/x")
+        self.assertIsNone(out["blob"])
+        self.assertIsNone(out["form"])
 
 
 class InterfaceSourceTests(unittest.TestCase):
