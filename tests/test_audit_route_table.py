@@ -232,6 +232,9 @@ class RouteTableTestCase(unittest.TestCase):
         if body is not None:
             data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
             request_headers.setdefault("Content-Type", "application/json")
+        elif method == "POST":
+            # R9: a bodyless POST still declares JSON, as the UIs do.
+            request_headers.setdefault("Content-Type", "application/json")
         req = urllib.request.Request(
             f"http://127.0.0.1:{self.port}{path}",
             data=data, headers=request_headers, method=method,

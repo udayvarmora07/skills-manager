@@ -168,3 +168,42 @@ here.
 - Cursor: `https://prod.cursor.com/docs/skills`
 - Gemini CLI: `https://geminicli.com/docs/cli/using-agent-skills/`
 - OpenCode: `https://opencode.ai/v2/docs/skills`
+
+## Native settings observations (R4, 2026-11-06)
+
+**[SPEC]** Scoped list, search and detail records add `native_state`, derived
+from selected JSON files on each read. Each scope batch reads each source at
+most once; no setting is persisted or written. Existing `disabled`, `status`,
+instance states and effective-resolution fields retain their meanings.
+
+- Claude Code sources are low-to-high priority: `~/.claude/settings.json`,
+  `<cwd>/.claude/settings.json`, `<cwd>/.claude/settings.local.json`.
+  `skillOverrides` maps an exact skill name to `on`, `name-only`,
+  `user-invocable-only`, or `off`. `sources` lists each observed declaration;
+  `observed_setting`, when available, is the highest declaration among these
+  files, not a claim about runtime visibility. Missing keys do not manufacture
+  an `on` observation. Invalid/unavailable sources suppress that aggregate.
+- OpenCode sources are the standard user
+  `~/.config/opencode/opencode.json` followed by `<cwd>/opencode.json`.
+  `permission.skill` accepts `allow`, `ask`, `deny`, or a pattern map. `*` and
+  `?` match skill names; the last matching rule within each file is reported.
+  Cross-file rule ordering is not inferred, so there is no aggregate setting.
+- `sources[].status` distinguishes `ok`, `missing`, `unobserved`, `invalid`
+  schema and `unavailable` input. Reads are bounded to 1 MiB per file; duplicate
+  JSON keys, non-regular files and bad JSON/encoding fail cleanly. Claude maps
+  are capped at 10,000 rules, OpenCode at 256, and patterns at 512 characters.
+  Other settings and raw errors are never included in the observation.
+- The context is the manager process's current directory, including when a
+  user-scope skill is being inspected. Parent-directory discovery, managed,
+  CLI, environment, remote, plugin and additional config-directory sources are
+  incomplete. Every observation says `partial: true` and
+  `effective_state: unknown`. This evidence does not prove discovery, loading
+  or invocation. Unsupported consumers are explicit; Codex TOML is deferred.
+
+**[NOTE] Primary source check (2026-11-06):**
+[Claude skill visibility](https://code.claude.com/docs/en/skills#override-skill-visibility-from-settings),
+[Claude settings precedence](https://code.claude.com/docs/en/settings),
+[OpenCode permissions](https://opencode.ai/docs/permissions/), and
+[OpenCode configuration](https://opencode.ai/docs/config/).
+The omitted config sources are why observed declarations are kept separate
+from an effective runtime claim.

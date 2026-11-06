@@ -219,6 +219,21 @@
           <span>All {{ formatNumber(uniformProblemCount) }} visible instances are <strong>{{ uniformProblemLabel }}</strong>. The per-row badge is hidden so any row that differs stays visible.</span>
         </p>
       </div>
+      <!-- State legend: the seven observed words, each with its remedy direction.
+           Collapsed by default (progressive disclosure); static copy that mirrors
+           OBSERVED_STATE_LABELS in domain.js, so update both together. -->
+      <details v-if="view === 'skills'" class="state-legend">
+        <summary>What the states mean</summary>
+        <dl>
+          <div><dt>Active</dt><dd>Enabled, parsed, addressable.</dd></div>
+          <div><dt>Disabled</dt><dd>Skipped by its consumer.</dd></div>
+          <div><dt>Invalid</dt><dd>The backend reports it unreadable.</dd></div>
+          <div><dt>Malformed</dt><dd>Undecodable or invalid document.</dd></div>
+          <div><dt>Linked outside root</dt><dd>A symlink the tool refuses to follow.</dd></div>
+          <div><dt>Unaddressable</dt><dd>Name outside the canonical rule.</dd></div>
+          <div><dt>Divergent</dt><dd>Copies differ between scopes.</dd></div>
+        </dl>
+      </details>
       <div v-if="banner" :class="'banner banner-' + banner.type" role="alert" aria-live="assertive">{{ banner.text }}</div>
 
       <ul v-if="view === 'skills'" :class="['skilllist', { 'skill-grid': browseMode === 'grid' }]" aria-label="Skills">
@@ -236,6 +251,7 @@
         <li v-else class="selection-hint"><button class="selection-toggle" type="button" @click="toggleSelectAll">Select visible</button><span>Batch actions apply only to the visible filtered rows.</span></li>
         <li v-for="s in visibleSkills" :key="libraryMode === 'library' ? s.name : s.scope + '/' + s.name"
             :data-skill-key="libraryMode === 'library' ? ((s.primary && s.primary.scope) || '') + '/' + s.name : s.scope + '/' + s.name"
+            :aria-label="s.name + (s.divergent ? ', divergent copies' : '') + '. ' + (s.description || '')"
             :class="{ selected: selectedName === s.name && (libraryMode === 'library' || !selected || selected.scope === s.scope) }"
             @click="libraryMode === 'library' ? selectLogicalSkill(s) : selectSkill(s)"
             @keydown.enter.self.prevent="libraryMode === 'library' ? selectLogicalSkill(s) : selectSkill(s)"
@@ -757,7 +773,7 @@
         <template v-else-if="selected">
           <div class="detail-head">
             <div><h1 id="view-title" tabindex="-1">Quality: {{ selected.name }}</h1><p class="lead">Independent observations for this exact skill copy. These panels do not produce a combined score or infer safety, trust, effective load, or usefulness.</p></div>
-            <div class="detail-actions quality-actions"><button class="btn btn-primary" type="button" @click="openValidate">Validate</button><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="inspectQualityInLibrary">Inspect in Library</button></div>
+            <div class="detail-actions quality-actions"><button class="btn btn-secondary" type="button" @click="showQualityReport">← Hygiene report</button><button class="btn btn-primary" type="button" @click="openValidate">Validate</button><button class="btn btn-secondary" type="button" @click="openDoctor">Doctor</button><button class="btn btn-secondary" type="button" @click="openStats">Stats</button><button class="btn btn-secondary" type="button" @click="inspectQualityInLibrary">Inspect in Library</button></div>
           </div>
           <section class="quality-section" aria-labelledby="quality-validity-title">
             <div class="section-label-row"><h2 id="quality-validity-title">Specification and observed validity</h2><span class="badge" :class="selected.malformed || selected.addressable === false ? 'badge-warn' : ''">{{ qualityStateLabel(selected) }}</span></div>

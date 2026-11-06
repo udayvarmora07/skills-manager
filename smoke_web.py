@@ -27,6 +27,9 @@ try:
             else:
                 data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = ctype
+        elif method == "POST":
+            # R9: a bodyless POST still declares JSON, as the UIs do.
+            headers["Content-Type"] = "application/json"
         r = Request(base + path, data=data, headers=headers, method=method)
         with urlopen(r) as resp:
             raw = resp.read()

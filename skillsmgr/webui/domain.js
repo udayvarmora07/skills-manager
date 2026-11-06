@@ -20,8 +20,22 @@ async function api(url, opts = {}) {
   return pending;
 }
 
+/* Every state-changing request declares JSON unless it carries a form or a
+ * file, which set their own type. The backend rejects a mutating POST without
+ * it (R9), and a body-less toggle or purge is still a JSON-shaped request. */
+function withJsonType(opts) {
+  const method = String(opts.method || "GET").toUpperCase();
+  if (method === "GET" || method === "HEAD") return opts;
+  const body = opts.body;
+  if (typeof FormData !== "undefined" && body instanceof FormData) return opts;
+  if (typeof Blob !== "undefined" && body instanceof Blob) return opts;
+  const headers = { ...(opts.headers || {}) };
+  if (!Object.keys(headers).some((k) => k.toLowerCase() === "content-type")) headers["Content-Type"] = "application/json";
+  return { ...opts, headers };
+}
+
 async function requestJson(url, opts = {}) {
-  const res = await fetch(url, opts);
+  const res = await fetch(url, withJsonType(opts));
   let data = null;
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) data = await res.json();
@@ -441,6 +455,7 @@ function formatTools(v) {
 }
 
 window.SkillManagerDomain = Object.freeze({
+  withJsonType,
   api,
   apiText,
   apiBlob,

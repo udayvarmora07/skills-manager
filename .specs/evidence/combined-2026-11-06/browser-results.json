@@ -1,0 +1,130 @@
+{
+  "results": [
+    {
+      "name": "Unreadable Inbox guidance preserves original bytes",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Home Inbox count equals queue; acknowledging a note is not a fix",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Disabled Enter does not sync a tied copy",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Delayed double click issues one sync and Undo restores bytes and queue",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Stale file toggle reports error without resurrecting fixture",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Native setting evidence is partial and file switch Undo preserves files",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Native invalid and unavailable settings render without exposing values",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Discard navigation, dialog focus trap and cancellation",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Global Recovery restores a trashed fixture",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Classic disable and enable send bodyless POST requests",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Sync Undo restores target-disabled bytes and disabled state",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Sync Undo restores source-disabled bytes and disabled state",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Malformed text Inbox repair and Undo reappear",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Create, editor focus, safe Markdown, save and Undo",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "One-place dialogs preselect and cancellation keeps files",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Add-to-agent single target is selected and creates a copy",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Backup download/import and invalid archive error",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Sync map totals, singular grammar and top-link target size",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Responsive layouts in both themes",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Phone dark Sync map sampled text contrast",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Empty and one-record shelves render without stale cards",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Forced colors focus indicator",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Actual Chrome zoom at 200 and 400 percent",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "No uncaught page errors",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Coverage limit",
+      "status": "NOTE",
+      "detail": "No screen-reader validation; real browser zoom is checked only in isolated headed mode. CSS magnification is not browser zoom. Screenshots and overflow checks do not constitute a complete accessibility audit."
+    }
+  ],
+  "failures": 0
+}

@@ -1613,6 +1613,7 @@ createApp({
     },
 
     closeMobileView() {
+      if (this.view === "quality" && this.selected) { this.showQualityReport(); return; }
       this.mobileDetailOpen = false;
       this.$nextTick(() => {
         const label = this.view === "trash" ? "Trash" : this.view.charAt(0).toUpperCase() + this.view.slice(1);
@@ -1628,7 +1629,20 @@ createApp({
       this.mobileDetailOpen = true;
     },
 
+    /* Quality's per-skill panel replaces the hygiene report; this is the way
+     * back to it, without dropping the Library selection elsewhere. */
+    showQualityReport() {
+      this.selected = null;
+      this.selectedName = null;
+      this.mobileDetailOpen = false;
+      this.$nextTick(() => {
+        const heading = document.querySelector("#view-title");
+        if (heading) heading.focus();
+      });
+    },
+
     switchView(v) {
+      if (v === "quality" && this.view === "quality" && this.selected) { this.showQualityReport(); return; }
       this.view = v;
       // Keep auxiliary lists visible on phones; a selected item can then move
       // to its detail state and the explicit back action returns to that list.
@@ -1948,6 +1962,8 @@ createApp({
     },
 
     openBatch(operation, explicitTargets = null, context = null) {
+      // Every dialog returns focus to its opener (docs/08); batch did not.
+      if (!(this.commandPaletteTransfer && this.modalRestoreFocus)) this.modalRestoreFocus = document.activeElement;
       const targets = (explicitTargets || this.selectedTargets).map((target) => Object.freeze({
         name: target.name,
         scope: target.scope,

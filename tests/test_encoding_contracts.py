@@ -213,9 +213,9 @@ class TestWritePathsFailClosedOnUndecodableDocuments(EncodingCase):
         self.assert_refused(lambda: self.store.restore("enc", snapshot=snapshot))
         self.assert_file_unchanged(skill_dir)
 
-    def test_scope_get_raw_reports_a_clean_error(self):
+    def test_scope_get_raw_reads_undecodable_text_lossily(self):
         self.install_agent("enc")
-        self.assert_refused(lambda: scopes.get_raw("agents", "enc"))
+        self.assertIn("\ufffd", scopes.get_raw("agents", "enc"))
 
     def test_scope_edit_refuses_and_leaves_the_file_untouched(self):
         skill_dir = self.install_agent("enc")

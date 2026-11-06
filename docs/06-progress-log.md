@@ -8,6 +8,54 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-06 — Classic screens, 10,000-instance scale and screen-reader checks closed three gaps
+
+**[SPEC]** Three gaps left by @docs/31-combined-e2e-verification-2026-11-06.md
+are closed in @docs/32-continuation-verification-2026-11-06.md, all on
+isolated fixtures. The classic-only screens now have an end-to-end runner
+(`tools/e2e_classic`), passing 312 assertions twice after fixing two defects:
+the batch dialog lost its focus return, and Quality's hygiene report became
+unreachable once a skill was selected. A 10,000-instance run found no crash or
+stall and measured where time goes: a 56.7 MB list payload, a token-counting
+`/api/scopes` rescan, and a classic Library that renders all 55,765 nodes.
+Orca 46 transcripts plus a CDP audit found a P0: Enter on the Inbox "Open
+skill" link ran the fix instead of navigating. It and twelve other findings
+are fixed and pinned by four new browser checks (v2 suite 27/27 twice).
+
+**[?] Open.** No person has heard the screen-reader output; the docs/32
+walkthrough is the requested next step. The payload, scopes-rescan and classic
+row-cap fixes are maintainer decisions, not silent changes.
+
+## 2026-11-06 — Combined frontend/backend integration and browser verification
+
+- Normally merged completed backend `fbe8ec2` into frontend `7d225dc` without
+  conflicts; retained the frontend JSON transport required by R9.
+- Show partial native settings separately from file toggles in v2 detail;
+  loading remains unknown. Corrected binary-repair guidance to explain the
+  text Undo limitation instead of denying the new force-sync capability.
+- Sanitize initial-load errors and traceback/library failures alongside toasts.
+- Red-first model probes found mixed text/binary repair and refused-link source
+  bugs. Automatic repair now requires every target to support text Undo and a
+  readable source. Sync Undo restores prior file enabled state and refreshes
+  after failure; companion-file rollback is explicitly outside text Undo.
+- Actual 400% Chrome zoom exposed Recovery’s fixed 320px grid minimum. Its
+  tracks and controls now fit the available width; browser zoom is checked
+  through isolated X11 input and measured device-pixel ratio.
+- The rejected-upload test now observes its own staging allocation rather than
+  other suites’ temporary directories; invalid parts still allocate nothing.
+- Current tree: **1,337 tests OK on each Python 3.10–3.14**, 24 browser
+  assertion groups (both UI transports; desktop/phone, both themes; actual
+  200%/400% browser zoom), classic six-width harness, both smokes, docs,
+  complexity (721 functions), design tokens, compilation, Ruff and Bandit pass.
+- Pinned wheel/sdist build, archives and clean wheel install pass. Automatic
+  sdist install remains unavailable without setuptools; a separate clean
+  install seeded with pinned build tools passed all 27 asset identity checks.
+- Durable D1–D14 dispositions, the new Recovery zoom finding, evidence hashes
+  and remaining limits: @docs/31-combined-e2e-verification-2026-11-06.md.
+  Screen-reader validation, Markdown table/nested-list rendering and the
+  maintainer decisions remain open. Original design checkout, main, releases
+  and remotes remain untouched.
+
 ## Digest — read this before the entries
 
 **[SPEC] This file is now a digest plus a resident window.** It measured
@@ -53,7 +101,20 @@ has a surviving owning doc: the ADR set,
 @docs/13-audit-remediation-status-2026-09-11.md. If an archived entry disagrees
 with an owning doc, the owning doc wins.
 
-## Current state (measured 2026-10-08 on the UI redesign pass)
+## Current state (measured 2026-11-06 on backend continuation)
+
+**[SPEC]** On the final backend source tree, all **1,324 tests** pass on each
+of **Python 3.10, 3.11, 3.12, 3.13 and 3.14**. Complexity: **721 functions
+across 16 files**, passed with no ratchet increase. Compilation, docs, design
+tokens, both smokes, Ruff and Bandit passed. Pinned wheel/sdist builds and
+archive inspection passed; wheel clean install passed, and a separate fresh
+sdist environment seeded with pinned build tools passed the full asset probe.
+The automated sdist clean-install gate still reports unavailable because its
+fresh environment lacks setuptools. No combined frontend or Windows execution
+is claimed. Full findings, commits, limits and parent integration checks:
+@docs/30-backend-continuation-2026-11-06.md.
+
+## Historical state (measured 2026-10-08 on the UI redesign pass)
 
 **[SPEC]** Every number below was produced by running the gate on this tree.
 
@@ -133,10 +194,13 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-10-08)
 
-**[NOTE]** 26 dated entries; full text follows.
+**[NOTE]** 28 dated entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-06 | Classic screens, 10,000-instance scale and screen-reader checks closed three gaps |
+| 2026-11-06 | Research-roadmap backend items (docs/28, docs/29) |
+| 2026-11-06 | The prototype-final design shipped as a v2 interface on real data |
 | 2026-10-08 | The UI was redesigned against a contract, and the redesign found a product defect |
 | 2026-10-06 | TestPyPI recovered, 1.0.2 shipped, and the recorded hashes were wrong |
 | 2026-10-06 | A search body cost one document read per row, to compute nothing |
@@ -166,6 +230,178 @@ entries that introduced them:
 | 2026-09-23 | Dependabot Actions PR triage |
 | 2026-09-23 | Next five audit-derived tasks planned |
 | 2026-09-23 | Public onboarding copy and current-build image |
+
+## 2026-11-06 — Continuation verified and prepared for parent integration
+
+**[SPEC]** Seven coherent implementation commits complete R14/R6/R4/R10 and
+the reproduced parent backend fixes; the source tree passes 1,324 tests on
+each supported Python version, the repository ladder and static checks. The
+handoff at @docs/30-backend-continuation-2026-11-06.md lists every fixed,
+doc-clarified and unconfirmed finding, actual packaging evidence, remaining
+approval decisions and exact combined-tree retests. No frontend tree, original
+dirty checkout, remote branch or release was mutated. Both writers are idle;
+parent should merge normally and retest both interfaces with frontend R9
+header commit `fe46552` present.
+
+## 2026-11-06 — Continuation: prompt HTTP rejection and parameter errors
+
+**[SPEC]** An over-limit declared Content-Length now returns 413 without
+waiting for the sender to finish, and closes the connection so unread bytes
+cannot be reused as a request. History zero limits and blank context windows
+are clean 400s instead of silent defaults. Live socket regressions and existing
+parameter contracts pass; the previous drain assertion was updated to require
+closure without reading. API docs now distinguish independent template listing
+from routes that depend on a broken skills layout. Final full suite: 1,324
+tests on Python 3.10–3.14; complexity lowered/removed stale entries only, both
+smokes, docs, design tokens and static checks passed.
+
+## 2026-11-06 — Continuation: CLI findings and precise contracts
+
+**[SPEC]** Reproduced CLI search aborts on a refused link and doctor encoding
+misclassification now have per-entry handling and explicit decode evidence.
+Bare `db` requires an action, ports are range-checked before bootstrap, `@file`
+token input must be readable UTF-8, and no-tokens also applies to JSON totals.
+Directory export destinations return a clean error; explicit file replacement
+remains supported. Docs correct exact-scope view, command-local JSON flags,
+add-name matching, global-view token fields, archive preflight and doctor's
+limited aggregate headline/project behavior. Seven new CLI tests pass along
+with the 1,324-test suite on each supported interpreter; no command, Store
+method, dependency, Python-floor or schema change was added.
+
+## 2026-11-06 — Continuation: scoped mutation and damaged-copy recovery
+
+**[SPEC]** The reproduced edit/toggle race now serializes read/validation/write,
+toggle, restore and sync destinations on one canonical document lock. Document
+symlinks are refused for mutation; contained directory aliases share the key.
+Force sync preserves undecodable old bytes before replacement, with manual
+binary-snapshot recovery and unchanged source-state semantics. Scoped raw reads
+are lossy reports, while rewrites remain strict, and detail no longer logs the
+strict decoder's document-byte repr. A cleanup fault no longer rolls back a
+successfully installed copy; retained backups survive retries and one refusal
+allows other destinations to complete. Thirteen regressions cover processes,
+thread storms, aliases, corrupt input, snapshot failure, rollback and partial
+cleanup. Full five-version suite: 1,324 tests each; Store and web smokes passed.
+Broader source-update/data-root/recursive-identity locking limits remain open.
+
+## 2026-11-06 — Continuation: R4 native JSON observations
+
+**[SPEC]** Scoped list/search/detail adds fresh `native_state` without changing
+manager on/off fields. Selected Claude and OpenCode JSON sources are parsed
+once per scope batch with explicit missing/invalid/unavailable states, source
+order and bounds. Effective state stays unknown because managed/CLI/environment
+and other sources are incomplete. Nine helper tests and a real REST regression
+cover precedence, wildcard ordering, freshness, corrupt/large/duplicate input,
+FIFO refusal, partial evidence and no settings/document mutation. Codex TOML
+is deferred without changing Python >=3.10 or dependencies. The final suite
+passed all 1,324 tests on each of Python 3.10–3.14.
+
+## 2026-11-06 — Continuation: R10 hidden-Unicode advisory evidence
+
+**[SPEC]** `insights.risk_scan` names format, bidi and tag characters with
+escaped code points, Unicode names and occurrence counts. Output is bounded
+to 32 field/code-point pairs with omitted counts, remains advisory, and never
+rewrites documents or declares them safe. Four red-first tests plus the
+insights contracts cover hidden controls, ordinary Unicode, repeated controls,
+bounds and read purity. Nested metadata and companion files are outside this
+scan. The final five-interpreter suite passed with 1,324 tests each.
+
+## 2026-11-06 — Continuation: R6 portability and physical findings
+
+**[SPEC]** Compatibility mappings remain errors with a string-portability
+explanation. The validator warns once for unknown top-level keys (escaped for
+display), and lints the combined description/when_to_use 1,536-character cap.
+Hygiene retains one finding per physical identity while exposing bounded alias
+paths, scopes and supplied state flags; identical separate copies remain
+separate. Seven focused tests cover boundary lengths, spec keys, empty input,
+physical aliases, distinct copies and truncation. Final source-tree suite:
+1,324 tests passed on each of Python 3.10, 3.11, 3.12, 3.13 and 3.14.
+
+## 2026-11-06 — Continuation: R14 malformed request handling
+
+**[SPEC]** JSON decoding now catches recursion failures and rejects containers
+deeper than 64 levels before downstream metadata handling. Unknown-user project
+expansion was outside the guard in both workspace observation and effective
+resolution; both now return a clean 400 without echoing the supplied path.
+Red-first route tests reproduced project 500s and accepted deep PATCH metadata;
+the same tests now pass across POST/PATCH and both project routes.
+
+## 2026-11-06 — Research-roadmap backend items (docs/28, docs/29)
+
+**[SPEC] R1 / S1 — tar caps now apply while reading.** `archive.validate_members`
+called `tar.getmembers()` before any cap, so a 13 KB bz2 of repeated headers
+reached 373 MB RSS. Imports now open the tar through `archive.open_tar()`: the
+decompressor is chosen by magic bytes and wrapped in `_BoundedReader`, which
+refuses any read or seek past `MAX_ARCHIVE_DECOMPRESSED_BYTES` (expanded budget
++ 8 MiB of header slack) *before* delegating, and members are pulled one
+`tar.next()` at a time so the 200-member, per-member and expanded caps stop the
+walk early. A PAX header declaring 64 MB is refused before it is allocated.
+Every decompressor failure (bz2 `OSError`, `LZMAError`, `EOFError`,
+`RecursionError` from chained headers) becomes `StoreError`. Red-first: the
+many-headers and PAX-bomb tests measured 17.4 MB and 101 MB peak traced memory
+on the old code against a 12 MB budget; both pass now, and valid plain/gz/bz2/xz
+exports still import.
+
+**[SPEC] R2 / S2 — manager sidecars never survive external intake.**
+`.skillsmgr-provenance.json` and `.skillsmgr-source-lock.json` are
+unauthenticated; a well-formed forgery needs no secret, and one made `Store.get`
+report `registry_provenance` with `hash_verified: true` for a skill that was
+never fetched. `Store.add` now copies with `archive.ignore_manager_sidecars`,
+archive import strips them from the whole extracted tree (skills and trash), the
+multipart upload inherits `Store.add`'s behaviour, and `registry.validate_snapshot`
+refuses either name at any depth (it blocked only root provenance before). The
+registry commit writes provenance after `Store.add`, into the installed copy, and
+purges the install if that write fails. Red-first: all 7 assertions in
+`tests/test_audit_r2_intake_sidecars.py` fail on the old code. **Consequence:**
+an export → import round trip drops provenance and lock evidence by design.
+**Open:** sidecars inside agent scopes are still trusted as read, and
+`scopes.sync_skill` copies them between scopes; binding evidence to an install
+needs a maintainer decision.
+
+**[SPEC] R5 / S3 — lock files moved under the data root, with a timeout.**
+Lock files were in `tempfile.gettempdir()/skillsmgr-locks`, so two processes
+with different `TMPDIR` values never excluded each other, the shared directory
+had no ownership check, and an unreleased lock blocked forever. They now live in
+`<data>/locks/` (owner-only, symlink- and foreign-owner-refused, files opened
+`O_NOFOLLOW`), chosen from roots `Store` registers on construction. A blocking
+acquisition gives up after `MUTATION_LOCK_TIMEOUT` (60 s) with
+`LockTimeoutError` (`StoreError`, 409). Red-first: 6 of 6 tests in
+`tests/test_audit_r5_lock_root.py` fail on the old code (with only the new
+names shimmed so the module imports). One existing test,
+`test_record_runs_never_touches_skill_files_or_the_index`, enumerated every
+file under the data root and now excludes `locks/`: those are empty
+coordination files, not skill or index data.
+
+**[SPEC] R9 / S4 — every POST declares JSON.** `do_POST` now rejects any POST
+whose media type is not `application/json` (415), except the multipart
+source-update upload. A `text/plain` purge used to answer 200 and delete data.
+Three existing test clients (`smoke_web.py`, `test_audit_route_table`,
+`test_webapp`) sent bodyless POSTs without the header and were updated to send
+it. **Both web UIs do the same and will get 415 until `domain.js` defaults the
+header** — handed to the frontend session, not edited here.
+
+## 2026-11-06 — The prototype-final design shipped as a v2 interface on real data
+
+**[SPEC]** Branch `ui/prototype-final` adds `skillsmgr/webui/v2/` (served at
+`/v2/`): Home, Skills, Skill page with edit, Sync map, Inbox, Recovery, New
+skill, a dark theme and a shortcut list, all on the existing REST routes. The
+classic interface and every existing contract are untouched; see
+@docs/08-web-ui.md.
+
+**[NOTE] Real data changed three design decisions.** On the maintainer's machine
+all 2,061 records are `uncategorized`, so the category shelf falls back to A–Z.
+The prototype's "Can't be read" would have labelled 169 of Claude Code's skills
+broken; 168 were refused symlinks the agent reads fine, now "Linked elsewhere".
+And the prototype's "older copy" has no basis (no version order exists), so the
+reference is the majority content hash and a tie asks the user.
+
+**[SPEC] Verified, not asserted.** Against an isolated fixture in a real browser:
+replacing a damaged copy, making copies match, editing and saving to two scopes,
+and each Undo all round-tripped on disk. A new contrast test caught the
+prototype's muted text at 4.41:1 on the sunken surface; it is now ≥ 4.5:1.
+
+**[?] Open.** v2 is not the default route; the maintainer decides when to flip
+it. `GET /api/skills?scope=all` is 22.7 MB on this machine and both interfaces
+pay it on every load.
 
 ## 2026-10-08 — The UI was redesigned against a contract, and the redesign found a product defect
 

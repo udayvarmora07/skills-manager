@@ -1,0 +1,21 @@
+FF
+======================================================================
+FAIL: test_mixed_damaged_targets_do_not_offer_text_undo_for_binary_bytes (tests.test_v2_interface_contracts.ModelProblemTests.test_mixed_damaged_targets_do_not_offer_text_undo_for_binary_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/uday-varmora/skills-manager.ui-final/tests/test_v2_interface_contracts.py", line 162, in test_mixed_damaged_targets_do_not_offer_text_undo_for_binary_bytes
+    self.assertFalse(out["fixable"])
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_a_refused_link_cannot_be_the_source_of_a_repair (tests.test_v2_interface_contracts.ModelProblemTests.test_a_refused_link_cannot_be_the_source_of_a_repair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/uday-varmora/skills-manager.ui-final/tests/test_v2_interface_contracts.py", line 170, in test_a_refused_link_cannot_be_the_source_of_a_repair
+    self.assertFalse(out)
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.122s
+
+FAILED (failures=2)

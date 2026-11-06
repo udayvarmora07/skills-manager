@@ -40,6 +40,8 @@ REGISTRY_AUDIT_PATH = "/api/v1/skills/audit"      # public: third-party audits
 REGISTRY_CACHE_DIRNAME = "registry-cache"
 REGISTRY_REVIEW_DIRNAME = "registry-reviews"
 PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
+_SOURCE_LOCK_FILENAME = ".skillsmgr-source-lock.json"
+_MANAGER_SIDECARS = frozenset({PROVENANCE_FILENAME, _SOURCE_LOCK_FILENAME})
 
 #: Message used whenever an authenticated-only route is requested without a
 #: token.  It names the working alternative instead of surfacing a bare HTTP 401,
@@ -262,8 +264,10 @@ def validate_snapshot(payload: object, *, verify_upstream_hash: bool = True) -> 
             raise RegistryError("registry snapshot files must contain text path and contents")
         if path != path.strip():
             raise RegistryError("registry snapshot paths cannot have surrounding whitespace")
-        if path == PROVENANCE_FILENAME:
-            raise RegistryError("registry snapshots cannot include the manager provenance sidecar")
+        if PurePosixPath(path).name in _MANAGER_SIDECARS:
+            raise RegistryError(
+                f"registry snapshots cannot include a manager sidecar ({PurePosixPath(path).name})"
+            )
         _safe_join(Path("."), path, inspect_symlinks=False)
         if path in seen:
             raise RegistryError(f"registry snapshot contains duplicate path {path!r}")

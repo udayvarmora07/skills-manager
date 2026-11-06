@@ -53,6 +53,7 @@ NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MAX_NAME = 64
 MAX_DESCRIPTION = 1024
 MAX_COMPATIBILITY = 500
+MAX_COMBINED_DESCRIPTION = 1536
 MAX_BODY_LINES = 500
 MAX_BODY_TOKENS = 5000
 
@@ -190,9 +191,7 @@ def validate_text(
     _check_scalar(
         result, data, "description", required=True, max_len=MAX_DESCRIPTION
     )
-    _check_scalar(
-        result, data, "compatibility", required=False, max_len=MAX_COMPATIBILITY
-    )
+    _check_portability(result, data)
 
     if "license" in data and not isinstance(data["license"], str):
         result.add("error", "license must be a string", "license")
@@ -266,6 +265,24 @@ def validate_text(
         _check_layout(result, body, skill_dir)
 
     return result
+
+
+def _check_portability(result: ValidationResult, data: dict) -> None:
+    if isinstance(data.get("compatibility"), dict):
+        result.add("error", "'compatibility' is a mapping; the specification requires a string. Local consumers may ignore it, and uploads may reject it.", "compatibility")
+    else:
+        _check_scalar(result, data, "compatibility", required=False, max_len=MAX_COMPATIBILITY)
+    unknown = sorted(str(key) for key in data if key not in {
+        "name", "description", "license", "compatibility", "metadata", "allowed-tools"
+    })
+    if unknown:
+        result.add("warning", "non-spec top-level frontmatter keys: " + ", ".join(ascii(key) for key in unknown), "frontmatter")
+    description = data.get("description")
+    when_to_use = data.get("when_to_use")
+    if isinstance(description, str) and isinstance(when_to_use, str):
+        combined = len(description) + len(when_to_use)
+        if combined > MAX_COMBINED_DESCRIPTION:
+            result.add("warning", f"description and when_to_use exceed {MAX_COMBINED_DESCRIPTION} characters combined (found {combined})", "description")
 
 
 def _heading_re(body: str) -> bool:

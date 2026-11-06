@@ -483,10 +483,13 @@ class ScoreAndRecordTests(unittest.TestCase):
             return rows
 
         before_rows = persisted_rows()
+        # ``locks/`` holds empty advisory lock files (R5); they coordinate
+        # writers and are not skill data, so the no-mutation contract skips them.
+        lock_dir = str(data_dir / "locks")
         before_files = sorted(
             str(path.relative_to(data_dir))
             for path in data_dir.rglob("*")
-            if path.is_file()
+            if path.is_file() and not str(path).startswith(lock_dir)
         )
         workspace = evals.workspace_for(data_dir, "demo")
         evals.record_runs(workspace, 1, evals.load_cases(skill_dir)["cases"], [
@@ -497,7 +500,9 @@ class ScoreAndRecordTests(unittest.TestCase):
         after_files = [
             str(path.relative_to(data_dir))
             for path in data_dir.rglob("*")
-            if path.is_file() and not str(path).startswith(str(workspace))
+            if path.is_file()
+            and not str(path).startswith(str(workspace))
+            and not str(path).startswith(lock_dir)
         ]
         self.assertEqual(sorted(after_files), before_files)
 

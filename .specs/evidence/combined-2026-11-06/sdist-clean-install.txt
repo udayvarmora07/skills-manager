@@ -1,0 +1,1 @@
+PASS: separately installed sdist, all 27 UI/example files match source

@@ -619,6 +619,12 @@ def search_output_row(match: dict, scope: str) -> dict:
 
 def search_full_record(match: dict, scope: str, store: Store, get_skill) -> dict:
     """Rehydrate one search match through the public detail seam."""
+    return _search_detail_or_observation(match, scope, store, get_skill)
+
+
+def _search_detail_or_observation(match: dict, scope: str, store: Store, get_skill) -> dict:
+    if match.get("link_escape") or match.get("addressable") is False:
+        return dict(match)
     match_scope = match.get("scope", scope)
     if match_scope == "global":
         return store.get(match["name"])
@@ -744,7 +750,7 @@ def _doctor_scope_report(scope_id: str) -> dict:
     undecodable = sorted(
         str(entry["name"])
         for entry in entries
-        if entry.get("decode_error")
+        if entry.get("encoding_error")
     )
     conflicting = sorted(
         str(entry["name"])
@@ -1186,7 +1192,7 @@ def cmd_scopes(args, store: Store) -> int:
 
     scopes = _list_scopes()
     if args.json:
-        _print_json(scopes)
+        _print_json(_scope_json_rows(scopes, getattr(args, "no_tokens", False)))
         return EXIT_OK
     if not scopes:
         print("no scopes found")
@@ -1202,6 +1208,22 @@ def cmd_scopes(args, store: Store) -> int:
     return EXIT_OK
 
 
+def _scope_json_rows(rows: list[dict], no_tokens: bool) -> list[dict]:
+    if not no_tokens:
+        return rows
+    return [{key: value for key, value in row.items()
+             if key not in {"tokens", "avg_tokens", "max_tokens"}} for row in rows]
+
+
+def _token_input_text(text: str) -> str:
+    if not text.startswith("@"):
+        return text
+    try:
+        return Path(text[1:]).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeError, RuntimeError, ValueError):
+        raise StoreError("cannot read --text file as UTF-8; check the path and encoding") from None
+
+
 def cmd_tokens(args, store: Store) -> int:
     from .tokens import WINDOWS as _WINDOWS, estimate as _est, format_tokens as _fmt
 
@@ -1210,10 +1232,7 @@ def cmd_tokens(args, store: Store) -> int:
         raise StoreError(f"unknown window {window!r}; choose from {', '.join(_WINDOWS)}")
     scope = scope_from_args(args)
     if args.text:
-        raw = args.text
-        if raw.startswith("@"):
-            p = Path(raw[1:]).expanduser()
-            raw = p.read_text(encoding="utf-8") if p.is_file() else raw
+        raw = _token_input_text(args.text)
         est = _est(raw, window=window)
         if args.json:
             _print_json(est)
@@ -1537,6 +1556,17 @@ def _commit_registry_review(store: Store, review_id: str) -> dict:
         return _commit_registry_review_unlocked(store, review_id)
 
 
+def _record_registry_provenance(store: Store, name: str, installed: dict, provenance: dict) -> None:
+    """Write provenance into the installed skill, or undo the install."""
+    from .registry import RegistryError, write_provenance
+
+    try:
+        write_provenance(Path(installed["path"]), provenance)
+    except (RegistryError, OSError) as exc:
+        store.remove(name, purge=True)
+        raise StoreError(f"registry install rolled back: could not record provenance: {exc}") from exc
+
+
 def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
     """Commit one reviewed registry snapshot without another network request."""
     from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
@@ -1546,7 +1576,6 @@ def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
         mark_registry_review_committed,
         provenance_for_snapshot,
         read_registry_review,
-        write_provenance,
     )
 
     review = read_registry_review(store.data_dir, review_id)
@@ -1573,8 +1602,10 @@ def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
             "body": validation.body,
             "allowed_tools": validation.data.get("allowed-tools"),
         })
-        write_provenance(staged, provenance)
+        # Store.add strips manager sidecars from external intake (R2), so the
+        # provenance this review earned is written to the installed copy.
         installed = store.add(staged, name=name)
+        _record_registry_provenance(store, name, installed, provenance)
     committed = mark_registry_review_committed(store.data_dir, review_id)
     registry = dict(committed["registry"])
     registry["remote_hash"] = remote_hash

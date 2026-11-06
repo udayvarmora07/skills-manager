@@ -1,0 +1,73 @@
+
+=== LIGHT ===
+  OK    16.49:1 (need 4.5) body text
+  OK     8.64:1 (need 4.5) secondary text
+  OK     5.62:1 (need 4.5) tertiary text
+  OK     5.99:1 (need 4.5) active state label
+  OK     6.13:1 (need 4.5) divergent state label
+  OK     6.55:1 (need 4.5) invalid state label
+  OK     5.78:1 (need 4.5) muted state label
+  OK     6.22:1 (need 4.5) accent text / link
+  OK     5.35:1 (need 4.5) active badge
+  OK     5.57:1 (need 4.5) divergent badge
+  OK     5.70:1 (need 4.5) invalid badge
+  OK     5.14:1 (need 4.5) muted badge
+  OK     5.50:1 (need 4.5) accent badge
+  OK     6.44:1 (need 4.5) primary button label
+  OK    16.49:1 (need 4.5) ink on surface
+  OK    14.68:1 (need 4.5) ink on surface-2
+  OK    13.49:1 (need 4.5) ink on surface-3
+  OK     8.64:1 (need 4.5) ink-2 on surface
+  OK     7.69:1 (need 4.5) ink-2 on surface-2
+  OK     7.06:1 (need 4.5) ink-2 on surface-3
+  OK     5.62:1 (need 4.5) ink-3 on surface
+  OK     5.00:1 (need 4.5) ink-3 on surface-2
+  OK     4.60:1 (need 4.5) ink-3 on surface-3
+  OK     3.24:1 (need 3.0) control border
+  OK     3.01:1 (need 3.0) control border on the page ground
+  OK     3.65:1 (need 3.0) focus ring
+  OK     6.22:1 (need 3.0) selection mark
+  OK     4.70:1 (need 3.0) non-text mark (not used for text)
+  OK     5.35:1 (need 3.0) state dot
+  OK     5.57:1 (need 3.0) state dot
+  OK     5.70:1 (need 3.0) state dot
+  OK     1.08:1 (need 1.05) pane separation
+
+=== DARK ===
+  OK    15.39:1 (need 4.5) body text
+  OK    10.45:1 (need 4.5) secondary text
+  OK     6.59:1 (need 4.5) tertiary text
+  OK     7.54:1 (need 4.5) active state label
+  OK     8.23:1 (need 4.5) divergent state label
+  OK     6.97:1 (need 4.5) invalid state label
+  OK     6.59:1 (need 4.5) muted state label
+  OK     8.51:1 (need 4.5) accent text / link
+  OK     7.16:1 (need 4.5) active badge
+  OK     7.73:1 (need 4.5) divergent badge
+  OK     6.99:1 (need 4.5) invalid badge
+  OK     6.04:1 (need 4.5) muted badge
+  OK     7.29:1 (need 4.5) accent badge
+  OK     8.22:1 (need 4.5) primary button label
+  OK    15.39:1 (need 4.5) ink on surface
+  OK    14.10:1 (need 4.5) ink on surface-2
+  OK    12.40:1 (need 4.5) ink on surface-3
+  OK    10.45:1 (need 4.5) ink-2 on surface
+  OK     9.58:1 (need 4.5) ink-2 on surface-2
+  OK     8.43:1 (need 4.5) ink-2 on surface-3
+  OK     6.59:1 (need 4.5) ink-3 on surface
+  OK     6.04:1 (need 4.5) ink-3 on surface-2
+  OK     5.31:1 (need 4.5) ink-3 on surface-3
+  OK     3.53:1 (need 3.0) control border
+  OK     3.77:1 (need 3.0) control border on the page ground
+  OK     3.74:1 (need 3.0) focus ring
+  OK     8.51:1 (need 3.0) selection mark
+  OK     5.61:1 (need 3.0) non-text mark (not used for text)
+  OK     7.16:1 (need 3.0) state dot
+  OK     7.73:1 (need 3.0) state dot
+  OK     6.99:1 (need 3.0) state dot
+  OK     1.07:1 (need 1.05) pane separation
+
+=== fonts ===
+  OK   12 vendored woff2 face(s)
+
+DESIGN TOKENS OK — every measured pair still clears its threshold.

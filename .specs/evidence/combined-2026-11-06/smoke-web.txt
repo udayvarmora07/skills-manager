@@ -1,0 +1,27 @@
+== static ==
+static ok
+== skills CRUD ==
+CRUD ok
+== search ==
+search ok
+== validate ==
+validate ok
+== disable/enable ==
+toggle ok
+== stats / doctor / history ==
+misc ok
+misc ok
+== templates ==
+templates ok
+== export/import archive ==
+export/import ok
+== trash / restore / purge ==
+trash ok
+== rebuild / resync ==
+index ops ok
+== multipart folder upload ==
+upload ok
+== error paths ==
+errors ok
+
+ALL WEB SMOKE TESTS PASSED

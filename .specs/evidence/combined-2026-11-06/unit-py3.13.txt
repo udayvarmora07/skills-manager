@@ -1,0 +1,55 @@
+......................../home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/zipfile/__init__.py:1655: UserWarning: Duplicate name: 'skills/demo/SKILL.md'
+  return self._open_to_write(zinfo, force_zip64=force_zip64)
+.....................skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+.skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+........skillsmgr diagnostic: doctor scope=all enrichment failed: RuntimeError('boom')
+.skillsmgr diagnostic: stats scope enrichment failed: RuntimeError('boom')
+................................skillsmgr diagnostic: resync cleared 1 abandoned transaction artifact(s): trash/residue-2026-11-06_06-46-22Z/.SKILL.md.abc123.skillsmgr-tmp
+.....................................skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Broken_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+.skillsmgr diagnostic: test token enrichment failed: OSError('boom')
+...............................skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+...........................................................................................................................................................................................................................................................................................................................................................skillsmgr diagnostic: sync completed but backup cleanup failed: OSError('backup retained for manual review')
+..................................................................................................................................................................................................................................................................................................................................................................................................FAIL: File is not a zip file
+............................................................................................................skillsmgr diagnostic: scope detail enrichment failed for 'agents': FrontmatterError("unterminated flow collection: '[broken'")
+..............................................................skillsmgr diagnostic: edit rollback failed for 'demo': StoreError('db failed')
+........................................................../home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:128: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7236874cd3f0>
+  path = os.fspath(arg)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:128: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7236871fdf30>
+  path = os.fspath(arg)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:128: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7236871fe2f0>
+  path = os.fspath(arg)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py:128: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7236871fe980>
+  path = os.fspath(arg)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+........................................................................................................../home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2253: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7236873b2e30>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2253: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x723686f3ef20>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/unittest/mock.py:2253: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7236871ff4c0>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..skillsmgr diagnostic: doctor scope=all enrichment failed: OSError('scan failed')
+............................................................./home/uday-varmora/.local/share/uv/python/cpython-3.13.13-linux-x86_64-gnu/lib/python3.13/unittest/case.py:606: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  if method() is not None:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+................................................
+----------------------------------------------------------------------
+Ran 1337 tests in 147.583s
+
+OK
+PASS: vendored Vue 3.5.13 matches https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js (sha256 c459ba7cc8db65c982589fa5d64c7ff478877e8e5b0fd75683207cec6a4e89e8; 157924 bytes)
+PASS: vendored Vue 3.5.13 matches https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js (sha256 c459ba7cc8db65c982589fa5d64c7ff478877e8e5b0fd75683207cec6a4e89e8; 157924 bytes)
+PASS: wheel a-1.0-py3-none-any.whl (0 web UI files; 0 example files; Vue 0 bytes;  license)
+PASS: wheel a-1.0-py3-none-any.whl (0 web UI files; 0 example files; Vue 0 bytes;  license)
+PASS: clean install a-1.0-py3-none-any.whl
+PASS: clean install a-1.0.tar.gz

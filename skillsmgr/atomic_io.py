@@ -70,24 +70,112 @@ def _evict_idle_locks() -> None:
             return
 
 
-def _lock_file_path(path: Path) -> Path:
-    """Return a stable sidecar outside managed data trees.
+#: R5/S3: how long a blocking acquisition waits for *another process* before
+#: giving up with a clean ``LockTimeoutError``.  A lock file nobody releases --
+#: a wedged process, or another user holding it -- used to block forever.
+#: In-process contention is not bounded: those holders are this process's own
+#: threads and always release.
+MUTATION_LOCK_TIMEOUT = 60.0
 
-    Keeping lock files in ``/tmp`` avoids creating a fake skill directory when
-    the lock key names a skill that does not exist yet, and avoids leaving
-    ``.skillsmgr-*`` entries in the user's data tree after a successful request.
-    The absolute path remains part of the digest, so independent data roots do
-    not contend.
+#: Directory, under a validated data root, that holds the advisory lock files.
+#: It is a sibling of ``skills/``, never inside any managed skill tree, so
+#: acquiring a lock for a path that does not exist yet cannot materialise a
+#: fake skill directory.
+LOCK_DIRNAME = "locks"
+
+#: Data roots registered by ``Store`` construction, most recent last.  Bounded
+#: so a test process that builds thousands of stores cannot grow it forever.
+_LOCK_ROOTS: "OrderedDict[str, Path]" = OrderedDict()
+_LOCK_ROOTS_GUARD = threading.Lock()
+MAX_LOCK_ROOTS = 64
+
+
+def register_lock_root(data_dir: Path) -> None:
+    """Record *data_dir* as a root whose lock files live in ``<data_dir>/locks``.
+
+    ``Store`` calls this on construction.  Nothing is created here: a read
+    must create nothing (docs/24 §D3-4); the directory appears on the first
+    acquisition.
     """
-    identity = str(Path(path).expanduser().resolve()).encode("utf-8")
-    digest = hashlib.sha256(identity).hexdigest()
-    root = Path(tempfile.gettempdir()) / "skillsmgr-locks"
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    try:
-        os.chmod(root, 0o700)
-    except OSError:
-        pass
-    return root / f"{digest}.lock"
+    resolved = Path(os.path.realpath(Path(data_dir).expanduser()))
+    with _LOCK_ROOTS_GUARD:
+        _LOCK_ROOTS.pop(str(resolved), None)
+        _LOCK_ROOTS[str(resolved)] = resolved
+        while len(_LOCK_ROOTS) > MAX_LOCK_ROOTS:
+            _LOCK_ROOTS.popitem(last=False)
+
+
+def _lock_root_for(identity: Path) -> Path:
+    """Choose the data root whose ``locks/`` directory serialises *identity*.
+
+    A path inside a registered root uses that root (longest match).  Anything
+    else -- an agent-scope skill, a review artifact elsewhere -- uses the most
+    recently registered root, so a CLI and a Web UI on the same data directory
+    agree.  With no registered root the validated ``paths.data_dir()`` is used.
+    Unlike ``tempfile.gettempdir()``, none of these depend on ``TMPDIR`` (S3).
+    """
+    with _LOCK_ROOTS_GUARD:
+        roots = list(_LOCK_ROOTS.values())
+    best = None
+    for root in roots:
+        try:
+            identity.relative_to(root)
+        except ValueError:
+            continue
+        if best is None or len(root.parts) > len(best.parts):
+            best = root
+    if best is not None:
+        return best
+    if roots:
+        return roots[-1]
+    from . import paths  # lazy: paths -> path_safety only, but keep import order cheap
+
+    return paths.data_dir()
+
+
+def _private_lock_dir(root: Path) -> Path:
+    """Create or verify ``<root>/locks`` as an owner-only, non-symlink directory."""
+    from .path_safety import mkdir_private
+
+    directory = root / LOCK_DIRNAME
+    mkdir_private(directory)
+    info = os.lstat(directory)
+    if not os.path.isdir(directory) or os.path.islink(directory):
+        raise OSError(f"lock directory is not a plain directory: {directory}")
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None:
+        if info.st_uid != getuid():
+            raise OSError(f"lock directory is owned by another user: {directory}")
+        if info.st_mode & 0o077:
+            os.chmod(directory, 0o700)
+    return directory
+
+
+def _lock_file_path(path: Path) -> Path:
+    """Return the lock file for *path* under a validated data root.
+
+    The absolute path remains part of the digest, so independent keys never
+    contend.  The file is opened with ``O_NOFOLLOW`` by the caller, so a planted
+    symlink cannot redirect the create to an arbitrary path (S3).
+    """
+    identity = Path(os.path.realpath(Path(path).expanduser()))
+    digest = hashlib.sha256(str(identity).encode("utf-8")).hexdigest()
+    return _private_lock_dir(_lock_root_for(identity)) / f"{digest}.lock"
+
+
+def _open_lock_file(path: Path):
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(path, flags, 0o600)
+    return os.fdopen(fd, "r+b")
+
+
+def _lock_timeout_error(path: Path, waited: float):
+    from .store import LockTimeoutError  # lazy: store imports this module
+
+    return LockTimeoutError(
+        f"timed out after {waited:g}s waiting for another process to release the "
+        f"lock on {path}; retry, or stop the other skills-mgr process"
+    )
 
 
 class _CrossProcessLock:
@@ -126,7 +214,8 @@ class _CrossProcessLock:
                 raise
             self._depth = 1
             return True
-        if timeout is not None and timeout >= 0:
+        explicit = timeout is not None and timeout >= 0
+        if explicit:
             deadline = time.monotonic() + timeout
             if not self._thread_lock.acquire(True, timeout):
                 return False
@@ -136,8 +225,15 @@ class _CrossProcessLock:
         if self._depth:
             self._depth += 1
             return True
+        if deadline is None:
+            deadline = time.monotonic() + MUTATION_LOCK_TIMEOUT
         try:
             self._acquire_file(True, deadline=deadline)
+        except TimeoutError:
+            self._thread_lock.release()
+            if explicit:
+                return False
+            raise _lock_timeout_error(self.path, MUTATION_LOCK_TIMEOUT) from None
         except Exception:
             self._thread_lock.release()
             raise
@@ -169,7 +265,7 @@ class _CrossProcessLock:
             self._thread_lock.release()
 
     def _acquire_file(self, blocking: bool, deadline=None):
-        handle = open(_lock_file_path(self.path), "a+b")
+        handle = _open_lock_file(_lock_file_path(self.path))
         if _fcntl is not None:
             flags = _fcntl.LOCK_EX | (0 if blocking else _fcntl.LOCK_NB)
             if deadline is None:
@@ -192,9 +288,12 @@ class _CrossProcessLock:
                     _msvcrt.locking(handle.fileno(), _msvcrt.LK_NBLCK if not blocking else _msvcrt.LK_LOCK, 1)
                     break
                 except OSError:
-                    if not blocking or (deadline is not None and time.monotonic() >= deadline):
+                    if not blocking:
                         handle.close()
                         raise BlockingIOError("mutation lock is held")
+                    if deadline is not None and time.monotonic() >= deadline:
+                        handle.close()
+                        raise TimeoutError("timed out acquiring mutation lock")
                     time.sleep(0.01)
         self._handle = handle
 

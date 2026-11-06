@@ -1,6 +1,6 @@
 # Web UI — Skills Manager
 
-**Version 0.10.0**
+**Version 0.10.1**
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
@@ -12,6 +12,20 @@
 - "Website" here means **localhost only** — nothing is hosted or exposed.
 
 ## Architecture
+
+**[NOTE] 2026-11-06 combined continuation.** `/v2/` retains the selected
+cream/serif/terracotta interface; `/` remains classic. Skill detail exposes
+partial native-settings declarations from existing `native_state` records.
+These are read-only evidence, not effective loading or filesystem toggle state.
+File switches rename documents and do not edit native settings. Unreadable-byte
+Inbox items keep manual guidance because text Undo cannot restore binary
+snapshots. The backend can preserve such bytes during explicit force sync;
+manual snapshot recovery is documented in
+@docs/30-backend-continuation-2026-11-06.md. Current combined verification and
+remaining coverage limits are in @docs/31-combined-e2e-verification-2026-11-06.md.
+The optional developer runner is `tools/e2e_v2/run.py` (external Playwright,
+no runtime dependency). It isolates fixtures and server lifetime, checks both
+UI transports and supports measured browser zoom on isolated X11.
 
 ```text
 Browser (Vue 3, no build step)
@@ -113,6 +127,15 @@ scope-qualified.
 
 ## REST API
 
+Scoped skill list/search/detail records additionally include `native_state`.
+It is fresh read-only evidence from selected native JSON settings, with ordered
+per-file declarations, explicit missing/invalid/unavailable sources, and
+`partial: true` / `effective_state: unknown`. Existing enabled, disabled,
+status and instance-state fields do not change meaning. The observation context
+is the server process's current directory. Exact sources and bounds:
+@docs/12-agent-root-discovery-2026-09-08.md. These observations establish no
+runtime loading claim and do not write native settings.
+
 All endpoints return JSON unless noted. Errors are **one shape**:
 `{"error": "message", "code": "<stable string>"}` — `error` is always the human
 message, `code` is always a machine-readable slug (the exception's own code
@@ -123,20 +146,24 @@ families the audit found disagreeing: 39 routes emitted `{"error": ...}` while
 the source-update family emitted `{"code", "error"}`, so a client could not
 branch on one key (docs/24 §D3-7).
 
+JSON bodies are bounded to 64 nested containers; invalid/deep JSON and project
+paths whose user expansion or resolution fails return a clean `400`. This
+also applies to the source-update JSON routes and doctor/explain.
+
 Statuses: 400 (StoreError/invalid bounded input), 403 (host or cross-origin rejection), 404 (SkillNotFound / unknown / a broken data layout — an unrecognised `/api/…` path is answered as JSON `404 {"error": "unknown endpoint"}` and never falls through to the static handler), 405 (an unrouted verb, see below), 415 (non-JSON body on a JSON mutation endpoint), and 500 (internal). Reads share the mutation status codes: `GET` with a bad `Host` is a `403`, not a silent success.
 
-**[SPEC] Reads never write, and a broken layout answers one 404 everywhere.**
+**[SPEC] Reads never write; routes depending on the Store layout share one 404.**
 `GET /api/skills`, `/api/stats`, `/api/doctor` and `/api/search` used to run the
 write path's bootstrap, so one request against a data directory that did not
 exist created four directories and a 32 KB SQLite file. They no longer do: a
 read opens the index without creating the layout, the file, or the schema. When
-a component of `<data>` is a regular file (or the index is a directory), every
-route answers the **same** `404` with the same body naming the path and its
+a component of `<data>` is a regular file (or the index is a directory), routes that inspect that component answer the **same** `404` with the same body naming the path and its
 `mv <path> <path>.broken` repair — previously four routes answered `400` with
 the interpreter's own `mkdir_private` text while `/api/scopes` and `/api/trash`
 still answered `200`, leaving the UI half-broken and half-looking-healthy
 (docs/24 §D3-4). `StoreLayoutError` carries `status = 404`, so the existing
-`StoreError` branch routes it with no special case.
+`StoreError` branch routes it with no special case. Independent template
+listing can still succeed when the skills component is broken.
 
 **[SPEC]** Requests are accepted only on a loopback-bound server with the
 configured loopback `Host` and port. This policy applies to **every** request,
@@ -157,6 +184,11 @@ response was readable because a browser enforces CORS only on non-simple reads.
   `validate_request`; it is now a misnomer.
 - JSON mutation endpoints require `Content-Type: application/json`; raw archive
   and multipart import keep their explicitly documented content types.
+- **Every `POST` declares `application/json`, bodyless ones included** (R9/S4):
+  `/api/trash/purge`, `/api/rebuild`, `/api/resync`, enable/disable and trash
+  restore answer `415` otherwise, so a `text/plain` "simple request" can no
+  longer empty the trash. The multipart `POST /api/source-updates/reviews`
+  upload is the one exception and enforces `multipart/form-data` itself.
 
 **[SPEC] A parameter that cannot be used is a `400`, never a silent default**
 (docs/24 §D3-8). `?limit=abc`, `?limit=`, `?limit=1.5`, `?limit=١٢٣` and
@@ -167,6 +199,9 @@ matched against `^[0-9]+$` rather than `int()`, because `int(" 5 ")`,
 same defect in smaller clothes. Query strings are parsed with
 `keep_blank_values=True`, so `?limit=` is distinguishable from an absent `limit`
 at all — without it `parse_qs` drops the pair and the two look identical.
+History requires `limit >= 1`; an explicitly blank `window` is invalid.
+An over-limit declared Content-Length receives `413` immediately and the
+connection is closed without draining its body.
 
 `to_scopes` is validated the same way on every route that takes it.
 `/api/sync` validated nothing: `to_scopes: [123]` answered `200` and reflected
@@ -365,6 +400,49 @@ pins the contract). What a client must know:
 - **`OPTIONS` and `TRACE` are refused** with a JSON `405` plus `Allow` and the
   security headers — do not use them as a reachability probe; use `HEAD` (which
   mirrors `GET`, headers only) or `/api/stats`.
+
+## v2 interface (`/v2/`, prototype-final design)
+
+**[SPEC]** `skillsmgr/webui/v2/` is a second presentation of the same backend,
+served at `http://127.0.0.1:<port>/v2/`. It implements the maintainer-selected
+`prototype-final` design on real data: **Home** (one card per agent with health,
+skills and a full-text reading-window meter), **Skills** (a shelf grouped by
+category when skills carry categories, otherwise A–Z, with All / Needs care /
+Turned off and per-agent filters), the **Skill page** (escaped document, margin
+notes, per-agent on/off switches, folder locations, edit with Write/Preview and
+"save to" targets), the **Sync map**, the **Inbox** (one problem at a time with
+a side-by-side diff), **Recovery** (global trash restore/empty, backup download,
+archive import), **New skill**, a measured warm dark theme that shares the
+classic `skillsmgr-theme` preference, and a `?` shortcut list. Install, Profiles,
+Quality, Workspaces and Settings stay in the classic interface, linked as
+"All tools & settings". The classic interface at `/` is unchanged.
+
+- **No new surface.** It calls only existing routes (`/api/scopes`, `/api/skills`,
+  `/api/history`, `/api/sync`, `/api/trash`, `/api/import`, `/api/export`). The
+  only backend change is that `_serve_static` serves files under `webui/v2/`.
+- **Honesty rules** (`v2/model.js`): there is no version order, so a skill whose
+  copies differ is "Copies differ" and the reference copy is the content most
+  copies hold; a tie is reported as ambiguous and the Inbox asks which copy to
+  use. A refused symlink is "Linked elsewhere", never "Can't be read" (the agent
+  reads it; this tool will not follow it). A dot-prefixed or file-like entry
+  (`.system`, `README.md`) is "Not a skill". Only a damaged document with a
+  readable copy elsewhere offers an automatic fix; the other kinds explain the
+  manual step.
+- **Undo** for sync, edit and on/off uses the backend's own snapshots
+  (`write_snapshot` on forced sync and edit) and the snapshot rollback route.
+  Agent-scope trash has no in-app restore, and the dialog says so.
+- Keyboard shortcuts (`/`, `?`, and the Inbox's Enter/`S`) never fire from a
+  link, button, field or summary, so Enter on a link always follows it. An Undo
+  toast lasts 20 s and pauses while focused or hovered. "Skip to content"
+  focuses the page heading without changing the route. See
+  @docs/32-continuation-verification-2026-11-06.md.
+- The page re-reads the filesystem when the tab becomes visible again (at most
+  every 15 s, never during an edit).
+- Pinned by `tests/test_v2_interface_contracts.py`: model behaviour under Node
+  with the real `domain.js`, hostile-Markdown escaping, the closed set of
+  `v-html` sites and API routes, declared CSS variables, light **and** dark
+  contrast (text ≥ 4.5:1, control boundary ≥ 3:1), assets present, and served
+  routes including traversal refusal.
 
 ## Frontend map (app.js)
 

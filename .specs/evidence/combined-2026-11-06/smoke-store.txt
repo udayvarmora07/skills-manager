@@ -1,0 +1,40 @@
+== create ==
+created: {'name': 'demo-tool', 'path': '/tmp/skillsmgr-smoke-enl_j4zb/skills/demo-tool'}
+== list ==
+[{'name': 'demo-tool', 'status': 'active', 'description': 'A demo skill for smoke tests', 'category': 'utility', 'license': 'MIT', 'version': '1.2.3', 'disabled': 0, 'added_at': '2026-11-06T06:41:51Z', 'updated_at': '2026-11-06T06:41:51Z', 'addressable': True, 'content_hash': 'cf3481512b216f3e445d7bd68dd42bc8fc5e7e1090ba7ac65059812536986990', 'metadata_hash': 'e61e998a6f90e493a7d245de1881e5e120f23aa80ee6e2dc1ba69086fa37f6f3', 'observed_at': '2026-11-06T06:41:51Z', 'provenance': {'path': '/tmp/skillsmgr-smoke-enl_j4zb/skills/demo-tool', 'scope': 'global', 'consumer': 'skills-manager'}, 'portable_frontmatter': {'name': 'demo-tool', 'description': 'A demo skill for smoke tests', 'license': 'MIT', 'compatibility': {'opencode': '>=1.0', 'claude': '>=2.0'}, 'version': '1.2.3', 'allowed-tools': ['bash', 'read'], 'metadata': {'category': 'utility'}}, 'frontmatter_extensions': {}, 'malformed': False, 'decode_error': None, 'tokens': 51, 'tokens_method': 'heuristic', 'tokens_pct': 0.01, 'chars': 224}]
+== get ==
+ok, path: /tmp/skillsmgr-smoke-enl_j4zb/skills/demo-tool
+== edit (changed + unchanged) ==
+changed: {'name': 'demo-tool', 'changed': True}
+unchanged: {'name': 'demo-tool', 'changed': False}
+== add existing skill dir (tmp fixture) ==
+added: fixture-skill
+== search ==
+demo hits: ['demo-tool']
+wildcard-escaped hits: []
+== stats ==
+{'total': 2, 'active': 2, 'disabled': 0, 'trashed': 0, 'db_rows': 2, 'size_bytes': 303, 'db_bytes': 32768, 'categories': {'uncategorized': 1, 'utility': 1}}
+== disable/enable ==
+edit disabled guard ok: skill 'demo-tool' is disabled; enable it first
+== export ==
+exported: /tmp/skillsmgr-smoke-enl_j4zb/backups/export-2026-11-06_06-41-51Z.tar.gz
+== import into second store ==
+import result: {'imported': ['demo-tool', 'fixture-skill'], 'skipped': [], 'source': 'export-2026-11-06_06-41-51Z.tar.gz', 'created': '2026-11-06T06:41:51Z'}
+== import duplicate -> skipped ==
+second import: {'imported': [], 'skipped': ['demo-tool', 'fixture-skill'], 'source': 'export-2026-11-06_06-41-51Z.tar.gz', 'created': '2026-11-06T06:41:51Z'}
+== remove to trash, list, restore ==
+trash: [('demo-tool', '/tmp/skillsmgr-smoke-enl_j4zb/trash/demo-tool-2026-11-06_06-41-51Z')]
+== purge ==
+purged ok
+== history ==
+history: ['purge', 'restore', 'trash', 'enable', 'disable', 'edit', 'create']
+== doctor ==
+{'data_dir': '/tmp/skillsmgr-smoke-enl_j4zb', 'repair': [], 'db_integrity': 'ok', 'skills_on_disk': 1, 'db_rows': 1, 'orphan_dirs': [], 'stale_rows': [], 'filesystem_index_drift': [], 'undecodable_documents': [], 'conflicting_documents': [], 'transaction_artifacts': [], 'temporary_files': [], 'incomplete_transactions': [], 'stale_snapshots': [], 'trash_count': 0, 'templates_count': 0, 'ok': True}
+== spec-lint warnings (v1.1) ==
+vague warnings: ["description has no use-context ('Use ... when ...'); agents may not trigger this skill", "description contains vague filler 'stuff'; name the concrete tool, format, or condition instead", "description contains vague filler 'various'; name the concrete tool, format, or condition instead"]
+== resync / db_rebuild ==
+resync: {'added': 0, 'updated': 0, 'removed': 0}
+rebuilt: {'added': 1, 'updated': 0, 'removed': 0}
+orphan check: [] True
+
+ALL STORE SMOKE TESTS PASSED

@@ -32,6 +32,7 @@ from . import paths
 from . import __version__
 from .diagnostics import diagnose as _diagnose
 from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
+from .atomic_io import register_lock_root as _register_lock_root
 from . import archive as _archive
 from .path_safety import mkdir_private
 from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
@@ -313,6 +314,17 @@ def _unique_dest(directory: Path, stem: str, suffix: str) -> Path:
     return target
 
 
+def _explicit_export_destination(dest: str | Path) -> Path:
+    try:
+        target = Path(dest).expanduser()
+        if target.is_dir():
+            raise StoreError("archive destination must be a file path, not a directory")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return target
+    except (OSError, RuntimeError, ValueError):
+        raise StoreError("cannot prepare archive destination; check the path and permissions") from None
+
+
 def _move_within_tree(source: Path, dest: Path) -> None:
     """Move *source* to *dest*, falling back to copy+delete across devices."""
     try:
@@ -463,6 +475,16 @@ class SkillNotFound(StoreError):
     """Raised when an operation targets a skill that does not exist."""
 
 
+class LockTimeoutError(StoreError):
+    """Another process held a mutation lock past ``MUTATION_LOCK_TIMEOUT`` (R5).
+
+    Routed as ``409`` by the web layer's existing ``status`` attribute: the
+    request was valid, the library is busy, and a retry is the remedy.
+    """
+
+    status = 409
+
+
 class StoreLayoutError(StoreError):
     """Raised when the managed data layout exists but cannot be used.
 
@@ -502,6 +524,11 @@ def _check_snapshot_target(scope: str, name: str) -> None:
 
 def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
     """Save pre-write skill content and retain only the newest five snapshots."""
+    return _write_snapshot_bytes(data_dir, scope, name, text.encode("utf-8"))
+
+
+def _write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes) -> str:
+    """Preserve exact bytes in the ordinary snapshot location."""
     _check_snapshot_target(scope, name)
     snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
     snap_dir.mkdir(parents=True, exist_ok=True)
@@ -513,7 +540,7 @@ def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
             snap_id = f"{base}-{counter}"
             counter += 1
         snapshot_path = snap_dir / f"{snap_id}.md"
-        _atomic_write_text(snapshot_path, text)
+        _atomic_write_text(snapshot_path, content.decode("latin-1"), encoding="latin-1")
         files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
         while len(files) > SNAPSHOT_KEEP:
             files.pop(0).unlink()
@@ -853,15 +880,36 @@ def _record_restored_trash(store: "Store", labels: list[str]) -> None:
 
 
 def _extract_import_archive(archive: Path, dest: Path) -> None:
-    """Sniff and safely extract either supported archive format."""
+    """Sniff and safely extract either supported archive format.
+
+    Manager sidecars are stripped from the whole extracted tree — skills and
+    trash alike — before anything reads it, so an archive cannot carry forged
+    provenance or source-lock evidence into the store (R2/S2).
+    """
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive, "r") as zipped:
             members = _validate_zip_members(zipped, archive.stat().st_size)
             _extract_zip_members(zipped, dest, members)
-        return
-    with tarfile.open(archive, "r:*") as tar:
-        members = _validate_archive_members(tar, archive.stat().st_size)
-        _extract_archive_members(tar, dest, members)
+    else:
+        _extract_tar_archive(archive, dest)
+    _strip_intake_sidecars(dest)
+
+
+def _strip_intake_sidecars(root: Path) -> None:
+    try:
+        _archive.strip_manager_sidecars(root)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
+
+
+def _extract_tar_archive(archive: Path, dest: Path) -> None:
+    """Walk a tar behind the streamed caps in ``archive.open_tar`` (R1/S1)."""
+    try:
+        with _archive.open_tar(archive) as tar:
+            members = _validate_archive_members(tar, archive.stat().st_size)
+            _extract_archive_members(tar, dest, members)
+    except _archive.ArchiveError as exc:
+        raise StoreError(str(exc)) from exc
 
 
 def _has_skill_document(source: Path) -> bool:
@@ -914,6 +962,7 @@ class Store:
 
     def __init__(self, data_dir: Path | None = None):
         self.data_dir = Path(data_dir).expanduser() if data_dir else paths.data_dir()
+        _register_lock_root(self.data_dir)
         self.skills_dir = self.data_dir / "skills"
         self.trash_dir = self.data_dir / "trash"
         self.templates_dir = self.data_dir / "templates"
@@ -1726,7 +1775,9 @@ class Store:
         self._init_db()
         stage = _stage_sibling(skill_dir)
         try:
-            shutil.copytree(source, stage)
+            # An added folder is external intake: manager evidence describes a
+            # different install and is never carried in (R2/S2).
+            shutil.copytree(source, stage, ignore=_archive.ignore_manager_sidecars)
             os.replace(stage, skill_dir)
         except OSError as exc:
             shutil.rmtree(stage, ignore_errors=True)
@@ -2320,8 +2371,7 @@ class Store:
             # not create `backups/` either: the web route stages a download in a
             # private temporary directory and would otherwise leave an empty
             # directory behind on every request (docs/24 §D3-3).
-            dest = Path(dest).expanduser()
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest = _explicit_export_destination(dest)
         entries = self._scan_dir(self.skills_dir)
         manifest = {
             "app": "skills-mgr",

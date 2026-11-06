@@ -4,6 +4,100 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Continuation verification — classic screens, scale, screen reader (2026-11-06)
+
+See @docs/32-continuation-verification-2026-11-06.md.
+
+- [x] Classic-only screens E2E (`tools/e2e_classic`): 37 scenarios / 312
+  assertions, 0 failures twice. Fixed C-1 (batch dialog focus return) and C-2
+  (Quality report unreachable after selecting a skill).
+- [x] Synthetic 10,000-instance run: no crash, error or >5 s stall; measured
+  payload, render, heap, DOM and interaction costs for both UIs.
+- [x] Screen-reader investigation (Orca 46 transcripts + CDP audit): fixed
+  SR-1 (P0, Enter on "Open skill" ran the fix), SR-2/3/4 (P1) and SR-5–13,
+  15, 16; v2 browser suite 27/27 twice.
+- [ ] Human spoken screen-reader sign-off using the docs/32 walkthrough.
+- [ ] Decide: body-less list projection (R3); `/api/scopes` without token
+  totals; capping classic Library rows (changes "exact visible-set").
+- [ ] Decide: batch plan binding of before-state and sync source content (P3).
+- [ ] P3: Enter in Workspaces project field; classic Install shows API trust
+  blockers.
+
+## Research roadmap — backend items (docs/28 R-table, docs/29 Horizon 1; 2026-11-06)
+
+Branch `claude/research-roadmap-c0a574`. Only items the roadmap marks as not
+needing maintainer approval; each lands as its own commit with red-first tests.
+
+- [x] **R1 (P0)** — tar members are streamed and capped while reading
+  (`archive.open_tar`, `_BoundedReader`, `MAX_ARCHIVE_DECOMPRESSED_BYTES`).
+  `tests/test_audit_r1_streamed_tar.py`: 2 of 6 fail on the old code
+  (17.4 MB and 101 MB peak traced memory against a 12 MB budget).
+- [x] **R2 (P0)** — manager sidecars stripped at `Store.add`, archive import
+  (skills + trash), multipart upload; registry snapshots refuse both names at
+  any depth; registry commit writes provenance post-install or rolls back.
+  `tests/test_audit_r2_intake_sidecars.py`: 7 of 7 assertions red before.
+- [ ] **Decide (R2 follow-up, ⚠ approval):** bind sidecars to an install
+  (per-install HMAC or recorded physical path). Agent-scope sidecars are still
+  trusted as read, and `scopes.sync_skill` copies them between scopes.
+- [x] **R5** — lock files in `<data>/locks/` (owner-only, `O_NOFOLLOW`), 60 s
+  cross-process acquire timeout → `LockTimeoutError` (409).
+  `tests/test_audit_r5_lock_root.py`: 6 of 6 red before.
+- [x] **R9** — every POST except the multipart source-update upload requires
+  `application/json` (415 otherwise). `tests/test_audit_r9_post_media_type.py`.
+  Integrated with frontend `fe46552`: the shared transport declares JSON for
+  bodyless mutations and preserves FormData/Blob upload types.
+- [x] **R14** — JSON nesting bounded to 64 levels (decoder recursion is also
+  caught); unresolved project expansion is a clean 400 on workspaces and
+  doctor/explain. `tests/test_continuation_http.py` covers POST/PATCH bodies
+  and both project routes without modifying the existing skill.
+- [x] **R6 / H1** — compatibility dedupe + portability message, unknown-key
+  warning, 1,536-character description cap.
+- [x] **R4 (read-only, JSON part)** — `native_state` from Claude Code
+  `skillOverrides` and OpenCode `permission.skill`, per-file evidence and
+  partial/unknown effective state; batched reads, no settings writes.
+- [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
+  escaped code points, bounded output and no safe verdict or text rewriting.
+- [ ] **Decide (R4 / D-1):** Codex TOML parsing remains deferred. Keep Python
+  >=3.10 and dependencies unchanged; choose a maintained parser/floor policy
+  before implementing `[[skills.config]]`, rather than a partial TOML parser.
+- [x] **Parent P1/P2 findings:** serialize scoped edit/toggle/restore/sync;
+  preserve damaged target bytes before force sync; fix per-entry search and
+  doctor encoding classification. See @docs/30-backend-continuation-2026-11-06.md
+  for all triage dispositions, verification and integration requirements.
+
+- [x] **Parent REST:** immediate 413 with connection closure; history zero
+  and blank-window 400s; independent-template layout contract clarified.
+
+## v2 interface — prototype-final on real data (2026-11-06)
+
+- [x] Combined backend `fbe8ec2` + frontend `7d225dc` verification and durable
+  D1–D14 report: @docs/31-combined-e2e-verification-2026-11-06.md.
+  1,337 tests on each Python 3.10–3.14; 24 browser assertion groups; both
+  smokes, gates and pinned packaging passed. Automatic sdist-install tooling
+  remains unavailable; the separate clean pinned-tool install passed.
+- [x] Partial native-settings declarations shown separately from file toggles;
+  loading remains unknown. Binary-copy repair guidance explains text Undo limits.
+- [x] Error presentation sanitizes initial-load failures as well as toasts;
+  library/traceback details receive actionable fallback text.
+- [x] Sync Undo restores prior file enabled state and refreshes after failure;
+  mixed binary/text repairs and refused-link sources cannot offer automatic repair.
+  Companion-file copying and text-only Undo limits are disclosed before sync.
+- [x] Recovery grid and buttons fit the 320px CSS viewport exposed by actual
+  400% Chrome zoom; the browser regression covers every v2 screen.
+- [x] `skillsmgr/webui/v2/` served at `/v2/`: Home, Skills, Skill page + edit,
+  Sync map, Inbox, Recovery, New skill, dark theme, shortcut list.
+- [x] Honest model: no "older copy" claims, refused symlinks are "Linked
+  elsewhere", file-like entries are "Not a skill"; tie between copies asks.
+- [x] Undo via backend snapshots verified on disk (sync, edit, on/off).
+- [x] `tests/test_v2_interface_contracts.py` (model, escaping, API set, contrast
+  in both themes, served assets, traversal).
+- [ ] Decide: make `/v2/` the default route (classic moves to `/classic/`).
+- [ ] Port Install, Profiles, Quality, Workspaces, Settings into v2.
+- [ ] In-app restore for agent-scope trash (needs a backend route; ⚠ approval).
+- [ ] Slim `/api/skills` list payload (22.7 MB on the maintainer's machine).
+- [ ] Human perceptual review and screen-reader validation of v2. Automated
+  forced-colors, keyboard and actual 200%/400% browser-zoom results are recorded separately.
+
 ## UI redesign — Warm Instrument (2026-10-08)
 
 The maintainer selected **Prototype A — Warm Instrument** from

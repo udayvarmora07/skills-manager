@@ -75,6 +75,14 @@ skills-manager/
   directory; loader reconciliation exposes drift instead of trusting stale
   metadata. Registry snapshots are validated and committed through the
   existing Store API, so SQLite remains a rebuildable index only.
+- **[SPEC] Sidecars never cross external intake (R2).** Both manager sidecars
+  are unauthenticated, so `Store.add`, archive import, the multipart upload
+  (which delegates to `Store.add`) and registry snapshot validation drop or
+  refuse them; only this tool writes them, after a reviewed commit. A registry
+  commit writes provenance into the *installed* copy and purges the install if
+  that write fails. **[?]** Sidecars inside agent-scope directories are still
+  read as written by whatever tool put them there; binding them to an install
+  (per-install HMAC or recorded physical path) is an open maintainer decision.
 
 ## Data-dir resolution
 
@@ -162,9 +170,26 @@ CLI process and a web UI process on one data directory exclude one another.
   `msvcrt.locking` region on Windows. On a platform providing neither, the
   lock degrades to thread-only exclusion — that fallback is the one documented
   limit.
-- Lock files live in `tempfile.gettempdir()/skillsmgr-locks/<sha256-of-key>.lock`,
-  deliberately **outside** every managed tree, so acquiring a lock for a path
-  that does not exist yet cannot materialize a fake skill directory.
+- Lock files live in `<data>/locks/<sha256-of-key>.lock` — under the validated
+  data root, a sibling of `skills/`, and deliberately **outside** every managed
+  skill tree, so acquiring a lock for a path that does not exist yet cannot
+  materialize a fake skill directory (R5/S3). `Store` construction registers
+  its data root (`atomic_io.register_lock_root`); a key inside a registered root
+  uses that root, any other key (an agent-scope skill) uses the most recently
+  registered root, and with none registered `paths.data_dir()` is used. None of
+  this depends on `TMPDIR`: the previous `tempfile.gettempdir()/skillsmgr-locks`
+  let two processes with different `TMPDIR` values skip exclusion entirely.
+- `<data>/locks` is created owner-only on first acquisition (a read creates
+  nothing), refused if it is a symlink or owned by another user, and each lock
+  file is opened with `O_NOFOLLOW` and mode `0600`, so a planted symlink cannot
+  redirect the create.
+- A blocking acquisition waits at most `atomic_io.MUTATION_LOCK_TIMEOUT`
+  (60 s) for **another process**, then raises `store.LockTimeoutError` — a
+  `StoreError` with `status = 409` — instead of blocking forever. An explicit
+  `acquire(timeout=…)` still returns `False`. In-process (thread) contention is
+  not bounded, because those holders are this process's own code. **[?]** Two
+  processes pointed at *different* data roots that edit the same agent-scope
+  skill use different lock roots and do not exclude each other.
 - A mutation takes a **per-skill lock** on `<skill>/SKILL.md` and/or the
   **library-wide index lock** at `<data>/skills/.skillsmgr-index-lock`
   (`store._index_lock_path`). `store._skill_and_index_locks()` holds both, always
@@ -209,3 +234,21 @@ adding new public entities or SQLite state. Discovery research is recorded in
 3. CLI stdlib-only.
 4. Web UI: stdlib backend, vendored Vue, no build step, loopback bind by default.
 5. No new CLI commands or Store methods without approval (see AGENTS.md judgment boundaries).
+
+## Scoped mutation continuation (2026-11-06)
+
+**[SPEC]** Scoped create/edit/toggle/restore and sync destination replacement
+use the physical skill directory's canonical `SKILL.md` lock identity. Edit
+and restore test existence and read/write under that lock. Mutating a document
+symlink is refused before key selection and again inside the lock, because a
+rename otherwise changes its identity. Contained directory aliases still share
+the physical key. Force sync snapshots exact prior document bytes before
+replacement. A successful install is not rolled back when backup cleanup fails;
+the backup is retained for manual review and later sync refuses to discard it.
+Policy refusal on one target does not abort other destinations.
+
+**[NOTE]** Advisory locking does not constrain external non-cooperating
+writers. Different data roots still do not coordinate on one agent folder;
+source-update directory locks differ from document locks, and recursive
+name-based lookup remains ambiguous during a directory replacement. A broader
+identity/locking design remains open; these fixes do not claim to solve it.

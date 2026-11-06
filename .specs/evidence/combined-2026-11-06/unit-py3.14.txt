@@ -1,0 +1,62 @@
+......................../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/zipfile/__init__.py:1721: UserWarning: Duplicate name: 'skills/demo/SKILL.md'
+  return self._open_to_write(zinfo, force_zip64=force_zip64)
+.....................skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+.skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+........skillsmgr diagnostic: doctor scope=all enrichment failed: RuntimeError('boom')
+.skillsmgr diagnostic: stats scope enrichment failed: RuntimeError('boom')
+................................skillsmgr diagnostic: resync cleared 1 abandoned transaction artifact(s): trash/residue-2026-11-06_06-46-22Z/.SKILL.md.abc123.skillsmgr-tmp
+.....................................skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Broken_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+.skillsmgr diagnostic: test token enrichment failed: OSError('boom')
+............................./home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 404: 'Not Found'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+/home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 415: 'Unsupported Media Type'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+......................................................................................................................................................................./home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+......./home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 405: 'Method Not Allowed'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..........................................................................................................................................................................skillsmgr diagnostic: sync completed but backup cleanup failed: OSError('backup retained for manual review')
+......................................................................................................................................./home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+...........................................................................................................................................................................................................................................................FAIL: File is not a zip file
+.........................................................../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.................................................skillsmgr diagnostic: scope detail enrichment failed for 'agents': FrontmatterError("unterminated flow collection: '[broken'")
+..............................................................skillsmgr diagnostic: edit rollback failed for 'demo': StoreError('db failed')
+....................................................................................................../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 404: 'Not Found'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............./home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+./home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 404: 'Not Found'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................skillsmgr diagnostic: doctor scope=all enrichment failed: OSError('scan failed')
+.../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 404: 'Not Found'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.........../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 415: 'Unsupported Media Type'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+........................................../home/uday-varmora/.local/share/uv/python/cpython-3.14.3-linux-x86_64-gnu/lib/python3.14/unittest/case.py:615: ResourceWarning: unclosed file <_io.TextIOWrapper name=11 encoding='UTF-8'>
+  result = method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+................................................
+----------------------------------------------------------------------
+Ran 1337 tests in 145.998s
+
+OK
+PASS: vendored Vue 3.5.13 matches https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js (sha256 c459ba7cc8db65c982589fa5d64c7ff478877e8e5b0fd75683207cec6a4e89e8; 157924 bytes)
+PASS: vendored Vue 3.5.13 matches https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js (sha256 c459ba7cc8db65c982589fa5d64c7ff478877e8e5b0fd75683207cec6a4e89e8; 157924 bytes)
+PASS: wheel a-1.0-py3-none-any.whl (0 web UI files; 0 example files; Vue 0 bytes;  license)
+PASS: wheel a-1.0-py3-none-any.whl (0 web UI files; 0 example files; Vue 0 bytes;  license)
+PASS: clean install a-1.0-py3-none-any.whl
+PASS: clean install a-1.0.tar.gz

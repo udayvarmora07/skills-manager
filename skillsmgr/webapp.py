@@ -600,12 +600,19 @@ def _window_param(qs: dict[str, list[str]], name: str = "window") -> str:
     """
     from .tokens import WINDOWS as _WINDOWS
 
-    raw = (qs.get(name, ["claude"])[0] or "claude").strip() or "claude"
+    raw = qs.get(name, ["claude"])[0].strip()
     if raw not in _WINDOWS:
         raise StoreError(
             f"unknown {name} {raw!r}; choose one of {', '.join(sorted(_WINDOWS))}"
         )
     return raw
+
+
+def _history_limit(qs: dict[str, list[str]]) -> int:
+    value = _int_param(qs, "limit", 50, maximum=MAX_HISTORY_LIMIT)
+    if value < 1:
+        raise StoreError("limit must be at least 1")
+    return value
 
 
 def _scope_list(data: dict, name: str = "to_scopes") -> list[str]:
@@ -895,18 +902,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         self._send_json(_error_payload(status, message, code), status)
 
-    def _drain_body(self, length: int) -> None:
-        """Read and discard an over-limit body before sending its error."""
-        remaining = length
-        try:
-            while remaining > 0:
-                chunk = self.rfile.read(min(65536, remaining))
-                if not chunk:
-                    break
-                remaining -= len(chunk)
-        except (OSError, ValueError):
-            pass
-
     def _read_body(self, limit: int = MAX_BODY_BYTES) -> bytes:
         raw_length = self.headers.get("Content-Length") or "0"
         try:
@@ -916,7 +911,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if length < 0:
             raise StoreError("invalid Content-Length")
         if length > limit:
-            self._drain_body(length)
+            # Do not wait for bytes the peer may never send. Closing also
+            # prevents unconsumed bytes becoming a request on this connection.
+            self.close_connection = True
             raise RequestError(413, "request body too large")
         return self.rfile.read(length) if length else b""
 
@@ -942,6 +939,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self._validate_request()
+            self._require_post_media_type()
             self._route_post()
         except Exception as exc:
             self._handle_exception(exc)
@@ -1003,6 +1001,24 @@ class WebAppHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._handle_exception(exc)
 
+    def _require_post_media_type(self) -> None:
+        """Every POST must declare ``application/json``, body or not (R9/S4).
+
+        Bodyless mutations (``/api/trash/purge``, ``/api/rebuild``,
+        ``/api/resync``, enable/disable, trash restore) skipped the check
+        because they never parsed a body, so a ``text/plain`` POST -- one a
+        cross-site form can send without a preflight -- emptied the trash.
+        Origin and Fetch-Metadata checks still apply first; this removes the
+        "simple request" shape altogether.  The multipart source-update upload
+        is the one POST that carries another media type, and its route
+        enforces ``multipart/form-data`` itself.
+        """
+        if self._parts() == ["api", "source-updates", "reviews"]:
+            return
+        media = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if media != "application/json":
+            raise RequestError(415, "POST requests must declare Content-Type: application/json")
+
     def _handle_exception(self, exc: Exception) -> None:
         if isinstance(exc, SkillNotFound):
             self._send_error(404, str(exc))
@@ -1035,15 +1051,25 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     # -- static -----------------------------------------------------------
 
+    @staticmethod
+    def _static_rel(parts: list[str]) -> str:
+        """Map URL segments to a path under the web UI directory.
+
+        ``v2`` is the prototype-final interface; it lives in its own directory
+        so the classic UI's files and contracts stay untouched.
+        """
+        rel = parts[0] if parts else "index.html"
+        if rel in ("static", "v2") and len(parts) >= 2:
+            return rel + "/" + "/".join(parts[1:])
+        if rel == "v2":
+            return "v2/index.html"
+        return rel or "index.html"
+
     def _serve_static(self) -> bool:
         parts = self._parts()
-        rel = parts[0] if parts else "index.html"
-        if rel == "api":
+        if parts and parts[0] == "api":
             return False
-        if rel == "" or rel == "index.html":
-            rel = "index.html"
-        elif rel == "static" and len(parts) >= 2:
-            rel = "static/" + "/".join(parts[1:])
+        rel = self._static_rel(parts)
         candidate = (_WEBUI_DIR / rel).resolve()
         try:
             inside = candidate.is_relative_to(_WEBUI_DIR)
@@ -1329,7 +1355,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if parts != ["api", "history"]:
             return False
         name = qs.get("name", [None])[0]
-        limit = max(1, _int_param(qs, "limit", 50, maximum=MAX_HISTORY_LIMIT))
+        limit = _history_limit(qs)
         if qs.get("snapshots", ["0"])[0] in ("1", "true", "yes") and name:
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             if scope == "global":

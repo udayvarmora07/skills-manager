@@ -114,6 +114,9 @@ class WebAppTestCase(unittest.TestCase):
         request_headers = dict(headers or {})
         if body is not None:
             data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+        if method == "POST":
+            # R9: every POST declares JSON, bodyless ones included.
+            request_headers.setdefault("Content-Type", "application/json")
         request = urllib.request.Request(
             url,
             data=data,
@@ -176,19 +179,17 @@ class WebAppTestCase(unittest.TestCase):
             self._get("/api/search?q=" + "x" * 300)
         self.assertEqual(ctx.exception.code, 400)
 
-    def test_over_limit_body_is_drained_and_returns_413(self):
+    def test_over_limit_body_closes_without_reading_and_returns_413(self):
         class FakeHandler:
             headers = {"Content-Length": "5"}
             rfile = io.BytesIO(b"12345")
-
-            def _drain_body(self, length):
-                return WebAppHandler._drain_body(self, length)
 
         handler = FakeHandler()
         with self.assertRaises(RequestError) as ctx:
             WebAppHandler._read_body(handler, limit=4)
         self.assertEqual(ctx.exception.status, 413)
-        self.assertEqual(handler.rfile.read(), b"")
+        self.assertTrue(handler.close_connection)
+        self.assertEqual(handler.rfile.read(), b"12345")
 
     def test_client_disconnect_during_response_is_ignored(self):
         class BrokenWriter:
@@ -578,7 +579,7 @@ class WebAppTestCase(unittest.TestCase):
             local_server.httpd.store.remove("localhost-demo")
             request = urllib.request.Request(
                 local_server.url + "api/trash/purge",
-                headers={"Origin": local_server.url.rstrip("/")},
+                headers={"Origin": local_server.url.rstrip("/"), "Content-Type": "application/json"},
                 method="POST",
             )
             with urllib.request.urlopen(request) as response:

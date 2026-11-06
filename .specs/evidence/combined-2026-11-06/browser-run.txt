@@ -1,0 +1,27 @@
+Fixture and evidence directory: /tmp/skillsmgr-parent-verification/browser/skillsmgr-e2e-u8btgjd6
+The unauthenticated service is bound to localhost only; do not forward or tunnel it.
+PASS Unreadable Inbox guidance preserves original bytes
+PASS Home Inbox count equals queue; acknowledging a note is not a fix
+PASS Disabled Enter does not sync a tied copy
+PASS Delayed double click issues one sync and Undo restores bytes and queue
+PASS Stale file toggle reports error without resurrecting fixture
+PASS Native setting evidence is partial and file switch Undo preserves files
+PASS Native invalid and unavailable settings render without exposing values
+PASS Discard navigation, dialog focus trap and cancellation
+PASS Global Recovery restores a trashed fixture
+PASS Classic disable and enable send bodyless POST requests
+PASS Sync Undo restores target-disabled bytes and disabled state
+PASS Sync Undo restores source-disabled bytes and disabled state
+PASS Malformed text Inbox repair and Undo reappear
+PASS Create, editor focus, safe Markdown, save and Undo
+PASS One-place dialogs preselect and cancellation keeps files
+PASS Add-to-agent single target is selected and creates a copy
+PASS Backup download/import and invalid archive error
+PASS Sync map totals, singular grammar and top-link target size
+PASS Responsive layouts in both themes
+PASS Phone dark Sync map sampled text contrast
+PASS Empty and one-record shelves render without stale cards
+PASS Forced colors focus indicator
+PASS Actual Chrome zoom at 200 and 400 percent
+PASS No uncaught page errors
+NOTE Coverage limit: No screen-reader validation; real browser zoom is checked only in isolated headed mode. CSS magnification is not browser zoom. Screenshots and overflow checks do not constitute a complete accessibility audit.

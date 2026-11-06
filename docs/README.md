@@ -8,6 +8,7 @@
 
 | Doc | Covers | Load when |
 |---|---|---|
+| @docs/31-combined-e2e-verification-2026-11-06.md | Combined frontend/backend verification, D1–D14 dispositions and accessibility limits | Before claiming UI or combined integration coverage |
 | @docs/01-architecture.md | Data model, data-dir layout, FS vs SQLite roles | Any task touching data or paths |
 | @docs/02-modules.md | Module-by-module inventory, constants, key behavior | Any edit to `skillsmgr/` internals |
 | @docs/03-cli-surface.md | Every command, alias, flag, exit code | Web UI work (must mirror CLI) or CLI QA |
@@ -73,3 +74,5 @@
   @docs/15-product-ux-delivery-plan-2026-09-15.md. Architecture-specific
   questions remain in their ADRs. Resolved questions are recorded in
   06-progress-log.md.
+
+Continuation implementation, triage and integration: @docs/30-backend-continuation-2026-11-06.md.

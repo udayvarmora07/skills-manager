@@ -22,6 +22,16 @@ def add_scope_arg(parser) -> None:
     )
 
 
+def _port_number(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("port must be a whole number from 0 to 65535") from None
+    if not 0 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be from 0 to 65535")
+    return port
+
+
 def build_parser(commands) -> argparse.ArgumentParser:
     """Build the ``skills-mgr`` parser, wiring ``commands`` handlers.
 
@@ -221,14 +231,13 @@ def build_parser(commands) -> argparse.ArgumentParser:
     p.set_defaults(func=commands["cmd_history"])
 
     db = sub.add_parser("db", help="database maintenance")
-    db_sub = db.add_subparsers(dest="db_command", metavar="ACTION")
+    db_sub = db.add_subparsers(dest="db_command", metavar="ACTION", required=True)
     p = db_sub.add_parser("rebuild", help="rebuild the index from disk")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_db_rebuild"])
     p = db_sub.add_parser("resync", help="sync index entries with disk")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_db_resync"])
-    db.set_defaults(func=commands["cmd_db_rebuild"])
 
     p = sub.add_parser("sync", help="copy a skill from one scope to others (global -> all agents by default)")
     p.add_argument("name", help="skill name to sync")
@@ -309,7 +318,7 @@ def build_parser(commands) -> argparse.ArgumentParser:
         help="launch the local web UI (opens in your browser)",
     )
     p.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
-    p.add_argument("--port", type=int, default=8765, help="port (default: 8765)")
+    p.add_argument("--port", type=_port_number, default=8765, help="port (default: 8765)")
     p.add_argument("--no-browser", action="store_true", help="do not open the browser")
     p.set_defaults(func=commands["cmd_gui"])
 

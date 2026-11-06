@@ -1,0 +1,257 @@
+{
+  "viewports": [
+    {
+      "width": 320,
+      "height": 700,
+      "scenario": "populated",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 2775,
+        "scan_state": "Scan complete: 6 observed instances across 2 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    {
+      "width": 400,
+      "height": 800,
+      "scenario": "populated",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 2330,
+        "scan_state": "Scan complete: 6 observed instances across 2 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    {
+      "width": 640,
+      "height": 900,
+      "scenario": "populated",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 4501,
+        "scan_state": "Scan complete: 6 observed instances across 2 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    {
+      "width": 900,
+      "height": 800,
+      "scenario": "populated",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 2727,
+        "scan_state": "Scan complete: 6 observed instances across 2 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    {
+      "width": 1280,
+      "height": 900,
+      "scenario": "populated",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 2242,
+        "scan_state": "Scan complete: 6 observed instances across 2 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "scenario": "populated",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 2921,
+        "scan_state": "Scan complete: 6 observed instances across 2 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    }
+  ],
+  "scenarios": {
+    "scope-failure": {
+      "width": 1280,
+      "height": 900,
+      "scenario": "scope-failure",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 2653,
+        "scan_state": "Skill records loaded, but root details are unavailable. No conclusion is made about roots that could not be read.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    "inventory-failure": {
+      "width": 1280,
+      "height": 900,
+      "scenario": "inventory-failure",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 3048,
+        "scan_state": "The skill inventory scan failed. Retry before drawing conclusions from an empty result.",
+        "unreadable_attention": false,
+        "divergent_attention": false,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": false,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    "unavailable-root": {
+      "width": 1280,
+      "height": 900,
+      "scenario": "unavailable-root",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 3750,
+        "scan_state": "Scan complete: 6 observed instances across 3 detected roots.",
+        "unreadable_attention": true,
+        "divergent_attention": true,
+        "unavailable_root": true,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": true,
+        "preview_disabled_for_empty": false
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    },
+    "empty": {
+      "width": 1280,
+      "height": 900,
+      "scenario": "empty",
+      "document": {
+        "title": "Skills Manager",
+        "modalCount": 0,
+        "overflow": false
+      },
+      "firstScan": {
+        "first_useful_ms": 3828,
+        "scan_state": "Scan complete: 0 observed instances across 1 detected roots.",
+        "unreadable_attention": false,
+        "divergent_attention": false,
+        "unavailable_root": false,
+        "scan_complete": true,
+        "skip_restart": true,
+        "effective_explain": true,
+        "exact_preview_target": false,
+        "preview_disabled_for_empty": true
+      },
+      "errors": [],
+      "warnings": [],
+      "failed": []
+    }
+  },
+  "passed": true
+}

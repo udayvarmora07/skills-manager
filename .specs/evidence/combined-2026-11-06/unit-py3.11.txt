@@ -1,0 +1,34 @@
+......................../home/uday-varmora/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/zipfile.py:1580: UserWarning: Duplicate name: 'skills/demo/SKILL.md'
+  return self._open_to_write(zinfo, force_zip64=force_zip64)
+.....................skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+.skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Bad_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+........skillsmgr diagnostic: doctor scope=all enrichment failed: RuntimeError('boom')
+.skillsmgr diagnostic: stats scope enrichment failed: RuntimeError('boom')
+................................skillsmgr diagnostic: resync cleared 1 abandoned transaction artifact(s): trash/residue-2026-11-06_06-46-21Z/.SKILL.md.abc123.skillsmgr-tmp
+.....................................skillsmgr diagnostic: global scope token enrichment failed: ValueError("invalid skill name 'Broken_Name': must match ^[a-z0-9]+(-[a-z0-9]+)*$ (1-64 chars)")
+.skillsmgr diagnostic: test token enrichment failed: OSError('boom')
+...............................skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+.skillsmgr diagnostic: skill index read failed: OperationalError('no such table: history')
+...........................................................................................................................................................................................................................................................................................................................................................skillsmgr diagnostic: sync completed but backup cleanup failed: OSError('backup retained for manual review')
+..................................................................................................................................................................................................................................................................................................................................................................................................FAIL: File is not a zip file
+............................................................................................................skillsmgr diagnostic: scope detail enrichment failed for 'agents': FrontmatterError("unterminated flow collection: '[broken'")
+..............................................................skillsmgr diagnostic: edit rollback failed for 'demo': StoreError('db failed')
+......................................................................................................................................................................skillsmgr diagnostic: doctor scope=all enrichment failed: OSError('scan failed')
+............................................................./home/uday-varmora/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/unittest/case.py:579: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  if method() is not None:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+................................................
+----------------------------------------------------------------------
+Ran 1337 tests in 137.140s
+
+OK
+PASS: vendored Vue 3.5.13 matches https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js (sha256 c459ba7cc8db65c982589fa5d64c7ff478877e8e5b0fd75683207cec6a4e89e8; 157924 bytes)
+PASS: vendored Vue 3.5.13 matches https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js (sha256 c459ba7cc8db65c982589fa5d64c7ff478877e8e5b0fd75683207cec6a4e89e8; 157924 bytes)
+PASS: wheel a-1.0-py3-none-any.whl (0 web UI files; 0 example files; Vue 0 bytes;  license)
+PASS: wheel a-1.0-py3-none-any.whl (0 web UI files; 0 example files; Vue 0 bytes;  license)
+PASS: clean install a-1.0-py3-none-any.whl
+PASS: clean install a-1.0.tar.gz
