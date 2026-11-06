@@ -917,6 +917,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self._validate_request()
+            self._require_post_media_type()
             self._route_post()
         except Exception as exc:
             self._handle_exception(exc)
@@ -977,6 +978,24 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._write_body(_METHOD_NOT_ALLOWED_BODY)
         except Exception as exc:
             self._handle_exception(exc)
+
+    def _require_post_media_type(self) -> None:
+        """Every POST must declare ``application/json``, body or not (R9/S4).
+
+        Bodyless mutations (``/api/trash/purge``, ``/api/rebuild``,
+        ``/api/resync``, enable/disable, trash restore) skipped the check
+        because they never parsed a body, so a ``text/plain`` POST -- one a
+        cross-site form can send without a preflight -- emptied the trash.
+        Origin and Fetch-Metadata checks still apply first; this removes the
+        "simple request" shape altogether.  The multipart source-update upload
+        is the one POST that carries another media type, and its route
+        enforces ``multipart/form-data`` itself.
+        """
+        if self._parts() == ["api", "source-updates", "reviews"]:
+            return
+        media = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if media != "application/json":
+            raise RequestError(415, "POST requests must declare Content-Type: application/json")
 
     def _handle_exception(self, exc: Exception) -> None:
         if isinstance(exc, SkillNotFound):

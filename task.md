@@ -23,7 +23,11 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [x] **R5** — lock files in `<data>/locks/` (owner-only, `O_NOFOLLOW`), 60 s
   cross-process acquire timeout → `LockTimeoutError` (409).
   `tests/test_audit_r5_lock_root.py`: 6 of 6 red before.
-- [ ] **R9** — JSON content type on bodyless mutating POSTs.
+- [x] **R9** — every POST except the multipart source-update upload requires
+  `application/json` (415 otherwise). `tests/test_audit_r9_post_media_type.py`.
+  ⚠ **Both UIs send bodyless POSTs without the header** (classic `app.js` and
+  `v2/app.js`); the frontend session was asked to default the header in
+  `domain.js requestJson()`. **Do not merge this commit without that change.**
 - [ ] **R14** — deep JSON → 400; `?project=~nouser/x` → clean error.
 - [ ] **R6 / H1** — compatibility dedupe + portability message, unknown-key
   warning, 1,536-character description cap.

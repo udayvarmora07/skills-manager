@@ -157,6 +157,11 @@ response was readable because a browser enforces CORS only on non-simple reads.
   `validate_request`; it is now a misnomer.
 - JSON mutation endpoints require `Content-Type: application/json`; raw archive
   and multipart import keep their explicitly documented content types.
+- **Every `POST` declares `application/json`, bodyless ones included** (R9/S4):
+  `/api/trash/purge`, `/api/rebuild`, `/api/resync`, enable/disable and trash
+  restore answer `415` otherwise, so a `text/plain` "simple request" can no
+  longer empty the trash. The multipart `POST /api/source-updates/reviews`
+  upload is the one exception and enforces `multipart/form-data` itself.
 
 **[SPEC] A parameter that cannot be used is a `400`, never a silent default**
 (docs/24 §D3-8). `?limit=abc`, `?limit=`, `?limit=1.5`, `?limit=١٢٣` and

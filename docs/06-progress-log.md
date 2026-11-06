@@ -215,6 +215,14 @@ names shimmed so the module imports). One existing test,
 file under the data root and now excludes `locks/`: those are empty
 coordination files, not skill or index data.
 
+**[SPEC] R9 / S4 — every POST declares JSON.** `do_POST` now rejects any POST
+whose media type is not `application/json` (415), except the multipart
+source-update upload. A `text/plain` purge used to answer 200 and delete data.
+Three existing test clients (`smoke_web.py`, `test_audit_route_table`,
+`test_webapp`) sent bodyless POSTs without the header and were updated to send
+it. **Both web UIs do the same and will get 415 until `domain.js` defaults the
+header** — handed to the frontend session, not edited here.
+
 ## 2026-11-06 — The prototype-final design shipped as a v2 interface on real data
 
 **[SPEC]** Branch `ui/prototype-final` adds `skillsmgr/webui/v2/` (served at
