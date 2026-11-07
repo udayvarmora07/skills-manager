@@ -71,3 +71,29 @@
 window measured in tokens. The conversion it uses is not stated, so any
 over-budget figure computed here is an estimate and must say which conversion
 it assumed.
+
+## Gemini CLI native skill switch
+
+**[SPEC]** From google-gemini/gemini-cli at commit
+`62bab5b232c15b925d31e655ce844ab939c882b7`
+(`packages/cli/src/utils/skillSettings.ts`, `packages/cli/src/config/settingsSchema.ts`,
+`docs/reference/configuration.md`), read 2026-11-07:
+
+- `/skills disable <name>` appends the skill name to `skills.disabled` in the
+  workspace settings file when a workspace exists, otherwise the user file.
+  `/skills enable` removes it from every writable scope's list.
+- `skills.disabled` (array) uses `mergeStrategy: UNION`, so a skill is disabled
+  when **any** loaded settings file lists it.
+- `skills.enabled` (boolean, default `true`) switches Agent Skills off entirely.
+  `admin.skills.enabled` (boolean, default `true`) "disallows agent skills from
+  being used" when false.
+- Settings files, lowest → highest: system defaults
+  (`/etc/gemini-cli/system-defaults.json` on Linux, overridable with
+  `GEMINI_CLI_SYSTEM_DEFAULTS_PATH`), user `~/.gemini/settings.json`, project
+  `.gemini/settings.json`, system overrides (`/etc/gemini-cli/settings.json`,
+  overridable with `GEMINI_CLI_SYSTEM_SETTINGS_PATH`). Environment variables and
+  CLI arguments rank above all files and are not observable here.
+
+**[NOTE]** Because the list is a union, any single readable file that lists a
+name is enough to say "disabled". An unreadable file can only leave the answer
+partial; it can never turn a listed name back on.
