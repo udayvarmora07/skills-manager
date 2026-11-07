@@ -9,6 +9,7 @@
 | Doc | Covers | Load when |
 |---|---|---|
 | [V2 parity design and migration](superpowers/specs/2026-11-06-v2-feature-parity-design.md) | Source inventory, visual contract, research and linked implementation/acceptance plan | Understanding the completed v2 migration and default switch |
+| @docs/35-open-decisions-resolved-2026-11-07.md | Resolved/deferred decisions for Codex TOML, sidecars, agent recovery, peer links and product direction | Before reopening a decision or implementing deferred work |
 | @docs/31-combined-e2e-verification-2026-11-06.md | Combined frontend/backend verification, D1–D14 dispositions and accessibility limits | Before claiming UI or combined integration coverage |
 | @docs/01-architecture.md | Data model, data-dir layout, FS vs SQLite roles | Any task touching data or paths |
 | @docs/02-modules.md | Module-by-module inventory, constants, key behavior | Any edit to `skillsmgr/` internals |

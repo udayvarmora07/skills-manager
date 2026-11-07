@@ -62,7 +62,7 @@ const app = createApp({
   data() {
     return {
       route: parseRoute(), m: null, loading: true, loadError: "", history: [], busy: false,
-      records: [], scopes: [], catalog: {tags:{}, profiles:{}}, catalogError: "", tagFilter: "", libraryView: savedPreference("skillsmgr-v2-library-view",["shelf","instances"],"shelf"), toolTarget: null, readCopyPath: "",
+      records: [], scopes: [], catalog: {tags:{}, profiles:{}}, catalogError: "", tagFilter: "", libraryView: savedPreference("skillsmgr-v2-library-view",["shelf","instances"],"shelf"), toolTarget: null, readCopyPath: "", readCopyScope: "", readCopyName: "",
       historyError: "", skillHistoryError: "", trashError: "", trashLoading: false, importFull: false, importResult: null, createTemplates: [], commandQuery: "",
       query: "", filter: "all", agentFilter: "all", extra: {}, sortBy: "name",
       front: null, skipped: [], dismissed: [], done: 0, srcChoice: "",
@@ -143,7 +143,15 @@ const app = createApp({
       if (!s || !s.differing.length) return null;
       return s.differing.find((c) => c.scope === this.compareWith) || s.differing[0];
     },
-    refCopy() { const s = this.skill; return s ? (s.copies.find(c=>c.path===this.readCopyPath) || s.ref.holders[0] || s.primary) : null; },
+    refCopy() {
+      const s = this.skill;
+      if (!s) return null;
+      if (this.readCopyName === s.name && this.readCopyScope) {
+        const exact = s.copies.find(c => c.scope === this.readCopyScope && c.path === this.readCopyPath);
+        if (exact) return exact;
+      }
+      return s.ref.holders[0] || s.primary;
+    },
     docHtml() {
       const s = this.skill;
       if (!s) return "";
@@ -166,10 +174,10 @@ const app = createApp({
       return why ? { title: why[0], text: why[1] } : { title: "Not readable here", text: "" };
     },
     docError() { return this.bodyErrorOf(this.refCopy); },
-    editable() { return !!this.skill && this.skill.copies.some((c) => c.state !== "broken"); },
-    canEdit() { return !!this.skill && this.editable && this.bodyFetchable(this.refCopy); },
-    editWhy() { return this.docWhy ? `${this.docWhy.title}. ${this.docWhy.text}` : ""; },
-    editTargets() { return this.skill ? this.skill.copies.filter((c) => c.state !== "broken") : []; },
+    editable() { return !!this.skill && this.skill.copies.some((c) => c.state !== "broken" && !c.readOnly); },
+    canEdit() { return !!this.skill && this.editable && this.bodyFetchable(this.refCopy) && !(this.refCopy && this.refCopy.readOnly); },
+    editWhy() { const c = this.refCopy; if (c && c.readOnly) return this.readOnlyWhy(c); return this.docWhy ? `${this.docWhy.title}. ${this.docWhy.text}` : ""; },
+    editTargets() { return this.skill ? this.skill.copies.filter((c) => c.state !== "broken" && !c.readOnly) : []; },
     editError() {
       if (!this.edit) return "";
       if (!this.edit.desc.trim()) return "Add a short description so agents know when to use this skill.";
@@ -274,7 +282,7 @@ const app = createApp({
     skillTags(name) {return (this.catalog.tags || {})[name] || [];},
     openSource(record) { this.toolTarget=markRaw(record);location.hash="#/tools/source-update"; },
     inspectRecord(record) { this.query=record.name;this.filter="all";this.tagFilter="";this.agentFilter=record.scope||"all";this.libraryView="instances";location.hash="#/skills"; },
-    openRecord(record) {this.toolTarget=markRaw(record);this.readCopyPath=record.physical_path||record.path||"";location.hash="#/skill/"+encodeURIComponent(record.name);},
+    openRecord(record) {this.toolTarget=markRaw(record);this.readCopyPath=record.physical_path||record.path||"";this.readCopyScope=record.scope||"";this.readCopyName=record.name||"";location.hash="#/skill/"+encodeURIComponent(record.name);},
     openCommands() {this.commandQuery="";this.openDialog({title:"Find a tool or action",commands:true,cancel:"Close"}); },
     commandGo(item) {const opener=this.opener;this.closeDialog();if(item.action==="create"){this.openCreate();this.opener=opener;}else if(item.action==="refresh")this.refresh();else location.hash=item.path;},
     agentOf(id) { return (this.m && this.m.agent(id)) || { ...FALLBACK_AGENT, name: id || "Unknown" }; },
@@ -557,7 +565,7 @@ const app = createApp({
       const s = this.skill;
       if (!s || s.ref.ambiguous) return;
       const from = s.ref.holders[0].scope;
-      await this.runSync(s.name, from, s.differing.map((c) => c.scope), `${s.name} now matches in`);
+      await this.runSync(s.name, from, s.differing.filter((c) => !c.readOnly).map((c) => c.scope), `${s.name} now matches in`);
     },
     async runSync(name, from, tos, label, onUndo) {
       this.busy = true;
@@ -569,7 +577,11 @@ const app = createApp({
         return r.synced.length ? r : null;
       } catch (e) { this.toast(e.message, { err: true }); return null; } finally { this.busy = false; }
     },
+    /* A followed link (SCOPE-2) is read-only: it belongs to the agent whose
+     * folder it lives in, and a write here would land in that other copy. */
+    readOnlyWhy(c) { const from = c && c.linkFrom ? shortPath(c.linkFrom) : "another folder"; return `This is a link into ${from}; change it in that agent's copy.`; },
     async toggleCopy(c) {
+      if (c && c.readOnly) { this.toast(this.readOnlyWhy(c), { err: true }); return; }
       const name = this.skill.name, to = c.state === "on" ? "disable" : "enable";
       const clause = this.tokenClause(c.tokens, to === "disable" ? "off" : "on");
       this.busy = true;
@@ -582,9 +594,9 @@ const app = createApp({
     },
     async allOn() {
       const s = this.skill; this.busy = true; const turned = [];
-      const gained = s.copies.filter((x) => x.state === "off").reduce((n, x) => n + (Number(x.tokens) || 0), 0);
+      const gained = s.copies.filter((x) => x.state === "off" && !x.readOnly).reduce((n, x) => n + (Number(x.tokens) || 0), 0);
       try {
-        for (const c of s.copies.filter((x) => x.state === "off")) { await api(`/api/skills/${encodeURIComponent(s.name)}/enable?scope=${encodeURIComponent(c.scope)}`, { method: "POST" }); turned.push(c.scope); }
+        for (const c of s.copies.filter((x) => x.state === "off" && !x.readOnly)) { await api(`/api/skills/${encodeURIComponent(s.name)}/enable?scope=${encodeURIComponent(c.scope)}`, { method: "POST" }); turned.push(c.scope); }
         await this.refresh();
         const clause = gained > 0 ? ` — uses about ${this.fmt(gained)} tokens across ${plural(turned.length, "agent")}` : "";
         this.toast(`${s.name} turned on everywhere.${clause}`, { undo: async () => { for (const sc of turned) await api(`/api/skills/${encodeURIComponent(s.name)}/disable?scope=${encodeURIComponent(sc)}`, { method: "POST" }); } });
@@ -593,6 +605,7 @@ const app = createApp({
     async turnOffIn(s, scope) {
       this.busy = true; const name = s.name;
       const c = s.copies.find((x) => x.scope === scope);
+      if (!c || c.readOnly) { this.busy = false; if (c) this.toast(this.readOnlyWhy(c), { err: true }); return; }
       const clause = this.tokenClause(c && c.tokens, "off");
       try {
         await api(`/api/skills/${encodeURIComponent(name)}/disable?scope=${encodeURIComponent(scope)}`, { method: "POST" });
@@ -623,7 +636,7 @@ const app = createApp({
       this.openDialog({
         title: `Move “${s.name}” to the trash?`, danger: true, confirm: "Move to trash",
         lines: ["Choose the places to remove it from. Each agent keeps its own trash folder, and every copy you remove here can be restored from Recovery or with Undo."],
-        picks: s.copies.map((c) => ({ id: c.scope, label: this.agentOf(c.scope).name, path: shortPath(c.path) })), chosen: s.copies.length === 1 ? [s.copies[0].scope] : [],
+      picks: s.copies.filter(c => !c.readOnly).map((c) => ({ id: c.scope, label: this.agentOf(c.scope).name, path: shortPath(c.path) })), chosen: s.copies.filter(c => !c.readOnly).length === 1 ? [s.copies.find(c => !c.readOnly).scope] : [],
         onConfirm: async (d) => {
           this.busy = true;
           try {
@@ -640,7 +653,7 @@ const app = createApp({
         },
       });
     },
-    openPermanentDelete() {const skill=this.skill;if(!skill)return;this.openDialog({title:`Permanently delete “${skill.name}”?`,danger:true,confirm:"Delete permanently",lines:["This removes the selected copies without moving them to trash. There is no Undo or trash restore for this action."],picks:skill.copies.filter(c=>c.record.addressable!==false&&c.state!=="link"&&this.agentOf(c.scope).writable).map(c=>({id:c.scope,label:this.agentOf(c.scope).name,path:shortPath(c.path)})),chosen:[],onConfirm:async d=>{this.busy=true;try{for(const scope of d.chosen)await api(`/api/skills/${encodeURIComponent(skill.name)}?scope=${encodeURIComponent(scope)}&purge=1`,{method:"DELETE"});await this.refresh();this.toast("Selected copies permanently deleted.");if(!this.m.byName.get(skill.name))location.hash="#/skills";}catch(e){await this.refresh();this.toast(e.message,{err:true});}finally{this.busy=false;}}});},
+    openPermanentDelete() {const skill=this.skill;if(!skill)return;this.openDialog({title:`Permanently delete “${skill.name}”?`,danger:true,confirm:"Delete permanently",lines:["This removes the selected copies without moving them to trash. There is no Undo or trash restore for this action."],picks:skill.copies.filter(c=>!c.readOnly&&c.record.addressable!==false&&c.state!=="link"&&this.agentOf(c.scope).writable).map(c=>({id:c.scope,label:this.agentOf(c.scope).name,path:shortPath(c.path)})),chosen:[],onConfirm:async d=>{this.busy=true;try{for(const scope of d.chosen)await api(`/api/skills/${encodeURIComponent(skill.name)}?scope=${encodeURIComponent(scope)}&purge=1`,{method:"DELETE"});await this.refresh();this.toast("Selected copies permanently deleted.");if(!this.m.byName.get(skill.name))location.hash="#/skills";}catch(e){await this.refresh();this.toast(e.message,{err:true});}finally{this.busy=false;}}});},
 
     /* ----- create, recovery, theme, help ----- */
     openCreate() {
@@ -817,7 +830,7 @@ const app = createApp({
       return inf.key === "bad" ? `${plural(inf.broken.length, "skill")} can't be read` : inf.key === "warn" ? `${plural(inf.differing.length, "copy", "copies")} ${inf.differing.length === 1 ? "differs" : "differ"}` : "matches";
     },
     selectMap(id) { this.mapSelId = id; this.mapPicked = this.mapDefaults(id); this.peek = null; },
-    mapDefaults(id) { const i = this.m.info(id); return i ? i.differing.filter((s) => !s.ref.ambiguous).map((s) => s.name) : []; },
+    mapDefaults(id) { const i = this.m.info(id); return i ? i.differing.filter((s) => !s.ref.ambiguous && s.copies.some((c) => c.scope === id && !c.readOnly)).map((s) => s.name) : []; },
     togglePick(n) { this.mapPicked = this.mapPicked.includes(n) ? this.mapPicked.filter((x) => x !== n) : [...this.mapPicked, n]; },
     togglePeek(s) { const next = this.peek === s.name ? null : s.name; this.peek = next; if (next) { const mine = s.copies.find((c) => c.scope === this.mapSel.id); return this.ensureBodies([mine, s.ref.holders[0]]); } return undefined; },
     diffCount(s, scope) {
@@ -827,7 +840,7 @@ const app = createApp({
     },
     brokenShort(s, scope) { const c = s.copies.find((x) => x.scope === scope); return (BROKEN_WHY[c && c.kind] || BROKEN_WHY.invalid)[0]; },
     async syncPicked() {
-      const inf = this.mapSel, picked = this.mapPicked.filter((n) => inf.differing.some((s) => s.name === n));
+      const inf = this.mapSel, picked = this.mapPicked.filter((n) => inf.differing.some((s) => s.name === n && s.copies.some((c) => c.scope === inf.id && !c.readOnly)));
       if (!picked.length) return;
       this.busy = true; const results = [];
       try {
@@ -849,7 +862,7 @@ const app = createApp({
       if (p.key === "warn") {
         const s = this.curSkill, src = this.srcChoice;
         const srcHash = (s.copies.find((c) => c.scope === src) || {}).hash;
-        const tos = s.copies.filter((c) => c.state !== "broken" && c.hash && c.hash !== srcHash).map((c) => c.scope);
+        const tos = s.copies.filter((c) => !c.readOnly && c.state !== "broken" && c.hash && c.hash !== srcHash).map((c) => c.scope);
         ok = !!(await this.runSync(p.skill, src, tos, `${p.skill} now matches in`, back));
       } else if (p.key === "bad") {
         if (!p.fixable) return this.fixBad(p);

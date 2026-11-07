@@ -4,6 +4,26 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Interrupted sub-session continuation complete (2026-11-07)
+
+- [x] Recover the named Claude sub-session, its decisions and both completed
+  worker snapshots; preserve the dirty primary checkout.
+- [x] Complete R15 shared reviews and SCOPE-2 peer-link inspection. Keep linked
+  scope views visible, physical reference voting deduplicated, and owner-only
+  mutation paths.
+- [x] Fix review findings in batch whole-tree approval, transactional sidecar
+  bindings (including failed rollback evidence), active Store identity and
+  linked agent-trash roots; retain regression coverage.
+- [x] Current-tree ladder: 1,724 cases on each Python 3.11–3.14 (two optional
+  skips, separately exercised), v2 36 scenarios, classic 38 scenarios / 342
+  assertions, six-viewport harness, both smokes, compilation/syntax, all gates,
+  and hash-pinned wheel/sdist build with isolated install smokes.
+
+Decision dispositions and intentional deferrals are in
+@docs/35-open-decisions-resolved-2026-11-07.md; detailed evidence and limitations
+are in the newest @docs/06-progress-log.md entry. Human sign-offs and external
+publication remain separate.
+
 ## V2 feature parity and default interface (2026-11-06)
 
 - [x] Audit classic and v2; create the [source-backed design and inventory](docs/superpowers/specs/2026-11-06-v2-feature-parity-design.md).
@@ -35,7 +55,8 @@
   `origin/main` (verified 2026-11-06).
 - [ ] Human visual sign-off of the redesigned tool pages.
 
-Agent-scope in-app trash restore remains outside existing backend capability.
+Agent-scope in-app trash restore now uses the existing scope-aware trash API
+and the v2 Recovery card (2026-11-07; see docs/35).
 Live registry fetch/commit and actual external runner execution are not exercised
 by this task's browser checks. Human screen-reader and spoken usability sign-off
 remain unclaimed. The work landed on `main` as `61355a2`.
@@ -92,10 +113,14 @@ See @docs/32-continuation-verification-2026-11-06.md.
   SR-1 (P0, Enter on "Open skill" ran the fix), SR-2/3/4 (P1) and SR-5–13,
   15, 16; v2 browser suite 27/27 twice.
 - [ ] Human spoken screen-reader sign-off using the docs/32 walkthrough.
-- [ ] Decide: `/api/scopes` without token totals; capping classic Library
-  rows (changes "exact visible-set"). Opt-in body-less projection is covered
-  by the performance completion above.
-- [ ] Decide: batch plan binding of before-state and sync source content (P3).
+- [x] Decided 2026-11-07 (@docs/35-open-decisions-resolved-2026-11-07.md):
+  `/api/scopes` keeps token totals (0.003 s over the shared scan on 2,062 real
+  rows; the rescan cost was already removed); classic row cap declined (classic
+  is no longer the default and the cap breaks "exact visible-set").
+- [x] Batch plan binding (P3, 2026-11-07): plan id binds each target's
+  `content_hash`/`disabled`, bounded whole-tree digests, and sync destination
+  copies. Companion edits invalidate approval as well as document edits.
+  `tests/test_batch_plan_binding.py`: 4 of 5 red before.
 - [x] P3: Enter in Workspaces project field; classic Install shows API trust
   blockers (2026-11-07, `tests/test_classic_install_preview_contracts.py`).
 
@@ -112,9 +137,11 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   (skills + trash), multipart upload; registry snapshots refuse both names at
   any depth; registry commit writes provenance post-install or rolls back.
   `tests/test_audit_r2_intake_sidecars.py`: 7 of 7 assertions red before.
-- [ ] **Decide (R2 follow-up, ⚠ approval):** bind sidecars to an install
-  (per-install HMAC or recorded physical path). Agent-scope sidecars are still
-  trusted as read, and `scopes.sync_skill` copies them between scopes.
+- [x] **R2 follow-up (2026-11-07):** sidecars bound to the install that wrote
+  them by a record in `<data>/sidecar-bindings/` (recorded path + sha256; HMAC
+  rejected, see docs/35). Unbound sidecars read untrusted; source-lock reports
+  `unbound`. `tests/test_sidecar_binding.py` (15, incl. a red-first read-race
+  test).
 - [x] **R5** — lock files in `<data>/locks/` (owner-only, `O_NOFOLLOW`), 60 s
   cross-process acquire timeout → `LockTimeoutError` (409).
   `tests/test_audit_r5_lock_root.py`: 6 of 6 red before.
@@ -135,9 +162,9 @@ needing maintainer approval; each lands as its own commit with red-first tests.
   writes.
 - [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
   escaped code points, bounded output and no safe verdict or text rewriting.
-- [ ] **Decide (R4 / D-1):** Codex TOML parsing remains deferred. Keep Python
-  >=3.10 and dependencies unchanged; choose a maintained parser/floor policy
-  before implementing `[[skills.config]]`, rather than a partial TOML parser.
+- [x] **D-1 (2026-11-07):** Python floor raised to 3.11 (3.10 EOL 2026-10-01,
+  PEP 619); Codex `[[skills.config]]` read with stdlib `tomllib`
+  (`tests/test_native_state_codex.py`, 16).
 - [x] **Parent P1/P2 findings:** serialize scoped edit/toggle/restore/sync;
   preserve damaged target bytes before force sync; fix per-entry search and
   doctor encoding classification. See @docs/30-backend-continuation-2026-11-06.md
@@ -170,7 +197,7 @@ The maintainer chose both phases, hook first.
   in the `scopes` ContextVar, so a later in-process `cli.main` resolved `global`
   through a stale Store. `cli.main` now binds its own Store per command and
   restores the prior binding. `tests/test_cli_store_binding.py`.
-- [ ] AI features (BYOK): proposal in @docs/33-ai-features-design-2026-11-06.md;
+- [ ] AI features (BYOK, deferred 2026-11-07 — D-AI-4 blocks any web route; see docs/35): proposal in @docs/33-ai-features-design-2026-11-06.md;
   answer D-AI-1…D-AI-7 before any implementation.
 - [x] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
   `insights.risk_scan()` — nine checks, `tests/test_risk_scan_phase_b.py`,
@@ -204,10 +231,11 @@ the docs mark them as not needing maintainer approval.
 - [x] **R13** name-only candidates ranked by description size in the
   hygiene `claude_listing` section (2026-11-07). Usage-ranked demotion would
   need transcript counts, which stay a ⚠ decision.
-- [/] **R15** install argv now rendered only by `insights.install_argv`
-  (2026-11-07, 22-case characterization) and the exception hierarchy lives in
-  `skillsmgr/errors.py`, re-exported from `store`. Still open: shared review
-  plumbing across registry/source_update/backup_sync.
+- [x] **R15** install argv is rendered by `insights.install_argv`, exceptions
+  live in `errors.py`, and `review_artifacts.py` now shares review-id, expiry,
+  serialization, credential-key, status and file-read checks across registry,
+  source update and backup sync. The 23 pre-refactor characterization cases
+  and four failure-path regressions preserve caller contracts.
 - [x] **R16** `backup_sync._run_git` pins program-executing config with `-c` and
   a scrubbed environment (2026-11-07). `tests/test_audit_r16_git_config.py`
   includes a real-git test where a hostile `core.sshCommand` used to run.
@@ -215,15 +243,18 @@ the docs mark them as not needing maintainer approval.
   (`tests/test_skills_ref_oracle.py`, skips unless `SKILLS_REF_PYTHON` is set).
   14/17 verdicts agree; the 3 divergences (Unicode names = R18, unknown fields
   warn, unquoted colon warns) are pinned and mutation-checked (2026-11-07).
-- [ ] **R18** accept NFKC Unicode lowercase names (⚠ locked name rule).
-- [ ] **R19** CycloneDX/SPDX export from source-lock data (⚠ new command).
+- [x] **R18** declined 2026-11-07: names stay ASCII (NFD/NFC filesystem
+  divergence, confusables; docs/35).
+- [x] **R19** deferred 2026-11-07: new command with no consumer yet (docs/35).
 - [x] docs/29 H1: advisory `ignored-frontmatter` hygiene finding from cited
   per-agent key lists (`skillsmgr/key_support.py`, 2026-11-07).
 - [x] docs/29 H1: README "what it will not do" and a source-verified privacy
   statement (2026-11-07), including tiktoken's first-use download.
 - [ ] docs/29 H2: `.agents/skills` → `.claude/skills` bridge, explain-only
   first (⚠ if a new command); documented Skill CI recipe (no).
-- [ ] Decide docs/29 open questions D-2…D-10 (D-1 and D-7 are tracked above).
+- [x] docs/29 D-2…D-10 resolved or deferred with reasons in
+  @docs/35-open-decisions-resolved-2026-11-07.md (D-3 already shipped as R11;
+  owner questions D-4/5/6/9/10 deferred).
 
 ## v2 interface — prototype-final on real data (2026-11-06)
 
@@ -252,7 +283,10 @@ the docs mark them as not needing maintainer approval.
   Done in `61355a2` at the maintainer's request (docs/29 D-7).
 - [x] Port Install, Profiles, Quality, Workspaces, Settings into v2 (`61355a2`;
   see the V2 feature parity section above).
-- [ ] In-app restore for agent-scope trash (needs a backend route; ⚠ approval).
+- [x] In-app restore for agent-scope trash (2026-11-07): `scopes.scope_trash_list`
+  / `restore_trashed`, `?scope=` on the trash routes (which used to restore the
+  global trash), v2 Undo + Recovery card; verified in a real browser on an
+  isolated fixture. `tests/test_agent_scope_trash.py` (12; 7 red before).
 - [x] Slim v2's `/api/skills` list payload: v2 starts with `body=0` and fetches
   each document on demand (2026-11-07). A real-browser run caught an untracked
   reactivity read that kept Edit disabled; fixed and pinned.
@@ -270,10 +304,10 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
   OpenCode `permission.skill`, Gemini workspace/user disable), so the UI can
   show **Active** for a skill Codex has disabled. Latent: no disable rule exists
   on this machine today (the one entry is `enabled = true`). Read-only fix first (§4b).
-- [ ] Decide: per-project profiles that translate one toggle into each agent's
+- [ ] Deferred (docs/35): per-project profiles that translate one toggle into each agent's
   native setting (⚠); Codex's switch is user-level only and must say so.
-- [ ] Decide: interoperate with Microsoft APM `apm.yml` instead of a new lockfile.
-- [ ] Decide: Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
+- [ ] Deferred (docs/35): interoperate with Microsoft APM `apm.yml` instead of a new lockfile.
+- [ ] Deferred (docs/35): Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
 - [x] "What the model sees": `claude_listing` in `doctor --hygiene` estimates
   the Claude Code listing against its documented budget (env, settings
   fraction or 1%; the char/token conversion is stated as an assumption), honours
@@ -284,8 +318,8 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
 - [x] Resident-token effect on every v2 toggle toast and switch (2026-11-07).
 - [x] Silent-failure lint: the >1,536-char cap (R6), plus empty frontmatter and
   unquoted `: ` in plain scalars (2026-11-07, `tests/test_validator_silent_failures.py`).
-- [ ] Decide: transcript-based usage counts (⚠) and project skill lockfile (⚠).
-- [ ] Decide on docs/27 monetization questions MON-Q1…MON-Q5 (services-first year; widen scope to MCP + AGENTS.md; public top-skills report; zh-CN UI; which docs/14 tiers stay). Proposals only, nothing approved.
+- [ ] Deferred (docs/35): transcript-based usage counts (⚠) and project skill lockfile (⚠).
+- [ ] Owner's call, deferred (docs/35): docs/27 monetization questions MON-Q1…MON-Q5 (services-first year; widen scope to MCP + AGENTS.md; public top-skills report; zh-CN UI; which docs/14 tiers stay). Proposals only, nothing approved.
 
 ## UI redesign — Warm Instrument (2026-10-08)
 
@@ -326,14 +360,13 @@ The maintainer selected **Prototype A — Warm Instrument** from
   a non-Chromium engine, forced-colors mode, 200%/400% zoom, and a screen
   reader. This is the same open gate G8 carried, carried forward honestly.
 
-- [ ] **Decide whether a skill directory symlinked into a shared store should
-  be refused at all.** The containment rule (SCOPE-2) makes 15% of this
-  machine's library unreadable and every description empty, because the
-  skills in `~/.claude/skills` are symlinks into `~/.agents/skills`. The
-  refusal is deliberate and documented, and it is a product decision about the
-  security model rather than a UI one, so it was **deliberately not changed**.
-  The UI now names it accurately instead of calling it corruption. Options
-  and their trade-offs are in @docs/06-progress-log.md.
+- [x] **SCOPE-2 decided and implemented (2026-11-07):** agent scope links
+  into another known managed agent root are readable with explicit read-only
+  metadata. Mutations through the alias remain refused; unmanaged targets
+  and global-store links retain their existing refusal. The v2 model keeps
+  alias scope views and writable owners, and deduplicates physical documents
+  for reference voting.
+  See @docs/35-open-decisions-resolved-2026-11-07.md.
 
 ## docs/24 audit remediation — day 1 and week 1, 2026-10-04
 

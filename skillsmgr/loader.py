@@ -246,6 +246,61 @@ def _link_escape_record(skill_dir: Path, reason: str) -> dict:
     return record
 
 
+def _peer_link_record(skill_dir: Path, link_roots: tuple[Path, ...]) -> dict | None:
+    """Read a skill directory that links into another managed scope root.
+
+    SCOPE-2 refuses a link out of its own root so a write can never land
+    outside a managed root and the tool never reads an unmanaged location.
+    Both properties survive here: the resolved target must lie inside one of
+    ``link_roots`` -- the *already-resolved* bases of the other known scope
+    roots -- and it is re-checked with the same containment guard that peer
+    root's own scan uses.  Only then is the document loaded.
+
+    The returned row keeps the link's own on-disk ``path`` so a caller can
+    show the entry it found, while ``linked_to`` and ``link_target_root`` name
+    the resolved target and its peer root.  ``read_only``/``link_followed``
+    tell every writer and interface this copy must not be mutated through the
+    link.
+
+    ``None`` means "not followable": a link into anything that is not a peer
+    root, a dangling link, a target that fails the peer guard, or a peer target
+    holding no document.  The caller then builds today's escape record, byte
+    for byte.
+    """
+    if not link_roots:
+        return None
+    try:
+        target = Path(os.path.realpath(skill_dir))
+        if not target.is_dir():
+            return None
+    except OSError:
+        return None
+    for peer_root in link_roots:
+        try:
+            if target != peer_root and not target.is_relative_to(peer_root):
+                continue
+            relative = target.relative_to(peer_root)
+        except (AttributeError, ValueError):
+            continue
+        if not relative.parts:
+            continue
+        try:
+            contained = paths.contained_entry_under(peer_root, *relative.parts)
+        except ValueError:
+            continue
+        try:
+            record = load_skill(contained)
+        except (SkillNotFound, OSError):
+            return None
+        record["path"] = str(skill_dir)
+        record["linked_to"] = str(target)
+        record["link_target_root"] = str(peer_root)
+        record["read_only"] = True
+        record["link_followed"] = True
+        return record
+    return None
+
+
 def _unreadable_record(skill_dir: Path, read_error: str, disabled: int) -> dict:
     """Build the malformed row for a document that could not be opened.
 
@@ -714,6 +769,7 @@ def scan_dir(
     recursive: bool = False,
     include_husks: bool = False,
     annotate_paths: bool = False,
+    link_roots: tuple[Path, ...] = (),
 ) -> list[dict]:
     """Scan a skill root, optionally walking nested skill directories.
 
@@ -739,6 +795,13 @@ def scan_dir(
     §D1).  It is opt-in because a flat record without ``path`` is what the
     other callers (``effective``, ``cli_handlers``, the web route) consume, and
     the records they see are unchanged.
+
+    ``link_roots`` are the already-resolved bases of the *other* known managed
+    scope roots.  A directory that is a symlink out of ``root`` is normally
+    reported as drift (SCOPE-2); when its resolved target lies inside one of
+    these peer roots it is read read-only instead
+    (:func:`_peer_link_record`).  The default is empty, so every existing
+    caller -- the global store above all -- keeps refusing those links.
 
     The scan also decides whether the derived-record reuse is worth running at
     all: a scan holding more documents than the bounded cache can hold would
@@ -789,6 +852,14 @@ def scan_dir(
             # own documented install workflow creates (``skills-mgr install``
             # symlinks unless ``--copy`` is given).  Report it as drift rather
             # than dropping it silently: the filesystem is the source of truth.
+            #
+            # A link into another managed scope root is the one exception: the
+            # peer scope loads that document anyway, so it is read read-only
+            # here instead of being shown empty (SCOPE-2).
+            followed = _peer_link_record(child, link_roots)
+            if followed is not None:
+                entries.append(followed)
+                continue
             entry = _link_escape_record(child, str(exc))
             # Always carry the on-disk path: the record has no contained path
             # to derive, and the caller still has to show the user where the

@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 import os
 import re
-import secrets
 import shutil
 import stat
 from contextlib import contextmanager
@@ -25,6 +23,16 @@ from . import scopes
 from .atomic_io import atomic_write_text, mutation_lock
 from . import frontmatter
 from .path_safety import mkdir_private
+from .review_artifacts import (
+    encode_review,
+    enforce_review_size,
+    has_review_header,
+    is_valid_review_id,
+    new_review_id,
+    read_bounded_json,
+    require_status,
+    review_expiry,
+)
 from .source_lock import (
     SOURCE_LOCK_FILENAME,
     SourceLockError,
@@ -38,7 +46,6 @@ from .validator import validate_skill_name
 
 
 _PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
-_REVIEW_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _REVIEW_TTL = 24 * 60 * 60
 _MAX_REVIEW_BYTES = 2 * 1024 * 1024
@@ -93,7 +100,7 @@ def _root(data_dir: Path, name: str) -> Path:
 
 
 def _valid_review_id(review_id: str) -> str:
-    if not isinstance(review_id, str) or not _REVIEW_ID_RE.fullmatch(review_id):
+    if not is_valid_review_id(review_id):
         raise SourceUpdateError("invalid-review-id", "review id must be 32 lowercase hexadecimal characters")
     return review_id
 
@@ -118,12 +125,24 @@ def _review_dir(data_dir: Path, review_id: str) -> Path:
     return directory
 
 
+def _review_fail(message: str) -> SourceUpdateError:
+    return SourceUpdateError("review-not-found", message)
+
+
+def _not_pending(message: str) -> SourceUpdateError:
+    return SourceUpdateError("review-not-pending", message)
+
+
 def _write_record(directory: Path, record: dict) -> None:
-    encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-    if len(encoded.encode("utf-8")) > _MAX_REVIEW_BYTES:
-        raise SourceUpdateError("candidate-unsafe", "review evidence exceeds the persistent size limit")
+    encoded = encode_review(record, separators=(",", ":")) + b"\n"
+    enforce_review_size(
+        encoded,
+        _MAX_REVIEW_BYTES,
+        lambda message: SourceUpdateError("candidate-unsafe", message),
+        "review evidence exceeds the persistent size limit",
+    )
     path = directory / "review.json"
-    atomic_write_text(path, encoded)
+    atomic_write_text(path, encoded.decode("utf-8"))
     try:
         os.chmod(path, 0o600)
     except OSError as exc:
@@ -133,27 +152,26 @@ def _write_record(directory: Path, record: dict) -> None:
 def _load_record(data_dir: Path, review_id: str) -> tuple[Path, dict]:
     directory = _review_dir(data_dir, review_id)
     path = directory / "review.json"
-    try:
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > _MAX_REVIEW_BYTES:
-            raise ValueError
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError, TypeError):
-        raise SourceUpdateError("review-not-found", "update review is unavailable")
+    record = read_bounded_json(
+        path,
+        _MAX_REVIEW_BYTES,
+        _review_fail,
+        missing_message="update review is unavailable",
+        size_message="update review is unavailable",
+        unreadable_message="update review is unavailable",
+    )
     if (
-        not isinstance(record, dict)
-        or record.get("version") != 1
+        not has_review_header(record)
         or record.get("review_id") != review_id
         or record.get("status") not in _REVIEW_STATUSES
     ):
-        raise SourceUpdateError("review-not-found", "update review is unavailable")
+        raise _review_fail("update review is unavailable")
     return directory, record
 
 
 def _expired(record: dict) -> bool:
-    try:
-        return float(record["expires_epoch"]) <= _now().timestamp()
-    except (KeyError, TypeError, ValueError):
-        return True
+    expiry = review_expiry(record, numeric_strings=True)
+    return expiry is None or expiry <= _now().timestamp()
 
 
 def _mark_expired(directory: Path, record: dict) -> None:
@@ -374,10 +392,6 @@ def _stage_candidate(source: Path, review_dir: Path, disabled: bool) -> dict:
     return staged
 
 
-def _new_review_id() -> str:
-    return secrets.token_hex(16)
-
-
 def _candidate_summary(manifest: dict) -> dict:
     return {
         "content_hash": manifest["sha256"],
@@ -440,7 +454,7 @@ def _prepare_from_source(
         source_identity("local", source_record["value"])
     except (KeyError, SourceLockError) as exc:
         raise SourceUpdateError("candidate-unsafe", "source identity is not safe to retain") from exc
-    review_id = _new_review_id()
+    review_id = new_review_id()
     reviews_root = _root(data_dir, "source-update-reviews")
     directory = reviews_root / review_id
     try:
@@ -574,7 +588,7 @@ def _snapshot_entries(data_dir: Path, target: dict) -> list[dict]:
         return []
     entries = []
     for folder in sorted(base.iterdir(), key=lambda item: item.name, reverse=True):
-        if folder.is_symlink() or not folder.is_dir() or not _REVIEW_ID_RE.fullmatch(folder.name):
+        if folder.is_symlink() or not folder.is_dir() or not is_valid_review_id(folder.name):
             continue
         try:
             created_at = _iso(datetime.fromtimestamp(folder.stat().st_mtime, timezone.utc))
@@ -618,7 +632,7 @@ def _active_rollback_ids(data_dir: Path, target: dict) -> set[str]:
     if not root.exists():
         return protected
     for directory in root.iterdir():
-        if directory.is_symlink() or not directory.is_dir() or not _REVIEW_ID_RE.fullmatch(directory.name):
+        if directory.is_symlink() or not directory.is_dir() or not is_valid_review_id(directory.name):
             continue
         try:
             _, record = _load_record(data_dir, directory.name)
@@ -696,8 +710,7 @@ def cancel_update_review(data_dir: str | Path, review_id: str) -> dict:
         if record["status"] == "pending" and _expired(record):
             _mark_expired(directory, record)
             raise SourceUpdateError("review-expired", "update review has expired")
-        if record["status"] != "pending":
-            raise SourceUpdateError("review-not-pending", "update review is no longer pending")
+        require_status(record, "pending", _not_pending, "update review is no longer pending")
         record["status"] = "cancelled"
         record["cancelled_at"] = _iso(_now())
         _write_record(directory, record)
@@ -798,8 +811,7 @@ def commit_update_review(
             if record["status"] == "pending" and _expired(record):
                 _mark_expired(directory, record)
                 raise SourceUpdateError("review-expired", "update review has expired")
-            if record["status"] != "pending":
-                raise SourceUpdateError("review-not-pending", "update review is no longer pending")
+            require_status(record, "pending", _not_pending, "update review is no longer pending")
             if record.get("target", {}).get("name") != name or record.get("target", {}).get("scope") != scope:
                 raise SourceUpdateError("target-mismatch", "apply arguments do not match the reviewed target")
             target = _resolve_target(data, name, scope, target_path)

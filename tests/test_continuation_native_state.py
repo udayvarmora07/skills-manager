@@ -16,6 +16,11 @@ class NativeStateTests(unittest.TestCase):
         self.project = Path(self.tmp.name) / 'project'
         self.home.mkdir()
         self.project.mkdir()
+        # Codex follows CODEX_HOME before HOME. Keep the observer inside this
+        # fixture even when the test runner itself uses a custom Codex home.
+        environment = patch.dict(os.environ, {"CODEX_HOME": str(self.home / '.codex')})
+        environment.start()
+        self.addCleanup(environment.stop)
 
     def write(self, path, value):
         path.parent.mkdir(parents=True, exist_ok=True)

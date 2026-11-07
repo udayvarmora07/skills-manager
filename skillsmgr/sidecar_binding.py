@@ -29,10 +29,30 @@ def _real_skill_dir(skill_dir: str | Path) -> Path:
     return Path(os.path.realpath(Path(skill_dir).expanduser()))
 
 
+def _binding_root(resolved: Path) -> Path:
+    """Choose the requesting store, or a stable root for unbound callers."""
+    # Import lazily: scopes imports the modules that read sidecar bindings.
+    from . import scopes
+
+    store = scopes._GLOBAL_STORE.get()
+    if store is not None:
+        return Path(os.path.realpath(Path(store.data_dir).expanduser()))
+    # Preserve direct operations on a Store's own tree without allowing an
+    # unrelated Store registration to redirect external agent-scope records.
+    with atomic_io._LOCK_ROOTS_GUARD:
+        roots = list(atomic_io._LOCK_ROOTS.values())
+    matches = [root for root in roots if resolved.is_relative_to(root)]
+    if matches:
+        return max(matches, key=lambda root: len(root.parts))
+    from . import paths
+
+    return paths.data_dir()
+
+
 def _binding_dir(skill_dir: str | Path) -> Path:
     """Return the private directory holding this install's binding records."""
     resolved = _real_skill_dir(skill_dir)
-    return atomic_io._lock_root_for(resolved) / BINDING_DIRNAME
+    return _binding_root(resolved) / BINDING_DIRNAME
 
 
 def _record_name(resolved: Path, sidecar_name: str) -> str:
@@ -44,7 +64,7 @@ def _record_name(resolved: Path, sidecar_name: str) -> str:
 def _record_path(skill_dir: str | Path, sidecar_name: str) -> Path:
     """Return the full record path for one install and sidecar name."""
     resolved = _real_skill_dir(skill_dir)
-    return atomic_io._lock_root_for(resolved) / BINDING_DIRNAME / _record_name(
+    return _binding_root(resolved) / BINDING_DIRNAME / _record_name(
         resolved, sidecar_name
     )
 
@@ -85,7 +105,7 @@ def record_binding(skill_dir: str | Path, sidecar_name: str, sidecar_bytes: byte
     if not isinstance(sidecar_bytes, (bytes, bytearray)):
         raise TypeError("sidecar bytes must be bytes")
     resolved = _real_skill_dir(skill_dir)
-    directory = _ensure_binding_dir(atomic_io._lock_root_for(resolved))
+    directory = _ensure_binding_dir(_binding_root(resolved))
     destination = directory / _record_name(resolved, sidecar_name)
     value = {
         "version": BINDING_VERSION,
@@ -136,7 +156,7 @@ def binding_state(skill_dir: str | Path, sidecar_name: str, sidecar_bytes: bytes
     """
     try:
         resolved = _real_skill_dir(skill_dir)
-        directory = atomic_io._lock_root_for(resolved) / BINDING_DIRNAME
+        directory = _binding_root(resolved) / BINDING_DIRNAME
     except Exception:
         return "unrecorded"
     if not os.path.lexists(directory):

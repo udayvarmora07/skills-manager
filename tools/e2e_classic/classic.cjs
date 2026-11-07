@@ -295,7 +295,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     const rows = await memberRows();
     eq(rows['prof-disabled'].state, 'observed', 'preview refreshed after execute');
   });
-  await test('Profiles', 'plan whose target vanished is rejected before anything applies; state drift is applied safely (already-set)', async () => {
+  await test('Profiles', 'vanished target, state drift and changed sync source are rejected as stale before writes', async () => {
     for (const s of ['claude', 'codex']) fs.renameSync(sk(s, 'prof-disabled'), sk(s, 'prof-disabled', 'SKILL.md.disabled'));
     await page.getByRole('button', {name: 'Preview', exact: true}).click(); await sleep(400);
     // (a) a target is deleted behind the reviewed plan
@@ -309,16 +309,25 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     eq(diffSnap(snap, diskSnapshot()), [], 'a rejected plan applied nothing (the other 7 targets untouched)');
     await page.keyboard.press('Escape'); fs.cpSync(keep, path.dirname(sk('codex', 'prof-disabled', 'SKILL.md.disabled')), {recursive: true});
     eq(state('codex', 'prof-disabled'), 'disabled', 'fixture restored');
-    // (b) a target changes state behind the reviewed plan: not rejected, applied idempotently
+    // (b) a target changes state behind the reviewed plan: reject the stale plan before any writes.
     await page.getByRole('button', {name: 'Preview', exact: true}).click(); await sleep(400);
     await page.getByRole('button', {name: 'Review enable plan'}).click();
     await page.locator('[data-modal=batch] .batch-target-list li').first().waitFor(); await planReady();
     fs.renameSync(sk('codex', 'prof-disabled', 'SKILL.md.disabled'), sk('codex', 'prof-disabled'));
-    const resp = await clickWait(page.getByRole('button', {name: 'Execute exact plan'}), /batch\/execute/); eq(resp.status(), 200);
-    const body = await resp.json(); const codexItem = body.results.find(x => x.scope === 'codex' && x.name === 'prof-disabled');
-    eq(codexItem.result, 'already-set', 'drifted target reported as already-set, not toggled back');
-    eq([state('claude', 'prof-disabled'), state('codex', 'prof-disabled'), state('claude', 'bystander'), state('agents', 'prof-disabled')], ['enabled', 'enabled', 'disabled', 'disabled'], 'only plan targets changed');
-    note('Profiles/batch: plan_id binds identity+options only (catalog.plan_hash); before-state (disabled flag) shown in preview is not bound, so state drift is not "stale" (applied as already-set).');
+    const driftSnap = diskSnapshot(); let driftResponse;
+    await allowFailures(async () => { driftResponse = await clickWait(page.getByRole('button', {name: 'Execute exact plan'}), /batch\/execute/); ok(driftResponse.status() === 400, 'state-drifted plan rejected, got ' + driftResponse.status()); await sleep(250); });
+    const driftError = await driftResponse.json(); match(driftError.error, /stale|changed|review/i, 'stale-plan reason returned');
+    match((await page.locator('.toast.toast-err, .toast.error').allInnerTexts().catch(() => [])).join(' '), /stale|changed|review/i, 'user sees stale-plan reason');
+    eq(diffSnap(driftSnap, diskSnapshot()), [], 'state drift rejection wrote nothing');
+    eq([state('claude', 'prof-disabled'), state('codex', 'prof-disabled'), state('claude', 'bystander'), state('agents', 'prof-disabled')], ['disabled', 'enabled', 'disabled', 'disabled'], 'the external state change remains; no other target changed');
+    await page.keyboard.press('Escape');
+    ok(!(await page.locator('[data-modal=batch]').count()), 'stale modal closes before the next profile action');
+    await page.getByRole('button', {name: 'Preview', exact: true}).click(); await sleep(400);
+    await page.getByRole('button', {name: 'Review enable plan'}).click();
+    await page.locator('[data-modal=batch] .batch-target-list li').first().waitFor(); await planReady();
+    const refreshed = await clickWait(page.getByRole('button', {name: 'Execute exact plan'}), /batch\/execute/);
+    eq(refreshed.status(), 200, 'a fresh plan is executable'); await sleep(300);
+    eq([state('claude', 'prof-disabled'), state('codex', 'prof-disabled')], ['enabled', 'enabled'], 'fresh plan reconciles the remaining disabled target');
     // (c) widened / tampered plan ids
     const targets = [{name: 'prof-disabled', scope: 'claude-code', physical_path: path.dirname(sk('claude', 'prof-disabled'))}];
     const plan = await api('POST', '/api/batch/preview', {operation: 'enable', targets}); eq(plan.status, 200);
@@ -329,15 +338,21 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
       const op = await api('POST', '/api/batch/execute', {operation: 'disable', plan_id: plan.json.plan_id, targets}); ok(op.status >= 400, 'operation swap rejected, got ' + op.status);
     });
     eq(state('claude', 'bystander'), 'disabled', 'bystander untouched'); eq(state('claude', 'prof-disabled'), 'enabled', 'plan target unchanged by rejected requests');
-    // (d) observation: a reviewed sync plan applies whatever the source holds at execute time
+    // (d) the source document is part of the reviewed sync binding.
     const probe = d => path.join(home, d, 'sync-probe'); fs.mkdirSync(probe('.claude/skills'));
     const w = t => fs.writeFileSync(path.join(probe('.claude/skills'), 'SKILL.md'), `---\nname: sync-probe\ndescription: Use this probe when testing sync staleness.\n---\n${t}\n`);
     w('REVIEWED CONTENT');
     const sp = await api('POST', '/api/batch/preview', {operation: 'sync', targets: [{name: 'sync-probe', scope: 'claude-code', physical_path: probe('.claude/skills')}], to_scopes: ['agents']});
-    eq(sp.status, 200); w('CHANGED AFTER REVIEW');
-    const se = await api('POST', '/api/batch/execute', {operation: 'sync', plan_id: sp.json.plan_id, targets: [{name: 'sync-probe', scope: 'claude-code', physical_path: probe('.claude/skills')}], to_scopes: ['agents']});
-    const copied = fs.existsSync(path.join(probe('.agents/skills'), 'SKILL.md')) ? fs.readFileSync(path.join(probe('.agents/skills'), 'SKILL.md'), 'utf8') : '';
-    note(`Profiles/batch: sync plan executed status=${se.status}; copied content ${/CHANGED AFTER REVIEW/.test(copied) ? 'is the post-review content (reviewed plan did not bind source content)' : /REVIEWED/.test(copied) ? 'is the reviewed content' : 'absent'}`);
+    eq(sp.status, 200); w('CHANGED AFTER REVIEW'); const changedSource = fs.readFileSync(path.join(probe('.claude/skills'), 'SKILL.md'));
+    const syncSnap = diskSnapshot(); let staleSync;
+    await allowFailures(async () => { staleSync = await api('POST', '/api/batch/execute', {operation: 'sync', plan_id: sp.json.plan_id, targets: [{name: 'sync-probe', scope: 'claude-code', physical_path: probe('.claude/skills')}], to_scopes: ['agents']}); ok(staleSync.status === 400, 'changed sync source rejected, got ' + staleSync.status); });
+    match(staleSync.json.error, /stale|changed|review/i, 'changed-source rejection explains stale plan');
+    eq(diffSnap(syncSnap, diskSnapshot()), [], 'stale sync rejection wrote nothing');
+    ok(!fs.existsSync(path.join(probe('.agents/skills'), 'SKILL.md')), 'stale sync did not install a destination');
+    eq(fs.readFileSync(path.join(probe('.claude/skills'), 'SKILL.md')), changedSource, 'changed source remains intact');
+    const freshSync = await api('POST', '/api/batch/preview', {operation: 'sync', targets: [{name: 'sync-probe', scope: 'claude-code', physical_path: probe('.claude/skills')}], to_scopes: ['agents']}); eq(freshSync.status, 200);
+    const appliedSync = await api('POST', '/api/batch/execute', {operation: 'sync', plan_id: freshSync.json.plan_id, targets: [{name: 'sync-probe', scope: 'claude-code', physical_path: probe('.claude/skills')}], to_scopes: ['agents']}); eq(appliedSync.status, 200);
+    eq(fs.readFileSync(path.join(probe('.agents/skills'), 'SKILL.md'), 'utf8'), changedSource.toString('utf8'), 'fresh review installs exactly the reviewed source bytes');
     fs.rmSync(probe('.claude/skills'), {recursive: true, force: true}); fs.rmSync(probe('.agents/skills'), {recursive: true, force: true}); fs.rmSync(keep, {recursive: true, force: true});
   });
   await test('Profiles', 'delete removes only profile metadata; skills untouched', async () => {

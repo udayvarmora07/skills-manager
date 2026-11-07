@@ -230,7 +230,8 @@ def computed_folder_hash(directory: str | Path, order: str = "codepoint") -> str
 
 
 def _git_blob_digest(data: bytes) -> bytes:
-    return hashlib.sha1(b"blob %d\x00" % len(data) + data).digest()
+    # SHA-1 is the Git object identifier format, not a security/trust digest.
+    return hashlib.sha1(b"blob %d\x00" % len(data) + data, usedforsecurity=False).digest()
 
 
 def _tree_entry_name(entry, as_enabled: bool) -> bytes:
@@ -276,7 +277,7 @@ def _git_tree_digest(directory: Path, budget: _HashBudget, as_enabled: bool = Fa
     body = b"".join(
         mode + b" " + name + b"\x00" + digest for name, mode, digest in rows
     )
-    return hashlib.sha1(b"tree %d\x00" % len(body) + body).digest()
+    return hashlib.sha1(b"tree %d\x00" % len(body) + body, usedforsecurity=False).digest()
 
 
 def skill_folder_tree_sha(directory: str | Path, *, as_enabled: bool = False) -> str:

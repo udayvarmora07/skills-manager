@@ -1,8 +1,8 @@
-"""Read-only source locks and whole-tree update previews.
+"""Source-lock evidence, bounded tree reviews, and snapshot-backed updates.
 
-This module deliberately stops at evidence.  It never writes a managed skill,
-snapshot, provenance sidecar, cache, or SQLite row.  A future approved update
-surface can consume the JSON-safe preview after an explicit target review.
+Inspection helpers read filesystem evidence. Explicitly approved update and
+restore operations write managed trees and source-lock bindings, retaining
+snapshots and rollback evidence when a transaction cannot be completed.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 from . import sidecar_binding
 from .atomic_io import atomic_write_text, mutation_lock
+from .diagnostics import diagnose as _diagnose
 from .insights import risk_scan
 from .validator import validate_text
 
@@ -343,7 +344,7 @@ def write_source_lock(skill_dir: str | Path, lock: dict) -> Path:
 
 
 def _bind_staged_lock(staged_root: Path, destination: Path) -> None:
-    """Bind the staged sidecar bytes to the install they are about to replace.
+    """Bind sidecar bytes to the install after the staged tree is active.
 
     ``write_source_lock`` records a binding for the staging path it wrote; the
     sidecar ends up at ``destination`` after the atomic swap, so the destination
@@ -689,6 +690,84 @@ def _snapshot_tree(source: Path, snapshot_root: Path) -> Path:
         raise SourceLockError(f"could not create rollback snapshot: {exc}") from exc
 
 
+def _backup_source_binding(binding: Path) -> Path | None:
+    """Save the prior binding even if recording its replacement partly fails."""
+    if not os.path.lexists(binding):
+        return None
+    if binding.is_symlink() or not binding.is_file():
+        raise SourceLockError("source-lock binding record is not a plain file")
+    fd, backup_name = tempfile.mkstemp(prefix=".source-binding-", dir=binding.parent)
+    os.close(fd)
+    binding_backup = Path(backup_name)
+    try:
+        shutil.copyfile(binding, binding_backup)
+    except Exception:
+        binding_backup.unlink(missing_ok=True)
+        raise
+    return binding_backup
+
+
+class _SourceRecoveryRequired(SourceLockError):
+    """An incomplete rollback left transaction evidence for manual recovery."""
+
+
+def _source_recovery_error(error: OSError, backup: Path, staged_root: Path,
+                           binding_backup: Path | None) -> _SourceRecoveryRequired:
+    _diagnose(
+        f"source update recovery evidence: original tree {backup!r}; "
+        f"staged tree {staged_root!r}; original binding {binding_backup!r}", error,
+    )
+    return _SourceRecoveryRequired(
+        "source update recovery required; saved tree and binding evidence were "
+        "retained; inspect the server or CLI diagnostic log"
+    )
+
+
+def _swap_and_bind(current: Path, staged_root: Path, backup: Path) -> None:
+    """Swap trees and restore the prior tree and binding if binding fails."""
+    if backup.exists() or backup.is_symlink():
+        raise SourceLockError("rollback staging path already exists")
+    binding = sidecar_binding._record_path(current, SOURCE_LOCK_FILENAME)
+    binding_backup = _backup_source_binding(binding)
+    recovery_required = False
+    try:
+        os.replace(current, backup)
+        try:
+            os.replace(staged_root, current)
+        except OSError:
+            try:
+                os.replace(backup, current)
+            except OSError as exc:
+                recovery_required = True
+                raise _source_recovery_error(exc, backup, staged_root, binding_backup) from exc
+            raise
+        try:
+            _bind_staged_lock(current, current)
+        except Exception:
+            try:
+                os.replace(current, staged_root)
+                os.replace(backup, current)
+                if binding_backup is not None:
+                    os.replace(binding_backup, binding)
+                else:
+                    binding.unlink(missing_ok=True)
+            except OSError as exc:
+                recovery_required = True
+                raise _source_recovery_error(exc, backup, staged_root, binding_backup) from exc
+            raise
+    finally:
+        if binding_backup is not None and not recovery_required:
+            binding_backup.unlink(missing_ok=True)
+
+
+def _remove_stage_binding(staged_root: Path) -> None:
+    # An obsolete staging record cannot grant trust to an install.
+    try:
+        sidecar_binding._record_path(staged_root, SOURCE_LOCK_FILENAME).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def commit_local_update(current: str | Path, candidate: str | Path, *, target: dict,
                         review: dict, approve: bool = False, snapshot_root: str | Path | None = None,
                         provenance: dict | None = None, name: str | None = None,
@@ -732,17 +811,13 @@ def commit_local_update(current: str | Path, candidate: str | Path, *, target: d
                 fresh["target"], state=state, review_id=review["review_id"],
             )
             write_source_lock(staged_root, lock)
-            _bind_staged_lock(staged_root, current)
-            if backup.exists() or backup.is_symlink():
-                raise SourceLockError("rollback staging path already exists")
-            os.replace(current, backup)
-            try:
-                os.replace(staged_root, current)
-            except OSError:
-                os.replace(backup, current)
-                raise
-            stage.rmdir()
-            shutil.rmtree(backup)
+            _swap_and_bind(current, staged_root, backup)
+            # The transaction is committed; cleanup must not report a failed
+            # update after its rollback tree has already been partly removed.
+            shutil.rmtree(backup, ignore_errors=True)
+            shutil.rmtree(stage, ignore_errors=True)
+        except _SourceRecoveryRequired:
+            raise
         except SourceLockError:
             shutil.rmtree(stage, ignore_errors=True)
             if backup.exists() and not current.exists():
@@ -753,6 +828,9 @@ def commit_local_update(current: str | Path, candidate: str | Path, *, target: d
             if backup.exists() and not current.exists():
                 os.replace(backup, current)
             raise SourceLockError(f"could not commit source update: {exc}") from exc
+        finally:
+            # write_source_lock also binds the temporary staging path.
+            _remove_stage_binding(stage / current.name)
     return {
         "committed": True,
         "review_id": review["review_id"],

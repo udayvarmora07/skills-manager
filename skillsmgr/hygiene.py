@@ -39,7 +39,7 @@ _CLAUDE_PROJECT_SCOPE = "project-claude"
 _CLAUDE_LISTING_SOURCE = "https://code.claude.com/docs/en/skills"
 _LISTING_SEPARATOR = "\n"
 LISTING_CHARS_PER_TOKEN = 4
-LISTING_TOKEN_ASSUMPTION = (
+LISTING_ESTIMATE_ASSUMPTION = (
     "4 characters per token; the documented budget is in characters but scales "
     "from a token window and the conversion is not documented"
 )
@@ -1145,7 +1145,7 @@ def _listing_budget(observation: dict, window: str) -> dict:
         "window_tokens": window_tokens,
         "fraction": fraction,
         "env_status": env.get("status"),
-        "assumption": LISTING_TOKEN_ASSUMPTION,
+        "assumption": LISTING_ESTIMATE_ASSUMPTION,
     }
 
 

@@ -258,6 +258,18 @@ not Store methods. Review artifacts live below private
 by the CLI and REST adapters; no staged private path or credential-bearing
 source identity is returned.
 
+## `review_artifacts.py`
+
+**[SPEC]** Shared review mechanics for registry installs, source updates and
+backup sync: id/header/status checks, expiry interpretation, JSON encoding,
+credential-key rejection, size checks and private registry writes. The callers
+retain storage layouts, TTL/size policies, JSON framing, public projections,
+exception classes/codes, locks and cleanup. Backup sync preserves unnormalized
+symlink ancestry checks; source updates and sync retain `atomic_write_text` and
+its directory-move failure cleanup. The module is covered by the complexity
+ratchet and `tests/test_review_plumbing_characterization.py` plus
+`tests/test_review_artifact_failures.py`.
+
 ## `backup_sync.py`
 
 DEL-09 review-first planning and integration seam. `build_manifest()`
@@ -274,6 +286,18 @@ the candidate and applies only through the existing source-lock snapshot,
 atomic replacement, and rollback seam. No CLI command, Store method, or
 SQLite state is added. Decision record:
 @docs/ADR-009-backup-sync-dry-run-planner.md.
+
+## Sidecar bindings and agent recovery
+
+**[SPEC]** `sidecar_binding.py` records physical install path and sidecar-byte
+digest under the private manager data root. Copied, edited or preexisting
+unrecorded provenance/source-lock files do not become trusted declarations.
+`scopes.scope_trash_list()` and `restore_trashed()` provide bounded agent-scope
+trash discovery and exact-copy restore; the existing REST trash endpoints
+select the requested scope. `loader.scan_dir(link_roots=...)` and scope reads
+can inspect directory links contained in another known agent root, mark them
+`read_only`/`link_followed`, and retain their physical alias identity. Writes
+continue to use the original containment path; the global store never opts in.
 
 ## `bundles.py`
 

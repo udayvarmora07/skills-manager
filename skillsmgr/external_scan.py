@@ -31,7 +31,7 @@ import json
 import os
 import shutil
 import signal
-import subprocess
+import subprocess  # nosec B404 - opt-in trusted scanner, fixed argv and scrubbed environment
 import tempfile
 from pathlib import Path
 

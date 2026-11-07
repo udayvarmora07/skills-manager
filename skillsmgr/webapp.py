@@ -7,10 +7,12 @@ software, never a public service.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import os
 import re
 import shutil
+import stat
 import subprocess  # nosec B404 - only the allowlisted installer and trusted opener use it.
 import sys
 import tempfile
@@ -469,7 +471,105 @@ def _batch_target_candidates(
     return candidates
 
 
-def _resolve_batch_target(item: object, records: list[dict], seen: set[tuple[str, str, str]]) -> dict:
+def _batch_file_digest(entry: Path, total: int) -> tuple[bytes, int]:
+    fd = os.open(entry, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise StoreError("batch skill tree contains a non-regular file")
+        size = 0
+        file_hash = hashlib.sha256()
+        while chunk := stream.read(65536):
+            size += len(chunk)
+            total += len(chunk)
+            if size > 4 * 1024 * 1024 or total > 16 * 1024 * 1024:
+                raise StoreError("batch skill tree exceeds the size limit")
+            file_hash.update(chunk)
+        return file_hash.digest(), total
+
+
+def _batch_tree_hash(path: object) -> str:
+    """Hash at most 256 entries, depth 16, 4 MiB per file and 16 MiB total."""
+    root = Path(str(path or ""))
+    digest = hashlib.sha256()
+    count = total = 0
+    try:
+        if root.is_symlink() or not root.is_dir():
+            raise StoreError("batch skill tree is unavailable or a symlink")
+        for base, dirs, files in os.walk(root, followlinks=False, onerror=lambda exc: (_ for _ in ()).throw(exc)):
+            dirs.sort()
+            files.sort()
+            for name in dirs + files:
+                entry = Path(base) / name
+                relative = entry.relative_to(root)
+                count += 1
+                if count > 256 or len(relative.parts) > 16:
+                    raise StoreError("batch skill tree exceeds the entry or depth limit")
+                info = entry.lstat()
+                if stat.S_ISLNK(info.st_mode):
+                    raise StoreError("batch skill tree contains a symlink")
+                encoded = str(relative).encode("utf-8")
+                digest.update(len(encoded).to_bytes(8, "big"))
+                digest.update(encoded)
+                if stat.S_ISDIR(info.st_mode):
+                    digest.update(b"D")
+                    continue
+                if not stat.S_ISREG(info.st_mode):
+                    raise StoreError("batch skill tree contains a non-regular file")
+                digest.update(b"F")
+                file_digest, total = _batch_file_digest(entry, total)
+                digest.update(file_digest)
+        return digest.hexdigest()
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise StoreError(f"could not inspect batch skill tree: {exc}") from exc
+
+
+def _batch_rooted_path(value: object, scope, base: Path) -> Path:
+    path = Path(os.path.abspath(str(value or "")))
+    alias = Path(os.path.abspath(scope.base))
+    try:
+        return base / path.relative_to(alias)
+    except ValueError:
+        return path
+
+
+def _batch_tree_evidence(row: dict) -> str:
+    """Validate the named scope entry before reading any tree bytes."""
+    from . import scopes
+
+    if row.get("read_only") or row.get("instance_state") in {"link_escape", "link_followed"}:
+        raise StoreError("batch skill is not a writable scope entry")
+    scope = scopes._scope_by_id(row.get("scope"))
+    if scope is None:
+        raise StoreError("batch skill scope is unavailable")
+    base = scope.base.resolve()
+    named = _batch_rooted_path(row.get("path"), scope, base)
+    try:
+        relative = named.relative_to(base)
+    except ValueError as exc:
+        raise StoreError("batch skill path is outside its scope") from exc
+    current = base
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise StoreError("batch skill path contains a symlink")
+    safe = scopes._safe_scope_skill_path(scope, row.get("name"))
+    observed = row.get("physical_path") or row.get("path")
+    if named != safe.resolve() or named != _batch_rooted_path(observed, scope, base):
+        raise StoreError("batch skill path does not match the named scope entry")
+    return _batch_tree_hash(named)
+
+
+def _batch_optional_tree(row: dict, include_tree: bool) -> str | None:
+    return _batch_tree_evidence(row) if include_tree else None
+
+
+def _batch_destination(row: dict) -> dict:
+    return {"scope": row.get("scope"), "physical_path": row.get("physical_path") or row.get("path"),
+            "content_hash": row.get("content_hash"), "disabled": bool(row.get("disabled")),
+            "tree_hash": _batch_tree_evidence(row)}
+
+
+def _resolve_batch_target(item: object, records: list[dict], seen: set[tuple[str, str, str]], *, include_tree: bool = True) -> dict:
     name, scope, physical = _batch_target_inputs(item)
     candidates = _batch_target_candidates(name, scope, physical, records)
     if not candidates:
@@ -491,6 +591,7 @@ def _resolve_batch_target(item: object, records: list[dict], seen: set[tuple[str
         "disabled": bool(row.get("disabled")),
         "instance_state": row.get("instance_state", "unresolved"),
         "content_hash": row.get("content_hash"),
+        "tree_hash": _batch_optional_tree(row, include_tree),
     }
 
 
@@ -499,8 +600,7 @@ def _sync_destinations(name: str, data: dict, records: list[dict]) -> list[dict]
     wanted = set(_scope_list(data))
     return sorted(
         (
-            {"scope": row.get("scope"), "physical_path": row.get("physical_path") or row.get("path"),
-             "content_hash": row.get("content_hash"), "disabled": bool(row.get("disabled"))}
+            _batch_destination(row)
             for row in records
             if row.get("name") == name and row.get("scope") in wanted
         ),
@@ -524,7 +624,7 @@ def _batch_targets(data: dict) -> list[dict]:
 
     records = _list_all()
     seen: set[tuple[str, str, str]] = set()
-    targets = [_resolve_batch_target(item, records, seen) for item in raw]
+    targets = [_resolve_batch_target(item, records, seen, include_tree=data.get("operation") in {"remove", "sync"}) for item in raw]
     return _with_sync_destinations(targets, data, records)
 
 

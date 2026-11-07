@@ -8,6 +8,90 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — Resume the interrupted remaining-tasks sub-session
+
+**[NOTE]** Recovered the named Claude sub-session and both completed worker
+snapshots. Continued in its worktree and preserved the unrelated dirty primary
+checkout. The maintainer's previous delegated decisions are recorded in
+@docs/35-open-decisions-resolved-2026-11-07.md; the untracked decision record is
+now included with the implementation.
+
+**[SPEC]** R15 now shares review mechanics across registry, source-update and
+backup-sync modules without merging their storage, expiry, error or locking
+contracts. The 23 characterization tests passed against the pre-refactor code.
+Review caught and fixed normalization of backup paths before symlink checks,
+lost temporary-file cleanup after a moved directory, and a descriptor leak on
+registry writer setup failure. Existing executable/data-root trust policies
+were retained; worker changes aimed only at sandbox quirks were excluded.
+
+**[SPEC]** SCOPE-2 allows read-only inspection of directory links contained in
+another known managed agent root. Unmanaged links and global-store scans keep
+the old refusal. Scope mutations remain refused with a target-folder message.
+The new link tests failed on the old tree before integration. Review also
+caught a v2 physical-deduplication bug that hid the writable owning copy; the
+owner now survives regardless of row order.
+
+**[SPEC]** Review of the preceding commits found three additional defects:
+batch approval did not bind companion files, a failed source swap could replace
+the prior sidecar trust binding, and a linked agent-trash root could redirect
+restore. Batch plans now include bounded whole-tree hashes for affected trees;
+source updates roll back the tree and its prior binding together; agent trash
+checks refuse linked roots and recheck the selected entry inside the lock.
+Sidecar lookup also uses the requesting Store context rather than the last
+unrelated Store registered in the process. Compound rollback failures preserve
+the exact saved binding and tree evidence for recovery; private recovery paths
+stay in diagnostic logs rather than public exception text.
+
+**[NOTE]** The pinned Bandit audit also exposed four unsuppressed sites from
+previous work: one scanner subprocess import, a token-estimate prose constant,
+and two Git object SHA-1 calls. Reviewed the existing scanner subprocess call
+(trusted executable, argv list, scrubbed environment) and added the narrow
+B404 import rationale required by docs/21. Renamed the explanatory constant
+without changing its output, and marked Git-format hashes
+`usedforsecurity=False`; SHA-256 trust/binding digests are unchanged.
+
+**[NOTE]** Full verification exposed a native-state test that inherited the
+runner's real `CODEX_HOME`; it now points to the private fixture. Classic's
+browser checks also still expected the old unbound-plan behavior. They now
+assert stale rejection before writes and successful execution only after a new
+preview. All four Python versions passed the corrected backend tree. Final
+verification is repeated after the peer-alias UI integration below.
+
+**[SPEC]** Followed aliases retain per-agent visibility, counts and disabled
+mutation controls while the writable owner remains editable. Physical aliases
+are counted once for majority/reference comparison, rather than gaining extra
+votes from their scope views.
+Human visual, spoken screen-reader and usability acceptance remain unclaimed;
+PyPI publishing remains a separate human release gate.
+
+**[NOTE] Final verification on the frozen product/test/browser tree.**
+- Python 3.11, 3.12, 3.13 and 3.14: **1,724 cases per interpreter, no failures**;
+  the two optional reference-oracle cases skip in the stdlib matrix and both
+  pass when run separately with the existing `skills-ref` interpreter.
+- Full v2 browser suite: **36 scenarios, zero failures**. Full classic suite:
+  **38 scenarios / 342 assertions, zero failures**. The peer-link browser case
+  checks Claude filtering, disabled alias selection/update/toggle controls and
+  editing the owner; agent Recovery covers both Undo and card restore.
+- Six-viewport smoke harness, both Store/web smokes, Python compilation, all
+  frontend syntax, documentation/design gates, Ruff 0.16.8 and Bandit 1.9.4
+  passed. Bandit has zero unsuppressed findings. The complexity ratchet tracks
+  **894 functions across 21 files**, with no existing allowance increased and
+  every new function at most 15.
+- Hash-verified build tools produced wheel and sdist; package-data checks and
+  isolated installations of both artifacts passed both smokes. Synthetic
+  0/1/10,000-entry tree probes confirm the batch tree bound refuses the large
+  case. Source fingerprints confirm no product/test/browser edit landed during
+  the final ladder.
+
+**[NOTE] Hostile-review disposition.** Checked linked paths before hashing,
+read-only write refusal, physical alias voting, stale approvals, duplicate
+attempts, corrupt/missing evidence, descriptor/temp cleanup and both single-
+and compound-failure rollback. Advisory locks do not prevent unrelated tools
+from writing after validation; that limit is explicit. The tests run on Linux
+and Chromium locally; human perceptual/spoken screen-reader acceptance, live
+registry/runner execution, and PyPI release approval remain unclaimed. The
+unrelated primary checkout's tracked diff and status are unchanged.
+
 ## 2026-11-07 — Second pass: what review and real data changed
 
 **[NOTE]** Lead plus DeepSeek workers again, with one new step. A read-only

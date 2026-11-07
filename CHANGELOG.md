@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Read-only Codex native skill declarations using stdlib TOML; Python >=3.11
+  is now required. Agent-scope removals can be restored from v2 Recovery.
+- Read-only inspection of skill directory links into another managed agent
+  root, with a writable owner retained in the merged Library. Writes through
+  the linked alias remain refused.
+- Manager-side binding of provenance and source-lock bytes to their physical
+  install path; copied or changed sidecars are reported as untrusted.
+
 - **Optional SkillSpector scan during reviews.** When NVIDIA SkillSpector is
   installed, `install --fetch` and `update preview` accept `--external-scan`
   (static checks) or `--external-scan-llm` (adds SkillSpector's LLM stage with

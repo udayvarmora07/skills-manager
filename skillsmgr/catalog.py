@@ -186,6 +186,7 @@ def plan_hash(operation: str, targets: list[dict], options: dict | None = None) 
                     # a rewrite, toggle or changed sync destination after the
                     # preview makes the plan stale.
                     "content_hash": item.get("content_hash"),
+                    "tree_hash": item.get("tree_hash"),
                     "disabled": bool(item.get("disabled")),
                     "destinations": item.get("destinations") or [],
                 }

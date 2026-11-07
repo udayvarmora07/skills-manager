@@ -20,6 +20,18 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .atomic_io import atomic_write_text, mutation_lock
+from .review_artifacts import (
+    encode_review,
+    enforce_review_size,
+    ensure_private_directory,
+    has_review_header,
+    is_valid_review_id,
+    read_bounded_json,
+    reject_credential_keys,
+    reject_symlink_ancestors,
+    require_status,
+    review_expiry,
+)
 from .source_lock import local_manifest, review_local_update, commit_local_update
 from .validator import validate_skill_name
 
@@ -30,12 +42,10 @@ MAX_NAME = 64
 SYNC_REVIEW_DIRNAME = "sync-reviews"
 MAX_SYNC_REVIEW_BYTES = 16 * 1024 * 1024
 MAX_SYNC_REVIEW_AGE = 24 * 60 * 60
-_REVIEW_ID = re.compile(r"^[0-9a-f]{32}$")
 _HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 _GIT_REVISION = re.compile(r"^[0-9a-fA-F]{40,64}$")
 _REMOTE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _REFSPEC = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:+*^~-]{0,255}$")
-_CREDENTIAL_KEYS = {"authorization", "bearer", "credential", "password", "secret", "token"}
 # Repository-local configuration can name a program for Git to execute
 # (`core.sshCommand` during a fetch, `core.fsmonitor`, hooks, a pager, ...).
 # `-c` beats repository config, so these pins are applied to every invocation.
@@ -252,27 +262,25 @@ def _json_bytes(value: object) -> bytes:
 
 
 def _ensure_credential_free(value: object) -> None:
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            normalized = key.lower().replace("-", "_") if isinstance(key, str) else ""
-            if normalized != "credential_redacted" and (
-                normalized in _CREDENTIAL_KEYS
-                or any(part in _CREDENTIAL_KEYS for part in normalized.split("_"))
-            ):
-                raise BackupSyncError("sync review cannot contain credential fields")
-            _ensure_credential_free(nested)
-    elif isinstance(value, list):
-        for nested in value:
-            _ensure_credential_free(nested)
+    reject_credential_keys(
+        value,
+        BackupSyncError,
+        message="sync review cannot contain credential fields",
+        allowed=frozenset({"credential_redacted"}),
+    )
 
 
 def _review_path(data_dir: str | Path, review_id: str) -> Path:
-    if not isinstance(review_id, str) or not _REVIEW_ID.fullmatch(review_id):
+    if not is_valid_review_id(review_id):
         raise BackupSyncError("sync review id is invalid")
     directory = Path(data_dir).expanduser() / SYNC_REVIEW_DIRNAME
-    for ancestor in (directory, *directory.parents):
-        if ancestor.is_symlink():
-            raise BackupSyncError("sync review path cannot contain a symlink")
+    reject_symlink_ancestors(
+        directory,
+        BackupSyncError,
+        symlink_message="sync review path cannot contain a symlink",
+        inspect_message=None,
+        normalize=False,
+    )
     return directory / f"{review_id}.json"
 
 
@@ -410,14 +418,15 @@ def _review_public(record: dict) -> dict:
 
 
 def _validate_review(value: object) -> dict:
-    if not isinstance(value, dict) or value.get("version") != 1:
+    if not has_review_header(value):
         raise BackupSyncError("sync review has an invalid header")
     review_id = value.get("review_id")
-    if not isinstance(review_id, str) or not _REVIEW_ID.fullmatch(review_id):
+    if not is_valid_review_id(review_id):
         raise BackupSyncError("sync review id is invalid")
     if value.get("status") not in {"pending", "committed"}:
         raise BackupSyncError("sync review status is invalid")
-    if not isinstance(value.get("expires_epoch"), (int, float)) or value["expires_epoch"] <= time.time():
+    expiry = review_expiry(value)
+    if expiry is None or expiry <= time.time():
         raise BackupSyncError("sync review has expired; prepare it again")
     for field in ("candidate_hash", "remote_manifest_hash"):
         if not isinstance(value.get(field), str) or not _HEX64.fullmatch(value[field]):
@@ -453,14 +462,21 @@ def _validate_review(value: object) -> dict:
 def write_sync_review(data_dir: str | Path, record: dict) -> dict:
     """Persist a bounded, private review record for a later apply transaction."""
     normalized = _validate_review(record)
-    encoded = _json_bytes(normalized)
-    if len(encoded) > MAX_SYNC_REVIEW_BYTES:
-        raise BackupSyncError("sync review exceeds the review size limit")
+    encoded = encode_review(
+        normalized,
+        separators=(",", ":"),
+        fail=BackupSyncError,
+        json_error="sync review is not JSON-safe: {exc}",
+    )
+    enforce_review_size(
+        encoded,
+        MAX_SYNC_REVIEW_BYTES,
+        BackupSyncError,
+        "sync review exceeds the review size limit",
+    )
     path = _review_path(data_dir, normalized["review_id"])
-    directory = path.parent
     try:
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(directory, 0o700)
+        ensure_private_directory(path.parent)
         atomic_write_text(path, encoded.decode("utf-8") + "\n")
         os.chmod(path, 0o600)
     except OSError as exc:
@@ -471,19 +487,16 @@ def write_sync_review(data_dir: str | Path, record: dict) -> dict:
 def read_sync_review(data_dir: str | Path, review_id: str) -> dict:
     """Read one pending sync review without invoking Git or touching a target."""
     path = _review_path(data_dir, review_id)
-    if not path.is_file() or path.is_symlink():
-        raise BackupSyncError("sync review was not found")
-    try:
-        if path.stat().st_size > MAX_SYNC_REVIEW_BYTES:
-            raise BackupSyncError("sync review exceeds the review size limit")
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except BackupSyncError:
-        raise
-    except (OSError, UnicodeError, ValueError) as exc:
-        raise BackupSyncError(f"sync review is unreadable: {exc}") from exc
+    value = read_bounded_json(
+        path,
+        MAX_SYNC_REVIEW_BYTES,
+        BackupSyncError,
+        missing_message="sync review was not found",
+        size_message="sync review exceeds the review size limit",
+        unreadable_message="sync review is unreadable: {exc}",
+    )
     result = _validate_review(value)
-    if result["status"] != "pending":
-        raise BackupSyncError("sync review has already been committed")
+    require_status(result, "pending", BackupSyncError, "sync review has already been committed")
     return result
 
 
@@ -492,7 +505,12 @@ def _mark_review_committed(data_dir: str | Path, review_id: str) -> dict:
     value = read_sync_review(data_dir, review_id)
     value["status"] = "committed"
     value["committed_at"] = _iso()
-    encoded = _json_bytes(value)
+    encoded = encode_review(
+        value,
+        separators=(",", ":"),
+        fail=BackupSyncError,
+        json_error="sync review is not JSON-safe: {exc}",
+    )
     try:
         atomic_write_text(path, encoded.decode("utf-8") + "\n")
         os.chmod(path, 0o600)

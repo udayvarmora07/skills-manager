@@ -193,6 +193,10 @@ function observeRecord(record) {
      * a strictly finer reading of the same observation, not a new one. */
     malformedDocument: !!(source.malformed || source.decode_error) || has("invalid") || has("malformed"),
     linkEscape: LINK_ESCAPE_RE.test(decodeError),
+    /* SCOPE-2: a link into another managed scope root is read read-only. It
+     * is a readable copy, not a refused one, but nothing may write through it. */
+    linkFollowed: source.link_followed === true,
+    readOnly: source.read_only === true || source.link_followed === true,
     notAddressable: source.addressable === false || has("unaddressable"),
     isDisabled: !!source.disabled || has("disabled"),
   };

@@ -16,6 +16,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 from skillsmgr import scopes
 from skillsmgr.store import Store, StoreError
@@ -177,6 +178,57 @@ class AgentScopeTrashTests(unittest.TestCase):
         self.assertFalse((self.skills_dir / "demo").exists())
         self.assertTrue(link.is_symlink())
         self.assertEqual((target / "SKILL.md").read_text("utf-8"), "outside\n")
+
+    def test_symlinked_trash_root_is_refused_without_reading_or_restoring_external_entries(self):
+        outside = Path(self.tmp.name) / "outside-trash"
+        entry = outside / f"agents__demo-{OLD_STAMP}"
+        entry.mkdir(parents=True)
+        document = entry / "SKILL.md"
+        document.write_text("outside trash\n", encoding="utf-8")
+        self.trash.symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaises(StoreError):
+            scopes.scope_trash_list("agents")
+        with self.assertRaises(StoreError):
+            scopes.restore_trashed("agents", "demo")
+
+        self.assertTrue(document.is_file())
+        self.assertEqual(document.read_text("utf-8"), "outside trash\n")
+        self.assertFalse((self.skills_dir / "demo").exists())
+
+    def test_remove_refuses_symlinked_trash_root_without_moving_the_skill(self):
+        skill = self.write_skill()
+        outside = Path(self.tmp.name) / "outside-trash"
+        outside.mkdir()
+        self.trash.symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaises(StoreError):
+            scopes.remove_skill("agents", "demo")
+
+        self.assertEqual((skill / "SKILL.md").read_text("utf-8"), DOCUMENT)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertTrue(self.trash.is_symlink())
+
+    def test_restore_rechecks_selected_trash_entry_after_selection(self):
+        entry = self.write_trash_entry(OLD_STAMP, "trusted trash\n")
+        outside = Path(self.tmp.name) / "outside-entry"
+        outside.mkdir()
+        (outside / "SKILL.md").write_text("outside entry\n", encoding="utf-8")
+        original_select = scopes._select_trash_entry
+
+        def replace_after_selection(candidates, trash_path, scope_id, name):
+            selected = original_select(candidates, trash_path, scope_id, name)
+            entry.rename(entry.with_name(entry.name + ".saved"))
+            entry.symlink_to(outside, target_is_directory=True)
+            return selected
+
+        with mock.patch.object(scopes, "_select_trash_entry", replace_after_selection):
+            with self.assertRaises(StoreError):
+                scopes.restore_trashed("agents", "demo")
+
+        self.assertTrue(entry.is_symlink())
+        self.assertTrue((outside / "SKILL.md").is_file())
+        self.assertFalse((self.skills_dir / "demo").exists())
 
     # -- restore selection ----------------------------------------------
 

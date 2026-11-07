@@ -13,8 +13,9 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
-from skillsmgr import scopes
+from skillsmgr import scopes, webapp
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
 
@@ -131,6 +132,86 @@ class BatchPlanBindingTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("stale", result["error"])
         self.assertEqual(destination.read_text(), edited, "the destination edit must survive")
+
+    def test_source_companion_change_makes_sync_stale(self):
+        reference = self.document().parent / "reference.txt"
+        reference.write_text("reviewed")
+        target = self.target()
+        plan = self.preview("sync", target, to_scopes=["agents"], force=True)
+        reference.write_text("changed")
+        status, result = self.execute("sync", target, plan, to_scopes=["agents"], force=True)
+        self.assertEqual(status, 400, result)
+        self.assertIn("stale", result["error"])
+        self.assertFalse((self.agents / "demo").exists())
+
+    def test_destination_companion_change_makes_sync_stale(self):
+        reference = self.document().parent / "reference.txt"
+        reference.write_text("reviewed")
+        scopes.sync_skill("demo", "global", ["agents"], force=False)
+        target = self.target()
+        plan = self.preview("sync", target, to_scopes=["agents"], force=True)
+        destination = self.agents / "demo/reference.txt"
+        destination.write_text("local work")
+        status, result = self.execute("sync", target, plan, to_scopes=["agents"], force=True)
+        self.assertEqual(status, 400, result)
+        self.assertIn("stale", result["error"])
+        self.assertEqual("local work", destination.read_text())
+
+    def test_batch_rejects_symlink_in_skill_tree(self):
+        (self.document().parent / "reference").symlink_to(self.home, target_is_directory=True)
+        status, result = self.request("POST", "/api/batch/preview", {
+            "operation": "remove", "targets": [self.target()],
+        })
+        self.assertEqual(status, 400, result)
+        self.assertIn("symlink", result["error"])
+
+    def test_linked_target_never_hashes_outside_tree(self):
+        outside = self.home / "outside"
+        outside.mkdir()
+        (outside / "SKILL.md").write_text("secret")
+        (self.agents / "linked").symlink_to(outside, target_is_directory=True)
+        row = {"name": "linked", "scope": "agents", "path": str(self.agents / "linked"),
+               "physical_path": str(outside), "instance_state": "link_escape"}
+        with mock.patch.object(webapp, "_batch_tree_hash") as hashed:
+            with self.assertRaises(webapp.StoreError):
+                webapp._resolve_batch_target(row, [row], set())
+            hashed.assert_not_called()
+
+    def test_linked_destination_never_hashes_outside_tree(self):
+        outside = self.home / "outside"
+        outside.mkdir()
+        (outside / "SKILL.md").write_text("secret")
+        (self.agents / "demo").symlink_to(outside, target_is_directory=True)
+        row = {"name": "demo", "scope": "agents", "path": str(self.agents / "demo"),
+               "physical_path": str(outside), "read_only": True}
+        with mock.patch.object(webapp, "_batch_tree_hash") as hashed:
+            with self.assertRaises(webapp.StoreError):
+                webapp._sync_destinations("demo", {"to_scopes": ["agents"]}, [row])
+            hashed.assert_not_called()
+
+    def test_malformed_skill_can_be_trashed(self):
+        self.document().write_text("---\nname: [broken\n---\nbody\n")
+        target = self.target()
+        plan = self.preview("remove", target)
+        status, result = self.execute("remove", target, plan)
+        self.assertEqual(200, status, result)
+        self.assertTrue(result["ok"], result)
+        self.assertFalse(self.document().exists())
+
+    def test_scope_root_symlink_allows_real_child(self):
+        actual = self.home / "real-agent-skills"
+        self.agents.rename(actual)
+        self.agents.symlink_to(actual, target_is_directory=True)
+        demo = actual / "agentdemo"
+        demo.mkdir()
+        (demo / "SKILL.md").write_text("---\nname: agentdemo\ndescription: Demo\n---\nbody\n")
+        status, rows = self.request("GET", "/api/skills?scope=all&body=0")
+        row = next(r for r in rows if r["name"] == "agentdemo" and r["scope"] == "agents")
+        target = {"name": row["name"], "scope": row["scope"], "physical_path": row["physical_path"]}
+        plan = self.preview("remove", target)
+        status, result = self.execute("remove", target, plan)
+        self.assertEqual(200, status, result)
+        self.assertTrue(result["ok"], result)
 
 
 if __name__ == "__main__":

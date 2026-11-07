@@ -1,6 +1,17 @@
 # Session Context — Skills Manager
 
+**Version 1.17.0**
+
 **AI manifest**: Fast-load context for agents working on skills-manager. One compact doc replaces re-reading source for the most common questions. For anything this doc does not answer, follow `@docs/...` pointers. This doc is a cache, not a spec — `docs/` files and source remain authoritative.
+
+**Continuation anchor — 2026-11-07.** Python >=3.11 is required; Codex native
+skill declarations use stdlib `tomllib`. Open-decision dispositions live in
+@docs/35-open-decisions-resolved-2026-11-07.md. Agent trash restore is implemented
+through the existing scope-aware API and v2 Recovery. Agent directory links
+into another known agent root are readable and read-only; mutations through
+aliases remain refused. `review_artifacts.py` shares review mechanics while
+preserving caller policies. Use the newest progress entry for verification;
+historical test counts below describe only their dated checkpoints.
 
 **Current UI anchor — 2026-11-06.** V2 is the default: `/` and `/index.html`
 redirect to `/v2/`; classic remains at `/classic/`. The maintainer explicitly

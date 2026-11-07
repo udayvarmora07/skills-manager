@@ -4,6 +4,31 @@
 
 **AI manifest**: The GUI of skills-manager is a **local web UI** (browser frontend + Python stdlib backend). It replaces the former GTK4 GUI. This doc is the single source of truth for the web UI: how it runs, what endpoints exist, and how the frontend is structured. Do not re-read source to answer questions this doc already answers.
 
+## 2026-11-07 continuation
+
+**[SPEC]** Agent trash uses the existing `GET /api/trash?scope=<agent>` and
+`POST /api/trash/<name>?scope=<agent>` endpoints. Restore can select
+`trash_path` for an exact removed copy, refuses an occupied destination, and
+v2 Recovery lists agent trash separately from global trash. Agent removals
+can offer the same scope-aware Undo. Purge remains global-only.
+
+**[SPEC]** Batch approval includes affected-tree digests covering companion
+files and directories as well as skill document content and enabled state.
+Tree inspection refuses symlinks/special files and is bounded to 256 entries,
+16 path components, 4 MiB per file and 16 MiB total per skill. A changed source
+or overwritten destination requires another preview. These checks provide
+staleness detection; unrelated processes can still write outside the tool's
+advisory locking protocol.
+
+**[SPEC]** A skill directory linked into another known managed agent root is
+readable through list/detail/raw views with `link_followed`, `read_only`,
+`linked_to` and `link_target_root` metadata. The v2 reader shows its document
+and the linked folder, disables editing/file toggles through that alias, and
+keeps both alias scope views and the writable owner. Physical documents
+are deduplicated for reference voting; alias views retain their per-agent
+filters and counts. Links outside managed agent roots retain the previous refusal. This
+changes inspection only; the filesystem remains authoritative.
+
 ## Why web and not GTK
 
 - GTK4 + PyGObject made cross-version GUI work slow and fragile (progress log has the receipts: `set_data` unsupported, Popover API differences between GTK4/GTK3).
@@ -397,9 +422,9 @@ stated beside the setting and in every result.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/trash` | Store.trash_list (global trash only) |
-| POST | `/api/trash/<name>` | restore; `?snapshot=ID&scope=SCOPE` rolls back to a snapshot |
-| POST | `/api/trash/purge` | purge everything |
+| GET | `/api/trash` | Global Store trash by default; `?scope=<agent>` lists that agent's bounded trash |
+| POST | `/api/trash/<name>` | Restore in the requested scope; optional JSON `trash_path` selects an agent copy; `?snapshot=ID&scope=SCOPE` rolls back a snapshot |
+| POST | `/api/trash/purge` | Purge global trash; agent-scope purge is refused |
 
 ### Templates
 
@@ -722,7 +747,7 @@ claimed.
   not changed, which is why the detail count above is zero.
 - **Flow helpers**: `loadSkills`/`loadTrash`/`loadDetail`/`applySearch`; `toast(text, type, undoFn)` with auto-dismiss (8s when undoable, else 4s). Source updates use a frozen exact target, multipart review, explicit confirmation, and snapshot-backed rollback. The scope query string is built inline per call (`"?scope=" + encodeURIComponent(scope)`); the former `_scopeParam`/`_scopeQs` helpers were dead code and were removed (`BUG-15`).
 - **Source update state**: `update` stores the pending review, exact `{name, scope, physical_path}` target, candidate source identity, bounded change evidence, validation/risk results, review expiry, and recovery snapshot evidence. `recoverySnapshots` is loaded for the selected physical instance; apply and rollback both require a fresh review and explicit confirmation.
-- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), exact visible-set selection and tag changes, `prepareBatch`/`executeBatch` (preview-locked enable/disable/remove/sync), `saveProfile`/`previewProfile`/`openProfileBatch`/`deleteProfile`, `openInstallCenter`/`openRecoveryCenter`, `loadWorkspaces` (read-only adapter/project evidence), `inspectQualityInLibrary` (reuse exact Library selection/detail), `openInstall`/`runInstall` (build/run `skills add` or browse/search/curate/fetch skills.sh), `runRegistry` (cache-aware reads and explicit provenance fetch), `commitRegistryReview` (separate no-network trust commit), and escaped editor preview. Install reports existing `registry_provenance` as registry-backed skills (not deduplicated sources) and makes no update claim without registry evidence; persistent search filters names and provenance identifiers. Registry fetch sends `{fetch:true, source}` and shows review id/expiry/validation/risk/hash evidence; the separate `{fetch:true, review_id, trust_confirmed:true}` action commits only the exact returned review, with a new request retiring the old review. Recovery is the single exposed recovery navigation entry and composes global-only trash restore, history/snapshot rollback, full archive import, and full backup export; its history modal forces global scope. Profile detail shows observed/disabled/divergent/missing counts, configured targets, and each instance scope/path; `Review enable plan` is offered only when at least one observed instance exists. The plan explains Disabled → Active and Active → No state change outcomes, unresolved members, and recovery/partial-failure behavior. Quality actions route to existing Validate, Doctor, and Stats modals without inventing new evidence. Runner-mode Preview posts the offline bridge plan (`preview: true`) and renders its command, `may_install` wording, every `blockers` entry, and https-only `audit_links` as plain text from `install.preview`; the locally built command toast remains only the request-failure fallback. In Workspaces, Enter in the project field runs the same `loadWorkspaces` action as **Check project**, guarded by `loadingWorkspaces`.
+- **Actions**: `saveSkill` (create/update, scope-aware), `toggleSelected` (disable/enable), `removeSkill` (trash with **Undo toast**, or purge), `restoreTrash`, snapshot rollback from History, `purgeTrash`, `runValidate`, `openDoctor/Stats/History/Templates`, slim/full `doImport`/`exportArchive` (browser download), `rebuildIndex`/`resyncIndex`, `openSync`/`doSync` (copy skill between scopes with resolution preview), exact visible-set selection and tag changes, `prepareBatch`/`executeBatch` (preview-locked enable/disable/remove/sync), `saveProfile`/`previewProfile`/`openProfileBatch`/`deleteProfile`, `openInstallCenter`/`openRecoveryCenter`, `loadWorkspaces` (read-only adapter/project evidence), `inspectQualityInLibrary` (reuse exact Library selection/detail), `openInstall`/`runInstall` (build/run `skills add` or browse/search/curate/fetch skills.sh), `runRegistry` (cache-aware reads and explicit provenance fetch), `commitRegistryReview` (separate no-network trust commit), and escaped editor preview. Install reports existing `registry_provenance` as registry-backed skills (not deduplicated sources) and makes no update claim without registry evidence; persistent search filters names and provenance identifiers. Registry fetch sends `{fetch:true, source}` and shows review id/expiry/validation/risk/hash evidence; the separate `{fetch:true, review_id, trust_confirmed:true}` action commits only the exact returned review, with a new request retiring the old review. Recovery is the single exposed recovery navigation entry and composes global trash plus v2 agent-scope trash restore, history/snapshot rollback, full archive import, and full backup export; its history modal forces global scope. Profile detail shows observed/disabled/divergent/missing counts, configured targets, and each instance scope/path; `Review enable plan` is offered only when at least one observed instance exists. The plan explains Disabled → Active and Active → No state change outcomes, unresolved members, and recovery/partial-failure behavior. Quality actions route to existing Validate, Doctor, and Stats modals without inventing new evidence. Runner-mode Preview posts the offline bridge plan (`preview: true`) and renders its command, `may_install` wording, every `blockers` entry, and https-only `audit_links` as plain text from `install.preview`; the locally built command toast remains only the request-failure fallback. In Workspaces, Enter in the project field runs the same `loadWorkspaces` action as **Check project**, guarded by `loadingWorkspaces`.
 - **Source update actions**: The selected exact physical instance exposes `Update from folder` only when addressable and writable. The dialog freezes `{name, scope, physical_path}`, uploads a `webkitdirectory` candidate for private review, separates changes/validity/advisory risk/recovery evidence, renders diffs as escaped text, and requires the unchecked confirmation `I reviewed the target, file changes, validation, and recovery snapshot policy.` before `Apply reviewed update`. Recovery lists retained source snapshots and opens rollback through the same review UI; it never offers a blind restore.
 - **Hygiene actions**: Quality calls `loadQualityHygiene()` on entry and active-scope changes, keeps loading/error/report state separate from Library records, and offers retry, severity filters, search across finding evidence, expandable accessible findings, exact-instance navigation, and separate largest/unavailable sections. Similarity is computed only by the server report; Vue renders escaped evidence and does not infer a score or cleanup action.
 - **Markdown**: block-level only, everything HTML-escaped (XSS-safe, no raw HTML), supports headings, paragraphs, lists, quotes, fenced code, inline code/bold/italic/links, tables.

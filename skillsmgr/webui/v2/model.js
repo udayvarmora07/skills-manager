@@ -76,6 +76,10 @@
      * the target and agent loading remain unobserved. */
     const broken = state === "invalid" || state === "malformed" || state === "unaddressable" || state === "undecodable";
     const linked = state === "linked";
+    /* SCOPE-2: a link into another managed scope root is read read-only. It is
+     * a readable copy -- the peer agent loads that document anyway -- but it is
+     * not the agent's own copy, so nothing here may toggle or edit it. */
+    const readOnly = !!obs.linkFollowed;
     /* The list request omits document bodies, so an absent `body` key means
      * "not loaded yet", never "empty document". Keep the two apart. */
     const bodyLoaded = Object.prototype.hasOwnProperty.call(record, "body") && typeof record.body === "string";
@@ -85,15 +89,30 @@
       state: broken ? "broken" : linked ? "link" : state === "disabled" ? "off" : "on",
       kind: broken || linked ? state : "", hash: broken || linked ? "" : String(record.content_hash || ""),
       tokens: record.tokens || 0, path: record.physical_path || record.path || "",
+      /* Where a followed link's document actually lives, and the fact that it
+       * must not be written through this scope. */
+      readOnly, linkFrom: readOnly ? String(record.link_target_root || "") : "",
+      linkedTo: readOnly ? String(record.linked_to || "") : "",
       body: bodyLoaded ? record.body : "", bodyLoaded,
       description: record.description || "", record,
     };
   }
 
   /* Reference = the content most readable copies hold. A tie is reported as
-   * ambiguous so the interface asks instead of guessing. */
+   * ambiguous so the interface asks instead of guessing. Physical aliases are
+   * separate scope views, but one physical document gets one vote. */
   function reference(copies, agentOrder) {
-    const readable = copies.filter((c) => c.state !== "broken" && c.hash);
+    const physical = new Map();
+    for (const copy of copies) {
+      if (copy.state === "broken" || !copy.hash) continue;
+      const key = String(copy.path || copy.record.physical_path || copy.record.path || copy.scope);
+      const existing = physical.get(key);
+      if (!existing || (existing.readOnly && !copy.readOnly) ||
+          (existing.readOnly === copy.readOnly && agentOrder(copy.scope) < agentOrder(existing.scope))) {
+        physical.set(key, copy);
+      }
+    }
+    const readable = [...physical.values()];
     const tally = new Map();
     for (const c of readable) tally.set(c.hash, (tally.get(c.hash) || []).concat(c));
     const groups = [...tally.values()].sort((a, b) => b.length - a.length || agentOrder(a[0].scope) - agentOrder(b[0].scope));
@@ -119,15 +138,30 @@
     const order = new Map(agents.map((a, i) => [a.id, i]));
     const rank = (id) => (order.has(id) ? order.get(id) : 99);
     const byName = new Map();
-    const seen = new Set();
+    const seen = new Map();
     for (const r of Array.isArray(records) ? records : []) {
       const name = String(r.name || "");
       if (!name) continue;
       const key = name + "\u0000" + String(r.physical_path || r.path || r.scope);
-      if (seen.has(key)) continue; /* aliases of one physical document count once */
-      seen.add(key);
+      const copy = copyOf(r);
+      const previous = seen.get(key) || [];
+      const sameScope = previous.find((item) => item.copy.scope === copy.scope);
+      if (sameScope) {
+        if (sameScope.copy.readOnly && !copy.readOnly) {
+          byName.get(name)[sameScope.index] = copy;
+          sameScope.copy = copy;
+        }
+        continue;
+      }
+      /* Preserve one followed link row per agent so that agent-specific views
+       * reflect what that consumer loads. Ordinary duplicate-root observations
+       * still collapse, and a real row is retained beside any link aliases. */
+      if (previous.length && !copy.readOnly && previous.some((item) => !item.copy.readOnly)) continue;
       if (!byName.has(name)) byName.set(name, []);
-      byName.get(name).push(copyOf(r));
+      const copies = byName.get(name);
+      previous.push({ index: copies.length, copy });
+      seen.set(key, previous);
+      copies.push(copy);
     }
     const skills = [];
     for (const [name, copies] of byName) {
@@ -140,8 +174,14 @@
         : copies.some((c) => c.state === "link") ? STATUS.linked : STATUS.ok;
       /* Name each distinct text: A is the one most places hold. This answers the
        * question users ask most, "which copy does each agent have". */
-      ref.groups.forEach((g, i) => { for (const c of g) c.version = String.fromCharCode(65 + Math.min(i, 25)); });
-      const pick = (copies.find((c) => c.hash === ref.hash) || copies.find((c) => c.state !== "broken") || copies[0]);
+      const versionByHash = new Map();
+      ref.groups.forEach((g, i) => {
+        const version = String.fromCharCode(65 + Math.min(i, 25));
+        versionByHash.set(g[0].hash, version);
+        for (const c of g) c.version = version;
+      });
+      for (const c of copies) if (!c.version && versionByHash.has(c.hash)) c.version = versionByHash.get(c.hash);
+      const pick = (ref.holders[0] || copies.find((c) => c.state !== "broken" && !c.readOnly) || copies[0]);
       const category = (copies.map((c) => c.record.category).find((c) => c && c !== "uncategorized")) || "";
       skills.push({
         name, copies, status, ref, category,
@@ -183,7 +223,8 @@
         const repairable = (c) => c.kind === "invalid" || c.kind === "malformed";
         const b = s.broken.find((c) => !repairable(c)) || s.broken[0];
         const why = BROKEN_WHY[b.kind] || BROKEN_WHY.invalid;
-        const good = s.copies.find((c) => c.hash && (c.state === "on" || c.state === "off"));
+        const good = s.copies.find((c) => !c.readOnly && c.hash && (c.state === "on" || c.state === "off"))
+          || s.copies.find((c) => c.hash && (c.state === "on" || c.state === "off"));
         const fixable = !!good && s.broken.every(repairable);
         const sole = !good;
         out.push({
@@ -196,7 +237,7 @@
           action: fixable ? `Replace with ${name(good.scope)}'s copy` : "Show me how",
         });
       } else if (s.status.key === "warn") {
-        const targets = s.differing.map((c) => c.scope);
+        const targets = s.differing.filter((c) => !c.readOnly).map((c) => c.scope);
         const names = targets.map(name);
         out.push({
           id: "warn:" + s.name, key: "warn", skill: s.name, agents: targets, ambiguous: s.ref.ambiguous,

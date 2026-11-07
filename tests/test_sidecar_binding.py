@@ -14,6 +14,8 @@ from skillsmgr import atomic_io, hygiene, registry, sidecar_binding
 from skillsmgr.source_lock import (
     SourceLockError,
     local_manifest,
+    commit_local_update,
+    review_local_update,
     source_identity,
     source_lock_record,
     source_lock_status,
@@ -237,7 +239,148 @@ class SidecarBindingTests(unittest.TestCase):
         categories = {finding["category"] for finding in report["findings"]}
         self.assertIn("source-lock-unbound", categories)
 
+    def _update_fixture(self):
+        current = self._skill()
+        write_source_lock(current, _lock_record(current))
+        candidate = self._skill("candidate")
+        (candidate / "SKILL.md").write_text(DOCUMENT + "updated\n", encoding="utf-8")
+        target = {"physical_path": str(current), "contained": True}
+        source = source_identity("git", "owner/repo", revision="new")
+        review = review_local_update(current, candidate, target=target, source=source)
+        self.assertEqual(review["review_state"], "review-required")
+        kwargs = dict(target=target, source=source, review=review, approve=True,
+                      snapshot_root=self.tmp / "snapshots")
+        return current, candidate, kwargs
+
+    def test_update_preserves_binding_on_failures(self):
+        from skillsmgr import source_lock as module
+
+        for failure in ("collision", "swap", "binding"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir=self.tmp) as temp:
+                # Use isolated install names and snapshot roots for each attempt.
+                self.skills = Path(temp)
+                current, candidate, kwargs = self._update_fixture()
+                old_bytes = (current / LOCK).read_bytes()
+                old_document = (current / "SKILL.md").read_bytes()
+                real_replace = module.os.replace
+                real_bind = sidecar_binding.record_binding
+                if failure == "collision":
+                    (current.parent / (".demo-rollback-" + kwargs["review"]["review_id"][:12])).mkdir()
+                    patch = mock.patch.object(module, "_bind_staged_lock", wraps=module._bind_staged_lock)
+                elif failure == "swap":
+                    def fail_swap(src, dst):
+                        if Path(dst) == current and Path(src).parent.name.startswith(".demo-source-"):
+                            raise OSError("swap failed")
+                        return real_replace(src, dst)
+                    patch = mock.patch.object(module.os, "replace", side_effect=fail_swap)
+                else:
+                    def fail_binding(path, name, payload):
+                        result = real_bind(path, name, payload)
+                        if Path(path) == current:
+                            raise OSError("binding failed after write")
+                        return result
+                    patch = mock.patch.object(sidecar_binding, "record_binding", side_effect=fail_binding)
+                with patch, self.assertRaises(SourceLockError):
+                    commit_local_update(current, candidate, **kwargs)
+                self.assertEqual((current / LOCK).read_bytes(), old_bytes)
+                self.assertEqual((current / "SKILL.md").read_bytes(), old_document)
+                self.assertTrue(source_lock_status(current)["trusted"])
+
+    def test_failed_binding_rollback_preserves_original_record_for_recovery(self):
+        from skillsmgr import source_lock as module
+
+        current, candidate, kwargs = self._update_fixture()
+        binding = sidecar_binding._record_path(current, LOCK)
+        old_binding = binding.read_bytes()
+        old_document = (current / "SKILL.md").read_bytes()
+        real_bind = sidecar_binding.record_binding
+        real_replace = module.os.replace
+
+        def fail_after_binding(path, name, payload):
+            result = real_bind(path, name, payload)
+            if Path(path) == current:
+                raise OSError("binding failed after write")
+            return result
+
+        def fail_binding_restore(src, dst):
+            if Path(src).name.startswith(".source-binding-") and Path(dst) == binding:
+                raise OSError("binding rollback failed")
+            return real_replace(src, dst)
+
+        with mock.patch.object(sidecar_binding, "record_binding", side_effect=fail_after_binding):
+            with mock.patch.object(module.os, "replace", side_effect=fail_binding_restore):
+                with self.assertRaisesRegex(SourceLockError, "recovery required") as caught:
+                    commit_local_update(current, candidate, **kwargs)
+        self.assertNotIn(str(self.tmp), str(caught.exception))
+        backups = list(binding.parent.glob(".source-binding-*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), old_binding)
+        self.assertEqual((current / "SKILL.md").read_bytes(), old_document)
+
+    def test_failed_tree_rollback_preserves_tree_and_binding_evidence(self):
+        from skillsmgr import source_lock as module
+
+        current, candidate, kwargs = self._update_fixture()
+        binding = sidecar_binding._record_path(current, LOCK)
+        old_binding = binding.read_bytes()
+        old_document = (current / "SKILL.md").read_bytes()
+        real_bind = sidecar_binding.record_binding
+        real_replace = module.os.replace
+
+        def fail_after_binding(path, name, payload):
+            result = real_bind(path, name, payload)
+            if Path(path) == current:
+                raise OSError("binding failed after write")
+            return result
+
+        def fail_tree_restore(src, dst):
+            if Path(src).name.startswith(".demo-rollback-") and Path(dst) == current:
+                raise OSError("tree rollback failed")
+            return real_replace(src, dst)
+
+        with mock.patch.object(sidecar_binding, "record_binding", side_effect=fail_after_binding):
+            with mock.patch.object(module.os, "replace", side_effect=fail_tree_restore):
+                with self.assertRaisesRegex(SourceLockError, "recovery required") as caught:
+                    commit_local_update(current, candidate, **kwargs)
+        self.assertNotIn(str(self.tmp), str(caught.exception))
+        bindings = list(binding.parent.glob(".source-binding-*"))
+        self.assertEqual(len(bindings), 1)
+        self.assertEqual(bindings[0].read_bytes(), old_binding)
+        backups = list(current.parent.glob(".demo-rollback-*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual((backups[0] / "SKILL.md").read_bytes(), old_document)
+        stages = list(current.parent.glob(".demo-source-*"))
+        self.assertEqual(len(stages), 1)
+        self.assertTrue((stages[0] / "demo" / "SKILL.md").exists())
+
+    def test_successful_update_has_recorded_trusted_binding(self):
+        current, candidate, kwargs = self._update_fixture()
+        commit_local_update(current, candidate, **kwargs)
+        status = source_lock_status(current)
+        self.assertEqual(status["install_binding"], "recorded")
+        self.assertTrue(status["trusted"])
+        self.assertEqual((current / "SKILL.md").read_bytes(), (candidate / "SKILL.md").read_bytes())
+
     # -- the binding record itself -------------------------------------
+
+    def test_external_binding_uses_active_store_not_registration_order(self):
+        from types import SimpleNamespace
+        from skillsmgr import scopes
+
+        skill = self.home / "external"
+        skill.mkdir()
+        (skill / "SKILL.md").write_text(DOCUMENT, encoding="utf-8")
+        store_a = SimpleNamespace(data_dir=self.data)
+        other = self.tmp / "other"
+        other.mkdir(mode=0o700)
+        with scopes._bound_global_store(store_a):
+            write_source_lock(skill, _lock_record(skill))
+            atomic_io.register_lock_root(other)
+            self.assertTrue(source_lock_status(skill)["trusted"])
+        with scopes._bound_global_store(SimpleNamespace(data_dir=other)):
+            self.assertFalse(source_lock_status(skill)["trusted"])
+        with scopes._bound_global_store(store_a):
+            self.assertTrue(source_lock_status(skill)["trusted"])
 
     def test_binding_state_creates_nothing(self) -> None:
         skill = self._skill()

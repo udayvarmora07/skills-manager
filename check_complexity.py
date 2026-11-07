@@ -38,6 +38,7 @@ TARGET_FILES = (
     "skillsmgr/frontmatter.py",
     "skillsmgr/scopes.py",
     "skillsmgr/registry.py",
+    "skillsmgr/review_artifacts.py",
     "skillsmgr/validator.py",
     "skillsmgr/effective.py",
     "skillsmgr/hygiene.py",

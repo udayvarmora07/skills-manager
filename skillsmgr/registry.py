@@ -12,7 +12,6 @@ import hashlib
 import json
 import os
 import re
-import secrets
 import shutil
 import tempfile
 import time
@@ -24,6 +23,20 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from . import sidecar_binding
 from .errors import StoreError
+from .review_artifacts import (
+    encode_review,
+    enforce_review_size,
+    ensure_private_directory,
+    has_review_header,
+    is_valid_review_id,
+    new_review_id,
+    read_bounded_json,
+    reject_credential_keys,
+    reject_symlink_ancestors,
+    require_status,
+    review_expiry,
+    write_private_bytes,
+)
 
 
 REGISTRY_BASE_URL = "https://skills.sh"
@@ -70,10 +83,6 @@ DEFAULT_CACHE_TTL = 300
 MAX_REVIEW_BYTES = 16 * 1024 * 1024
 MAX_REVIEW_AGE = 24 * 60 * 60
 _HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
-_REVIEW_ID = re.compile(r"^[0-9a-f]{32}$")
-_REVIEW_CREDENTIAL_KEYS = {
-    "authorization", "bearer", "credential", "password", "secret", "token",
-}
 _ALLOWED_HOSTS = frozenset({"skills.sh", "www.skills.sh"})
 _CACHE_STATES = frozenset({"miss", "fresh", "stale", "refreshed"})
 
@@ -189,16 +198,12 @@ def _safe_join(root: Path, relative: str, *, inspect_symlinks: bool = True) -> P
 
 def _reject_symlink_ancestors(path: Path) -> None:
     """Reject existing symlinks in a caller-provided destination ancestry."""
-    current = Path(os.path.abspath(path))
-    while True:
-        try:
-            if current.is_symlink():
-                raise RegistryError("staging path contains a symlink ancestor")
-        except OSError as exc:
-            raise RegistryError(f"could not inspect staging path: {exc}") from exc
-        if current.parent == current:
-            return
-        current = current.parent
+    reject_symlink_ancestors(
+        path,
+        RegistryError,
+        symlink_message="staging path contains a symlink ancestor",
+        inspect_message="could not inspect staging path: {exc}",
+    )
 
 
 def snapshot_hash(files: list[dict]) -> str:
@@ -314,7 +319,7 @@ def _review_dir(data_dir: str | Path) -> Path:
 
 
 def _review_path(data_dir: str | Path, review_id: str) -> Path:
-    if not isinstance(review_id, str) or not _REVIEW_ID.fullmatch(review_id):
+    if not is_valid_review_id(review_id):
         raise RegistryError("registry review id is invalid")
     directory = _review_dir(data_dir)
     _reject_symlink_ancestors(directory)
@@ -323,17 +328,11 @@ def _review_path(data_dir: str | Path, review_id: str) -> Path:
 
 def _ensure_review_credential_free(value: object) -> None:
     """Reject credential-shaped keys before review data reaches disk."""
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            normalized_key = key.lower().replace("-", "_") if isinstance(key, str) else ""
-            if normalized_key in _REVIEW_CREDENTIAL_KEYS or any(
-                part in _REVIEW_CREDENTIAL_KEYS for part in normalized_key.split("_")
-            ):
-                raise RegistryError("registry review cannot contain credential fields")
-            _ensure_review_credential_free(nested)
-    elif isinstance(value, list):
-        for nested in value:
-            _ensure_review_credential_free(nested)
+    reject_credential_keys(
+        value,
+        RegistryError,
+        message="registry review cannot contain credential fields",
+    )
 
 
 def write_registry_review(data_dir: str | Path, snapshot: dict, inspection: dict) -> dict:
@@ -342,7 +341,7 @@ def write_registry_review(data_dir: str | Path, snapshot: dict, inspection: dict
     if not isinstance(inspection, dict):
         raise RegistryError("registry review inspection must be an object")
     _ensure_review_credential_free(inspection)
-    review_id = secrets.token_hex(16)
+    review_id = new_review_id()
     now = _now()
     review_snapshot = {
         key: normalized.get(key)
@@ -371,44 +370,39 @@ def write_registry_review(data_dir: str | Path, snapshot: dict, inspection: dict
         "snapshot": review_snapshot,
         "inspection": inspection,
     }
-    try:
-        encoded = json.dumps(record, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    except (TypeError, ValueError) as exc:
-        raise RegistryError(f"registry review is not JSON-safe: {exc}") from exc
-    if len(encoded) > MAX_REVIEW_BYTES:
-        raise RegistryError("registry review exceeds the review size limit")
+    encoded = encode_review(
+        record,
+        fail=RegistryError,
+        json_error="registry review is not JSON-safe: {exc}",
+    )
+    enforce_review_size(
+        encoded,
+        MAX_REVIEW_BYTES,
+        RegistryError,
+        "registry review exceeds the review size limit",
+    )
     directory = _review_dir(data_dir)
     path = _review_path(data_dir, review_id)
     try:
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(directory, 0o700)
-        fd, temporary = tempfile.mkstemp(prefix=".review-", suffix=".tmp", dir=directory)
-        try:
-            os.fchmod(fd, 0o600)
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(encoded)
-                stream.write(b"\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
+        ensure_private_directory(directory)
+        write_private_bytes(path, encoded + b"\n")
     except OSError as exc:
         raise RegistryError(f"could not write registry review: {exc}") from exc
     return registry_review_public(record)
 
 
 def _validate_review(value: object) -> dict:
-    if not isinstance(value, dict) or value.get("version") != 1:
+    if not has_review_header(value):
         raise RegistryError("registry review has an invalid header")
     review_id = value.get("review_id")
-    if not isinstance(review_id, str) or not _REVIEW_ID.fullmatch(review_id):
+    if not is_valid_review_id(review_id):
         raise RegistryError("registry review id is invalid")
     if value.get("status") not in {"pending", "committed"}:
         raise RegistryError("registry review status is invalid")
-    if not isinstance(value.get("expires_epoch"), (int, float)):
+    expiry = review_expiry(value)
+    if expiry is None:
         raise RegistryError("registry review expiry is invalid")
-    if value["expires_epoch"] <= _now():
+    if expiry <= _now():
         raise RegistryError("registry review has expired; fetch it again")
     snapshot = validate_snapshot(value.get("snapshot"))
     if not isinstance(value.get("inspection"), dict):
@@ -421,19 +415,16 @@ def _validate_review(value: object) -> dict:
 def read_registry_review(data_dir: str | Path, review_id: str) -> dict:
     """Read one pending registry review without contacting the network."""
     path = _review_path(data_dir, review_id)
-    if not path.is_file() or path.is_symlink():
-        raise RegistryError("registry review was not found")
-    try:
-        if path.stat().st_size > MAX_REVIEW_BYTES:
-            raise RegistryError("registry review exceeds the review size limit")
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except RegistryError:
-        raise
-    except (OSError, UnicodeError, ValueError) as exc:
-        raise RegistryError(f"registry review is unreadable: {exc}") from exc
+    value = read_bounded_json(
+        path,
+        MAX_REVIEW_BYTES,
+        RegistryError,
+        missing_message="registry review was not found",
+        size_message="registry review exceeds the review size limit",
+        unreadable_message="registry review is unreadable: {exc}",
+    )
     result = _validate_review(value)
-    if result["status"] != "pending":
-        raise RegistryError("registry review has already been committed")
+    require_status(result, "pending", RegistryError, "registry review has already been committed")
     return result
 
 
@@ -471,18 +462,7 @@ def mark_registry_review_committed(data_dir: str | Path, review_id: str) -> dict
         value = _validate_review(json.loads(path.read_text(encoding="utf-8")))
         value["status"] = "committed"
         value["committed_at"] = _iso()
-        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        fd, temporary = tempfile.mkstemp(prefix=".review-", suffix=".tmp", dir=path.parent)
-        try:
-            os.fchmod(fd, 0o600)
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(encoded)
-                stream.write(b"\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
+        write_private_bytes(path, encode_review(value) + b"\n")
     except RegistryError:
         raise
     except (OSError, UnicodeError, ValueError) as exc:

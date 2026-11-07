@@ -129,7 +129,131 @@ def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
                 return paths.contained_entry_under(resolved_base, *relative.parts)
         return direct
     except ValueError as exc:
-        raise StoreError(str(exc)) from exc
+        raise _refused_path_error(scope, name, exc) from exc
+
+
+def _peer_link_roots(scope: "Scope") -> tuple[Path, ...]:
+    """Resolved bases of the *other* managed agent roots (SCOPE-2).
+
+    The global store is deliberately excluded: it keeps refusing every link,
+    because its index is the authority for installed skills.  A root that is
+    missing, unreadable, or the same physical directory as this scope is not a
+    peer.
+    """
+    if scope.id == "global":
+        return ()
+    try:
+        own = scope.base.resolve()
+    except OSError:
+        own = scope.base
+    roots: list[Path] = []
+    for other in known_scopes():
+        if other.id == "global" or other.id == scope.id:
+            continue
+        try:
+            if not other.base.is_dir():
+                continue
+            resolved = other.base.resolve()
+        except OSError:
+            continue
+        if resolved == own or resolved in roots:
+            continue
+        roots.append(resolved)
+    return tuple(roots)
+
+
+def _peer_link_info(scope: "Scope", name: str) -> dict | None:
+    """Describe a flat scope entry that is a link into a peer root.
+
+    Returns ``{"path", "target", "linked_to", "link_target_root"}`` or ``None``
+    when the entry is not a symlink, its target is not a directory inside a
+    peer root, or the target fails that root's containment guard (which also
+    refuses a chain of links leaving the peer root).
+    """
+    try:
+        validate_skill_name(name)
+    except ValueError:
+        return None
+    link = scope.base / name
+    try:
+        if not link.is_symlink():
+            return None
+        target = Path(os.path.realpath(link))
+    except OSError:
+        return None
+    if not target.is_dir():
+        return None
+    for peer_root in _peer_link_roots(scope):
+        try:
+            if target != peer_root and not target.is_relative_to(peer_root):
+                continue
+            relative = target.relative_to(peer_root)
+        except (AttributeError, ValueError):
+            continue
+        if not relative.parts:
+            continue
+        try:
+            contained = paths.contained_entry_under(peer_root, *relative.parts)
+        except ValueError:
+            continue
+        return {
+            "path": str(link),
+            "target": contained,
+            "linked_to": str(target),
+            "link_target_root": str(peer_root),
+        }
+    return None
+
+
+def _refused_path_error(scope: "Scope", name: str, exc: Exception) -> StoreError:
+    """The clean refusal for a path guard that rejected *name*.
+
+    SCOPE-2: a link into a peer root is readable but never writable through
+    this scope.  Name the peer directory and where to make the change, rather
+    than surfacing the interpreter-level containment message; every other
+    refusal keeps that message unchanged.
+    """
+    link = _peer_link_info(scope, name)
+    if link is None:
+        return StoreError(str(exc))
+    return StoreError(
+        f"skill '{name}' in scope '{scope.id}' is a link into "
+        f"{link['link_target_root']}; change it there"
+    )
+
+
+def _scope_read_dir(scope: "Scope", name: str) -> tuple[Path, dict | None]:
+    """Resolve one skill directory for a read, following a peer link.
+
+    Returns ``(directory, link)`` where ``link`` is the peer-link description
+    for a followed link and ``None`` for an ordinary skill.  Writers must not
+    use this: :func:`_safe_scope_skill_path` keeps refusing every link.
+    """
+    try:
+        skill_dir = _safe_scope_skill_path(scope, name)
+    except StoreError:
+        link = _peer_link_info(scope, name)
+        if link is None:
+            raise
+        return Path(link["target"]), link
+    if not skill_dir.is_dir():
+        link = _peer_link_info(scope, name)
+        if link is not None:
+            return Path(link["target"]), link
+    return skill_dir, None
+
+
+def _apply_link_read(entry: dict, skill_dir: Path, link: dict | None) -> dict:
+    """Stamp the observed path of a read, marking a followed link read-only."""
+    if link is None:
+        entry["path"] = str(skill_dir)
+        return entry
+    entry["path"] = link["path"]
+    entry["linked_to"] = link["linked_to"]
+    entry["link_target_root"] = link["link_target_root"]
+    entry["read_only"] = True
+    entry["link_followed"] = True
+    return entry
 
 
 @dataclass(frozen=True)
@@ -276,7 +400,11 @@ def list_scopes(
         entries = (
             by_scope.get(s.id, [])
             if by_scope is not None
-            else (scan_dir(s.base, recursive=s.recursive) if exists else [])
+            else (
+                scan_dir(s.base, recursive=s.recursive, link_roots=_peer_link_roots(s))
+                if exists
+                else []
+            )
         )
         agg = _agg(entries)
         out.append(
@@ -433,7 +561,12 @@ def scan_scope(scope_id: str) -> list[dict]:
     # re-derived it for every row -- re-resolving the scope base and re-running
     # the name/containment check the scan had already performed.  The scan can
     # hand over the exact entry it validated instead.
-    entries = scan_dir(scope.base, recursive=scope.recursive, annotate_paths=True)
+    entries = scan_dir(
+        scope.base,
+        recursive=scope.recursive,
+        annotate_paths=True,
+        link_roots=_peer_link_roots(scope),
+    )
     _annotate_scope_entries(entries, scope, str(_resolved_scope_root(scope)))
     return _annotate_instance_states(sorted(entries, key=lambda r: (r["name"].lower(), r.get("path", ""))))
 
@@ -583,13 +716,13 @@ def get_skill(scope_id: str, name: str) -> dict:
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = _safe_scope_skill_path(scope, name)
+    skill_dir, link = _scope_read_dir(scope, name)
     if not skill_dir.is_dir():
         raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
     entry = load_skill(skill_dir)
     entry["scope"] = scope.id
     entry["scope_label"] = scope.label
-    entry["path"] = str(skill_dir)
+    _apply_link_read(entry, skill_dir, link)
     entry["status"] = "disabled" if entry.get("disabled") else "active"
     if isinstance(entry.get("provenance"), dict):
         entry["provenance"]["scope"] = scope.id
@@ -626,7 +759,7 @@ def get_raw(scope_id: str, name: str) -> str:
         scope = _scope_by_id(scope_id)
         if scope is None:
             raise StoreError(f"unknown scope {scope_id!r}")
-        p = _safe_scope_skill_path(scope, name)
+        p, _link = _scope_read_dir(scope, name)
     for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
         if cand.is_file():
             return read_skill_text(cand)[0]
@@ -694,7 +827,7 @@ def create_skill(
     try:
         skill_dir = paths.contained_entry(scope.base, name)
     except ValueError as exc:
-        raise StoreError(str(exc)) from exc
+        raise _refused_path_error(scope, name, exc) from exc
     # Do not let the sidecar lock's preparation create the candidate directory;
     # an absent flat path is precisely the successful create case.
     scope.base.mkdir(parents=True, exist_ok=True)
@@ -838,7 +971,7 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
         shutil.rmtree(skill_dir)
         return {"name": name, "action": "purged", "scope": scope_id}
     # Soft delete: move to sibling trash dir.
-    trash = scope.base.parent / "trash"
+    trash = _scope_trash_dir(scope)
     trash.mkdir(parents=True, exist_ok=True)
     from datetime import datetime, timezone
 
@@ -882,7 +1015,29 @@ def _agent_scope(scope_id: str) -> Scope:
 
 
 def _scope_trash_dir(scope: Scope) -> Path:
-    return scope.base.parent / "trash"
+    return _checked_scope_trash_dir(scope)
+
+
+def _checked_scope_trash_dir(scope: Scope) -> Path:
+    # The scope root may itself be reached through a symlinked home or agent
+    # directory. Anchor trash below its resolved parent, then refuse a linked
+    # trash root so listing/restoring cannot cross into an unrelated tree.
+    try:
+        parent = scope.base.parent.resolve()
+        trash = parent / "trash"
+        if trash.is_symlink():
+            raise StoreError(
+                f"the trash folder for scope '{scope.id}' must not be a symlink"
+            )
+        if trash.exists() and not trash.is_dir():
+            raise StoreError(
+                f"the trash path for scope '{scope.id}' is not a directory"
+            )
+        return trash
+    except OSError as exc:
+        raise StoreError(
+            f"could not safely resolve the trash folder for scope '{scope.id}': {exc}"
+        ) from exc
 
 
 def _scope_trash_size(entry: Path) -> int:
@@ -946,9 +1101,9 @@ def _parse_scope_trash_entry(scope_id: str, entry: Path) -> dict | None:
 def scope_trash_list(scope_id: str) -> list[dict]:
     """List soft-deleted skills for one agent scope, newest first.
 
-    Only entries this tool wrote (``<scope>__<name>-<timestamp>[-<n>]``) whose
-    name still passes the canonical rule are returned, so a folder another
-    program dropped into the trash is never offered as a restorable skill.
+    Only plain directories matching ``<scope>__<name>-<timestamp>[-<n>]``
+    whose name still passes the canonical rule are returned. The filename is
+    an address for recovery, not authentication of the folder's origin.
     Reads create nothing, a missing trash folder is an empty list, and the
     result is bounded to ``MAX_SCOPE_TRASH_ROWS``.
     """
@@ -994,6 +1149,44 @@ def _select_trash_entry(
     return candidates[0]
 
 
+def _validated_scope_trash_entry(
+    scope: Scope, scope_id: str, name: str, entry: dict
+) -> Path:
+    """Recheck the chosen trash child and its root immediately before restore."""
+    trash = _scope_trash_dir(scope)
+    source = Path(entry["trash_path"])
+    if source.parent != trash:
+        raise StoreError(
+            f"the trashed copy of '{name}' is outside the trash folder for "
+            f"scope '{scope_id}'"
+        )
+    try:
+        if trash.is_symlink() or not trash.is_dir():
+            raise StoreError(
+                f"the trash folder for scope '{scope_id}' changed; refresh and retry"
+            )
+        if source.is_symlink() or not source.is_dir():
+            raise StoreError(
+                f"the trashed copy of '{name}' changed; refresh and retry"
+            )
+        if source.resolve(strict=True) != source:
+            raise StoreError(
+                f"the trashed copy of '{name}' is no longer contained in the "
+                f"trash folder for scope '{scope_id}'"
+            )
+        current = _parse_scope_trash_entry(scope_id, source)
+        if current is None or current["name"] != name:
+            raise StoreError(
+                f"the trashed copy of '{name}' changed; refresh and retry"
+            )
+    except OSError as exc:
+        raise StoreError(
+            f"could not safely verify the trashed copy of '{name}' in "
+            f"scope '{scope_id}': {exc}"
+        ) from exc
+    return source
+
+
 def restore_trashed(scope_id: str, name: str, trash_path: str | None = None) -> dict:
     """Move one trashed agent-scope skill back where the agent reads it.
 
@@ -1016,8 +1209,12 @@ def restore_trashed(scope_id: str, name: str, trash_path: str | None = None) -> 
                 f"skill '{name}' already exists in scope '{scope_id}'; remove it "
                 "before restoring the trashed copy"
             )
+        # Listing and selection happen before the mutation lock. Revalidate
+        # both the root and the exact child while holding it so a replaced root
+        # or entry cannot redirect this rename to a symlinked external tree.
+        source = _validated_scope_trash_entry(scope, scope_id, name, entry)
         try:
-            os.rename(entry["trash_path"], skill_dir)
+            os.rename(source, skill_dir)
         except FileNotFoundError:
             # The advisory lock excludes cooperating writers, but this trash
             # folder is a plain directory another tool may edit.
