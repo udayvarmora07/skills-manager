@@ -237,7 +237,7 @@ approval and a snapshot root before atomically replacing the target; and
 `.skillsmgr-source-lock.json` sidecar is bounded, atomic, owner-only, and
 excluded from content hashes. `MAX_TOTAL_DIFF_LINES` adds a deterministic
 whole-preview budget while preserving per-file bounds and binary-safe evidence.
-The caller-facing review/apply workflow lives in `source_update.py`; it adds no
+`risk_file_listing()` gives `risk_scan()` a bounded `{path, contents?}` listing of a staged candidate (symlinks skipped, `SKILL.md` and sidecars left out, at most 50 script files of 256 KiB read as UTF-8, everything else listed by path only); the registry fetch/commit and source-update reviews pass it together with the description, so the bundled-script, bytecode, `ast` and description checks run on real reviews. The caller-facing review/apply workflow lives in `source_update.py`; it adds no
 Store method, SQLite state, network, or runtime dependency. Decision record:
 @docs/ADR-008-source-lock-and-update-preview.md.
 

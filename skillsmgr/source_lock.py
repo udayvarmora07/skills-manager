@@ -132,6 +132,60 @@ def local_manifest(root: str | Path) -> dict:
     return {"root": str(root), "files": files, "public_files": public, "sha256": digest.hexdigest()}
 
 
+_RISK_SCRIPT_SUFFIXES = frozenset({
+    ".py", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".psm1", ".bat", ".cmd",
+    ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl", ".php",
+})
+_RISK_LISTING_FILES = 256
+_RISK_TEXT_FILES = 50
+_RISK_TEXT_BYTES = 256 * 1024
+
+
+def _risk_entry(root: Path, path: Path, texts_read: int) -> dict | None:
+    """One bundled-file entry for risk_scan, or None for a skipped path."""
+    try:
+        relative = _relative_file(root, path)
+    except SourceLockError:
+        return None
+    entry: dict = {"path": relative}
+    if (path.suffix.lower() in _RISK_SCRIPT_SUFFIXES and texts_read < _RISK_TEXT_FILES
+            and path.stat().st_size <= _RISK_TEXT_BYTES):
+        try:
+            entry["contents"] = path.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+    return entry
+
+
+def risk_file_listing(root: str | Path) -> list[dict]:
+    """Bounded ``{path, contents?}`` listing of a staged candidate for risk_scan.
+
+    Symlinks are skipped, never followed. ``SKILL.md`` (scanned as the body) and
+    manager sidecars are left out. Script-like files up to 256 KiB carry their
+    UTF-8 text so the bundled-script and ``ast`` checks can run; every other
+    file, ``.pyc`` included, is listed by path only and never read.
+    """
+    root = Path(root).expanduser()
+    if not root.is_dir() or root.is_symlink():
+        return []
+    skipped = {"SKILL.md", "SKILL.md.disabled", _PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}
+    entries: list[dict] = []
+    texts_read = 0
+    try:
+        for path in sorted(root.rglob("*")):
+            if len(entries) >= _RISK_LISTING_FILES:
+                break
+            if path.is_symlink() or not path.is_file() or path.name in skipped:
+                continue
+            entry = _risk_entry(root, path, texts_read)
+            if entry is not None:
+                texts_read += "contents" in entry
+                entries.append(entry)
+    except OSError:
+        return entries
+    return entries
+
+
 def _iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -417,7 +471,8 @@ def _validation_evidence(source: Path, name: str) -> tuple[dict, list[dict]]:
         "errors": [{"level": item.level, "key": item.key, "message": item.message} for item in result.errors],
         "warnings": [{"level": item.level, "key": item.key, "message": item.message} for item in result.warnings],
     }
-    record = {"name": name, "body": result.body, "allowed_tools": result.data.get("allowed-tools")}
+    record = {"name": name, "body": result.body, "allowed_tools": result.data.get("allowed-tools"),
+              "description": result.data.get("description"), "files": risk_file_listing(source)}
     return validation, risk_scan(record)
 
 

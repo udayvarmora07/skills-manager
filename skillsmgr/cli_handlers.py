@@ -1514,6 +1514,7 @@ def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | Non
     """
     from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
     from .insights import risk_scan
+    from .source_lock import risk_file_listing
     from .registry import (
         materialize_snapshot,
         provenance_for_snapshot,
@@ -1564,6 +1565,8 @@ def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | Non
             "name": name,
             "body": validation.body,
             "allowed_tools": validation.data.get("allowed-tools"),
+            "description": validation.data.get("description"),
+            "files": risk_file_listing(staged),
         })
         external = _external_scan_evidence(staged, external_scan)
     inspection = {
@@ -1638,6 +1641,7 @@ def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
     """Commit one reviewed registry snapshot without another network request."""
     from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
     from .insights import risk_scan
+    from .source_lock import risk_file_listing
     from .registry import (
         materialize_snapshot,
         mark_registry_review_committed,
@@ -1668,6 +1672,8 @@ def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
             "name": name,
             "body": validation.body,
             "allowed_tools": validation.data.get("allowed-tools"),
+            "description": validation.data.get("description"),
+            "files": risk_file_listing(staged),
         })
         # Store.add strips manager sidecars from external intake (R2), so the
         # provenance this review earned is written to the installed copy.
