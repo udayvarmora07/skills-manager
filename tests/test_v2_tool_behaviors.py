@@ -178,3 +178,91 @@ class ToolBehaviorTests(unittest.TestCase):
         self.assertEqual(len(out["targets"]), 2)
         self.assertEqual(out["to_scopes"], [])
         self.assertFalse(out["force"])
+
+
+@unittest.skipUnless(shutil.which("node"), "Node is required for frontend behavior checks")
+class ClaudeListingCardTests(unittest.TestCase):
+    """The Quality page's "What Claude Code sees" card is read-only evidence."""
+
+    def test_verdict_is_a_worded_pill_for_each_status(self):
+        out = run_node(r"""
+          const h=mount(ctx.window.SkillsV2ToolCenter);
+          return ['within_budget','over_budget_estimate','unknown','surprising'].map(s=>h.listingVerdict({status:s}));
+        """)
+        self.assertEqual(out[0], {"text": "Fits the listing budget", "tone": "ok"})
+        self.assertEqual(out[1], {"text": "Over the listing budget (estimate)", "tone": "warn"})
+        self.assertEqual(out[2], {"text": "Can't tell — a settings file couldn't be read", "tone": "off"})
+        # An unrecognised status must never read as a green "fits".
+        self.assertEqual(out[3], {"text": "Budget status not recognised", "tone": "off"})
+
+    def test_the_snippet_is_valid_json_for_any_skill_name(self):
+        out = run_node(r"""
+          const h=mount(ctx.window.SkillsV2ToolCenter);
+          return JSON.parse('{'+h.listingSnippet('we"ird\\name')+'}');
+        """)
+        self.assertEqual(out, {"skillOverrides": {'we"ird\\name': "name-only"}})
+
+    def test_meter_measures_the_listing_against_its_budget(self):
+        out = run_node(r"""
+          const h=mount(ctx.window.SkillsV2ToolCenter);
+          const over={status:'over_budget_estimate',listing_chars:77516,budget:{budget_chars_estimate:40000}};
+          const fits={status:'within_budget',listing_chars:10000,budget:{budget_chars_estimate:40000}};
+          const none={status:'within_budget',listing_chars:10,budget:{budget_chars_estimate:0}};
+          return {over:{pct:h.listingPct(over),fill:h.listingFill(over),over:h.listingOver(over)},
+                  fits:{pct:h.listingPct(fits),fill:h.listingFill(fits),over:h.listingOver(fits)},
+                  none:{pct:h.listingPct(none),fill:h.listingFill(none)}};
+        """)
+        self.assertEqual(out["over"]["pct"], 193.8)
+        self.assertEqual(out["over"]["fill"], "100%")
+        self.assertTrue(out["over"]["over"])
+        self.assertEqual(out["fits"]["pct"], 25.0)
+        self.assertEqual(out["fits"]["fill"], "25%")
+        self.assertFalse(out["fits"]["over"])
+        self.assertEqual(out["none"]["pct"], 0)
+        self.assertEqual(out["none"]["fill"], "1.5%")
+
+    def test_the_listing_and_its_partial_reasons_come_from_the_report(self):
+        out = run_node(r"""
+          const section={instances_observed:3,listed_skills:3,confidence:'partial',
+            partial_reasons:['project settings were not read (no project root), so a project skillOverrides entry could change this estimate'],
+            status:'within_budget',listing_chars:10,budget:{budget_chars_estimate:1000,assumption:'estimated from 1% of the window'}};
+          const h=mount(ctx.window.SkillsV2ToolCenter,{quality:{claude_listing:section}});
+          return {card:h.claudeListing,confidence:h.claudeListing.confidence,reasons:h.claudeListing.partial_reasons};
+        """)
+        self.assertTrue(out["card"])
+        self.assertEqual(out["confidence"], "partial")
+        self.assertEqual(len(out["reasons"]), 1)
+
+    def test_a_candidate_renders_the_exact_settings_fragment(self):
+        out = run_node("const h=mount(ctx.window.SkillsV2ToolCenter);return h.listingSnippet('alpha-skill');")
+        self.assertEqual(out, '"skillOverrides": { "alpha-skill": "name-only" }')
+
+    def test_a_missing_section_or_no_instances_shows_no_card(self):
+        out = run_node(r"""
+          const missing=mount(ctx.window.SkillsV2ToolCenter,{quality:{}});
+          const zero=mount(ctx.window.SkillsV2ToolCenter,{quality:{claude_listing:{instances_observed:0}}});
+          const present=mount(ctx.window.SkillsV2ToolCenter,{quality:{claude_listing:{instances_observed:2,status:'within_budget'}}});
+          return {missing:missing.claudeListing,zero:zero.claudeListing,present:!!present.claudeListing};
+        """)
+        self.assertIsNone(out["missing"])
+        self.assertIsNone(out["zero"])
+        self.assertTrue(out["present"])
+
+    def test_excluded_keys_read_as_words_not_api_slugs(self):
+        out = run_node(r"""
+          const h=mount(ctx.window.SkillsV2ToolCenter);
+          return ['disabled','skillOverrides_off','unreadable','name_only','skillOverrides_user_invocable_only','disable_model_invocation','something_new']
+            .map(k=>h.listingExcludedLabel(k));
+        """)
+        self.assertEqual(out, ["Turned off on disk", "Off in settings", "Could not be read",
+                               "Name only", "User-invocable only", "Model invocation disabled",
+                               "Something new"])
+
+    def test_the_card_adds_no_html_sink_and_binds_every_piece_as_text(self):
+        source = (V2 / "tool-center.js").read_text(encoding="utf-8")
+        self.assertNotIn("v-html", source)
+        for binding in ("claudeListing.partial_reasons", 'pill off">Partial',
+                        "Ranked by description size only. Claude Code drops descriptions starting with the skills you use least, which this tool can't see.",
+                        "listingSnippet(c.name)", "copyListingSnippet(c.name)",
+                        "Free about", "No Claude Code skills were observed"):
+            self.assertIn(binding, source)

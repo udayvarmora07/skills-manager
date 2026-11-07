@@ -513,7 +513,7 @@ Styles are in `webui/v2/tools.css` and use only declared v2 tokens.
 | Install | Registry inventory, browse/search/curated/fetch, stale-cache choice, reviewed artifact and explicit trust; package-runner preview/copy/run; local folder filename/text review and explicit destination approval |
 | Profiles | Metadata CRUD, observed/missing/divergent membership, enable-only exact-target plan; absent members are not installed and contents are not reconciled |
 | Templates | List/read/create/preview/use stored templates, built-in fallback, create with structured metadata |
-| Quality | Hygiene search/severity/evidence, exact-instance links, manual name/scope validation, Doctor and token statistics with unavailable/degraded states |
+| Quality | Hygiene search/severity/evidence, the “What Claude Code sees” listing-budget card (verdict, partial confidence, meter, name-only candidates with a display-only settings snippet, over-cap and excluded counts), exact-instance links, manual name/scope validation, Doctor and token statistics with unavailable/degraded states |
 | Workspaces | Project containment observations and consumer adapter explanations; effective loading remains unresolved |
 | Settings | Shared theme, text-size and regional-format preferences, the optional SkillSpector scan preference (off / static / static + your LLM key), OS preference observations, explicit index rebuild/resync |
 | Source update | Exact-instance candidate review, per-file comparison, validation/risk evidence, apply/cancel, retained whole-tree snapshots and reviewed rollback |

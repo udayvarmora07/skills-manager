@@ -58,6 +58,7 @@
       findings(){return ((this.quality && this.quality.findings)||[]).filter(f => (this.severity==='all'||f.severity===this.severity) && JSON.stringify(f).toLowerCase().includes(this.search.toLowerCase()));
       },
       unavailableSignals(){const groups=new Map();for(const signal of this.quality?.unavailable_signals||[]){const key=signal.signal+'\0'+signal.explanation;if(!groups.has(key))groups.set(key,{...signal,count:0});groups.get(key).count++;}return [...groups.values()];},
+      claudeListing(){const l=this.quality&&this.quality.claude_listing;return l&&Number(l.instances_observed)>0?l:null;},
       runnerSignature(){return JSON.stringify([this.source.trim(),this.runner,this.runnerScope,this.agents,this.filter,this.copy,this.listOnly]);
       },
       localePreview(){try{return new Intl.NumberFormat(this.locale==='system'?undefined:this.locale).format(1234567.89)}catch(e){return 'Unavailable'}},
@@ -89,6 +90,18 @@
       addProfileName(){const n=this.profileExtra.trim();if(!n)return;this.toggleProfileSkill(n,true);this.profileExtra='';},
       newProfile(){this.sequence++;this.profile={name:'',description:'',skills:'',targets:''};this.profilePreview=null;this.plan=null;},
       pretty(v){return JSON.stringify(v,null,2)},
+      listingVerdict(l){const s=String((l||{}).status||'');
+        if(s==='over_budget_estimate')return{text:'Over the listing budget (estimate)',tone:'warn'};
+        if(s==='unknown')return{text:"Can't tell — a settings file couldn't be read",tone:'off'};
+        if(s==='within_budget')return{text:'Fits the listing budget',tone:'ok'};
+        return{text:'Budget status not recognised',tone:'off'};},
+      listingPct(l){const b=Number(((l||{}).budget||{}).budget_chars_estimate)||0;const c=Number((l||{}).listing_chars)||0;return b>0?Math.round(1000*c/b)/10:0;},
+      listingFill(l){return Math.min(Math.max(this.listingPct(l),1.5),100)+'%';},
+      listingOver(l){return String((l||{}).status||'')==='over_budget_estimate';},
+      listingAria(l){return this.fmtN((l||{}).listing_chars)+' of about '+this.fmtN(((l||{}).budget||{}).budget_chars_estimate)+" characters in Claude Code's skill listing";},
+      listingSnippet(name){return '"skillOverrides": { '+JSON.stringify(String(name))+': "name-only" }';},
+      async copyListingSnippet(name){try{if(navigator.clipboard)await navigator.clipboard.writeText(this.listingSnippet(name))}catch(e){}},
+      listingExcludedLabel(key){return {disabled:'Turned off on disk',skillOverrides_off:'Off in settings',unreadable:'Could not be read',name_only:'Name only',skillOverrides_user_invocable_only:'User-invocable only',disable_model_invocation:'Model invocation disabled'}[key]||this.human(key);},
       toggleProfileTarget(id,checked){const targets=new Set(this.profile.targets.split(',').map(s=>s.trim()).filter(Boolean));if(checked)targets.add(id);else targets.delete(id);this.profile.targets=[...targets].join(', ');},
       retireSource(){const r=this.sourceReview;
       this.sourceReview=null;
@@ -518,6 +531,41 @@ ${scanPanel('(review.inspection||{}).external_scan')}
         <h1 class="h1" id="h1" tabindex="-1">Quality</h1>
         <p class="lede">What the files say about your skills: broken documents, weak descriptions, copies that drifted apart. It does not certify safety or which copy an agent loads.</p>
         <template v-if="quality">
+          <section v-if="claudeListing" class="card tp-panel claude-listing" aria-labelledby="tp-cl-h">
+            <header class="tp-panel-h">
+              <div><h2 id="tp-cl-h">What Claude Code sees</h2><p>The skill listing Claude Code builds from the copies this report observed.</p></div>
+              <span class="tp-acts"><span :class="['pill', listingVerdict(claudeListing).tone]">{{ listingVerdict(claudeListing).text }}</span><span v-if="claudeListing.confidence==='partial'" class="pill off">Partial</span></span>
+            </header>
+            <p v-if="(claudeListing.partial_reasons||[]).length" class="claude-flags"><span v-for="(reason,i) in claudeListing.partial_reasons" :key="i" class="claude-reason">{{ reason }}</span></p>
+            <div class="meter">
+              <div class="ml"><span>{{ fmtN(claudeListing.listing_chars) }} of ~{{ fmtN(claudeListing.budget.budget_chars_estimate) }} characters</span><b class="num">{{ listingPct(claudeListing) }}%</b></div>
+              <div class="track" role="img" :aria-label="listingAria(claudeListing)"><i :class="{warn: listingOver(claudeListing)}" :style="{width: listingFill(claudeListing)}"></i></div>
+            </div>
+            <p class="tp-fine">{{ claudeListing.budget.assumption }}</p>
+            <p v-if="Number(claudeListing.chars_to_free)>0" class="claude-free"><b>Free about {{ fmtN(claudeListing.chars_to_free) }} characters.</b> Switching descriptions to name-only removes their text from the listing.</p>
+            <div v-if="((claudeListing.name_only_candidates||{}).candidates||[]).length">
+              <div class="tp-sec-h"><h3>Name-only candidates</h3><span class="tp-count num">{{ fmtN(claudeListing.name_only_candidates.total) }} total</span></div>
+              <p class="tp-fine">Ranked by description size only. Claude Code drops descriptions starting with the skills you use least, which this tool can't see.</p>
+              <ul class="tp-rows">
+                <li v-for="c in claudeListing.name_only_candidates.candidates" :key="(c.path||'')+c.name" class="v2-tool-row claude-cand">
+                  <span class="tp-row-main"><strong class="tp-mono">{{ c.name }}</strong><small>{{ fmtN(c.description_chars) }} description characters · frees {{ fmtN(c.freed_chars) }} characters</small></span>
+                  <span class="claude-snippet"><code>{{ listingSnippet(c.name) }}</code><button type="button" class="btn btn-soft btn-sm" @click="copyListingSnippet(c.name)">Copy</button></span>
+                </li>
+              </ul>
+              <p v-if="claudeListing.name_only_candidates.omitted" class="tp-fine">{{ fmtN(claudeListing.name_only_candidates.omitted) }} more candidates not shown.</p>
+            </div>
+            <div v-if="((claudeListing.over_cap||{}).count||0) > 0">
+              <div class="tp-sec-h"><h3>Descriptions cut per skill</h3><span class="tp-count num">{{ fmtN(claudeListing.over_cap.count) }}</span></div>
+              <p class="tp-fine">Descriptions longer than {{ fmtN(claudeListing.over_cap.max_description_chars || claudeListing.max_description_chars) }} characters are cut even within budget.</p>
+              <p class="tp-mono tp-fine">{{ (claudeListing.over_cap.names||[]).join(', ') }}<span v-if="claudeListing.over_cap.omitted"> and {{ fmtN(claudeListing.over_cap.omitted) }} more</span></p>
+            </div>
+            <details class="tp-more claude-excluded">
+              <summary>What this estimate leaves out</summary>
+              <ul class="tp-rows"><li v-for="(count,key) in (claudeListing.excluded||{})" :key="key" class="v2-tool-row"><span>{{ listingExcludedLabel(key) }}</span><span class="tp-count num">{{ fmtN(count) }}</span></li></ul>
+              <p class="tp-fine">{{ fmtN(claudeListing.instances_observed) }} instances observed · {{ fmtN(claudeListing.listed_skills) }} entries listed.</p>
+            </details>
+          </section>
+          <p v-else class="tp-empty">No Claude Code skills were observed in this report, so the listing budget is not estimated.</p>
           <div class="tp-toolbar">
             <div class="seg" role="group" aria-label="Severity">
               <button v-for="s in ['all','error','warning','info']" :key="s" type="button" :aria-pressed="severity===s" @click="severity=s">{{severityNames[s]}} <span class="n">{{severityCounts[s]||0}}</span></button>
