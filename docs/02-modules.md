@@ -386,7 +386,8 @@ explicitly unresolved per ADR-002), `diff_skills()`/`diff_three_way()`
 `quarantine_plan()` (stage-only plan validated by `validate_skill_name`),
 `risk_scan()` (explainable script/link/tool/pattern findings with why +
 evidence, plus bounded hidden-Unicode/bidi/tag code points and names in known
-text fields; advisory only, no safe verdict or rewriting), `registry_preview()` (offline dry-run gated on explicit trust),
+text fields, plus the nine Phase B checks described below; advisory only, no
+safe verdict or rewriting), `registry_preview()` (offline dry-run gated on explicit trust),
 `registry_reference()` (offline parse of `owner/repo`, `owner/repo/slug`,
 `https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo` into
 `{form, source, slug, registry_id, page_url, audit_links}` — no request, cache,
@@ -504,8 +505,33 @@ through atomic sibling-temp writes. Bounds: `MAX_CASES = 100`, `MAX_EVALS_FILE_B
 `MAX_CASE_TEXT = 20000`, `MAX_OUTPUT_TEXT = 200000`, `MAX_RUNS = 400`,
 `MAX_PATTERN_LENGTH = 200`, `MAX_REGEX_INPUT = 50000`. `EVAL_POLICY` records
 the standing rule: results are workspace files, never SQLite rows, and never
-gate installs or edits.
-sort deterministically; `risk_scan()` is six single-purpose scanners.
+gate installs or edits, and results sort deterministically.
+
+**[SPEC] `risk_scan()` also runs nine single-purpose Phase B checks over
+caller-supplied data only** (`name`, `description`, `body`, and an optional
+`files` listing of `{path, contents}` entries; no filesystem read is added):
+remote script piped to a shell (`curl`/`wget … | sh|bash|zsh`, PowerShell
+`iex (iwr …)`/`Invoke-Expression (Invoke-WebRequest …)`), decoded payload
+executed (`base64 -d | sh`, `eval(atob(…))`, `exec(base64.b64decode(…))`,
+`exec(codecs.decode(…))`), credential paths (`~/.ssh/`, `id_rsa`,
+`.aws/credentials`, `.netrc`, `.env`, the macOS keychain
+`security find-generic-password`, `~/.config/gcloud`, `~/.kube/config`,
+`.npmrc`), refusal/disclaimer suppression wording (English only; the finding
+policy states that limit), persistence (`crontab`, `systemctl --user`,
+`~/.config/systemd/user`, shell-rc append/redirect writes, `LaunchAgents`),
+shipped `__pycache__`/`.pyc` from the listing only, whitespace padding (at
+least 200 consecutive spaces/tabs or 30 consecutive blank lines, both stated in
+the evidence), over-broad description triggers plus exact shadowing of a small
+built-in command list, and `exec`/`eval`/`compile`/`__import__`/`os.system`/
+`os.popen`/`subprocess.*(shell=True)` in bundled `.py` sources parsed with
+stdlib `ast` (never imported or executed; at most 50 files and 256 KiB each,
+with `SyntaxError`, oversize and count-limit skips reported as counted notes).
+A match that sits in a warning or negation sentence (`do not`, `don't`, `never`,
+`avoid`, `instead of`, `unsafe`) is still reported, but at `low` with that
+reason in `why`; fenced code blocks are not exempt. Evidence is escaped and
+length-bounded, the new findings are capped at `MAX_RISK_FINDINGS` with an
+omitted note, and every finding stays advisory.
+
 Operates on records the existing `scopes`/`loader`/`Store.history` seams
 already return; no new CLI/Store surfaces, no schema change.
 

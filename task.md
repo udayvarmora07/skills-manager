@@ -170,8 +170,12 @@ The maintainer chose both phases, hook first.
   restores the prior binding. `tests/test_cli_store_binding.py`.
 - [ ] AI features (BYOK): proposal in @docs/33-ai-features-design-2026-11-06.md;
   answer D-AI-1…D-AI-7 before any implementation.
-- [ ] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
-  `insights.risk_scan()`, with measured noise on a real library.
+- [x] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
+  `insights.risk_scan()` — nine checks, `tests/test_risk_scan_phase_b.py`,
+  2026-11-07.
+- [?] Phase B measured-noise run on a real library is not available in this
+  sandbox (`HOME` is isolated and `scopes.list_all()` returns 0 records); it
+  stays open until it can produce a number.
 
 ## Research roadmap — not yet started (docs/28 R-table, docs/29; recorded 2026-11-06)
 
@@ -201,7 +205,10 @@ the docs mark them as not needing maintainer approval.
 - [x] **R16** `backup_sync._run_git` pins program-executing config with `-c` and
   a scrubbed environment (2026-11-07). `tests/test_audit_r16_git_config.py`
   includes a real-git test where a hostile `core.sshCommand` used to run.
-- [ ] **R17** `skills-ref` as a dev-only differential oracle in tests (no).
+- [x] **R17** `skills-ref` 0.1.1 as a dev-only differential oracle
+  (`tests/test_skills_ref_oracle.py`, skips unless `SKILLS_REF_PYTHON` is set).
+  14/17 verdicts agree; the 3 divergences (Unicode names = R18, unknown fields
+  warn, unquoted colon warns) are pinned and mutation-checked (2026-11-07).
 - [ ] **R18** accept NFKC Unicode lowercase names (⚠ locked name rule).
 - [ ] **R19** CycloneDX/SPDX export from source-lock data (⚠ new command).
 - [x] docs/29 H1: advisory `ignored-frontmatter` hygiene finding from cited

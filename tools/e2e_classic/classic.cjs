@@ -553,7 +553,7 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     eq(await page.locator('.install-center').getByText(/Trust and install reviewed snapshot/).count(), 0, 'no commit control without a review');
     await page.locator('#center-registry-op').selectOption('browse');
   });
-  await test('Install', 'full workflow dialog: Escape closes with focus return; runner preview text == server dry-run; Preview makes no request', async () => {
+  await test('Install', 'full workflow dialog: Escape closes with focus return; runner preview text == server dry-run; Preview asks only for the offline plan and runs nothing', async () => {
     const opener = page.getByRole('button', {name: 'Open full install workflow'});
     await opener.click(); await page.locator('[data-modal=install]').waitFor();
     ok(await page.evaluate(() => document.querySelector('[data-modal=install] .modal').contains(document.activeElement)) || true);
@@ -565,8 +565,18 @@ const overflowOf = () => page.evaluate(() => ({sw: document.documentElement.scro
     const shown = (await page.locator('[data-modal=install] .modal-body div[style*="mono"] span').first().innerText()).trim();
     eq(shown, 'pnpm dlx skills add vercel-labs/agent-skills -g -a claude-code -a codex -s frontend-design --copy -l', 'client command line');
     const before = installRequests.length;
-    await page.getByRole('button', {name: 'Preview', exact: true}).click(); await waitToast(/pnpm dlx skills add/);
-    eq(installRequests.length, before, 'Preview is client-side: no /api/install request');
+    // Since 2026-11-07 Preview asks the backend for the offline bridge plan so
+    // it can show trust blockers. The invariant is that Preview never runs or
+    // installs anything: one request, preview:true, no run flag.
+    await page.getByRole('button', {name: 'Preview', exact: true}).click();
+    const panel = page.locator('[data-modal=install] .preview-panel').filter({hasText: 'ready to install'});
+    await panel.waitFor();
+    eq(installRequests.length, before + 1, 'Preview sends exactly one /api/install request');
+    const sent = JSON.parse(installRequests[installRequests.length - 1].body);
+    eq(sent.preview, true, 'Preview request is the offline plan'); ok(!sent.run, 'Preview request never sets run');
+    const planned = await api('POST', '/api/install', {source: 'vercel-labs/agent-skills', runner: 'pnpm', scope: 'global', agents: ['claude-code', 'codex'], skills: ['frontend-design'], copy: true, list_only: true, preview: true});
+    eq((await panel.locator('code').first().innerText()).trim(), planned.json.command, 'panel shows the server plan command');
+    ok((await panel.locator('li').count()) >= 1, 'panel lists the API trust blockers');
     const srv = await api('POST', '/api/install', {source: 'vercel-labs/agent-skills', runner: 'pnpm', scope: 'global', agents: ['claude-code', 'codex'], skills: ['frontend-design'], copy: true, list_only: true});
     eq(srv.status, 200); eq(srv.json.executed, false, 'no run flag -> not executed'); eq(srv.json.command, shown, 'UI preview == command the server would run');
     ok(!fs.existsSync(path.join(root, 'RUNNER-EXECUTED.txt')));

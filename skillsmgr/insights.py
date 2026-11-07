@@ -17,8 +17,10 @@ explicitly ``unresolved`` per ADR-002 until the approval-gated
 
 from __future__ import annotations
 
+import ast
 import copy
 import difflib
+import itertools
 import re
 import unicodedata
 from typing import Callable
@@ -28,6 +30,7 @@ from .validator import validate_skill_name
 __all__ = [
     "MAX_BODY_DIFF_LINES",
     "MAX_REGISTRY_SEGMENT",
+    "MAX_RISK_FINDINGS",
     "REGISTRY_AUDIT_PROVIDERS",
     "REGISTRY_BASE_URL",
     "REGISTRY_PREVIEW_POLICY",
@@ -106,6 +109,145 @@ _SUSPICIOUS_PHRASES = (
     "exfiltrate",
     "send credentials",
     "bypass approval",
+)
+
+# --- Phase B single-purpose static checks --------------------------------
+#
+# Written fresh for this project.  The ideas overlap a third-party scanner's
+# (SkillSpector, Apache-2.0) categories, but no pattern, id or wording is
+# copied from it.  Every check below runs only over data the caller already
+# supplied -- the record's body, its description, and an optional bundled-file
+# listing -- so this module still reads no filesystem, imports and executes no
+# bundled code, and establishes no safety verdict.
+
+MAX_RISK_FINDINGS = 200
+PADDING_SPACE_RUN = 200
+PADDING_BLANK_LINES = 30
+MAX_SCANNED_SCRIPT_FILES = 50
+MAX_SCANNED_SCRIPT_CHARS = 256 * 1024
+
+_WARNING_CONTEXT_PHRASES = (
+    "do not", "don't", "never", "avoid", "instead of", "unsafe",
+)
+_WARNING_CONTEXT_NOTE = (
+    " Recorded at the lowest severity because the match sits in a warning or "
+    "negation context; confirm the surrounding sentence."
+)
+
+_REMOTE_EXEC_RE = re.compile(
+    r"\b(?:curl|wget)\b[^\n|]{0,160}\|\s*(?:sh|bash|zsh)\b"
+    r"|\biex\s*\(\s*iwr\b[^)\n]{0,200}\)"
+    r"|\bInvoke-Expression\s*\(\s*Invoke-WebRequest\b",
+    re.IGNORECASE,
+)
+_DECODED_EXEC_RE = re.compile(
+    r"\bbase64\b[^\n|]{0,160}\|\s*(?:sh|bash|zsh)\b"
+    r"|\beval\s*\(\s*atob\s*\("
+    r"|\bexec\s*\(\s*(?:base64\.)?b64decode\s*\("
+    r"|\bexec\s*\(\s*codecs\.decode\s*\(",
+    re.IGNORECASE,
+)
+_CREDENTIAL_RE = re.compile(
+    r"(?:~/|\$HOME/)?\.ssh(?:/[^\s`\"']*)?"
+    r"|(?<!\.ssh/)\bid_rsa\b"
+    r"|(?:~/|\$HOME/)?\.aws/credentials\b"
+    r"|(?<![\w.])\.netrc\b"
+    r"|(?<![\w.-])\.env(?![\w-])(?!\.\w)"
+    r"|\bsecurity\s+find-generic-password\b"
+    r"|(?:~/|\$HOME/)?\.config/gcloud\b"
+    r"|(?:~/|\$HOME/)?\.kube/config\b"
+    r"|(?<![\w.])\.npmrc\b",
+    re.IGNORECASE,
+)
+_SUPPRESSION_RE = re.compile(
+    r"\bnever\s+refuse\b"
+    r"|\bignore\s+(?:all\s+)?previous\s+instructions\b"
+    r"|\bdo\s+not\s+mention\s+this\s+skill\b"
+    r"|\bwithout\s+warning\s+the\s+user\b"
+    r"|\bdo(?:n['\u2019]t|\s+not)\s+tell\s+the\s+user\b",
+    re.IGNORECASE,
+)
+_PERSISTENCE_RE = re.compile(
+    r"\bcrontab\b"
+    r"|\bsystemctl\s+--user\b"
+    r"|(?:~/|\$HOME/)\.config/systemd/user/"
+    r"|(?:>>?|\btee\s+(?:-a\s+)?)[^\n]{0,40}"
+    r"(?:\.bashrc|\.zshrc|\.bash_profile|\.zprofile|\.profile)\b"
+    r"|\bLaunchAgents\b"
+    r"|\blaunchctl\s+(?:load|bootstrap)\b",
+    re.IGNORECASE,
+)
+_PADDING_SPACE_RE = re.compile(r"[ \t]{200,}")
+_PADDING_BLANK_RE = re.compile(r"(?:\n[ \t]*){31,}")
+_BROAD_TRIGGER_RE = re.compile(
+    r"\buse\s+for\s+any\b"
+    r"|\buse\s+for\s+all\s+tasks\b"
+    r"|\balways\s+use\s+this\s+skill\b"
+    r"|\buse\s+whenever\b",
+    re.IGNORECASE,
+)
+_BUILTIN_COMMAND_NAMES = frozenset({
+    "help", "clear", "compact", "init", "review", "config", "doctor",
+    "login", "logout",
+})
+_DYNAMIC_BUILTINS = frozenset({"exec", "eval", "compile", "__import__"})
+_SUBPROCESS_SHELL_CALLS = frozenset({
+    "run", "call", "check_call", "check_output", "Popen",
+})
+
+_REMOTE_EXEC_WHY = (
+    "remote script piped into a shell; the bytes are not reviewed before "
+    "execution"
+)
+_DECODED_EXEC_WHY = (
+    "encoded payload is decoded and executed; the executed text is not "
+    "visible in this document"
+)
+_CREDENTIAL_WHY = (
+    "credential or secret path; reading it can expose keys the user did not "
+    "intend to share"
+)
+_SUPPRESSION_WHY = (
+    "instruction asks the model to withhold warnings or refusals from the "
+    "user; English phrases only, so translated equivalents are not detected"
+)
+_PERSISTENCE_WHY = (
+    "persistence mechanism; the change outlives the session and can run later "
+    "without the user present"
+)
+_BYTECODE_WHY = (
+    "shipped bytecode is opaque, platform-specific, and unnecessary in a "
+    "skill tree"
+)
+_PADDING_WHY = (
+    "long whitespace runs can push hidden text out of view in a rendered "
+    "document; the threshold is stated in the evidence"
+)
+_BROAD_TRIGGER_WHY = (
+    "description claims an almost-universal trigger, so the skill can "
+    "activate outside the task it was written for"
+)
+_SHADOW_WHY = (
+    "the skill name equals a built-in command, so it can be confused with the "
+    "command the user meant"
+)
+_DYNAMIC_CODE_WHY = (
+    "bundled Python builds or runs code dynamically; parsed with ast and "
+    "never imported or executed here"
+)
+_SKIPPED_WHY = (
+    "bounded static analysis skipped this file; a missing finding is not "
+    "evidence of safety"
+)
+
+_SHELL_CHECKS = (
+    (_REMOTE_EXEC_RE, "remote-exec", "high", _REMOTE_EXEC_WHY),
+    (_DECODED_EXEC_RE, "decoded-exec", "high", _DECODED_EXEC_WHY),
+    (_CREDENTIAL_RE, "credential-path", "high", _CREDENTIAL_WHY),
+    (_PERSISTENCE_RE, "persistence", "medium", _PERSISTENCE_WHY),
+)
+_WORDING_CHECKS = (
+    (_SUPPRESSION_RE, "suppression", "medium", _SUPPRESSION_WHY),
 )
 
 
@@ -376,6 +518,7 @@ def risk_scan(record: dict) -> list[dict]:
     findings.extend(_scan_extension_keys(record))
     findings.extend(_scan_bare_urls(body, findings))
     findings.extend(_scan_hidden_unicode(record))
+    findings.extend(_phase_b_findings(record, body))
     return [dict(finding, advisory=True, authority="advisory")
             for finding in findings]
 
@@ -480,6 +623,311 @@ def _scan_bare_urls(body: str, findings: list[dict]) -> list[dict]:
              "why": "bare external URL outside markdown link "
                     "syntax; confirm before loading"}
             for url in _URL_RE.findall(body) if url[:160] not in known]
+
+
+def _phase_b_findings(record: dict, body: str) -> list[dict]:
+    """Run the Phase B checks over caller-supplied text and file listings."""
+    entries = _bundled_entries(record)
+    texts = [("", body)] + _script_texts(entries)
+    findings: list[dict] = []
+    findings.extend(_scan_text_checks(texts, _SHELL_CHECKS))
+    wording_texts = list(texts)
+    description = record.get("description")
+    if isinstance(description, str) and description:
+        wording_texts.append(("description: ", description))
+    findings.extend(_scan_text_checks(wording_texts, _WORDING_CHECKS))
+    findings.extend(_scan_padding(body))
+    findings.extend(_scan_description_triggers(record))
+    findings.extend(_scan_shipped_bytecode(entries))
+    findings.extend(_scan_dynamic_code(entries))
+    return _limit_new_findings(findings)
+
+
+def _bounded_evidence(text: str, limit: int = 160) -> str:
+    """Escape non-printable characters and bound one evidence string."""
+    escaped = "".join(
+        char if char.isprintable() else f"\\u{ord(char):04X}"
+        for char in text
+    )
+    return escaped[:limit]
+
+
+def _match_line(text: str, start: int, end: int) -> str:
+    """Return the line containing ``text[start:end]``."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if line_end < 0:
+        line_end = len(text)
+    return text[line_start:line_end]
+
+
+def _warning_context(line: str, matched: str) -> bool:
+    """Say whether the surrounding line warns about the matched text.
+
+    The matched text itself is removed first, so a suppression phrase such as
+    ``never refuse`` is not mistaken for the word "never" that marks a warning.
+    """
+    residual = line.replace(matched, " ", 1).lower()
+    return any(phrase in residual for phrase in _WARNING_CONTEXT_PHRASES)
+
+
+def _pattern_findings(text: str, label: str, pattern: re.Pattern,
+                      kind: str, severity: str, why: str) -> list[dict]:
+    """Build one finding per bounded match, downgrading warned-about text."""
+    findings: list[dict] = []
+    truncated = False
+    for match in itertools.islice(pattern.finditer(text),
+                                 MAX_RISK_FINDINGS + 1):
+        if len(findings) >= MAX_RISK_FINDINGS:
+            truncated = True
+            break
+        matched = match.group(0)
+        warns = _warning_context(
+            _match_line(text, match.start(), match.end()), matched)
+        findings.append({
+            "kind": kind,
+            "severity": "low" if warns else severity,
+            "evidence": _bounded_evidence(f"{label}{matched}"),
+            "confidence": "heuristic",
+            "why": why + _WARNING_CONTEXT_NOTE if warns else why,
+        })
+    if truncated:
+        last = dict(findings[-1])
+        last["evidence"] = (
+            f"{last['evidence']}; further matches omitted at the "
+            f"{MAX_RISK_FINDINGS}-finding bound"
+        )
+        findings[-1] = last
+    return findings
+
+
+def _scan_text_checks(texts: list[tuple[str, str]],
+                      checks: tuple[tuple[re.Pattern, str, str, str], ...]
+                      ) -> list[dict]:
+    """Apply single-purpose text checks to labelled body/file chunks."""
+    findings: list[dict] = []
+    for label, text in texts:
+        for pattern, kind, severity, why in checks:
+            findings.extend(
+                _pattern_findings(text, label, pattern, kind, severity, why))
+    return findings
+
+
+def _bundled_entries(record: dict) -> list[dict]:
+    """Return the optional bundled-file listing the caller supplied.
+
+    The accepted shape is the registry snapshot's: a list of mappings carrying
+    ``path`` and, when the bytes are already in memory, ``contents``.  A
+    record without a listing yields no entries, and nothing is read from disk.
+    """
+    entries = record.get("files")
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _entry_path(entry: dict) -> str:
+    path = entry.get("path")
+    return path if isinstance(path, str) else ""
+
+
+def _entry_text(entry: dict) -> str:
+    for key in ("contents", "content", "text"):
+        value = entry.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _script_texts(entries: list[dict]) -> list[tuple[str, str]]:
+    """Label in-memory bundled text for the pattern checks, bounded."""
+    texts: list[tuple[str, str]] = []
+    for entry in entries:
+        if len(texts) >= MAX_SCANNED_SCRIPT_FILES:
+            break
+        text = _entry_text(entry)
+        if text and len(text) <= MAX_SCANNED_SCRIPT_CHARS:
+            texts.append((f"{_entry_path(entry) or '<bundled>'}: ", text))
+    return texts
+
+
+def _scan_padding(body: str) -> list[dict]:
+    """Report padding runs long enough to hide text off screen."""
+    findings: list[dict] = []
+    for match in itertools.islice(_PADDING_SPACE_RE.finditer(body),
+                                 MAX_RISK_FINDINGS):
+        findings.append({
+            "kind": "padding", "severity": "low",
+            "evidence": f"{len(match.group(0))} consecutive spaces/tabs "
+                        f"(threshold {PADDING_SPACE_RUN})",
+            "confidence": "heuristic",
+            "why": _PADDING_WHY,
+        })
+    for match in itertools.islice(_PADDING_BLANK_RE.finditer(body),
+                                 MAX_RISK_FINDINGS):
+        blank_lines = match.group(0).count("\n") - 1
+        findings.append({
+            "kind": "padding", "severity": "low",
+            "evidence": f"{blank_lines} consecutive blank lines "
+                        f"(threshold {PADDING_BLANK_LINES})",
+            "confidence": "heuristic",
+            "why": _PADDING_WHY,
+        })
+    return findings
+
+
+def _scan_description_triggers(record: dict) -> list[dict]:
+    """Flag over-broad triggers and built-in command name collisions."""
+    findings: list[dict] = []
+    description = record.get("description")
+    if isinstance(description, str):
+        for match in itertools.islice(_BROAD_TRIGGER_RE.finditer(description),
+                                     MAX_RISK_FINDINGS):
+            findings.append({
+                "kind": "broad-trigger", "severity": "low",
+                "evidence": _bounded_evidence(match.group(0)),
+                "confidence": "heuristic",
+                "why": _BROAD_TRIGGER_WHY,
+            })
+    name = record.get("name")
+    if isinstance(name, str) and name.strip().lower() in _BUILTIN_COMMAND_NAMES:
+        findings.append({
+            "kind": "broad-trigger", "severity": "low",
+            "evidence": _bounded_evidence(
+                f"name '{name.strip()}' equals a built-in command"),
+            "confidence": "heuristic",
+            "why": _SHADOW_WHY,
+        })
+    return findings
+
+
+def _scan_shipped_bytecode(entries: list[dict]) -> list[dict]:
+    """Report ``__pycache__``/``.pyc`` entries from the listing only."""
+    findings: list[dict] = []
+    for entry in entries:
+        if len(findings) >= MAX_RISK_FINDINGS:
+            break
+        path = _entry_path(entry)
+        parts = path.replace("\\", "/").split("/")
+        if not path or not ("__pycache__" in parts or path.endswith(".pyc")):
+            continue
+        findings.append({
+            "kind": "bytecode", "severity": "low",
+            "evidence": _bounded_evidence(path),
+            "confidence": "heuristic",
+            "why": _BYTECODE_WHY,
+        })
+    return findings
+
+
+def _scan_dynamic_code(entries: list[dict]) -> list[dict]:
+    """Parse bundled ``.py`` sources with ``ast``; never import or execute."""
+    findings: list[dict] = []
+    skipped: dict[str, int] = {}
+    scanned = 0
+    for entry in entries:
+        path = _entry_path(entry)
+        if not path.endswith(".py"):
+            continue
+        if scanned >= MAX_SCANNED_SCRIPT_FILES:
+            skipped["count"] = skipped.get("count", 0) + 1
+            continue
+        text = _entry_text(entry)
+        if len(text) > MAX_SCANNED_SCRIPT_CHARS:
+            skipped["size"] = skipped.get("size", 0) + 1
+            continue
+        scanned += 1
+        try:
+            tree = ast.parse(text, filename=path)
+        except (SyntaxError, ValueError):
+            skipped["syntax"] = skipped.get("syntax", 0) + 1
+            continue
+        findings.extend(_dynamic_calls(tree, path))
+    findings.extend(_skipped_notes(skipped))
+    return findings
+
+
+def _dynamic_calls(tree: ast.AST, path: str) -> list[dict]:
+    """Report dynamic-execution call sites in one parsed file."""
+    findings: list[dict] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        label = _dynamic_call_label(node)
+        if label is None:
+            continue
+        findings.append({
+            "kind": "dynamic-code", "severity": "medium",
+            "evidence": _bounded_evidence(f"{path}:{node.lineno} {label}"),
+            "confidence": "heuristic",
+            "why": _DYNAMIC_CODE_WHY,
+        })
+        if len(findings) >= MAX_RISK_FINDINGS:
+            break
+    return findings
+
+
+def _dynamic_call_label(node: ast.Call) -> str | None:
+    """Name one dynamic-execution call, or return ``None`` for anything else."""
+    func = node.func
+    if isinstance(func, ast.Name) and func.id in _DYNAMIC_BUILTINS:
+        return f"{func.id}(...)"
+    if not isinstance(func, ast.Attribute):
+        return None
+    owner = _dotted_name(func.value)
+    if owner == "os" and func.attr in {"system", "popen"}:
+        return f"os.{func.attr}(...)"
+    if (owner == "subprocess" and func.attr in _SUBPROCESS_SHELL_CALLS
+            and _has_shell_true(node)):
+        return f"subprocess.{func.attr}(..., shell=True)"
+    return None
+
+
+def _dotted_name(node: ast.AST) -> str:
+    """Render a dotted attribute chain (``os.path``) for a call target."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _dotted_name(node.value)
+        return f"{parent}.{node.attr}" if parent else ""
+    return ""
+
+
+def _has_shell_true(node: ast.Call) -> bool:
+    for keyword in node.keywords:
+        value = keyword.value
+        if (keyword.arg == "shell" and isinstance(value, ast.Constant)
+                and value.value is True):
+            return True
+    return False
+
+
+def _skipped_notes(skipped: dict[str, int]) -> list[dict]:
+    """Report bounded-analysis skips so a missing finding is not silent."""
+    reasons = (
+        ("syntax", "a syntax error"),
+        ("size", f"over the {MAX_SCANNED_SCRIPT_CHARS} character scan limit"),
+        ("count", f"past the {MAX_SCANNED_SCRIPT_FILES}-file scan limit"),
+    )
+    return [{
+        "kind": "dynamic-code", "severity": "low",
+        "evidence": f"{skipped[key]} bundled Python file(s) not analyzed: "
+                    f"{reason}",
+        "confidence": "heuristic",
+        "why": _SKIPPED_WHY,
+    } for key, reason in reasons if skipped.get(key)]
+
+
+def _limit_new_findings(findings: list[dict]) -> list[dict]:
+    """Bound the Phase B findings and say how many were omitted."""
+    if len(findings) <= MAX_RISK_FINDINGS:
+        return findings
+    kept = findings[:MAX_RISK_FINDINGS]
+    omitted = len(findings) - MAX_RISK_FINDINGS
+    last = dict(kept[-1])
+    last["evidence"] = f"{last['evidence']}; {omitted} additional matches omitted"
+    kept[-1] = last
+    return kept
 
 
 def registry_preview(entry: dict, trust_confirmed: bool = False) -> dict:
