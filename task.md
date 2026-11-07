@@ -279,7 +279,8 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
   fraction or 1%; the char/token conversion is stated as an assumption), honours
   `name-only`/`user-invocable-only`/`off` and `disable-model-invocation`, and
   marks the estimate partial when project settings are unread. This machine:
-  77,516 chars vs ~40,000 (2026-11-07). A v2 page for it is not built yet.
+  77,516 chars vs ~40,000 (2026-11-07). Shown in v2 Quality as the "What
+  Claude Code sees" card (checked in a real browser at desktop and 320px).
 - [x] Resident-token effect on every v2 toggle toast and switch (2026-11-07).
 - [x] Silent-failure lint: the >1,536-char cap (R6), plus empty frontmatter and
   unquoted `: ` in plain scalars (2026-11-07, `tests/test_validator_silent_failures.py`).

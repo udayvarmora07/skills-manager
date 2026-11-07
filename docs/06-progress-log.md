@@ -51,7 +51,6 @@ corrects the earlier "OpenCode documents no order".
 
 **[?] Still open.**
 - Codex TOML (D-1) and shared review plumbing (R15 remainder).
-- The v2 page for the listing estimate.
 - Every maintainer decision, and every human sign-off.
 
 ## 2026-11-07 — Gemini CLI native skill switch (R4, read-only)
