@@ -183,7 +183,8 @@ the docs mark them as not needing maintainer approval.
   root files kept: they are tracked, linked from docs and record design history.
 - [x] **R8** triage refreshed 2026-11-07 in @docs/23-github-actions-dependency-pr-review-2026-09-23.md:
   all five Dependabot targets are themselves superseded; recommend one reviewed
-  pin PR (needs a release dry run). Issue #14 stays open on its F-2 `[ASK]`.
+  pin PR, done as #20 with a passing release dry run (draft release, deleted).
+  Issue #14 stays open on its F-2 `[ASK]`.
 - [ ] **R11** read `skills-lock.json` / `apm.lock.yaml`: declared vs present vs
   hash (⚠ unless folded into `doctor`; decision D-3).
 - [ ] **R12** consumer rows for Amp, Roo, Cline, Kiro, Copilot, Zed,

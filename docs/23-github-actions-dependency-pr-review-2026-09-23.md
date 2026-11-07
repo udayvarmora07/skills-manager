@@ -1,8 +1,27 @@
 # GitHub Actions Dependency PR Review — 2026-09-23
 
-**Version 1.2.0**
+**Version 1.3.0**
 
 **AI manifest**: Dated, read-only review of Dependabot PRs #15–#19 against the exact workflow uses, upstream action metadata, current CI evidence, and the release artifact contract. Recommendations are review guidance only; no GitHub review, comment, branch update, or merge was posted. Re-verified 2026-10-06: all five PRs are still open, every SHA recorded below still matches the `uses:` ref its PR introduces, and the CI evidence is refreshed against the current (now green) `main`.
+
+## Resolution — 2026-11-07
+
+**[SPEC]** Superseded by [udayvarmora07/skills-manager#20](https://github.com/udayvarmora07/skills-manager/pull/20),
+which applies the pins in the re-triage table below to `ci.yml`, `release.yml`
+and the reviewed-SHA table together. Every SHA was checked against both the
+releases API and `git ls-remote`. A pin-gate mutation (one old SHA restored)
+failed `test_sec14_every_first_party_action_is_pinned` as intended.
+
+**Release dry run.** A throwaway workflow on a throwaway branch ran the changed
+release steps with the new pins: build, upload-artifact v7.0.2,
+download-artifact v8.0.2 (three jobs), attest-build-provenance v4.2.2, and a
+**draft** release through action-gh-release v3.0.4
+([run 42366768629](https://github.com/udayvarmora07/skills-manager/actions/runs/42366768629)).
+All four jobs succeeded, the draft carried both artifacts, and GitHub recorded
+an attestation for the wheel's sha256. The draft release and the branch were
+then deleted. Not exercised: the tag-gated version check, the two
+`pypa/gh-action-pypi-publish` steps (pin unchanged) and the protected
+`release` environment, which run only on a real `v*` tag.
 
 ## Re-triage — 2026-11-07
 
