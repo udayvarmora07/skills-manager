@@ -940,7 +940,7 @@
         </div>
         <div class="workspace-project-form">
           <label for="workspace-project">Project root (optional)</label>
-          <input id="workspace-project" name="workspace-project" v-model.trim="workspaceProject" placeholder="/path/inside/managed-data">
+          <input id="workspace-project" name="workspace-project" v-model.trim="workspaceProject" placeholder="/path/inside/managed-data" @keydown.enter.prevent="!loadingWorkspaces && loadWorkspaces()">
           <button class="btn btn-secondary" type="button" @click="loadWorkspaces" :disabled="loadingWorkspaces">Check project</button>
         </div>
         <section v-if="workspaces" class="workspace-observation" aria-live="polite">
@@ -1665,6 +1665,17 @@
           <button class="btn btn-primary" :disabled="busy" @click="commitRegistryReview">Trust and install reviewed snapshot {{ install.review.review_id }}</button>
         </div>
         <div v-if="install.lastResult" style="margin-top:10px;max-height:220px;overflow:auto;background:#111;color:#ddd;border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;">{{ install.mode === 'registry' ? JSON.stringify(install.lastResult, null, 2) : ((install.lastResult.stdout||'') + (install.lastResult.stderr ? '\n' + install.lastResult.stderr : '') || '(no output)') }}</div>
+        <div v-if="install.mode !== 'registry' && install.preview" class="preview-panel" role="status" aria-live="polite">
+          <strong>{{ (install.preview.registry && install.preview.registry.may_install) ? 'Ready to install' : 'Not ready to install' }}</strong>
+          <code>{{ install.preview.command }}</code>
+          <ul v-if="install.preview.registry && install.preview.registry.blockers && install.preview.registry.blockers.length">
+            <li v-for="blocker in install.preview.registry.blockers" :key="blocker">{{ blocker }}</li>
+          </ul>
+          <small>Offline preview only: no registry request is made and nothing runs. A downloaded snapshot is unverified until an authenticated read.</small>
+          <div v-if="install.preview.registry && install.preview.registry.audit_links && install.preview.registry.audit_links.length" class="preview-audit-links">
+            <a v-for="link in install.preview.registry.audit_links.filter((item) => item.url && item.url.startsWith('https://'))" :key="link.url" :href="link.url" rel="noopener noreferrer" target="_blank">{{ link.provider }}</a>
+          </div>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-secondary" @click="closeModal('install')">Close</button>

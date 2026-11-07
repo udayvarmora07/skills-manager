@@ -8,6 +8,35 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — Classic UI: the install preview now comes from the backend
+
+**[SPEC]** Two classic-UI defects were fixed without touching `webui/v2/`.
+
+**Workspaces.** Enter in `#workspace-project` did nothing while the adjacent
+"Check project" button ran `loadWorkspaces`. The input now carries
+`@keydown.enter.prevent="!loadingWorkspaces && loadWorkspaces()"`, so the key
+runs the same action and cannot start a second request mid-flight.
+
+**Installer preview.** `runInstall(false)` built a command string in the browser
+and showed it in a toast, so the only trust blockers the backend provides were
+never displayed. The dry-run branch now posts the existing offline preview
+payload (`preview: true`, same validations and `busy` handling as the run
+branch) to `POST /api/install` and stores the response in a new
+`install.preview` field, cleared when a real run starts. The local toast remains
+only as the request-failure fallback. The modal renders that response in a
+`preview-panel`: the command, "Ready to install" / "Not ready to install" from
+the plan's `may_install`, one `<li>` per `blockers` entry, and https-only
+`audit_links` as `noopener noreferrer` targets. Every value is mustache
+interpolation — no `v-html`, because the payload is untrusted.
+
+**Verification.** `tests/test_classic_install_preview_contracts.py` (8 tests)
+pins the key binding, runs the real `app.js` under Node to prove the dry-run
+body, the stored response, the cleared field and the failure fallback, rejects
+`v-html` in the panel, restricts audit hrefs to `https://`, and posts the exact
+UI payload to a loopback server to prove `blockers`/`may_install` exist.
+`node --check`, `check_docs.py`, `check_complexity.py` and `smoke_web.py` pass.
+No dependency, build step, Store method, CLI surface or schema change.
+
 ## 2026-11-07 — The default-interface redirect broke CI on Python 3.10
 
 **[SPEC]** CI `unit (py3.10)` failed on `main` at `61355a2`. Because the security,

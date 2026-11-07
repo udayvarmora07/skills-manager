@@ -72,7 +72,7 @@ createApp({
       scopeScanFailed: false,
       budget: null,
       budgetWindow: localStorage.getItem("skillsmgr-budget-window") || "claude",
-      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null },
+      install: { mode: "runner", registryOp: "browse", runner: "npx", source: "", scope: "global", agents: [], skillsFilter: "", copy: false, listOnly: false, page: 0, perPage: 25, view: "all-time", allowStale: false, lastResult: null, review_id: null, review: null, preview: null },
       theme: ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system",
       resolvedTheme: "light",
       systemTheme: "light",
@@ -1306,10 +1306,30 @@ createApp({
       if (!this.install.source || !this.install.source.trim()) { this.toast("Enter a source (e.g. vercel-labs/agent-skills).", "err"); return; }
       if (this.install.runner === "uvx") { this.toast("uvx does not apply to the npm 'skills' package; use npx/pnpm/yarn/bunx.", "err"); return; }
       if (!confirm) {
-        // Dry-run: just show command.
-        this.toast(this.installPreview(), "info");
+        // Dry-run: the backend returns the offline bridge plan (blockers,
+        // audit links, trust evidence) without a registry request or a run.
+        this.busy = true;
+        try {
+          const payload = {
+            source: this.install.source.trim(),
+            runner: this.install.runner,
+            scope: this.install.scope || "global",
+            agents: this.install.agents && this.install.agents.length ? this.install.agents : undefined,
+            skills: this.install.skillsFilter ? [this.install.skillsFilter] : undefined,
+            copy: !!this.install.copy,
+            list_only: !!this.install.listOnly,
+            preview: true,
+          };
+          this.install.preview = await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        } catch (e) {
+          this.install.preview = null;
+          this.toast(this.installPreview(), "info");
+        } finally {
+          this.busy = false;
+        }
         return;
       }
+      this.install.preview = null;
       this.busy = true;
       try {
         const payload = {

@@ -40,6 +40,19 @@ Live registry fetch/commit and actual external runner execution are not exercise
 by this task's browser checks. Human screen-reader and spoken usability sign-off
 remain unclaimed. The work landed on `main` as `61355a2`.
 
+## Classic UI defect fixes (2026-11-07)
+
+- [x] Workspaces: Enter in the project field runs `loadWorkspaces`, guarded by
+  `loadingWorkspaces`.
+- [x] Installer preview: `runInstall(false)` posts `preview: true` to
+  `POST /api/install`, stores the bridge plan in `install.preview`, and clears
+  it when a real run starts; the local toast is the request-failure fallback.
+- [x] Render the plan's command, `may_install` wording, blockers and https-only
+  audit links with mustache interpolation only (no `v-html`).
+- [x] Cover both with `tests/test_classic_install_preview_contracts.py`
+  (source, Node behaviour and one real HTTP preview); `node --check`, docs,
+  complexity and web smoke pass.
+
 ## Performance and UX session completion (2026-11-06)
 
 Prepared on `claude/project-perf-ux-review-4da40d`; the maintainer subsequently
