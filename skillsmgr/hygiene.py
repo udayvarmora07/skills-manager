@@ -10,12 +10,13 @@ from __future__ import annotations
 import contextvars
 import hashlib
 import json
+import os
 import re
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import loader, source_lock, validator
+from . import loader, lockfiles, source_lock, validator
 from .tokens import estimate
 
 
@@ -856,16 +857,76 @@ def _summary(findings: list[dict], observed_records: int, physical_count: int, l
     }
 
 
-def hygiene_report(records: list[dict], *, scope: str, max_instances: int = 10_000) -> dict:
+def _lockfile_section(
+    degraded: list[dict],
+    *,
+    project_root,
+    home,
+    xdg_state_home,
+) -> dict:
+    """Gather lockfile evidence without letting one unreadable lock abort the report."""
+    try:
+        resolved_home = home if home is not None else Path.home()
+    except (OSError, RuntimeError):
+        resolved_home = None
+    if xdg_state_home is None:
+        xdg_state_home = os.environ.get("XDG_STATE_HOME") or None
+    try:
+        return lockfiles.lockfile_evidence(
+            resolved_home,
+            project_root=project_root,
+            xdg_state_home=xdg_state_home,
+        )
+    except Exception as exc:  # bounded evidence, never a report failure
+        reason = _bounded(str(exc))
+        degraded.append({"section": "lockfiles", "reason": reason})
+        return lockfiles.unavailable_evidence(f"lockfile evidence was unavailable: {reason}")
+
+
+def _report_extras(project_root, home, xdg_state_home) -> dict:
+    """Pass optional context through to the report only when supplied."""
+    extras = {}
+    for key, value in (
+        ("project_root", project_root),
+        ("home", home),
+        ("xdg_state_home", xdg_state_home),
+    ):
+        if value is not None:
+            extras[key] = value
+    return extras
+
+
+def hygiene_report(
+    records: list[dict],
+    *,
+    scope: str,
+    max_instances: int = 10_000,
+    project_root=None,
+    home=None,
+    xdg_state_home=None,
+) -> dict:
     """Build a stable JSON-safe read-only hygiene report."""
     token = _RESOLVED_IDENTITIES.set({})
     try:
-        return _hygiene_report(records, scope=scope, max_instances=max_instances)
+        return _hygiene_report(
+            records,
+            scope=scope,
+            max_instances=max_instances,
+            **_report_extras(project_root, home, xdg_state_home),
+        )
     finally:
         _RESOLVED_IDENTITIES.reset(token)
 
 
-def _hygiene_report(records: list[dict], *, scope: str, max_instances: int) -> dict:
+def _hygiene_report(
+    records: list[dict],
+    *,
+    scope: str,
+    max_instances: int,
+    project_root=None,
+    home=None,
+    xdg_state_home=None,
+) -> dict:
     prepared, degraded = _prepare_records(records, max_instances)
     unavailable = _unavailable_signals()
     findings = _validation_findings(prepared)
@@ -894,6 +955,12 @@ def _hygiene_report(records: list[dict], *, scope: str, max_instances: int) -> d
     context_findings, largest = _context_findings(prepared)
     findings.extend(context_findings)
     findings.extend(_source_lock_findings(prepared, unavailable, degraded))
+    lockfile_section = _lockfile_section(
+        degraded,
+        project_root=project_root,
+        home=home,
+        xdg_state_home=xdg_state_home,
+    )
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))
     full_summary["unavailable"] += len(unavailable)
@@ -907,6 +974,7 @@ def _hygiene_report(records: list[dict], *, scope: str, max_instances: int) -> d
         "category_counts": category_counts,
         "findings": findings[:MAX_FINDINGS],
         "largest_instances": largest,
+        "lockfiles": lockfile_section,
         "unavailable_signals": sorted(unavailable, key=lambda item: (str(item.get("signal", "")), str(item.get("name", "")))),
         "degraded": sorted(degraded, key=lambda item: (str(item.get("section", "")), str(item.get("instance", "")), str(item.get("reason", "")))),
         "limits": {

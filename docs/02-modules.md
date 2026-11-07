@@ -373,6 +373,39 @@ opt-in (`true`/`"static"`/`"llm"`/`{"llm": bool}`; empty means off) and raises
 `source_update._prepare_from_source` only; commit and apply never re-run it.
 No Store method, SQLite state or runtime dependency.
 
+## `lockfiles.py`
+
+Read-only evidence for lockfiles written by the open-source `skills` CLI
+(vercel-labs/skills). `read_lock(path, kind=...)` parses one bounded lockfile and
+returns a JSON-safe record; a missing file is `missing`, and malformed JSON, a
+non-object root, an unsupported version, a non-dict skill entry, a symlink, or a
+file above `MAX_LOCK_BYTES` (4 MiB) is `invalid` with a reason -- it never
+raises. Project locks must be version 1 and global locks version 3. At most
+`MAX_LOCK_ENTRIES` (500) entries are kept with an `omitted` count.
+`sanitize_name()` reproduces the CLI's directory-name rule (lowercase, each run
+of characters outside `[a-z0-9._]` becomes `-`, strip leading/trailing `.`/`-`,
+truncate to 255, empty becomes `unnamed-skill`). `safe_source_url()` removes
+userinfo, query, and fragment from a `sourceUrl` so no credential is echoed.
+`computed_folder_hash(dir, order)` reproduces the project lock's `computedHash`
+(relative path bytes followed by file bytes, no separators, under a plain
+codepoint or case-insensitive ordering; `.git` and `node_modules` are skipped
+and symlinks are not files). `skill_folder_tree_sha(dir)` computes the git tree
+object SHA-1 used by the global lock's `skillFolderHash`, with blob/tree
+headers, git's byte-order entry sort (directories compared with a trailing
+`/`), executable/symlink modes, and `.git` skipped. Both hashers share a
+per-skill budget of `MAX_HASH_FILES` (2,000 files) and `MAX_HASH_BYTES` (64 MiB)
+and raise `LockfileTooLarge` above it. `lockfile_evidence(home,
+project_root=None, xdg_state_home=None)` compares each declared skill with its
+installed copy (`<root>/.agents/skills/<sanitize_name>`), reports
+present/disabled/hash status and summary counts, lists undeclared global
+installs (bounded), and returns the project lock as `unavailable` when no
+project root context exists. A global `skillFolderHash` mismatch is
+`differs_from_recorded_tree`; a project `computedHash` outcome that matches
+neither ordering is `mismatch_or_unverifiable` with the ICU-collation
+explanation. An `apm.lock.yaml` is reported as an unavailable signal and is
+never parsed. `hygiene_report()` folds the section under `lockfiles`; no Store
+method, SQLite state, cache, network request, or write is added.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official

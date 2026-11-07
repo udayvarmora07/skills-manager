@@ -47,6 +47,7 @@ TARGET_FILES = (
     "skillsmgr/archive.py",
     "skillsmgr/evals.py",
     "skillsmgr/external_scan.py",
+    "skillsmgr/lockfiles.py",
 )
 DEFAULT_THRESHOLD = 15
 DEFAULT_TOP_N = 10
