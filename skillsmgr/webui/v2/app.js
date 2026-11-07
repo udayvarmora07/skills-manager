@@ -305,8 +305,11 @@ const app = createApp({
      * request. A body is never assumed loaded: `bodyLoaded` tells an empty
      * document from one that has not been read yet. */
     bodyKey(c) { return `${c && c.scope ? c.scope : ""}\u0000${(c && c.name) || ""}\u0000${(c && c.hash) || ""}`; },
-    bodyReady(c) { if (!c) return false; return !!c.bodyLoaded || Object.prototype.hasOwnProperty.call(this.bodies, this.bodyKey(c)); },
-    bodyOf(c) { if (!c) return ""; if (c.bodyLoaded) return c.body || ""; const key = this.bodyKey(c); return Object.prototype.hasOwnProperty.call(this.bodies, key) ? this.bodies[key] : ""; },
+    /* `key in` goes through the reactive proxy's tracked `has` trap;
+     * Object.prototype.hasOwnProperty.call does not, so a computed that read
+     * it never re-ran when the body arrived (Edit stayed disabled). */
+    bodyReady(c) { if (!c) return false; return !!c.bodyLoaded || this.bodyKey(c) in this.bodies; },
+    bodyOf(c) { if (!c) return ""; if (c.bodyLoaded) return c.body || ""; const key = this.bodyKey(c); return key in this.bodies ? this.bodies[key] : ""; },
     bodyErrorOf(c) { return c ? this.bodyErrors[this.bodyKey(c)] || "" : ""; },
     applyBody(c, body) { c.body = body; c.bodyLoaded = true; this.bodyErrors[this.bodyKey(c)] = ""; },
     async ensureBodies(copies) {

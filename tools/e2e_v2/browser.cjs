@@ -146,7 +146,7 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
     const response=await page.request.get(base+'/api/skills?scope=all'),records=await response.json();
     const selected=records.find(r=>r.name==='library-fixture');assert(selected);
     for(const fixture of [[],[selected]]){
-      await page.route(/[/]api[/]skills[?]scope=all$/,route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture)}));
+      await page.route(/[/]api[/]skills[?]scope=all(?:&body=0)?$/,route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture)}));
       try{await go('skills');assert.equal(await page.locator('.sk').count(),fixture.length);}finally{await page.unrouteAll({behavior:'wait'});}
     }
   });

@@ -688,3 +688,22 @@ class ServedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LazyBodyReactivityContracts(unittest.TestCase):
+    """The reader/editor readiness checks must be reactive.
+
+    `Object.prototype.hasOwnProperty.call(reactiveObj, key)` is not tracked by
+    Vue's proxy (no getOwnPropertyDescriptor trap), so a computed that used it
+    never re-ran when a lazily fetched body arrived: the skill page's Edit
+    button stayed disabled in a real browser while every unit test passed.
+    """
+
+    def test_body_accessors_use_a_tracked_membership_test(self):
+        source = (ROOT / "skillsmgr" / "webui" / "v2" / "app.js").read_text(encoding="utf-8")
+        start = source.index("bodyReady(c)")
+        end = source.index("bodyErrorOf(c)")
+        accessors = source[start:end]
+        self.assertNotIn("hasOwnProperty.call(this.bodies", accessors)
+        self.assertIn("in this.bodies", accessors)
+
