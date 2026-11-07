@@ -3202,8 +3202,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._as_option_list": {
       "complexity": 4,
-      "end_lineno": 1910,
-      "lineno": 1898
+      "end_lineno": 1922,
+      "lineno": 1910
     },
     "skillsmgr/webapp.py::WebAppHandler._body_json": {
       "complexity": 2,
@@ -3235,15 +3235,10 @@
       "end_lineno": 1058,
       "lineno": 1049
     },
-    "skillsmgr/webapp.py::WebAppHandler._install_command_parts": {
-      "complexity": 7,
-      "end_lineno": 1895,
-      "lineno": 1875
-    },
-    "skillsmgr/webapp.py::WebAppHandler._install_option_argv": {
-      "complexity": 8,
-      "end_lineno": 1935,
-      "lineno": 1912
+    "skillsmgr/webapp.py::WebAppHandler._install_argv_for": {
+      "complexity": 1,
+      "end_lineno": 1907,
+      "lineno": 1888
     },
     "skillsmgr/webapp.py::WebAppHandler._multipart_fields": {
       "complexity": 4,
@@ -3312,7 +3307,7 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_install_post": {
       "complexity": 12,
-      "end_lineno": 1872,
+      "end_lineno": 1871,
       "lineno": 1816
     },
     "skillsmgr/webapp.py::WebAppHandler._route_library_get": {
@@ -3500,10 +3495,20 @@
       "end_lineno": 2235,
       "lineno": 2228
     },
+    "skillsmgr/webapp.py::WebAppHandler._validate_install_runner": {
+      "complexity": 3,
+      "end_lineno": 1886,
+      "lineno": 1874
+    },
     "skillsmgr/webapp.py::WebAppHandler._validate_request": {
       "complexity": 1,
       "end_lineno": 1071,
       "lineno": 1066
+    },
+    "skillsmgr/webapp.py::WebAppHandler._validated_install_values": {
+      "complexity": 3,
+      "end_lineno": 1935,
+      "lineno": 1924
     },
     "skillsmgr/webapp.py::WebAppHandler._write_body": {
       "complexity": 2,

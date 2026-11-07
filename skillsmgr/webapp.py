@@ -1846,8 +1846,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if not isinstance(raw_runner, str):
             raise StoreError("runner must be a string")
         runner = raw_runner.strip() or "npx"
-        cmd_parts = self._install_command_parts(runner, source)
-        self._install_option_argv(cmd_parts, scope, data)
+        cmd_parts = self._install_argv_for(source, runner, scope, data)
         cmd_str = " ".join(cmd_parts)
         if not data.get("run"):
             self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
@@ -1872,27 +1871,40 @@ class WebAppHandler(BaseHTTPRequestHandler):
         return True
 
     @staticmethod
-    def _install_command_parts(runner: str, source: str) -> list[str]:
-        """Return the argv prefix for an allowlisted runner.
+    def _validate_install_runner(runner: str) -> None:
+        """Keep the route's runner contract and its exact error messages.
 
         The allowlist is the security boundary: the runner is never a shell
         string, and ``uvx`` is refused outright because it is not a way to run
-        the npm ``skills`` package.
+        the npm ``skills`` package.  ``insights.install_argv`` enforces the same
+        allowlist, but this route's messages are part of its REST contract.
         """
         if runner == "uvx":
             raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python tools use pipx/uvx with a PyPI package.")
         allowed_runners = {"npx", "pnpm", "yarn", "bunx", "bun"}
         if runner not in allowed_runners:
             raise StoreError(f"unsupported runner {runner!r}; use npx, pnpm, yarn, or bunx")
-        if runner == "npx":
-            return ["npx", "skills", "add", source]
-        if runner == "pnpm":
-            return ["pnpm", "dlx", "skills", "add", source]
-        if runner == "yarn":
-            return ["yarn", "dlx", "skills", "add", source]
-        if runner in ("bunx", "bun"):
-            return ["bunx", "skills", "add", source]
-        return ["npx", "skills", "add", source]
+
+    def _install_argv_for(self, source: str, runner: str, scope: str,
+                          data: dict) -> list[str]:
+        """Render this route's ``skills add`` argv through the shared renderer.
+
+        ``insights.install_argv`` is the only place the command line is built;
+        the route keeps its own validation and error responses for the runner
+        and every forwarded option value.
+        """
+        from .insights import install_argv
+
+        self._validate_install_runner(runner)
+        return install_argv(
+            source,
+            runner,
+            scope,
+            self._validated_install_values("agent", data.get("agents")),
+            self._validated_install_values("skill", data.get("skills")),
+            bool(data.get("copy")),
+            bool(data.get("list_only")),
+        )
 
     @staticmethod
     def _as_option_list(value) -> list | None:
@@ -1909,30 +1921,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return value
         return [value] if isinstance(value, str) else None
 
-    def _install_option_argv(self, cmd_parts: list[str], scope: str, data: dict) -> None:
-        """Append the validated scope, agent, skill and mode flags.
+    def _validated_install_values(self, label: str, raw) -> list[str] | None:
+        """Validate one repeated option into the shared renderer's shape.
 
         Every value that reaches the argv is run through the shared install
         guard, so an option cannot smuggle an argument into the runner.
         """
         from .cli_handlers import validated_install_value
 
-        if scope == "global":
-            cmd_parts.append("-g")
-        agents = self._as_option_list(data.get("agents"))
-        if agents:
-            for a in agents:
-                a = validated_install_value("agent", str(a))
-                cmd_parts.extend(["-a", a])
-        skills_filter = self._as_option_list(data.get("skills"))
-        if skills_filter:
-            for s in skills_filter:
-                s = validated_install_value("skill", str(s))
-                cmd_parts.extend(["-s", s])
-        if bool(data.get("copy")):
-            cmd_parts.append("--copy")
-        if bool(data.get("list_only")):
-            cmd_parts.append("-l")
+        values = self._as_option_list(raw)
+        if not values:
+            return None
+        return [validated_install_value(label, str(value)) for value in values]
 
     def _route_skill_write_post(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
         """Serve ``POST /api/skills`` -- create one skill, 201 on success.
