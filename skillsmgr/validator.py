@@ -69,6 +69,19 @@ _FILLER_RE = re.compile(
     r"(?i)\b(various|miscellaneous|etc\.|stuff|things|"
     r"best practices|appropriately|generally)\b"
 )
+# Delimiters and a top-level plain mapping entry, used only by the advisory
+# silent-failure scans below; parsing stays in ``frontmatter``.
+_DOC_MARKER_LINE = re.compile(r"^---(?:\s+#.*)?$")
+_PLAIN_ENTRY_RE = re.compile(r"^([^\s:#\"'][^:\"']*):(?:[ \t]+(.*))?$")
+_NON_PLAIN_VALUE_PREFIXES = ('"', "'", "|", ">", "[", "{", "&", "*", "!", "#")
+_EMPTY_FRONTMATTER_MESSAGE = (
+    "frontmatter block is present but empty; "
+    "agents will see no name or description"
+)
+_UNQUOTED_COLON_MESSAGE = (
+    "value contains an unquoted ': '; strict YAML parsers used by agents "
+    "reject this, so quote the value"
+)
 
 
 def validate_skill_name(name: str) -> str:
@@ -156,6 +169,7 @@ def validate_text(
         return result
     result.data = data
     result.body = body
+    _check_silent_frontmatter_failures(result, data, text)
 
     if name is not None:
         if not isinstance(name, str) or not name:
@@ -283,6 +297,84 @@ def _check_portability(result: ValidationResult, data: dict) -> None:
         combined = len(description) + len(when_to_use)
         if combined > MAX_COMBINED_DESCRIPTION:
             result.add("warning", f"description and when_to_use exceed {MAX_COMBINED_DESCRIPTION} characters combined (found {combined})", "description")
+
+
+def _is_doc_marker(line: str) -> bool:
+    return bool(_DOC_MARKER_LINE.match(line.strip()))
+
+
+def _frontmatter_block_lines(text: str) -> list[str] | None:
+    """Return the raw lines between the frontmatter delimiters.
+
+    ``None`` means the document carries no frontmatter block; an empty list
+    means the delimiters exist but hold no lines.  This mirrors
+    ``frontmatter.parse_frontmatter`` closely enough for the advisory scans
+    below: the first column-zero delimiter after the opening line closes the
+    block, so a successful parse guarantees the closing marker is present.
+    """
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    lines = text.split("\n")
+    if not lines or not _is_doc_marker(lines[0]):
+        return None
+    for index in range(1, len(lines)):
+        line = lines[index]
+        if line == line.lstrip() and _is_doc_marker(line):
+            return lines[1:index]
+    return None
+
+
+def _plain_frontmatter_entries(lines: list[str]):
+    """Yield ``(key, value)`` for top-level plain-scalar mapping entries."""
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or line[:1].isspace():
+            continue
+        if stripped.startswith(("#", "-")):
+            continue
+        match = _PLAIN_ENTRY_RE.match(stripped)
+        if match is not None:
+            yield match.group(1), match.group(2) or ""
+
+
+def _strip_plain_comment(value: str) -> str:
+    """Drop a trailing `` #`` comment, matching the frontmatter parser."""
+    marker = value.find(" #")
+    if marker >= 0:
+        value = value[:marker]
+    return value.rstrip()
+
+
+def _warn_plain_scalar_colons(
+    result: ValidationResult, lines: list[str]
+) -> None:
+    seen: set[str] = set()
+    for key, value in _plain_frontmatter_entries(lines):
+        if key in seen:
+            continue
+        value = _strip_plain_comment(value)
+        if not value or value.startswith(_NON_PLAIN_VALUE_PREFIXES):
+            continue
+        if ": " in value or value.endswith(":"):
+            seen.add(key)
+            result.add("warning", _UNQUOTED_COLON_MESSAGE, key)
+
+
+def _check_silent_frontmatter_failures(
+    result: ValidationResult, data: dict, text: str
+) -> None:
+    """Warn about frontmatter an agent's strict YAML parser would drop.
+
+    Both findings are advisory: they never change ``valid``, never echo the
+    offending value, and are skipped entirely when the document has no
+    frontmatter block (that case already produces name/description errors).
+    """
+    block = _frontmatter_block_lines(text)
+    if block is None:
+        return
+    if not data:
+        result.add("warning", _EMPTY_FRONTMATTER_MESSAGE, "frontmatter")
+    _warn_plain_scalar_colons(result, block)
 
 
 def _heading_re(body: str) -> bool:
