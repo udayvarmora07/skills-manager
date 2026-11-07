@@ -405,3 +405,51 @@ class HygieneIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    """Defects found by independent review on 2026-11-07."""
+
+    def test_the_request_wide_hash_budget_caps_total_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            skills = {}
+            for i in range(4):
+                folder = home / ".agents" / "skills" / f"s{i}"
+                _write(folder / "SKILL.md", b"x" * 1024)
+                skills[f"s{i}"] = {"source": "o/r", "skillFolderHash": "0" * 40}
+            _write(home / ".agents" / ".skill-lock.json",
+                   json.dumps({"version": 3, "skills": skills}))
+            with unittest.mock.patch.object(lockfiles, "MAX_REQUEST_HASH_BYTES", 2048):
+                rows = lockfiles.lockfile_evidence(home)["global"]["entries"]
+            statuses = [r["hash_status"] for r in rows]
+            self.assertIn("too_large", statuses)
+            self.assertIn("total hashing budget", " ".join(r["hash_reason"] for r in rows))
+
+    def test_the_budget_is_reset_between_requests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            folder = home / ".agents" / "skills" / "one"
+            _write(folder / "SKILL.md", b"x\n")
+            _write(home / ".agents" / ".skill-lock.json", json.dumps(
+                {"version": 3, "skills": {"one": {"source": "o/r",
+                                                   "skillFolderHash": lockfiles.skill_folder_tree_sha(folder)}}}))
+            for _ in range(3):
+                self.assertEqual(lockfiles.lockfile_evidence(home)["global"]["entries"][0]["hash_status"], "match")
+
+    def test_a_credential_in_the_source_fallback_is_not_echoed(self):
+        label = lockfiles._source_label({"source": "https://user:tok3n@host.invalid/r"})["label"]
+        self.assertNotIn("tok3n", label)
+        self.assertNotIn("user", label)
+
+    def test_an_unparseable_url_is_withheld_not_echoed(self):
+        for raw in ("https://user:tok3n@" + "a" * 3000, "user:tok3n@host\x00x"):
+            self.assertNotIn("tok3n", lockfiles.safe_source_url(raw))
+
+    def test_hygiene_redacts_lockfile_paths_under_home(self):
+        from skillsmgr import hygiene
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            _write(home / ".agents" / ".skill-lock.json", json.dumps({"version": 3, "skills": {}}))
+            evidence = hygiene._lockfile_section([], project_root=None, home=home, xdg_state_home=None)
+            self.assertTrue(evidence["global"]["path"].startswith("~"), evidence["global"]["path"])

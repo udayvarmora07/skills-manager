@@ -678,10 +678,14 @@ _CREDENTIAL_MENTION_NOTE = (
 )
 
 
+_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2}
+_EVIDENCE_CONTEXT = 60
+
+
 def _match_severity(kind: str, severity: str, why: str, line: str,
-                    matched: str) -> tuple[str, str]:
+                    matched: str, prefix: str) -> tuple[str, str]:
     """Return the severity and reason for one match on *line*."""
-    if _warning_context(line, matched):
+    if _warning_context(prefix):
         return "low", why + _WARNING_CONTEXT_NOTE
     if kind == "credential-path":
         residual = line.replace(matched, " ", 1)
@@ -690,44 +694,72 @@ def _match_severity(kind: str, severity: str, why: str, line: str,
     return severity, why
 
 
-def _warning_context(line: str, matched: str) -> bool:
-    """Say whether the surrounding line warns about the matched text.
+def _warning_context(prefix: str) -> bool:
+    """Say whether the text *before* a match on its line warns about it.
 
-    The matched text itself is removed first, so a suppression phrase such as
-    ``never refuse`` is not mistaken for the word "never" that marks a warning.
+    Only the prefix counts. A trailing "# never mind" after ``curl … | sh``
+    must not downgrade it, and the match itself is excluded, so a suppression
+    phrase such as ``never refuse`` is not mistaken for a warning word.
     """
-    residual = line.replace(matched, " ", 1).lower()
-    return any(phrase in residual for phrase in _WARNING_CONTEXT_PHRASES)
+    lowered = prefix.lower()
+    return any(phrase in lowered for phrase in _WARNING_CONTEXT_PHRASES)
+
+
+def _match_evidence(label: str, line: str, start: int, end: int) -> str:
+    """Bounded evidence around one match: slice first, then escape."""
+    window = line[max(0, start - _EVIDENCE_CONTEXT):end + _EVIDENCE_CONTEXT]
+    return _bounded_evidence(f"{label}{window.strip()}")
+
+
+def _record_match(findings: list[dict], by_token: dict, token: str,
+                  finding: dict) -> bool:
+    """Keep one finding per token, at the highest severity seen for it.
+
+    Returns False when a new token arrives after the finding bound.
+    """
+    index = by_token.get(token)
+    if index is not None:
+        old = findings[index]
+        if _SEVERITY_RANK[finding["severity"]] > _SEVERITY_RANK[old["severity"]]:
+            findings[index] = finding
+        return True
+    if len(findings) >= MAX_RISK_FINDINGS:
+        return False
+    by_token[token] = len(findings)
+    findings.append(finding)
+    return True
 
 
 def _pattern_findings(text: str, label: str, pattern: re.Pattern,
                       kind: str, severity: str, why: str) -> list[dict]:
     """Build one finding per distinct bounded match, downgrading warned text.
 
-    The same token repeated through a document is reported once, and the
-    evidence is its line rather than the bare token, so a reviewer can judge it.
+    The same token repeated through a document is reported once, at the
+    highest severity any of its occurrences earned, so an earlier harmless
+    mention cannot hide a later dangerous line. Evidence is the text around the
+    match rather than the bare token, so a reviewer can judge it.
     """
     findings: list[dict] = []
+    by_token: dict[str, int] = {}
     truncated = False
-    seen: set[str] = set()
     for match in itertools.islice(pattern.finditer(text),
                                  MAX_RISK_FINDINGS * 4 + 1):
         matched = match.group(0)
-        if matched.lower() in seen:
-            continue
-        seen.add(matched.lower())
-        if len(findings) >= MAX_RISK_FINDINGS:
-            truncated = True
-            break
+        line_start = text.rfind("\n", 0, match.start()) + 1
         line = _match_line(text, match.start(), match.end())
-        level, reason = _match_severity(kind, severity, why, line, matched)
-        findings.append({
+        start, end = match.start() - line_start, match.end() - line_start
+        level, reason = _match_severity(kind, severity, why, line, matched,
+                                        line[:start])
+        finding = {
             "kind": kind,
             "severity": level,
-            "evidence": _bounded_evidence(f"{label}{line.strip()}"),
+            "evidence": _match_evidence(label, line, start, end),
             "confidence": "heuristic",
             "why": reason,
-        })
+        }
+        if not _record_match(findings, by_token, matched.lower(), finding):
+            truncated = True
+            break
     if truncated:
         last = dict(findings[-1])
         last["evidence"] = (
@@ -876,10 +908,13 @@ def _scan_dynamic_code(entries: list[dict]) -> list[dict]:
         scanned += 1
         try:
             tree = ast.parse(text, filename=path)
-        except (SyntaxError, ValueError):
+            findings.extend(_dynamic_calls(tree, path))
+        # A hostile file can exhaust the parser's recursion or memory (deep
+        # attribute chains, a 100k-term expression). That is a skipped file,
+        # never an exception escaping the scan.
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
             skipped["syntax"] = skipped.get("syntax", 0) + 1
             continue
-        findings.extend(_dynamic_calls(tree, path))
     findings.extend(_skipped_notes(skipped))
     return findings
 
@@ -921,13 +956,18 @@ def _dynamic_call_label(node: ast.Call) -> str | None:
 
 
 def _dotted_name(node: ast.AST) -> str:
-    """Render a dotted attribute chain (``os.path``) for a call target."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        parent = _dotted_name(node.value)
-        return f"{parent}.{node.attr}" if parent else ""
-    return ""
+    """Render a dotted attribute chain (``os.path``) for a call target.
+
+    Iterative, so an attribute chain thousands deep cannot recurse.
+    """
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return ""
+    parts.append(node.id)
+    return ".".join(reversed(parts))
 
 
 def _has_shell_true(node: ast.Call) -> bool:

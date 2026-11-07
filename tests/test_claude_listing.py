@@ -107,6 +107,29 @@ class ClaudeListingContracts(unittest.TestCase):
         self.assertEqual(section["listed_skills"], 1)
         self.assertEqual(section["instances_observed"], 2)
 
+    def test_a_user_invocable_only_override_is_hidden_from_the_listing(self):
+        # Documented: "user-invocable-only" -> Listed to Claude: Hidden.
+        self.write_skill("alpha", "D" * 100)
+        self.write_skill("beta", "B" * 10)
+        self.write_settings({"skillOverrides": {"alpha": "user-invocable-only"}})
+        _report, section = self.section()
+        self.assertEqual([entry["name"] for entry in section["entries"]], ["beta"])
+        self.assertEqual(section["excluded"]["skillOverrides_user_invocable_only"], 1)
+
+    def test_disable_model_invocation_keeps_the_skill_out_of_the_listing(self):
+        self.write_skill("alpha", "D" * 100, extra={"disable-model-invocation": True})
+        self.write_skill("beta", "B" * 10)
+        _report, section = self.section()
+        self.assertEqual([entry["name"] for entry in section["entries"]], ["beta"])
+        self.assertEqual(section["excluded"]["disable_model_invocation"], 1)
+
+    def test_without_a_project_root_the_estimate_is_marked_partial(self):
+        self.write_skill("beta", "B" * 10)
+        _report, section = self.section()
+        self.assertEqual(section["confidence"], "partial")
+        self.assertTrue(any("project settings were not read" in r for r in section["partial_reasons"]))
+        self.assertIn(section["status"], ("within_budget", "over_budget_estimate"))
+
     def test_a_disabled_document_is_not_listed(self):
         self.write_skill("alpha", "D" * 100, disabled=True)
         self.write_skill("beta", "B" * 10)

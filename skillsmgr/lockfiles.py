@@ -10,6 +10,7 @@ of tampering or of an available update.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import os
@@ -62,9 +63,14 @@ class LockfileTooLarge(LockfileError):
     """Raised when a skill folder exceeds the local hashing budget."""
 
 
-class _HashBudget:
-    """Shared per-skill file/byte budget for both hash algorithms."""
+# One report request hashes at most this much in total, across every entry of
+# every lock. Without it the per-skill budget alone allowed ~500 x 64 MiB per
+# unauthenticated /api/doctor?hygiene=1 request (independent review, 2026-11-07).
+MAX_REQUEST_HASH_FILES = 20_000
+MAX_REQUEST_HASH_BYTES = 256 * 1024 * 1024
 
+
+class _RequestBudget:
     __slots__ = ("files", "bytes")
 
     def __init__(self) -> None:
@@ -74,10 +80,41 @@ class _HashBudget:
     def add(self, size: int) -> None:
         self.files += 1
         self.bytes += max(0, size)
-        if self.files > MAX_HASH_FILES:
-            raise LockfileTooLarge(f"skill folder exceeds {MAX_HASH_FILES} files")
-        if self.bytes > MAX_HASH_BYTES:
-            raise LockfileTooLarge(f"skill folder exceeds {MAX_HASH_BYTES} bytes")
+        if self.files > MAX_REQUEST_HASH_FILES or self.bytes > MAX_REQUEST_HASH_BYTES:
+            raise LockfileTooLarge("the report's total hashing budget is spent; "
+                                   "remaining entries were not hashed")
+
+
+_REQUEST_BUDGET: contextvars.ContextVar[_RequestBudget | None] = contextvars.ContextVar(
+    "skillsmgr_lockfile_request_budget", default=None)
+
+
+class _HashBudget:
+    """Shared per-skill file/byte budget for both hash algorithms.
+
+    It also charges the request-wide budget when one is active.
+    """
+
+    __slots__ = ("files", "bytes", "request")
+
+    def __init__(self) -> None:
+        self.files = 0
+        self.bytes = 0
+        self.request = _REQUEST_BUDGET.get()
+
+    def add(self, size: int) -> None:
+        self.files += 1
+        self.bytes += max(0, size)
+        _enforce_skill_budget(self.files, self.bytes)
+        if self.request is not None:
+            self.request.add(size)
+
+
+def _enforce_skill_budget(files: int, size: int) -> None:
+    if files > MAX_HASH_FILES:
+        raise LockfileTooLarge(f"skill folder exceeds {MAX_HASH_FILES} files")
+    if size > MAX_HASH_BYTES:
+        raise LockfileTooLarge(f"skill folder exceeds {MAX_HASH_BYTES} bytes")
 
 
 def _bounded(value: object, limit: int = MAX_STRING) -> str:
@@ -95,19 +132,34 @@ def sanitize_name(name: object) -> str:
     return text or "unnamed-skill"
 
 
+_WITHHELD_SOURCE = "source withheld (unparseable)"
+
+
+def _parse_source(text: str):
+    """Return ``(parsed_url, None)`` or ``(None, safe_label)``.
+
+    Anything that cannot be parsed and rebuilt is withheld rather than echoed,
+    because an unparsed string may still carry userinfo or a token.
+    """
+    if len(text) > 2048 or "\x00" in text:
+        return None, _WITHHELD_SOURCE
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return None, _WITHHELD_SOURCE
+    if not parsed.scheme or not parsed.netloc:
+        return None, (_WITHHELD_SOURCE if "@" in text else _bounded(text))
+    return parsed, None
+
+
 def safe_source_url(value: object) -> str:
     """Return a credential-free source label with userinfo/query removed."""
     if not isinstance(value, str) or not value.strip():
         return ""
     text = value.strip()
-    if len(text) > 2048 or "\x00" in text:
-        return _bounded(text)
-    try:
-        parsed = urlparse(text)
-    except ValueError:
-        return _bounded(text)
-    if not parsed.scheme or not parsed.netloc:
-        return _bounded(text)
+    parsed, fallback = _parse_source(text)
+    if parsed is None:
+        return fallback
     host = parsed.hostname or ""
     netloc = f"[{host}]" if ":" in host else host
     if parsed.port:
@@ -343,7 +395,8 @@ def read_lock(path: str | Path, *, kind: str | None = None) -> dict:
 def _source_label(entry: dict) -> dict:
     label = safe_source_url(entry.get("sourceUrl"))
     if not label:
-        label = _bounded(entry.get("source", ""))
+        # The fallback goes through the same credential stripping.
+        label = safe_source_url(entry.get("source", ""))
     return {
         "label": label,
         "source_type": _bounded(entry.get("sourceType", ""), 64),
@@ -391,8 +444,14 @@ def _hash_outcome(directory: Path, entry: dict, mode: str) -> tuple[str, str]:
         return outcome(directory, recorded)
     except LockfileTooLarge as exc:
         return "too_large", str(exc)
-    except (LockfileError, OSError) as exc:
-        return "unverifiable", _bounded(str(exc))
+    except (LockfileError, OSError, RecursionError) as exc:
+        return "unverifiable", _unverifiable_reason(exc)
+
+
+def _unverifiable_reason(exc: BaseException) -> str:
+    if isinstance(exc, RecursionError):
+        return "the skill folder nests too deeply to hash"
+    return _bounded(str(exc))
 
 
 def _entry_evidence(entry: dict, installed_root: Path, mode: str) -> dict:
@@ -527,6 +586,14 @@ def lockfile_evidence(
     xdg_state_home: str | Path | None = None,
 ) -> dict:
     """Build the read-only lockfile evidence section for a hygiene report."""
+    token = _REQUEST_BUDGET.set(_RequestBudget())
+    try:
+        return _lockfile_evidence(home, project_root, xdg_state_home)
+    finally:
+        _REQUEST_BUDGET.reset(token)
+
+
+def _lockfile_evidence(home, project_root, xdg_state_home) -> dict:
     if home is None:
         return unavailable_evidence("home directory is not resolvable")
     home_path = Path(home).expanduser()

@@ -1005,6 +1005,30 @@ def _claude_listing_records(prepared: list[dict], project_root,
     return personal, project
 
 
+def _frontmatter_value(record: dict, key: str):
+    for partition in ("portable_frontmatter", "frontmatter_extensions"):
+        mapping = record.get(partition)
+        if isinstance(mapping, dict) and key in mapping:
+            return mapping[key]
+    return None
+
+
+def _listing_hidden_reason(record: dict, state) -> str | None:
+    """Which documented rule keeps a skill out of Claude's listing, if any.
+
+    Per code.claude.com/docs/en/skills: skillOverrides "off" and
+    "user-invocable-only" are "Hidden" from the listing, and frontmatter
+    ``disable-model-invocation: true`` keeps the description out of context.
+    """
+    if state == "off":
+        return "skillOverrides_off"
+    if state == "user-invocable-only":
+        return "skillOverrides_user_invocable_only"
+    if _frontmatter_value(record, "disable-model-invocation") is True:
+        return "disable_model_invocation"
+    return None
+
+
 def _listing_entry(record: dict, cap: int, setting: dict | None,
                    excluded: dict, home_prefix: str) -> tuple[dict, str] | None:
     """One listed entry and its listing text, or ``None`` when not listed."""
@@ -1014,10 +1038,11 @@ def _listing_entry(record: dict, cap: int, setting: dict | None,
     if record.get("document_missing") or record.get("decode_error"):
         excluded["unreadable"] += 1
         return None
-    state = (setting or {}).get("observed_setting")
-    if state == "off":
-        excluded["skillOverrides_off"] += 1
+    hidden = _listing_hidden_reason(record, (setting or {}).get("observed_setting"))
+    if hidden:
+        excluded[hidden] += 1
         return None
+    state = (setting or {}).get("observed_setting")
     name = _bounded(record.get("name", ""), 128)
     combined = _listing_description(record)
     listing = "name-only" if state == "name-only" else "full"
@@ -1042,7 +1067,8 @@ def _collect_listing(records: list[dict], cap: int, settings: dict,
     """Build the listing entries in stable input order."""
     pairs: list[tuple[dict, str, dict]] = []
     over_cap: list[str] = []
-    excluded = {"disabled": 0, "skillOverrides_off": 0, "unreadable": 0, "name_only": 0}
+    excluded = {"disabled": 0, "skillOverrides_off": 0, "unreadable": 0, "name_only": 0,
+                "skillOverrides_user_invocable_only": 0, "disable_model_invocation": 0}
     for record in records:
         built = _listing_entry(
             record, cap, settings.get(str(record.get("name", ""))), excluded, home_prefix
@@ -1129,6 +1155,24 @@ def _listing_status(listing_chars: int, budget_chars: int, partial: bool) -> str
     if partial:
         return "unknown"
     return "over_budget_estimate" if listing_chars > budget_chars else "within_budget"
+
+
+def _listing_partial_reasons(unreadable: bool, project_root) -> list[str]:
+    """Why the listing estimate is partial, in words.
+
+    Project settings can set ``skillOverrides`` for personal skills too, so a
+    report without a project root cannot have seen every override. That keeps
+    the estimate but marks it partial; only an unreadable settings file makes
+    the verdict itself ``unknown``.
+    """
+    reasons = []
+    if unreadable:
+        reasons.append("a Claude Code settings file could not be parsed, so an "
+                       "override may be hidden; the budget verdict is unknown")
+    if project_root is None:
+        reasons.append("project settings were not read (no project root), so a "
+                       "project skillOverrides entry could change this estimate")
+    return reasons
 
 
 def _native_partial(observation: object) -> bool:
@@ -1231,7 +1275,8 @@ def _claude_listing_section(prepared: list[dict], *, home, project_root, window:
         "consumer": "claude-code",
         "source": _CLAUDE_LISTING_SOURCE,
         "effective_state": "unknown",
-        "confidence": "partial" if partial else "observed",
+        "confidence": "partial" if (partial or project_root is None) else "observed",
+        "partial_reasons": _listing_partial_reasons(partial, project_root),
         "status": _listing_status(listing_chars, budget_chars, partial),
         "instances_observed": len(personal) + len(project),
         "listed_skills": len(pairs),
@@ -1382,21 +1427,42 @@ def _lockfile_section(
 ) -> dict:
     """Gather lockfile evidence without letting one unreadable lock abort the report."""
     try:
-        resolved_home = home if home is not None else Path.home()
-    except (OSError, RuntimeError):
+        # paths.home_dir() treats an empty HOME as unresolvable (SCOPE-17);
+        # Path.home() would read /.agents instead.
+        resolved_home = home if home is not None else paths.home_dir()
+    except (OSError, RuntimeError, ValueError):
         resolved_home = None
     if xdg_state_home is None:
         xdg_state_home = os.environ.get("XDG_STATE_HOME") or None
     try:
-        return lockfiles.lockfile_evidence(
+        evidence = lockfiles.lockfile_evidence(
             resolved_home,
             project_root=project_root,
             xdg_state_home=xdg_state_home,
         )
+        return _redact_lockfile_paths(evidence, _home_prefix(resolved_home))
     except Exception as exc:  # bounded evidence, never a report failure
         reason = _bounded(str(exc))
         degraded.append({"section": "lockfiles", "reason": reason})
         return lockfiles.unavailable_evidence(f"lockfile evidence was unavailable: {reason}")
+
+
+def _redact_lockfile_paths(evidence: dict, home_prefix: str) -> dict:
+    """Show home-relative lockfile paths as ``~``, like the rest of the report."""
+    for kind in ("global", "project"):
+        lock = evidence.get(kind)
+        if not isinstance(lock, dict):
+            continue
+        for key in ("path", "installed_root"):
+            if lock.get(key):
+                lock[key] = _redacted_path(lock[key], home_prefix)
+        for row in lock.get("entries") or []:
+            if isinstance(row, dict) and row.get("installed_path"):
+                row["installed_path"] = _redacted_path(row["installed_path"], home_prefix)
+    for signal in evidence.get("unavailable_signals") or []:
+        if isinstance(signal, dict) and signal.get("path"):
+            signal["path"] = _redacted_path(signal["path"], home_prefix)
+    return evidence
 
 
 def _report_extras(project_root, home, xdg_state_home) -> dict:
