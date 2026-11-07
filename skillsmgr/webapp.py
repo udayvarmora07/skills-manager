@@ -490,7 +490,29 @@ def _resolve_batch_target(item: object, records: list[dict], seen: set[tuple[str
         "physical_path": row.get("physical_path") or row.get("path"),
         "disabled": bool(row.get("disabled")),
         "instance_state": row.get("instance_state", "unresolved"),
+        "content_hash": row.get("content_hash"),
     }
+
+
+def _sync_destinations(name: str, data: dict, records: list[dict]) -> list[dict]:
+    """The destination copies a sync would overwrite, as observed at preview."""
+    wanted = set(_scope_list(data))
+    return sorted(
+        (
+            {"scope": row.get("scope"), "physical_path": row.get("physical_path") or row.get("path"),
+             "content_hash": row.get("content_hash"), "disabled": bool(row.get("disabled"))}
+            for row in records
+            if row.get("name") == name and row.get("scope") in wanted
+        ),
+        key=lambda item: (str(item["scope"]), str(item["physical_path"])),
+    )
+
+
+def _with_sync_destinations(targets: list[dict], data: dict, records: list[dict]) -> list[dict]:
+    if data.get("operation") == "sync":
+        for target in targets:
+            target["destinations"] = _sync_destinations(target["name"], data, records)
+    return targets
 
 
 def _batch_targets(data: dict) -> list[dict]:
@@ -502,7 +524,8 @@ def _batch_targets(data: dict) -> list[dict]:
 
     records = _list_all()
     seen: set[tuple[str, str, str]] = set()
-    return [_resolve_batch_target(item, records, seen) for item in raw]
+    targets = [_resolve_batch_target(item, records, seen) for item in raw]
+    return _with_sync_destinations(targets, data, records)
 
 
 # Stable machine codes for the one error shape, so a client can branch on

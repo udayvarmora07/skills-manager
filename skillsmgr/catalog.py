@@ -182,6 +182,12 @@ def plan_hash(operation: str, targets: list[dict], options: dict | None = None) 
                     "name": item.get("name"),
                     "scope": item.get("scope"),
                     "physical_path": item.get("physical_path") or item.get("path"),
+                    # Bind the reviewed bytes and state, not only the identity:
+                    # a rewrite, toggle or changed sync destination after the
+                    # preview makes the plan stale.
+                    "content_hash": item.get("content_hash"),
+                    "disabled": bool(item.get("disabled")),
+                    "destinations": item.get("destinations") or [],
                 }
                 for item in targets
             ],
