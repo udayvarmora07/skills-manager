@@ -175,9 +175,10 @@ scope-qualified.
 ## REST API
 
 Scoped skill list/search/detail records additionally include `native_state`.
-It is fresh read-only evidence from selected native JSON settings, with ordered
-per-file declarations, explicit missing/invalid/unavailable sources, and
-`partial: true` / `effective_state: unknown`. Existing enabled, disabled,
+It is fresh read-only evidence from selected native JSON settings — Claude
+Code, OpenCode, and the Gemini CLI — with ordered per-file declarations,
+explicit missing/invalid/unavailable sources, and `partial: true` /
+`effective_state: unknown`. Existing enabled, disabled,
 status and instance-state fields do not change meaning. The observation context
 is the server process's current directory. Exact sources and bounds:
 @docs/12-agent-root-discovery-2026-09-08.md. These observations establish no

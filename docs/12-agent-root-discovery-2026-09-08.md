@@ -214,10 +214,27 @@ instance states and effective-resolution fields retain their meanings.
   `permission.skill` accepts `allow`, `ask`, `deny`, or a pattern map. `*` and
   `?` match skill names; the last matching rule within each file is reported.
   Cross-file rule ordering is not inferred, so there is no aggregate setting.
+- Gemini CLI sources, lowest to highest priority, are the system defaults file
+  (`GEMINI_CLI_SYSTEM_DEFAULTS_PATH`, otherwise
+  `/etc/gemini-cli/system-defaults.json`), `~/.gemini/settings.json`,
+  `<cwd>/.gemini/settings.json`, and the system overrides file
+  (`GEMINI_CLI_SYSTEM_SETTINGS_PATH`, otherwise `/etc/gemini-cli/settings.json`).
+  Those two documented system paths are Linux-only, and other platforms report
+  them `unavailable` instead of guessing a path. `skills.disabled` is a name
+  list merged with `UNION`, so a readable file that lists the exact name is
+  enough for `observed_setting: "disabled"`; `skills.enabled: false` and
+  `admin.skills.enabled: false` disable every skill, and each boolean resolves
+  to the last file that declares it. Case sensitivity is not documented, so
+  matching is exact only. Environment variables and CLI arguments outrank the
+  files and are not observed, so `partial` is always true. When nothing
+  readable disables a name the observation says
+  `"not disabled by the files read"`. Primary source: the "Gemini CLI native
+  skill switch" section of @docs/34-agent-skill-loading-research-2026-11-07.md.
 - `sources[].status` distinguishes `ok`, `missing`, `unobserved`, `invalid`
   schema and `unavailable` input. Reads are bounded to 1 MiB per file; duplicate
   JSON keys, non-regular files and bad JSON/encoding fail cleanly. Claude maps
-  are capped at 10,000 rules, OpenCode at 256, and patterns at 512 characters.
+  are capped at 10,000 rules, OpenCode at 256, Gemini's disabled list at 1,000
+  names with 512 characters per name, and patterns at 512 characters.
   Other settings and raw errors are never included in the observation.
 - The context is the manager process's current directory, including when a
   user-scope skill is being inspected. Parent-directory discovery, managed,
@@ -226,10 +243,13 @@ instance states and effective-resolution fields retain their meanings.
   `effective_state: unknown`. This evidence does not prove discovery, loading
   or invocation. Unsupported consumers are explicit; Codex TOML is deferred.
 
-**[NOTE] Primary source check (2026-11-06):**
+**[NOTE] Primary source check (2026-11-06, Gemini row added 2026-11-07):**
 [Claude skill visibility](https://code.claude.com/docs/en/skills#override-skill-visibility-from-settings),
 [Claude settings precedence](https://code.claude.com/docs/en/settings),
-[OpenCode permissions](https://opencode.ai/docs/permissions/), and
-[OpenCode configuration](https://opencode.ai/docs/config/).
+[OpenCode permissions](https://opencode.ai/docs/permissions/),
+[OpenCode configuration](https://opencode.ai/docs/config/), and the Gemini CLI
+[skills](https://geminicli.com/docs/cli/skills/) page as recorded in the
+"Gemini CLI native skill switch" section of
+@docs/34-agent-skill-loading-research-2026-11-07.md.
 The omitted config sources are why observed declarations are kept separate
 from an effective runtime claim.

@@ -8,12 +8,14 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_RULES = 10_000
 MAX_OPENCODE_RULES = 256
 MAX_PATTERN = 512
+MAX_GEMINI_DISABLED = 1_000
 _CLAUDE_VALUES = frozenset(('on', 'name-only', 'user-invocable-only', 'off'))
 _OPENCODE_VALUES = frozenset(('allow', 'ask', 'deny'))
 
@@ -31,6 +33,20 @@ MAX_LISTING_MAX_DESC_CHARS = 1_000_000
 LISTING_BUDGET_ENV = 'SLASH_COMMAND_TOOL_CHAR_BUDGET'
 _CLAUDE_LISTING_KEYS = ('skillListingMaxDescChars', 'skillListingBudgetFraction')
 _CLAUDE_REASON = 'Managed, CLI, and plugin settings are not observed.'
+#: Gemini CLI system settings files are documented for Linux only, so the other
+#: platforms are reported ``unavailable`` rather than guessed at.
+_GEMINI_SYSTEM_SOURCES = (
+    ('system-defaults', '/etc/gemini-cli/system-defaults.json',
+     'GEMINI_CLI_SYSTEM_DEFAULTS_PATH'),
+    ('system', '/etc/gemini-cli/settings.json',
+     'GEMINI_CLI_SYSTEM_SETTINGS_PATH'),
+)
+_GEMINI_REASON = (
+    'Environment variables and CLI arguments rank above these settings files '
+    'and are not observed. Gemini documents disabling by exact skill name; '
+    'case sensitivity is not documented.'
+)
+_GEMINI_NON_LINUX = 'Documented settings path is Linux-only; not observed here.'
 
 
 def _unique_object(pairs: list) -> dict:
@@ -124,6 +140,158 @@ def _match_rules(consumer: str, rules: object, name: str) -> dict:
     return result
 
 
+def _gemini_system_entry(source: str, default: str, env_name: str) -> tuple:
+    """One system settings source, or an explicit non-Linux ``unavailable``."""
+    configured = os.environ.get(env_name)
+    if configured:
+        return source, Path(configured), None
+    if sys.platform.startswith('linux'):
+        return source, Path(default), None
+    return source, None, _GEMINI_NON_LINUX
+
+
+def _gemini_files(home: Path, project: Path | None) -> list[tuple]:
+    """Gemini CLI settings files, lowest to highest precedence."""
+    return [
+        _gemini_system_entry(*_GEMINI_SYSTEM_SOURCES[0]),
+        ('user', home / '.gemini/settings.json', None),
+        ('project', project / '.gemini/settings.json' if project else None, None),
+        _gemini_system_entry(*_GEMINI_SYSTEM_SOURCES[1]),
+    ]
+
+
+def _gemini_names(value: object) -> frozenset | None:
+    """A bounded set of exact skill names, or ``None`` when unusable."""
+    if not isinstance(value, list):
+        return None
+    names = set()
+    for item in value:
+        if not isinstance(item, str) or not item or len(item) > MAX_PATTERN:
+            return None
+        names.add(item)
+    return frozenset(names)
+
+
+def _gemini_flags(config: dict) -> tuple:
+    """Typed ``skills``/``admin.skills`` declarations, without raising."""
+    invalid: list = []
+    disabled: frozenset = frozenset()
+    skills_enabled = None
+    admin_enabled = None
+    skills = config.get('skills')
+    if skills is not None:
+        if not isinstance(skills, dict):
+            invalid.append('skills')
+        else:
+            if 'disabled' in skills:
+                names = _gemini_names(skills['disabled'])
+                if names is None:
+                    invalid.append('skills.disabled')
+                else:
+                    disabled = names
+            if 'enabled' in skills:
+                if isinstance(skills['enabled'], bool):
+                    skills_enabled = skills['enabled']
+                else:
+                    invalid.append('skills.enabled')
+    admin = config.get('admin')
+    if admin is not None:
+        if not isinstance(admin, dict):
+            invalid.append('admin')
+        else:
+            admin_skills = admin.get('skills')
+            if admin_skills is not None:
+                if not isinstance(admin_skills, dict):
+                    invalid.append('admin.skills')
+                elif 'enabled' in admin_skills:
+                    if isinstance(admin_skills['enabled'], bool):
+                        admin_enabled = admin_skills['enabled']
+                    else:
+                        invalid.append('admin.skills.enabled')
+    return invalid, disabled, skills_enabled, admin_enabled
+
+
+def _prepare_gemini_source(source: str, status: str, config: dict | None) -> dict:
+    """One file's declarations, or an explicit invalid/unavailable status."""
+    if config is None:
+        return {'source': source, 'status': status}
+    skills = config.get('skills')
+    raw_names = skills.get('disabled') if isinstance(skills, dict) else None
+    if isinstance(raw_names, list) and len(raw_names) > MAX_GEMINI_DISABLED:
+        return {'source': source, 'status': 'unavailable'}
+    invalid, disabled, skills_enabled, admin_enabled = _gemini_flags(config)
+    if invalid:
+        return {'source': source, 'status': 'invalid', 'invalid_keys': invalid}
+    entry = {'source': source, 'status': 'ok'}
+    if disabled:
+        entry['disabled_names'] = disabled
+    if skills_enabled is not None:
+        entry['skills_enabled'] = skills_enabled
+    if admin_enabled is not None:
+        entry['admin_skills_enabled'] = admin_enabled
+    return entry
+
+
+def _prepare_gemini_batch(home: Path, project: Path | None) -> list[dict]:
+    """Read each Gemini settings file at most once per scope batch."""
+    prepared = []
+    for source, path, unavailable in _gemini_files(home, project):
+        if unavailable is not None:
+            prepared.append({'source': source, 'status': 'unavailable', 'reason': unavailable})
+            continue
+        status, config = _load(path)
+        prepared.append(_prepare_gemini_source(source, status, config))
+    return prepared
+
+
+def _gemini_evidence(name: str, entry: dict) -> dict:
+    evidence = {'source': entry['source'], 'status': entry['status']}
+    if entry['status'] == 'ok':
+        if name in entry.get('disabled_names', ()):
+            evidence['declared'] = 'disabled'
+        for key in ('skills_enabled', 'admin_skills_enabled'):
+            if key in entry:
+                evidence[key] = entry[key]
+    elif entry.get('invalid_keys'):
+        evidence['invalid_keys'] = list(entry['invalid_keys'])
+    elif entry.get('reason'):
+        evidence['reason'] = entry['reason']
+    return evidence
+
+
+def _last_boolean(sources: list[dict], key: str) -> bool | None:
+    """The last source that declares *key* wins, matching settings precedence."""
+    value = None
+    for entry in sources:
+        if key in entry:
+            value = entry[key]
+    return value
+
+
+def _gemini_observation(name: str, prepared: list[dict]) -> dict:
+    """Per-name evidence; a union list or a global off switch means disabled."""
+    sources = [_gemini_evidence(name, entry) for entry in prepared]
+    skills_enabled = _last_boolean(sources, 'skills_enabled')
+    admin_enabled = _last_boolean(sources, 'admin_skills_enabled')
+    disabled = (any(entry.get('declared') == 'disabled' for entry in sources)
+                or skills_enabled is False or admin_enabled is False)
+    result = {
+        'consumer': 'gemini',
+        'effective_state': 'unknown',
+        # Environment variables and CLI arguments outrank every file and are not
+        # observed, so a settings-only read is never complete.
+        'partial': True,
+        'sources': sources,
+        'observed_setting': 'disabled' if disabled else 'not disabled by the files read',
+        'reason': _GEMINI_REASON,
+    }
+    if skills_enabled is not None:
+        result['skills_enabled'] = skills_enabled
+    if admin_enabled is not None:
+        result['admin_skills_enabled'] = admin_enabled
+    return result
+
+
 def observe_native_states(consumer: str, names: list[str], *, home: Path | None = None,
                           project: Path | None = None) -> dict:
     """Observe a batch from one request-local snapshot of each settings file."""
@@ -131,6 +299,9 @@ def observe_native_states(consumer: str, names: list[str], *, home: Path | None 
         return {}
     home = Path.home() if home is None else Path(home)
     project = Path(project) if project is not None else None
+    if consumer == 'gemini':
+        prepared = _prepare_gemini_batch(home, project)
+        return {name: _gemini_observation(name, prepared) for name in names}
     files = []
     if consumer == 'claude-code':
         files = [('user', home / '.claude/settings.json'),

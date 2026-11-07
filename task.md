@@ -129,8 +129,10 @@ needing maintainer approval; each lands as its own commit with red-first tests.
 - [x] **R6 / H1** — compatibility dedupe + portability message, unknown-key
   warning, 1,536-character description cap.
 - [x] **R4 (read-only, JSON part)** — `native_state` from Claude Code
-  `skillOverrides` and OpenCode `permission.skill`, per-file evidence and
-  partial/unknown effective state; batched reads, no settings writes.
+  `skillOverrides`, OpenCode `permission.skill`, and Gemini CLI
+  `skills.disabled`/`skills.enabled`/`admin.skills.enabled`, with per-file
+  evidence and partial/unknown effective state; batched reads, no settings
+  writes.
 - [x] **R10** — advisory hidden-Unicode / bidi / tag-character evidence with
   escaped code points, bounded output and no safe verdict or text rewriting.
 - [ ] **Decide (R4 / D-1):** Codex TOML parsing remains deferred. Keep Python
@@ -258,8 +260,8 @@ Proposals from @docs/26-user-research-skills-context-2026-10-30.md — each
 needs a maintainer decision before work starts (⚠ = locked constraint 5).
 
 - [/] **Defect:** observed state ignores each agent's native switch. Claude
-  Code and OpenCode JSON declarations are now read (R4, `native_state`);
-  Codex TOML is blocked on decision D-1 and Gemini is not read. Original note: (Codex
+  Code, OpenCode and Gemini CLI JSON declarations are now read (R4,
+  `native_state`); Codex TOML is blocked on decision D-1. Original note: (Codex
   `[[skills.config]]` in `~/.codex/config.toml`, Claude Code `skillOverrides`,
   OpenCode `permission.skill`, Gemini workspace/user disable), so the UI can
   show **Active** for a skill Codex has disabled. Latent: no disable rule exists

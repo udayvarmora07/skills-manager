@@ -576,12 +576,31 @@ TTY auto-detect; honors `NO_COLOR` and `FORCE_COLOR`; `color(text, code)` and st
 
 ## `native_state.py`
 
-Read-only bounded JSON observations for Claude Code skill visibility and
-OpenCode skill permissions. `observe_native_states()` loads each selected
-source once per scope batch; `observe_native_state()` serves one name. Nothing
-is cached across requests or written. Reports disclose selected declarations
-with explicit uncertainty, not effective loading. See
-@docs/12-agent-root-discovery-2026-09-08.md for file ordering and parser bounds.
+Read-only bounded JSON observations for Claude Code skill visibility,
+OpenCode skill permissions and the Gemini CLI skill switches.
+`observe_native_states()` loads each selected source once per scope batch;
+`observe_native_state()` serves one name. Nothing is cached across requests or
+written. Reports disclose selected declarations with explicit uncertainty, not
+effective loading. See @docs/12-agent-root-discovery-2026-09-08.md for file
+ordering and parser bounds.
+
+Gemini CLI sources, lowest to highest precedence, are the system defaults file
+(`GEMINI_CLI_SYSTEM_DEFAULTS_PATH`, otherwise `/etc/gemini-cli/system-defaults.json`),
+`~/.gemini/settings.json`, `<cwd>/.gemini/settings.json`, and the system
+overrides file (`GEMINI_CLI_SYSTEM_SETTINGS_PATH`, otherwise
+`/etc/gemini-cli/settings.json`). The documented system paths are Linux-only;
+on other platforms those two sources report `unavailable` with a reason rather
+than an invented path. `skills.disabled` is a name list with `mergeStrategy:
+UNION`, so any readable file that lists the exact name (case sensitivity is not
+documented, so matching is exact only) is enough for `observed_setting:
+"disabled"`; `skills.enabled: false` and `admin.skills.enabled: false` disable
+every skill. `skills.enabled`/`admin.skills.enabled` resolve to the last
+declaration in precedence order. A wrong type is that source's `invalid`
+declaration (reported under `invalid_keys`), never an exception; at most 1,000
+disabled names and 512 characters per name are accepted. Environment variables
+and CLI arguments rank above every file and are not observed, so `partial` is
+always true and `effective_state` stays `unknown`. When nothing readable
+disables the name, `observed_setting` says `"not disabled by the files read"`.
 
 `observe_claude_listing()` reads the two documented listing-budget keys
 (`skillListingMaxDescChars`, `skillListingBudgetFraction`) from the same three

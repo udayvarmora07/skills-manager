@@ -8,6 +8,37 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — Gemini CLI native skill switch (R4, read-only)
+
+**[SPEC]** `observe_native_states('gemini', …)` now reads the four documented
+settings files lowest to highest: system defaults
+(`/etc/gemini-cli/system-defaults.json`, overridable with
+`GEMINI_CLI_SYSTEM_DEFAULTS_PATH`), `~/.gemini/settings.json`,
+`<cwd>/.gemini/settings.json` (reported `unobserved` when the caller supplied no
+project), and system overrides (`/etc/gemini-cli/settings.json`, overridable
+with `GEMINI_CLI_SYSTEM_SETTINGS_PATH`). Files go through the existing `_load`
+bounds, so duplicate keys, FIFOs/non-regular files, bad JSON and files above
+1 MiB fail cleanly, and each file is read once per scope batch. `skills.disabled`
+is a `UNION` name list, so any readable file that lists the exact name is enough
+for `observed_setting: "disabled"` (case sensitivity is not documented, so
+matching is exact only); `skills.enabled` and `admin.skills.enabled` resolve
+last-declaration-wins and `false` disables every skill. A wrong type is that
+source's `invalid` declaration under `invalid_keys`, never an exception; the
+list is bounded at 1,000 names and 512 characters per name. The two system paths
+are documented for Linux only, so other platforms report them `unavailable`
+with a reason instead of guessing. `partial` stays true and `effective_state`
+stays `unknown` because environment variables and CLI arguments outrank every
+file and are not observed. Wired for the `gemini` scope only through the
+existing `scope.consumer` dispatch; Codex TOML stays deferred under D-1.
+
+**[NOTE]** Verified on this tree: 16 new tests in
+`tests/test_native_state_gemini.py`; the full suite runs **1,589 tests** with
+only the four already-recorded environmental failures (`backup_sync`
+trusted-git, `localhost` bind DNS, and the two HOME/data-root permission tests).
+`check_docs.py` and `check_complexity.py` pass — `native_state.py` is not a
+ratchet target, so the baseline is unchanged. No Store method, CLI command,
+REST route, SQLite state, dependency or write was added.
+
 ## 2026-11-07 — Phase B: nine stdlib checks in `risk_scan()` with a warning-context rule
 
 **[SPEC]** Implemented Phase B of
