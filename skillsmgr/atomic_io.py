@@ -19,6 +19,8 @@ except ImportError:  # pragma: no cover - POSIX
 from collections import OrderedDict
 from pathlib import Path
 
+from .errors import LockTimeoutError
+
 
 _MUTATION_LOCKS: "OrderedDict[str, threading.RLock]" = OrderedDict()
 _MUTATION_LOCKS_GUARD = threading.Lock()
@@ -170,8 +172,6 @@ def _open_lock_file(path: Path):
 
 
 def _lock_timeout_error(path: Path, waited: float):
-    from .store import LockTimeoutError  # lazy: store imports this module
-
     return LockTimeoutError(
         f"timed out after {waited:g}s waiting for another process to release the "
         f"lock on {path}; retry, or stop the other skills-mgr process"

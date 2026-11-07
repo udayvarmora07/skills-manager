@@ -402,6 +402,7 @@ skillsmgr/
   cli_handlers.py      # command behavior
   cli_output.py        # JSON/errors/table rendering
   store.py             # FS/index/recovery/archive policy
+  errors.py            # leaf exception hierarchy; re-exported by store.py
   insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
   source_lock.py       # bounded source identity and whole-tree update previews
   source_update.py     # exact-target local review/apply/rollback orchestration

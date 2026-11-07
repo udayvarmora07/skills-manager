@@ -764,7 +764,7 @@ def _project_paths(project: str | Path) -> tuple[Path, Path]:
         candidate = Path(str(project)).expanduser()
         return candidate, candidate.resolve()
     except (RuntimeError, OSError, ValueError):
-        from .store import StoreError
+        from .errors import StoreError
 
         raise StoreError("invalid project path") from None
 

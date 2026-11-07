@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Mapping
 from urllib.parse import urlparse
 
-from .store import StoreError
+from .errors import StoreError
 
 
 class RequestError(StoreError):

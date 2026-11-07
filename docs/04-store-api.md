@@ -18,7 +18,12 @@
 
 ## Exceptions
 
-- `StoreError` (the module-level class in `store.py`) — generic store failure (duplicate, invalid state, I/O).
+**[SPEC]** The exception classes are defined in the leaf module
+`skillsmgr.errors` and re-exported from `skillsmgr.store`, so
+`from skillsmgr.store import StoreError` and
+`from skillsmgr.errors import StoreError` name the same class (R15).
+
+- `StoreError` (defined in `skillsmgr/errors.py`) — generic store failure (duplicate, invalid state, I/O).
 - `SkillNotFound` (subclasses `StoreError`) — skill absent or unavailable (e.g. disabled).
 - `LockTimeoutError` (subclasses `StoreError`, `status = 409`) — another
   process held a mutation lock past `atomic_io.MUTATION_LOCK_TIMEOUT`; retry

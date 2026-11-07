@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from .web_security import RequestError
-from .store import StoreError
+from .errors import StoreError
 
 
 def json_bytes(obj: Any) -> bytes:

@@ -17,7 +17,7 @@ from pathlib import Path
 from .frontmatter import FrontmatterError, parse_frontmatter
 from .observations import document_observations
 from . import paths
-from .store import SkillNotFound, StoreError
+from .errors import SkillNotFound, StoreError
 from .tokens import estimate as _estimate_tokens
 
 

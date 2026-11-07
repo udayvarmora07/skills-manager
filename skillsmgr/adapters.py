@@ -76,7 +76,7 @@ def project_observation(project: str | Path | None, allowed_roots: list[Path] | 
         candidate = Path(str(project)).expanduser()
         resolved = candidate.resolve()
     except (RuntimeError, ValueError):
-        from .store import StoreError
+        from .errors import StoreError
 
         raise StoreError("invalid project path") from None
     except OSError:
