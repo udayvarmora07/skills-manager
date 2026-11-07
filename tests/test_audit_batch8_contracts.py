@@ -24,12 +24,12 @@ ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 EXPECTED_FIRST_PARTY_SHAS = {
-    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
-    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
-    "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
-    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
-    "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
-    "actions/attest-build-provenance": "96b4a1ef7235a096b17240c259729fdd70c83d45",
+    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-python": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+    "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+    "actions/upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+    "actions/download-artifact": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+    "actions/attest-build-provenance": "4d101475d8b20a2381f78447822ac1eab6504dd8",
 }
 
 # A step may declare its action on the same line as the list dash
