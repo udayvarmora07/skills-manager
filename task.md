@@ -189,20 +189,23 @@ the docs mark them as not needing maintainer approval.
   declared vs present vs hash, folded into the existing `doctor --hygiene`
   report as a read-only `lockfiles` section (2026-11-07, `skillsmgr/lockfiles.py`).
   `apm.lock.yaml` is reported as an unavailable signal and never parsed.
-- [ ] **R12** consumer rows for Amp, Roo, Cline, Kiro, Copilot, Zed,
-  Windsurf/Devin with cited orders (no).
+- [x] **R12** consumer rows for Amp, Roo, Cline, Kiro, Zed (documented orders)
+  and Copilot, Windsurf/Devin (undocumented, no winner), from the cited
+  @docs/34-agent-skill-loading-research-2026-11-07.md. OpenCode corrected to its
+  now-documented order (2026-11-07, `tests/test_effective_new_consumers.py`).
 - [ ] **R13** residency ranking: skills to demote to name-only (no).
 - [/] **R15** install argv now rendered only by `insights.install_argv`
-  (2026-11-07, 22-case characterization). Still open: shared review plumbing
-  and moving `StoreError` to `errors.py`.
+  (2026-11-07, 22-case characterization) and the exception hierarchy lives in
+  `skillsmgr/errors.py`, re-exported from `store`. Still open: shared review
+  plumbing across registry/source_update/backup_sync.
 - [x] **R16** `backup_sync._run_git` pins program-executing config with `-c` and
   a scrubbed environment (2026-11-07). `tests/test_audit_r16_git_config.py`
   includes a real-git test where a hostile `core.sshCommand` used to run.
 - [ ] **R17** `skills-ref` as a dev-only differential oracle in tests (no).
 - [ ] **R18** accept NFKC Unicode lowercase names (⚠ locked name rule).
 - [ ] **R19** CycloneDX/SPDX export from source-lock data (⚠ new command).
-- [ ] docs/29 H1: surface per-agent ignored frontmatter (e.g.
-  `disable-model-invocation`) as a finding (no).
+- [x] docs/29 H1: advisory `ignored-frontmatter` hygiene finding from cited
+  per-agent key lists (`skillsmgr/key_support.py`, 2026-11-07).
 - [x] docs/29 H1: README "what it will not do" and a source-verified privacy
   statement (2026-11-07), including tiktoken's first-use download.
 - [ ] docs/29 H2: `.agents/skills` → `.claude/skills` bridge, explain-only
@@ -237,9 +240,9 @@ the docs mark them as not needing maintainer approval.
 - [x] Port Install, Profiles, Quality, Workspaces, Settings into v2 (`61355a2`;
   see the V2 feature parity section above).
 - [ ] In-app restore for agent-scope trash (needs a backend route; ⚠ approval).
-- [ ] Slim v2's `/api/skills` list payload (22.7 MB in the session's local
-  measurement). Classic now uses opt-in `body=0`; v2 still requests full
-  bodies for diffs and editing.
+- [x] Slim v2's `/api/skills` list payload: v2 starts with `body=0` and fetches
+  each document on demand (2026-11-07). A real-browser run caught an untracked
+  reactivity read that kept Edit disabled; fixed and pinned.
 - [ ] Human perceptual review and screen-reader validation of v2. Automated
   forced-colors, keyboard and actual 200%/400% browser-zoom results are recorded separately.
 ## User research follow-ups (2026-10-30)
@@ -259,7 +262,7 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
 - [ ] Decide: interoperate with Microsoft APM `apm.yml` instead of a new lockfile.
 - [ ] Decide: Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
 - [ ] "What the model sees" listing-budget view per project (1% rule, dropped descriptions).
-- [ ] Before/after resident-token savings on every toggle.
+- [x] Resident-token effect on every v2 toggle toast and switch (2026-11-07).
 - [x] Silent-failure lint: the >1,536-char cap (R6), plus empty frontmatter and
   unquoted `: ` in plain scalars (2026-11-07, `tests/test_validator_silent_failures.py`).
 - [ ] Decide: transcript-based usage counts (⚠) and project skill lockfile (⚠).
