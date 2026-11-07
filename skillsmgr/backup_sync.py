@@ -36,6 +36,36 @@ _GIT_REVISION = re.compile(r"^[0-9a-fA-F]{40,64}$")
 _REMOTE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _REFSPEC = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:+*^~-]{0,255}$")
 _CREDENTIAL_KEYS = {"authorization", "bearer", "credential", "password", "secret", "token"}
+# Repository-local configuration can name a program for Git to execute
+# (`core.sshCommand` during a fetch, `core.fsmonitor`, hooks, a pager, ...).
+# `-c` beats repository config, so these pins are applied to every invocation.
+# Authentication still delegates to the user's credential helper or SSH agent;
+# they are separate mechanisms from the program hooks disabled here.
+_GIT_CONFIG_OVERRIDES = (
+    ("core.sshCommand", "ssh"),
+    ("core.fsmonitor", "false"),
+    ("core.hooksPath", os.devnull),
+    ("core.askPass", ""),
+    ("protocol.ext.allow", "never"),
+    ("protocol.file.allow", "user"),
+    ("uploadpack.packObjectsHook", ""),
+    ("core.gitProxy", ""),
+    ("diff.external", ""),
+)
+# Environment wins over `core.sshCommand`, so pinning the SSH command here
+# closes the same hole for a Git build that reads the variable first.
+_GIT_ENV_OVERRIDES = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_SSH_COMMAND": "ssh",
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+_GIT_ENV_REMOVALS = (
+    "GIT_SSH",
+    "GIT_PROXY_COMMAND",
+    "GIT_EXTERNAL_DIFF",
+    "GIT_ASKPASS",
+    "SSH_ASKPASS",
+)
 
 
 class BackupSyncError(ValueError):
@@ -276,17 +306,40 @@ def _trusted_git() -> str:
     return path
 
 
+def _git_config_arguments() -> list[str]:
+    """Render the `-c key=value` pins that keep repository config inert."""
+    rendered: list[str] = []
+    for key, value in _GIT_CONFIG_OVERRIDES:
+        rendered.extend(("-c", f"{key}={value}"))
+    return rendered
+
+
+def _git_environment() -> dict[str, str]:
+    """Copy the environment and remove inherited program-hook overrides."""
+    environment = os.environ.copy()
+    for name in _GIT_ENV_REMOVALS:
+        environment.pop(name, None)
+    environment.update(_GIT_ENV_OVERRIDES)
+    return environment
+
+
 def _run_git(repo: str | Path, arguments: list[str], *, timeout: float = 60.0) -> str:
     root = Path(repo).expanduser()
     if not root.is_dir() or root.is_symlink():
         raise BackupSyncError("Git repository is not an accessible directory")
     if timeout <= 0 or timeout > 300:
         raise BackupSyncError("Git timeout must be between 0 and 300 seconds")
-    environment = os.environ.copy()
-    environment["GIT_TERMINAL_PROMPT"] = "0"
+    environment = _git_environment()
     try:
         result = subprocess.run(  # nosec B603 - trusted executable, validated argv, and no shell.
-            [_trusted_git(), "-C", str(root), "--no-optional-locks", *arguments],
+            [
+                _trusted_git(),
+                "-C",
+                str(root),
+                "--no-optional-locks",
+                *_git_config_arguments(),
+                *arguments,
+            ],
             capture_output=True,
             text=True,
             encoding="utf-8",
