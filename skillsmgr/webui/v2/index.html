@@ -117,7 +117,7 @@
       <div class="instance-filters"><label>Tag<select class="field" v-model="tagFilter"><option value="">All tags</option><option value="__untagged">Untagged</option><option v-for="tag in catalogTags" :key="tag" :value="tag">{{tag}}</option></select></label><div class="seg" role="group" aria-label="Library view"><button type="button" :aria-pressed="libraryView==='shelf'" @click="libraryView='shelf'">Shelf</button><button type="button" :aria-pressed="libraryView==='instances'" @click="libraryView='instances'">Exact instances</button></div><button class="btn btn-line btn-sm" @click="refresh()" :disabled="loading">Refresh files</button></div>
       <p class="state-note err" role="alert" v-if="catalogError">Tags and profiles are unavailable: {{catalogError}} <button class="btn btn-line btn-sm" @click="loadCatalog()">Retry</button></p>
       <div class="ribbon" v-if="careCount && filter !== 'care'"><ic name="warn"></ic><span><b>{{ plural(careCount, 'skill needs', 'skills need') }} a little care.</b> Cards with a badge have a problem.</span><a class="btn btn-ink btn-sm" href="#/inbox">Fix them in Inbox</a></div>
-      <library-tools v-if="libraryView==='instances'" :records="records" :scopes="scopes" :names="visibleNames" :agent-filter="agentFilter" :catalog="catalog" @changed="refresh()" @inspect="openRecord($event)" @source="openSource($event)"></library-tools>
+      <library-tools v-if="libraryView==='instances'" :records="records" :scopes="scopes" :names="visibleNames" :agent-filter="agentFilter" :catalog="catalog" @changed="refresh()" @inspect="openRecord($event)" @source="openSource($event)" @removed="removedBatch($event)"></library-tools>
       <template v-else-if="groups.length">
         <section class="cat" v-for="g in groups" :key="g.id" role="group" :aria-label="grouping === 'letter' && sortBy === 'name' ? 'Skills starting with ' + g.id : g.id">
           <div class="cat-h"><h2 class="h2" :id="'cat-' + g.key">{{ g.id }}</h2><span>{{ plural(g.items.length, 'skill') }}</span></div>
@@ -300,13 +300,25 @@
       <div class="rec-grid">
         <section class="card rec-card" aria-labelledby="rec-trash">
           <h2 id="rec-trash">Trash <span class="sub num">{{ trash.length }}</span></h2>
-          <p class="sub">Skills removed from your library. Each agent keeps its own trash folder, which is not listed here.</p>
+          <p class="sub">Skills removed from your library. Skills removed from an agent's folder are listed under Agent trash.</p>
           <ul class="rec-list" v-if="trash.length">
             <li v-for="t in trash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · last changed {{fmtDate(t.modified)}}</small></span>
               <button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="restoreTrash(t)">Restore</button></li>
           </ul>
           <p class="state-note" v-else-if="trashLoading" role="status">Reading global trash…</p><p class="state-note" v-else-if="!trashError">The trash is empty.</p><p class="state-note err" v-if="trashError" role="alert">{{trashError}} <button class="btn btn-line btn-sm" @click="loadTrash()">Retry</button></p>
           <div class="rec-acts" v-if="trash.length"><button type="button" class="btn btn-danger btn-sm" :disabled="busy" @click="openPurge()"><ic name="trash" cls="i-s"></ic>Empty the trash</button></div>
+        </section>
+        <section class="card rec-card" aria-labelledby="rec-agent-trash">
+          <h2 id="rec-agent-trash">Agent trash <span class="sub num">{{ agentTrash.length }}</span></h2>
+          <p class="sub">Skills you removed from an agent's folder go to that agent's own trash folder. Restoring puts the folder back where the agent reads it.</p>
+          <ul class="rec-list" v-if="agentTrash.length">
+            <li v-for="t in agentTrash" :key="t.trash_path"><span><b>{{ t.name }}</b><small>{{ t.scopeLabel }} · {{ fmt(Math.max(1, Math.round(t.size_bytes / 1024))) }} KB · removed {{ fmtDate(t.trashed_at) }}</small></span>
+              <button type="button" class="btn btn-line btn-sm" :disabled="busy" @click="restoreAgentTrash(t)">Restore</button></li>
+          </ul>
+          <p class="state-note" v-else-if="agentTrashLoading" role="status">Reading agent trash…</p>
+          <p class="state-note" v-else-if="!agentTrashErrors.length">No removed skills are waiting in an agent's trash folder.</p>
+          <p class="state-note err" v-for="e in agentTrashErrors" :key="e.scope" role="alert">{{ e.message }}
+            <button class="btn btn-line btn-sm" @click="loadAgentTrash()">Retry</button></p>
         </section>
         <section class="card rec-card" aria-labelledby="rec-backup">
           <h2 id="rec-backup">Backup</h2>

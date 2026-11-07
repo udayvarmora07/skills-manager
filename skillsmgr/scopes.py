@@ -9,6 +9,7 @@ paths at runtime; missing dirs show count 0.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import threading
 import contextlib
@@ -849,6 +850,186 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
         counter += 1
     shutil.move(str(skill_dir), str(target))
     return {"name": name, "action": "trashed", "scope": scope_id, "trash_path": str(target)}
+
+
+# ---------------------------------------------------------------------------
+# Agent-scope trash (the sibling ``trash`` folder ``remove_skill`` writes to)
+# ---------------------------------------------------------------------------
+
+MAX_SCOPE_TRASH_ROWS = 500
+_TRASH_TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M-%SZ"
+# ``remove_skill`` writes ``<scope>__<name>-<timestamp>`` and appends ``-<n>``
+# on a collision.  The name is greedy so a canonical name containing hyphens
+# still parses; the fixed-width timestamp anchors the match at the end.
+_TRASH_TAIL_RE = re.compile(
+    r"^(?P<name>.+)-(?P<stamp>\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z)(?:-(?P<copy>\d+))?$"
+)
+
+
+def _agent_scope(scope_id: str) -> Scope:
+    """Resolve a non-global scope for trash work.
+
+    ``global`` is refused on purpose: its trash lives in the manager's own data
+    root and is served by ``Store.trash_list`` / ``Store.restore``.  Only agent
+    scopes have the sibling ``trash`` folder :func:`remove_skill` uses.
+    """
+    if scope_id == "global":
+        raise StoreError("the global library trash is not an agent trash folder")
+    scope = _scope_by_id(scope_id)
+    if scope is None:
+        raise StoreError(f"unknown scope {scope_id!r}")
+    return scope
+
+
+def _scope_trash_dir(scope: Scope) -> Path:
+    return scope.base.parent / "trash"
+
+
+def _scope_trash_size(entry: Path) -> int:
+    total = 0
+    try:
+        for path in entry.rglob("*"):
+            try:
+                if path.is_file() and not path.is_symlink():
+                    total += path.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        return total
+    return total
+
+
+def _parse_scope_trash_entry(scope_id: str, entry: Path) -> dict | None:
+    """Return the listing row for one trash directory, or ``None``.
+
+    A symlink is never a trashed skill: this tool will not follow one out of the
+    trash folder, and ``remove_skill`` never creates one.  The returned row
+    carries its collision counter as ``_copy`` for ordering only.
+    """
+    prefix = f"{scope_id}__"
+    if not entry.name.startswith(prefix):
+        return None
+    try:
+        if entry.is_symlink() or not entry.is_dir():
+            return None
+    except OSError:
+        return None
+    match = _TRASH_TAIL_RE.match(entry.name[len(prefix):])
+    if match is None:
+        return None
+    try:
+        name = validate_skill_name(match.group("name"))
+    except ValueError:
+        return None
+    from datetime import datetime, timezone
+
+    try:
+        trashed = datetime.strptime(
+            match.group("stamp"), _TRASH_TIMESTAMP_FORMAT
+        ).replace(tzinfo=timezone.utc)
+        modified = datetime.fromtimestamp(
+            entry.stat().st_mtime, tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, OSError):
+        return None
+    return {
+        "name": name,
+        "scope": scope_id,
+        "trash_path": str(entry),
+        "trashed_at": trashed.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "modified": modified,
+        "size_bytes": _scope_trash_size(entry),
+        "_copy": int(match.group("copy") or 0),
+    }
+
+
+def scope_trash_list(scope_id: str) -> list[dict]:
+    """List soft-deleted skills for one agent scope, newest first.
+
+    Only entries this tool wrote (``<scope>__<name>-<timestamp>[-<n>]``) whose
+    name still passes the canonical rule are returned, so a folder another
+    program dropped into the trash is never offered as a restorable skill.
+    Reads create nothing, a missing trash folder is an empty list, and the
+    result is bounded to ``MAX_SCOPE_TRASH_ROWS``.
+    """
+    scope = _agent_scope(scope_id)
+    trash = _scope_trash_dir(scope)
+    if not trash.is_dir():
+        return []
+    try:
+        candidates = list(trash.iterdir())
+    except OSError as exc:
+        raise StoreError(
+            f"could not read the trash folder for scope '{scope_id}': {exc}"
+        ) from exc
+    rows = [
+        row
+        for row in (_parse_scope_trash_entry(scope_id, entry) for entry in candidates)
+        if row is not None
+    ]
+    rows.sort(key=lambda row: (row["trashed_at"], row["_copy"]), reverse=True)
+    bounded = rows[:MAX_SCOPE_TRASH_ROWS]
+    for row in bounded:
+        row.pop("_copy", None)
+    return bounded
+
+
+def _select_trash_entry(
+    candidates: list[dict], trash_path: str | None, scope_id: str, name: str
+) -> dict:
+    """Pick the entry to restore: the exact requested path, else the newest."""
+    if trash_path is not None:
+        if not isinstance(trash_path, str) or not trash_path.strip():
+            raise StoreError("trash_path must be a non-empty string")
+        wanted = os.path.realpath(trash_path)
+        for entry in candidates:
+            if os.path.realpath(entry["trash_path"]) == wanted:
+                return entry
+        raise StoreError(
+            f"the requested trash_path is not a restorable entry for '{name}' in "
+            f"scope '{scope_id}'; refresh the trash list and retry"
+        )
+    if not candidates:
+        raise SkillNotFound(f"no trashed copy of '{name}' exists in scope '{scope_id}'")
+    return candidates[0]
+
+
+def restore_trashed(scope_id: str, name: str, trash_path: str | None = None) -> dict:
+    """Move one trashed agent-scope skill back where the agent reads it.
+
+    The destination must be free (a symlink counts as occupied), and the move
+    is a rename on the same filesystem under the per-skill mutation lock the
+    other scoped writes use — never a copy.
+    """
+    try:
+        name = validate_skill_name(name)
+    except ValueError as exc:
+        raise StoreError(str(exc)) from exc
+    scope = _agent_scope(scope_id)
+    candidates = [row for row in scope_trash_list(scope_id) if row["name"] == name]
+    entry = _select_trash_entry(candidates, trash_path, scope_id, name)
+    skill_dir = _safe_scope_skill_path(scope, name)
+    with _scope_mutation_lock(skill_dir):
+        _check_mutation_documents(skill_dir)
+        if skill_dir.exists() or skill_dir.is_symlink():
+            raise StoreError(
+                f"skill '{name}' already exists in scope '{scope_id}'; remove it "
+                "before restoring the trashed copy"
+            )
+        try:
+            os.rename(entry["trash_path"], skill_dir)
+        except FileNotFoundError:
+            # The advisory lock excludes cooperating writers, but this trash
+            # folder is a plain directory another tool may edit.
+            raise StoreError(
+                f"the trashed copy of '{name}' changed concurrently in scope "
+                f"'{scope_id}'; retry the restore"
+            ) from None
+        except OSError as exc:
+            raise StoreError(
+                f"could not restore '{name}' in scope '{scope_id}': {exc}"
+            ) from exc
+    return {"name": name, "scope": scope_id, "action": "restored", "path": str(skill_dir)}
 
 
 def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:

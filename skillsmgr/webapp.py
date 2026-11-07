@@ -698,6 +698,25 @@ def _scope_list(data: dict, name: str = "to_scopes") -> list[str]:
     return scopes
 
 
+def _trash_scope(qs: dict[str, list[str]]) -> str:
+    return (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+
+
+def _trash_rows(store, qs: dict[str, list[str]]) -> list[dict]:
+    """Trash rows for the requested scope, without changing global behaviour.
+
+    No scope and ``scope=global`` keep ``Store.trash_list()`` exactly.  Every
+    other scope reads that agent's sibling trash folder read-only; nothing is
+    created by a read.
+    """
+    scope = _trash_scope(qs)
+    if scope == "global":
+        return store.trash_list()
+    from .scopes import scope_trash_list as _scope_trash_list
+
+    return _scope_trash_list(scope)
+
+
 # Paging parameters a client might reasonably send that this API does not
 # implement. They are refused rather than ignored: a caller that pages and
 # silently gets the whole set cannot tell its request was ignored (docs/24
@@ -1437,7 +1456,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         ``_serve_export`` because streaming it is not a one-liner.
         """
         if parts == ["api", "trash"]:
-            self._send_json(self.store.trash_list())
+            self._send_json(_trash_rows(self.store, qs))
             return True
         if self._route_templates_get(parts):
             return True
@@ -2016,20 +2035,38 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(self.store.purge_trash())
             return True
         if len(parts) == 3:
-            snapshot = qs.get("snapshot", [None])[0]
-            if snapshot:
-                scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-                if scope == "global":
-                    self._send_json(self.store.restore(parts[2], snapshot=snapshot))
-                else:
-                    from .scopes import restore_snapshot as _restore_snapshot
-
-                    self._send_json(_restore_snapshot(scope, parts[2], snapshot))
-            else:
-                self._send_json(self.store.restore(parts[2]))
+            self._restore_trash_post(parts[2], qs)
             return True
         self._send_error(404, "unknown endpoint", code="unknown_endpoint")
         return True
+
+    def _restore_trash_post(self, name: str, qs: dict[str, list[str]]) -> None:
+        """Restore one name from the global store or an agent's trash folder.
+
+        A ``snapshot`` query keeps the historical snapshot rollback.  Without
+        it, ``global`` restores through the Store exactly as before, and an
+        agent scope restores the exact trashed copy named by the JSON
+        ``trash_path`` (or that skill's newest trashed copy).
+        """
+        snapshot = qs.get("snapshot", [None])[0]
+        scope = _trash_scope(qs)
+        if snapshot:
+            if scope == "global":
+                self._send_json(self.store.restore(name, snapshot=snapshot))
+            else:
+                from .scopes import restore_snapshot as _restore_snapshot
+
+                self._send_json(_restore_snapshot(scope, name, snapshot))
+            return
+        if scope != "global":
+            from .scopes import restore_trashed as _restore_trashed
+
+            trash_path = self._body_json().get("trash_path")
+            if trash_path is not None and not isinstance(trash_path, str):
+                raise StoreError("trash_path must be a string")
+            self._send_json(_restore_trashed(scope, name, trash_path=trash_path))
+            return
+        self._send_json(self.store.restore(name))
 
     def _route_templates_post(self, parts: list[str]) -> bool:
         """Serve ``POST /api/templates`` -- create a template, 201 on success.

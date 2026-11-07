@@ -69,7 +69,7 @@ const app = createApp({
       bodies: {}, bodyInflight: {}, bodyErrors: {},
       treeQuery: "", edit: null, highlight: true, compareWith: "",
       mapSelId: "", mapPicked: [], peek: null,
-      trash: [], importFile: null, importForce: false,
+      trash: [], agentTrash: [], agentTrashErrors: [], agentTrashLoading: false, importFile: null, importForce: false,
       theme: savedPreference("skillsmgr-theme",THEMES,"system"),formatLocale:savedPreference("skillsmgr-locale",["system","en-US","en-GB","en-IN"],"system"),
       dialog: null, toasts: [], live: "", toastSeq: 0, skillHistory: [], opener: null,
     };
@@ -293,6 +293,7 @@ const app = createApp({
         this.bodies = {}; this.bodyInflight = {}; this.bodyErrors = {};
         this.history = Array.isArray(history) ? history : (history && history.history) || [];
         this.loadTrash();
+        if (this.route.page === "recovery") this.loadAgentTrash();
         this.loadCatalog();
         this.primeBodies();
       } catch (e) {
@@ -621,14 +622,19 @@ const app = createApp({
       const s = this.skill;
       this.openDialog({
         title: `Move “${s.name}” to the trash?`, danger: true, confirm: "Move to trash",
-        lines: ["Choose the places to remove it from. Each agent keeps its own trash folder, so restoring from inside the app only works for your library."],
+        lines: ["Choose the places to remove it from. Each agent keeps its own trash folder, and every copy you remove here can be restored from Recovery or with Undo."],
         picks: s.copies.map((c) => ({ id: c.scope, label: this.agentOf(c.scope).name, path: shortPath(c.path) })), chosen: s.copies.length === 1 ? [s.copies[0].scope] : [],
         onConfirm: async (d) => {
           this.busy = true;
           try {
-            for (const sc of d.chosen) await api(`/api/skills/${encodeURIComponent(s.name)}?scope=${encodeURIComponent(sc)}&purge=0`, { method: "DELETE" });
+            const trashed = [];
+            for (const sc of d.chosen) {
+              const r = await api(`/api/skills/${encodeURIComponent(s.name)}?scope=${encodeURIComponent(sc)}&purge=0`, { method: "DELETE" });
+              if (r && r.trash_path) trashed.push({ scope: sc, trash_path: r.trash_path });
+            }
             await this.refresh();
-            this.toast(`${s.name} moved to the trash in ${join(d.chosen.map((id) => this.agentOf(id).name))}.`);
+            const undo = trashed.length ? async () => { for (const t of trashed) await this.restoreTrashed(s.name, t.scope, t.trash_path); } : null;
+            this.toast(`${s.name} moved to the trash in ${join(d.chosen.map((id) => this.agentOf(id).name))}.`, { undo });
             if (!this.m.byName.get(s.name)) location.hash = "#/skills";
           } catch (e) { this.toast(e.message, { err: true }); await this.refresh(); } finally { this.busy = false; }
         },
@@ -662,6 +668,44 @@ const app = createApp({
       this.busy = true;
       try { await api("/api/trash/" + encodeURIComponent(t.name), { method: "POST" }); await this.refresh(); this.toast(`${t.name} restored to your library.`); }
       catch (e) { this.toast(e.message, { err: true }); } finally { this.busy = false; }
+    },
+    /* One restore for both trashes: an agent scope names the exact trashed copy
+     * the removal returned, so Undo cannot pick the wrong one when a skill was
+     * removed twice. */
+    async restoreTrashed(name, scope, trashPath) {
+      const scoped = scope && scope !== "global";
+      const url = `/api/trash/${encodeURIComponent(name)}${scoped ? "?scope=" + encodeURIComponent(scope) : ""}`;
+      await api(url, { method: "POST", body: trashPath ? JSON.stringify({ trash_path: trashPath }) : undefined });
+    },
+    async loadAgentTrash() {
+      const agents = (this.m ? this.m.agents : []).filter((a) => !a.library && a.writable);
+      this.agentTrashLoading = true;
+      const rows = [], errors = [];
+      await Promise.all(agents.map(async (a) => {
+        try {
+          const list = await api("/api/trash?scope=" + encodeURIComponent(a.id));
+          for (const row of Array.isArray(list) ? list : []) rows.push({ ...row, scopeLabel: a.name });
+        } catch (e) { errors.push({ scope: a.id, message: this.friendly(e.message) }); }
+      }));
+      rows.sort((a, b) => String(b.trashed_at).localeCompare(String(a.trashed_at)) || a.name.localeCompare(b.name));
+      this.agentTrash = rows; this.agentTrashErrors = errors; this.agentTrashLoading = false;
+    },
+    async restoreAgentTrash(t) {
+      this.busy = true;
+      try {
+        await this.restoreTrashed(t.name, t.scope, t.trash_path);
+        await this.refresh();
+        this.toast(`${t.name} restored to ${t.scopeLabel}.`);
+      } catch (e) { this.toast(e.message, { err: true }); } finally { this.busy = false; }
+    },
+    /* A reviewed batch removal reports the trash path of every copy it moved;
+     * the toast keeps those exact paths so Undo restores each one it removed. */
+    removedBatch(items) {
+      const entries = (items || []).filter((i) => i && i.trash_path);
+      if (!entries.length) return;
+      this.toast(`${plural(entries.length, "copy", "copies")} moved to the trash.`, {
+        undo: async () => { for (const e of entries) await this.restoreTrashed(e.name, e.scope, e.trash_path); },
+      });
     },
     openPurge() {
       this.openDialog({ title: "Empty the trash?", danger: true, confirm: "Delete forever", lines: [`${plural(this.trash.length, "skill")} will be deleted permanently. This cannot be undone.`],
@@ -832,6 +876,7 @@ const app = createApp({
       }
       this.route = next; if (next.page !== "skill") this.edit = null;
       this.primeBodies();
+      if (next.page === "recovery") this.loadAgentTrash();
       document.title = (next.page === "skill" ? next.name : TITLES[next.page]) + " · Skills Manager";
       window.scrollTo(0, 0); this.focusH1();
     });
