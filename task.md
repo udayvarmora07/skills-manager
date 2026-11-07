@@ -201,7 +201,10 @@ the docs mark them as not needing maintainer approval.
 - [x] **R16** `backup_sync._run_git` pins program-executing config with `-c` and
   a scrubbed environment (2026-11-07). `tests/test_audit_r16_git_config.py`
   includes a real-git test where a hostile `core.sshCommand` used to run.
-- [ ] **R17** `skills-ref` as a dev-only differential oracle in tests (no).
+- [x] **R17** `skills-ref` 0.1.1 as a dev-only differential oracle
+  (`tests/test_skills_ref_oracle.py`, skips unless `SKILLS_REF_PYTHON` is set).
+  14/17 verdicts agree; the 3 divergences (Unicode names = R18, unknown fields
+  warn, unquoted colon warns) are pinned and mutation-checked (2026-11-07).
 - [ ] **R18** accept NFKC Unicode lowercase names (⚠ locked name rule).
 - [ ] **R19** CycloneDX/SPDX export from source-lock data (⚠ new command).
 - [x] docs/29 H1: advisory `ignored-frontmatter` hygiene finding from cited

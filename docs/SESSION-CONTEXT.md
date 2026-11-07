@@ -348,6 +348,15 @@ PYTHONDONTWRITEBYTECODE=1 python3 smoke_web.py            # "ALL WEB SMOKE TESTS
 PYTHONDONTWRITEBYTECODE=1 python3 -m skillsmgr --help   # webui (gui) listed, no tracebacks
 ```
 
+Optional differential oracle (R17): install the reference validator into a
+throwaway Python >= 3.11 venv and point the test at it. It is never a project
+dependency:
+
+```bash
+python3 -m venv /tmp/skillsref && /tmp/skillsref/bin/pip install skills-ref==0.1.1
+SKILLS_REF_PYTHON=/tmp/skillsref/bin/python python3 -m unittest tests.test_skills_ref_oracle
+```
+
 Pinned static-analysis checks (run in a disposable environment) are:
 
 ```bash
@@ -430,6 +439,7 @@ tests/test_audit_batch5_contracts.py  # SEC-4..SEC-9 + SEC-13 regressions
 tests/test_audit_batch8_contracts.py  # SEC-14..SEC-18 regressions
 tests/test_ci_release_contracts.py    # action-pin gates; both YAML step forms
 tests/test_docs_consistency.py       # the HADS/link/parity gate's own contracts
+tests/test_skills_ref_oracle.py      # R17: optional skills-ref oracle (SKILLS_REF_PYTHON)
 tests/test_audit_batch9_contracts.py  # FM-19 reference normalization regression
 tests/test_audit_sec19_contracts.py   # SEC-19 trust-root regressions
 tests/test_eval_harness_contracts.py  # eval case/path/atomicity contracts
