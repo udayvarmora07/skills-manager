@@ -73,6 +73,7 @@ _CATEGORY_ORDER = (
     "near-duplicate",
     "source-lock-drift",
     "source-lock-inaccessible",
+    "source-lock-unbound",
     "source-lock-evidence",
 )
 _CATEGORY_RANK = {value: index for index, value in enumerate(_CATEGORY_ORDER)}
@@ -1305,19 +1306,71 @@ def _claude_listing_section(prepared: list[dict], *, home, project_root, window:
     return section, findings
 
 
+def _source_lock_status(record: dict, path: str, degraded: list[dict]) -> dict:
+    """Read one instance's source-lock state, degrading instead of raising."""
+    try:
+        return source_lock.source_lock_status(path)
+    except Exception as exc:
+        degraded.append({"instance": _bounded(_identity(record)), "section": "source-lock", "reason": _bounded(str(exc))})
+        return {"state": "inaccessible", "error": str(exc)}
+
+
+def _source_lock_finding(record: dict, status: dict) -> dict:
+    """Turn one present source-lock state into a hygiene finding."""
+    state = status.get("state", "inaccessible")
+    lock = status.get("lock") if isinstance(status.get("lock"), dict) else {}
+    if state == "changed":
+        return _finding(
+            "source-lock-drift", "warning", "observed",
+            f"{record.get('name', '')} differs from its source lock",
+            "The installed tree differs from the recorded source-lock content hash.",
+            [record], {"state": state, "content_hash": status.get("content_hash")},
+            "Inspect the exact source/update review before applying any deliberate change.",
+        )
+    if state == "inaccessible":
+        return _finding(
+            "source-lock-inaccessible", "warning", "observed",
+            f"{record.get('name', '')} source evidence is inaccessible",
+            "The source-lock sidecar or current tree could not be safely read or manifested.",
+            [record], {"state": state, "error": _bounded(status.get("error", "source evidence unavailable"))},
+            "Inspect the exact physical directory and source-lock sidecar permissions manually.",
+        )
+    if state == "unbound":
+        return _finding(
+            "source-lock-unbound", "warning", "observed",
+            f"{record.get('name', '')} source-lock sidecar is not bound to this install",
+            "No binding recorded in the manager's private data directory matches this sidecar, so it may have been forged or copied from another install.",
+            [record], {
+                "state": state,
+                "recorded_state": status.get("recorded_state"),
+                "install_binding": status.get("install_binding"),
+                "content_hash": status.get("content_hash"),
+            },
+            "Treat this source evidence as unverified until a reviewed source/update is applied here.",
+        )
+    return _finding(
+        "source-lock-evidence", "info", "observed",
+        f"{record.get('name', '')} has source-lock evidence",
+        "A source identity and recorded content hash are present; this is evidence, not a safety or trust verdict.",
+        [record], {
+            "state": state,
+            "content_hash": status.get("content_hash"),
+            "recorded_content_hash": lock.get("content_hash"),
+            "checked_at": lock.get("checked_at"),
+            "source": _safe_source(lock),
+        },
+        "Use the existing source/update review surface when inspecting this exact instance.",
+    )
+
+
 def _source_lock_findings(records: list[dict], unavailable: list[dict], degraded: list[dict]) -> list[dict]:
     findings = []
     for record in records:
         path = _path(record)
         if path is None or record.get("addressable") is False:
             continue
-        try:
-            status = source_lock.source_lock_status(path)
-        except Exception as exc:
-            degraded.append({"instance": _bounded(_identity(record)), "section": "source-lock", "reason": _bounded(str(exc))})
-            status = {"state": "inaccessible", "error": str(exc)}
-        state = status.get("state", "inaccessible")
-        if state == "missing":
+        status = _source_lock_status(record, path, degraded)
+        if status.get("state") == "missing":
             unavailable.append({
                 "signal": "source-lock",
                 "scope": record.get("scope", ""),
@@ -1326,37 +1379,7 @@ def _source_lock_findings(records: list[dict], unavailable: list[dict], degraded
                 "explanation": "No source-lock sidecar is recorded for this physical instance; freshness and provenance are not observed.",
             })
             continue
-        if state == "changed":
-            findings.append(_finding(
-                "source-lock-drift", "warning", "observed",
-                f"{record.get('name', '')} differs from its source lock",
-                "The installed tree differs from the recorded source-lock content hash.",
-                [record], {"state": state, "content_hash": status.get("content_hash")},
-                "Inspect the exact source/update review before applying any deliberate change.",
-            ))
-            continue
-        if state == "inaccessible":
-            findings.append(_finding(
-                "source-lock-inaccessible", "warning", "observed",
-                f"{record.get('name', '')} source evidence is inaccessible",
-                "The source-lock sidecar or current tree could not be safely read or manifested.",
-                [record], {"state": state, "error": _bounded(status.get("error", "source evidence unavailable"))},
-                "Inspect the exact physical directory and source-lock sidecar permissions manually.",
-            ))
-            continue
-        findings.append(_finding(
-            "source-lock-evidence", "info", "observed",
-            f"{record.get('name', '')} has source-lock evidence",
-            "A source identity and recorded content hash are present; this is evidence, not a safety or trust verdict.",
-            [record], {
-                "state": state,
-                "content_hash": status.get("content_hash"),
-                "recorded_content_hash": (status.get("lock") or {}).get("content_hash") if isinstance(status.get("lock"), dict) else None,
-                "checked_at": (status.get("lock") or {}).get("checked_at") if isinstance(status.get("lock"), dict) else None,
-                "source": _safe_source(status.get("lock")),
-            },
-            "Use the existing source/update review surface when inspecting this exact instance.",
-        ))
+        findings.append(_source_lock_finding(record, status))
     return findings
 
 

@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from . import sidecar_binding
 from .atomic_io import atomic_write_text, mutation_lock
 from .insights import risk_scan
 from .validator import validate_text
@@ -276,24 +277,47 @@ def source_lock_record(source: dict, content_hash: str, target: dict, *,
     return _validate_lock(value)
 
 
-def read_source_lock(skill_dir: str | Path) -> dict | None:
-    """Read a validated source-lock sidecar, if present."""
-    root = Path(skill_dir).expanduser()
+def _read_source_lock_bytes(root: Path) -> tuple[dict | None, bytes]:
+    """Read and validate a source-lock sidecar, returning it with its raw bytes.
+
+    One read serves both validation and the install-binding check, so the
+    binding is always judged on the bytes that were validated.
+    """
     if not root.is_dir() or root.is_symlink():
         raise SourceLockError("source-lock skill directory does not exist safely")
     path = _lock_path(root)
     if not os.path.lexists(path):
-        return None
+        return None, b""
     if path.is_symlink():
         raise SourceLockError("source-lock sidecar cannot be a symlink")
     try:
         if path.stat().st_size > MAX_SOURCE_LOCK_BYTES:
             raise SourceLockError("source-lock sidecar is too large")
-        return _validate_lock(json.loads(path.read_text(encoding="utf-8")))
+        raw = path.read_bytes()
+        return _validate_lock(json.loads(raw.decode("utf-8"))), raw
     except SourceLockError:
         raise
     except (OSError, UnicodeError, ValueError) as exc:
         raise SourceLockError(f"could not read source-lock sidecar: {exc}") from exc
+
+
+def read_source_lock(skill_dir: str | Path) -> dict | None:
+    """Read a validated source-lock sidecar, if present."""
+    return _read_source_lock_bytes(Path(skill_dir).expanduser())[0]
+
+
+def _bind_source_lock(root: Path, destination: Path, encoded: bytes) -> None:
+    """Bind the sidecar to this install, or remove it if that cannot be done."""
+    try:
+        sidecar_binding.record_binding(root, SOURCE_LOCK_FILENAME, encoded)
+    except Exception as exc:
+        try:
+            destination.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise SourceLockError(
+            f"could not bind source-lock sidecar to this install: {exc}"
+        ) from exc
 
 
 def write_source_lock(skill_dir: str | Path, lock: dict) -> Path:
@@ -314,14 +338,51 @@ def write_source_lock(skill_dir: str | Path, lock: dict) -> Path:
             os.chmod(destination, 0o600)
         except OSError as exc:
             raise SourceLockError(f"could not write source-lock sidecar: {exc}") from exc
+        _bind_source_lock(root, destination, encoded.encode("utf-8"))
     return destination
+
+
+def _bind_staged_lock(staged_root: Path, destination: Path) -> None:
+    """Bind the staged sidecar bytes to the install they are about to replace.
+
+    ``write_source_lock`` records a binding for the staging path it wrote; the
+    sidecar ends up at ``destination`` after the atomic swap, so the destination
+    path needs its own record or this tool's own commit would read as unbound.
+    """
+    try:
+        raw = (staged_root / SOURCE_LOCK_FILENAME).read_bytes()
+        sidecar_binding.record_binding(destination, SOURCE_LOCK_FILENAME, raw)
+    except (OSError, ValueError) as exc:
+        raise SourceLockError(
+            f"could not bind source-lock sidecar to this install: {exc}"
+        ) from exc
+
+
+def _bound_status(root: Path, lock: dict, raw: bytes, content_hash: str) -> dict:
+    """Report a lock's computed state together with its install binding."""
+    computed = lock["state"] if lock["content_hash"] == content_hash else "changed"
+    state = sidecar_binding.binding_state(root, SOURCE_LOCK_FILENAME, raw)
+    result = {
+        "state": computed,
+        "error": None,
+        "lock": lock,
+        "content_hash": content_hash,
+        "install_binding": state,
+    }
+    if state == "recorded":
+        result["trusted"] = True
+        return result
+    result["recorded_state"] = computed
+    result["state"] = "unbound"
+    result["trusted"] = False
+    return result
 
 
 def source_lock_status(skill_dir: str | Path) -> dict:
     """Compare a persisted lock with the current whole-tree content."""
     root = Path(skill_dir).expanduser()
     try:
-        lock = read_source_lock(root)
+        lock, raw = _read_source_lock_bytes(root)
     except SourceLockError as exc:
         return {"state": "inaccessible", "error": str(exc), "lock": None}
     if lock is None:
@@ -330,13 +391,7 @@ def source_lock_status(skill_dir: str | Path) -> dict:
         current = local_manifest(root)
     except SourceLockError as exc:
         return {"state": "inaccessible", "error": str(exc), "lock": lock}
-    state = lock["state"] if lock["content_hash"] == current["sha256"] else "changed"
-    return {
-        "state": state,
-        "error": None,
-        "lock": lock,
-        "content_hash": current["sha256"],
-    }
+    return _bound_status(root, lock, raw, current["sha256"])
 
 
 def _line_ending_only(left: bytes, right: bytes) -> bool:
@@ -677,6 +732,7 @@ def commit_local_update(current: str | Path, candidate: str | Path, *, target: d
                 fresh["target"], state=state, review_id=review["review_id"],
             )
             write_source_lock(staged_root, lock)
+            _bind_staged_lock(staged_root, current)
             if backup.exists() or backup.is_symlink():
                 raise SourceLockError("rollback staging path already exists")
             os.replace(current, backup)

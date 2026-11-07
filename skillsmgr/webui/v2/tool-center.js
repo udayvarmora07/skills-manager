@@ -380,7 +380,7 @@ ${scanPanel('(review.inspection||{}).external_scan')}
               <label class="sr-only" for="tp-inv-q">Search inventory</label>
               <input id="tp-inv-q" class="field tp-filter" type="search" v-model="search" placeholder="Filter installed">
               <ul class="tp-rows"><li v-for="r in registryInventory.slice(0,200)" :key="r.name+':'+r.scope+':'+(r.physical_path||r.path)" class="v2-tool-row">
-                <span class="tp-row-main"><strong class="tp-mono">{{r.name}}</strong><small>{{scopeLabel(r.scope)}} · {{r.registry_provenance.id||r.registry_provenance.source||'source known'}}</small></span>
+                <span class="tp-row-main"><strong class="tp-mono">{{r.name}}</strong><small>{{scopeLabel(r.scope)}} · {{r.registry_provenance.id||r.registry_provenance.source||'source known'}}<template v-if="r.registry_provenance.trusted===false"> · not recorded by this app for this copy, so unverified</template></small></span>
                 <button class="btn btn-soft btn-sm" @click="$emit('inspect',r)">Open</button>
               </li></ul>
             </template>

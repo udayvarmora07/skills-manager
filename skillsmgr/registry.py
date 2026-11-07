@@ -22,6 +22,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from . import sidecar_binding
 from .errors import StoreError
 
 
@@ -1129,6 +1130,29 @@ def _reconcile_provenance(root: Path, value: dict) -> None:
         raise RegistryError("registry provenance local hash does not match local files")
 
 
+def _provenance_bytes(value: dict) -> bytes:
+    """Serialize a validated provenance record to the exact sidecar bytes."""
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2)
+    except (TypeError, ValueError) as exc:
+        raise RegistryError(f"could not serialize registry provenance: {exc}") from exc
+    return (text + "\n").encode("utf-8")
+
+
+def _bind_provenance(root: Path, destination: Path, encoded: bytes) -> None:
+    """Bind the sidecar to this install, or remove it if that cannot be done."""
+    try:
+        sidecar_binding.record_binding(root, PROVENANCE_FILENAME, encoded)
+    except Exception as exc:
+        try:
+            destination.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise RegistryError(
+            f"could not bind registry provenance to this install: {exc}"
+        ) from exc
+
+
 def write_provenance(skill_dir: str | Path, provenance: dict) -> Path:
     """Atomically write a validated credential-free registry sidecar."""
     root = Path(skill_dir).expanduser()
@@ -1138,19 +1162,39 @@ def write_provenance(skill_dir: str | Path, provenance: dict) -> Path:
     value = _validate_provenance(provenance)
     _reconcile_provenance(root, value)
     destination = root / PROVENANCE_FILENAME
+    encoded = _provenance_bytes(value)
     fd, temporary = tempfile.mkstemp(prefix=".provenance-", suffix=".tmp", dir=root)
     try:
         os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
-            json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
-            stream.write("\n")
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(encoded)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
     except (OSError, TypeError, ValueError) as exc:
         Path(temporary).unlink(missing_ok=True)
         raise RegistryError(f"could not write registry provenance: {exc}") from exc
+    _bind_provenance(root, destination, encoded)
     return destination
+
+
+def _with_install_binding(value: dict, root: Path, raw: bytes) -> dict:
+    """Return a copy carrying the read-time install-binding annotations.
+
+    ``install_binding`` and ``trusted`` are annotations, never file fields: a
+    sidecar that carries them is rejected by :func:`_validate_provenance`, so a
+    forgery cannot claim its own trust.
+    """
+    state = sidecar_binding.binding_state(root, PROVENANCE_FILENAME, raw)
+    result = dict(value)
+    result["install_binding"] = state
+    if state == "recorded":
+        result["trusted"] = True
+    else:
+        result["trusted"] = False
+        result["hash_verified"] = False
+        result["remote_hash_verified"] = False
+    return result
 
 
 def read_provenance(skill_dir: str | Path) -> dict | None:
@@ -1174,14 +1218,15 @@ def read_provenance(skill_dir: str | Path) -> dict | None:
     try:
         if path.stat().st_size > 256 * 1024:
             raise RegistryError("registry provenance sidecar is too large")
-        value = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
     except RegistryError:
         raise
     except (OSError, UnicodeError, ValueError) as exc:
         raise RegistryError(f"registry provenance sidecar is unreadable: {exc}") from exc
     value = _validate_provenance(value)
     _reconcile_provenance(root, value)
-    return value
+    return _with_install_binding(value, root, raw)
 
 
 __all__ = [
