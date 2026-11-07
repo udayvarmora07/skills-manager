@@ -1,8 +1,31 @@
 # GitHub Actions Dependency PR Review — 2026-09-23
 
-**Version 1.1.0**
+**Version 1.2.0**
 
 **AI manifest**: Dated, read-only review of Dependabot PRs #15–#19 against the exact workflow uses, upstream action metadata, current CI evidence, and the release artifact contract. Recommendations are review guidance only; no GitHub review, comment, branch update, or merge was posted. Re-verified 2026-10-06: all five PRs are still open, every SHA recorded below still matches the `uses:` ref its PR introduces, and the CI evidence is refreshed against the current (now green) `main`.
+
+## Re-triage — 2026-11-07
+
+**[SPEC]** All five PRs are still open. Each one now targets a version that
+upstream has itself superseded (latest releases read via `gh api` on
+2026-11-07; the runtime is taken from each release's `action.yml`):
+
+| PR | Dependabot target | Latest release | Runtime |
+|---|---|---|---|
+| #15 | setup-python 7.0.0 | v7.1.0 `6d4fd22b20465ccc0f7354476588e8df7c9ca0e0` | node24 |
+| #16 | checkout 7.0.1 | v7.0.1 `3d3c42e5aac5ba805825da76410c181273ba90b1` (same) | node24 |
+| #17 | action-gh-release 3.0.3 | v3.0.4 `8a0cd651e5b2365bd640854a3fa5dfc70e4875f3` | node24 |
+| #18 | setup-node 7.0.0 | v7.1.0 `949feb2413d6458794dcd2491c4babbbce0c15c1` | node24 |
+| #19 | attest-build-provenance `e8998f9…` | v4.2.2 `4d101475d8b20a2381f78447822ac1eab6504dd8` | composite → `actions/attest` v4.2.1 |
+
+**[SPEC] Recommendation.** Do not merge the five PRs individually. Replace them
+with one reviewed pin PR that updates `ci.yml`, `release.yml` and the expected
+SHAs in `tests/test_ci_release_contracts.py` together, with adjacent version
+comments that match. `upload-artifact` (v7.0.2) and `download-artifact` (v8.0.2)
+should move with them, because the release job pairs them. That PR changes
+`release.yml`, which CI cannot exercise without a tag, so it needs a release
+dry run (for example a TestPyPI-only tag) before it is trusted. That was not
+done here. `main` CI is green at `c268c8b`, so nothing is currently broken.
 
 ## Re-verification — 2026-10-06
 

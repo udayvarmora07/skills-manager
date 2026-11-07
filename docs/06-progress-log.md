@@ -8,34 +8,59 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
-## 2026-11-07 — Classic UI: the install preview now comes from the backend
+## 2026-11-07 — Remaining approval-free tasks, lead + DeepSeek workers
 
-**[SPEC]** Two classic-UI defects were fixed without touching `webui/v2/`.
+**[NOTE]** The maintainer asked for every remaining task to be done and granted
+decision authority. Claude acted as lead and reviewer; DeepSeek workers
+(`deepseek_worker`, isolated worktrees, sandboxed verification) wrote four
+changes. Every worker diff was read and every red-first claim re-checked here
+before merging. Human sign-offs and maintainer decisions were not touched.
 
-**Workspaces.** Enter in `#workspace-project` did nothing while the adjacent
-"Check project" button ran `loadWorkspaces`. The input now carries
-`@keydown.enter.prevent="!loadingWorkspaces && loadWorkspaces()"`, so the key
-runs the same action and cannot start a second request mid-flight.
+**[SPEC] Shipped.**
 
-**Installer preview.** `runInstall(false)` built a command string in the browser
-and showed it in a toast, so the only trust blockers the backend provides were
-never displayed. The dry-run branch now posts the existing offline preview
-payload (`preview: true`, same validations and `busy` handling as the run
-branch) to `POST /api/install` and stores the response in a new
-`install.preview` field, cleared when a real run starts. The local toast remains
-only as the request-failure fallback. The modal renders that response in a
-`preview-panel`: the command, "Ready to install" / "Not ready to install" from
-the plan's `may_install`, one `<li>` per `blockers` entry, and https-only
-`audit_links` as `noopener noreferrer` targets. Every value is mustache
-interpolation — no `v-html`, because the payload is untrusted.
+- **R16 / S5** — `backup_sync._run_git` pins `core.sshCommand`,
+  `core.fsmonitor`, `core.hooksPath`, `core.askPass`, `core.gitProxy`,
+  `diff.external`, `uploadpack.packObjectsHook` and the `ext`/`file` protocols
+  with `-c`, sets `GIT_SSH_COMMAND=ssh` and `GIT_CONFIG_NOSYSTEM=1`, and drops
+  inherited `GIT_SSH`/proxy/askpass variables. Credential helpers stay the
+  delegation path. 3/3 tests fail on the old code, including a real-git test in
+  which a hostile repository's `core.sshCommand` actually executed.
+- **Silent-failure lint** — warnings for an empty delimited frontmatter block
+  and for an unquoted `: ` inside a top-level plain scalar, both of which strict
+  YAML parsers drop silently. Warning-only; the value is never echoed.
+- **Order-dependent test leak** — `WebAppServer` bound its Store into the
+  `scopes` ContextVar and never unbound it, so a later in-process `cli.main` on
+  another `--data-dir` resolved `global` through a stale Store. `cli.main` now
+  binds its own Store per command and restores the prior binding. That is a
+  product fix, not a test-fixture patch.
+- **Classic P3s** — Enter in the Workspaces project field runs the check; the
+  Install Preview requests the backend's offline plan and renders its blockers,
+  `may_install` and https-only audit links as escaped text.
+- **R15 (part)** — the web route renders its `skills add` argv through
+  `insights.install_argv`. A 22-case HTTP characterization was confirmed to pass
+  against the *original* `webapp.py`; only its source assertion failed there.
+- **README** — "What it will not do, and what leaves your machine", verified
+  against the source. It found one undisclosed egress: with optional `tiktoken`
+  installed, `tokens.py` calls `get_encoding("cl100k_base")` at import, which
+  downloads that file on first use.
+- **Hermetic Chrome test** — `test_chrome_launch_retries_before_giving_up`
+  asserted 0 == 3 on any machine without Chrome, because `_chrome()` raised
+  before the first launch. It now stubs the resolver.
+- **R7 (part)** — `AGENTS-1.md` removed; `git gc` (pack 67.6 → 63.3 MiB).
+- **SkillSpector trust** — group write removed from the uv tool path; the
+  unchanged policy now accepts the install and the real-tool test runs.
 
-**Verification.** `tests/test_classic_install_preview_contracts.py` (8 tests)
-pins the key binding, runs the real `app.js` under Node to prove the dry-run
-body, the stored response, the cleared field and the failure fallback, rejects
-`v-html` in the panel, restricts audit hrefs to `https://`, and posts the exact
-UI payload to a loopback server to prove `blockers`/`may_install` exist.
-`node --check`, `check_docs.py`, `check_complexity.py` and `smoke_web.py` pass.
-No dependency, build step, Store method, CLI surface or schema change.
+**[NOTE] Worker tooling fixed on the way.** The worker's verification output
+was cut at 6,000 characters keeping 70% head, so a long gate listing hid the
+test verdict. It now keeps 80% tail within 12,000 characters (worker suite
+50/50). Its sandbox has no Chrome and a private `HOME`, so host-dependent tests
+can report FAIL for an environment reason. One such FAIL here was a product-test
+defect (the Chrome test above), and the rest re-ran green on the host.
+
+**[?] Still open, by design.** Human perceptual/screen-reader sign-offs,
+consented sessions, every `Decide:` item, R12 (needs cited primary sources per
+agent), R13, R17–R19, Phase B, the rest of R15, and the Dependabot pin update,
+which touches `release.yml` and cannot be exercised without a release dry run.
 
 ## 2026-11-07 — The default-interface redirect broke CI on Python 3.10
 

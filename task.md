@@ -40,19 +40,6 @@ Live registry fetch/commit and actual external runner execution are not exercise
 by this task's browser checks. Human screen-reader and spoken usability sign-off
 remain unclaimed. The work landed on `main` as `61355a2`.
 
-## Classic UI defect fixes (2026-11-07)
-
-- [x] Workspaces: Enter in the project field runs `loadWorkspaces`, guarded by
-  `loadingWorkspaces`.
-- [x] Installer preview: `runInstall(false)` posts `preview: true` to
-  `POST /api/install`, stores the bridge plan in `install.preview`, and clears
-  it when a real run starts; the local toast is the request-failure fallback.
-- [x] Render the plan's command, `may_install` wording, blockers and https-only
-  audit links with mustache interpolation only (no `v-html`).
-- [x] Cover both with `tests/test_classic_install_preview_contracts.py`
-  (source, Node behaviour and one real HTTP preview); `node --check`, docs,
-  complexity and web smoke pass.
-
 ## Performance and UX session completion (2026-11-06)
 
 Prepared on `claude/project-perf-ux-review-4da40d`; the maintainer subsequently
@@ -109,8 +96,8 @@ See @docs/32-continuation-verification-2026-11-06.md.
   rows (changes "exact visible-set"). Opt-in body-less projection is covered
   by the performance completion above.
 - [ ] Decide: batch plan binding of before-state and sync source content (P3).
-- [ ] P3: Enter in Workspaces project field; classic Install shows API trust
-  blockers.
+- [x] P3: Enter in Workspaces project field; classic Install shows API trust
+  blockers (2026-11-07, `tests/test_classic_install_preview_contracts.py`).
 
 ## Research roadmap — backend items (docs/28 R-table, docs/29 Horizon 1; 2026-11-06)
 
@@ -170,15 +157,17 @@ The maintainer chose both phases, hook first.
   `external_scan`, v2 Settings + review panels. LLM mode is bring-your-own-key
   from the server/CLI environment only. 19 tests incl. an optional real-tool
   test; real v2.12.0 output verified through the hook.
-- [ ] Installed SkillSpector under `~/.local/share/uv/tools` is group-writable
-  (umask 002), so the trust check refuses it. Maintainer to run
-  `chmod -R g-w ~/.local/share/uv` or accept the refusal; the policy is unchanged.
+- [x] Installed SkillSpector under `~/.local/share/uv/tools` was group-writable
+  (umask 002). Group write removed from `~/.local/share/uv`, `.../tools` and the
+  `skillspector` tree (2026-11-07); `trusted_executable` now accepts it and the
+  optional real-tool test runs instead of skipping. Policy unchanged.
 - [x] CI `unit (py3.10)` red on `main` at `61355a2`: `/` answered 308, which
   3.10's urllib does not follow. Default-interface redirect is now 307; slash
   canonicalization stays 308; regression test added (2026-11-07).
-- [ ] Pre-existing test leak: `tests.test_registry_integration_contracts` run
-  before `tests.test_cli_contract` fails `test_scope_all_keeps_global_doctor_and_duplicate_summary`
-  (reproduced on unchanged `HEAD`; full discovery order passes).
+- [x] Pre-existing test leak (2026-11-07): `WebAppServer` left its Store bound
+  in the `scopes` ContextVar, so a later in-process `cli.main` resolved `global`
+  through a stale Store. `cli.main` now binds its own Store per command and
+  restores the prior binding. `tests/test_cli_store_binding.py`.
 - [ ] AI features (BYOK): proposal in @docs/33-ai-features-design-2026-11-06.md;
   answer D-AI-1…D-AI-7 before any implementation.
 - [ ] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
@@ -189,24 +178,30 @@ The maintainer chose both phases, hook first.
 These were in the research docs but missing from this checklist. "No" means
 the docs mark them as not needing maintainer approval.
 
-- [ ] **R7** repo hygiene: `git gc`, untracked prototype dirs, archive large
-  root files, remove `AGENTS-1.md` (deleting files is the maintainer's call).
-- [ ] **R8** triage the five Dependabot PRs, the worktrees/branches and issue #14 (no).
+- [/] **R7** repo hygiene: `git gc` run (pack 67.6 → 63.3 MiB) and `AGENTS-1.md`
+  removed with maintainer authorization (2026-11-07). Prototype dirs and large
+  root files kept: they are tracked, linked from docs and record design history.
+- [x] **R8** triage refreshed 2026-11-07 in @docs/23-github-actions-dependency-pr-review-2026-09-23.md:
+  all five Dependabot targets are themselves superseded; recommend one reviewed
+  pin PR (needs a release dry run). Issue #14 stays open on its F-2 `[ASK]`.
 - [ ] **R11** read `skills-lock.json` / `apm.lock.yaml`: declared vs present vs
   hash (⚠ unless folded into `doctor`; decision D-3).
 - [ ] **R12** consumer rows for Amp, Roo, Cline, Kiro, Copilot, Zed,
   Windsurf/Devin with cited orders (no).
 - [ ] **R13** residency ranking: skills to demote to name-only (no).
-- [ ] **R15** collapse triplicated install-runner logic onto
-  `insights.install_argv`; share review plumbing; move `StoreError` to
-  `errors.py` (no).
-- [ ] **R16** neutralise git config on fetch in `backup_sync._run_git` (latent, no).
+- [/] **R15** install argv now rendered only by `insights.install_argv`
+  (2026-11-07, 22-case characterization). Still open: shared review plumbing
+  and moving `StoreError` to `errors.py`.
+- [x] **R16** `backup_sync._run_git` pins program-executing config with `-c` and
+  a scrubbed environment (2026-11-07). `tests/test_audit_r16_git_config.py`
+  includes a real-git test where a hostile `core.sshCommand` used to run.
 - [ ] **R17** `skills-ref` as a dev-only differential oracle in tests (no).
 - [ ] **R18** accept NFKC Unicode lowercase names (⚠ locked name rule).
 - [ ] **R19** CycloneDX/SPDX export from source-lock data (⚠ new command).
 - [ ] docs/29 H1: surface per-agent ignored frontmatter (e.g.
   `disable-model-invocation`) as a finding (no).
-- [ ] docs/29 H1: README "what it will not do" and a verified privacy statement (no).
+- [x] docs/29 H1: README "what it will not do" and a source-verified privacy
+  statement (2026-11-07), including tiktoken's first-use download.
 - [ ] docs/29 H2: `.agents/skills` → `.claude/skills` bridge, explain-only
   first (⚠ if a new command); documented Skill CI recipe (no).
 - [ ] Decide docs/29 open questions D-2…D-10 (D-1 and D-7 are tracked above).
@@ -262,9 +257,8 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
 - [ ] Decide: Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
 - [ ] "What the model sees" listing-budget view per project (1% rule, dropped descriptions).
 - [ ] Before/after resident-token savings on every toggle.
-- [/] Silent-failure lint: the >1,536-char description + `when_to_use` cap is
-  shipped (R6). Still open: YAML that parses to empty frontmatter, and the
-  unquoted-colon failure (docs/29 Horizon 1).
+- [x] Silent-failure lint: the >1,536-char cap (R6), plus empty frontmatter and
+  unquoted `: ` in plain scalars (2026-11-07, `tests/test_validator_silent_failures.py`).
 - [ ] Decide: transcript-based usage counts (⚠) and project skill lockfile (⚠).
 - [ ] Decide on docs/27 monetization questions MON-Q1…MON-Q5 (services-first year; widen scope to MCP + AGENTS.md; public top-skills report; zh-CN UI; which docs/14 tiers stay). Proposals only, nothing approved.
 

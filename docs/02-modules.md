@@ -205,7 +205,7 @@ reports explicit keep-mine, use-remote, or keep-both choices; and
 `interrupted_sync()` exposes completed/pending work and a retryable snapshot
 handle. `git_remote_info()` and `git_fetch()` use a trusted Git executable,
 delegate auth to configured Git helpers/SSH agents, and reject credential-
-bearing remote URLs. `prepare_sync_review()`/`read_sync_review()` persist and
+bearing remote URLs. Every Git invocation pins program-executing configuration (`core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `core.askPass`, `core.gitProxy`, `diff.external`, `uploadpack.packObjectsHook`, `ext`/`file` protocols) with `-c`, sets `GIT_SSH_COMMAND=ssh` and `GIT_CONFIG_NOSYSTEM=1`, and drops inherited `GIT_SSH`/proxy/askpass variables, so a hostile repository's local config cannot run a program (R16). `prepare_sync_review()`/`read_sync_review()` persist and
 inspect private expiring manifests and plans; `commit_sync_review()` rechecks
 the candidate and applies only through the existing source-lock snapshot,
 atomic replacement, and rollback seam. No CLI command, Store method, or
