@@ -577,7 +577,15 @@ TTY auto-detect; honors `NO_COLOR` and `FORCE_COLOR`; `color(text, code)` and st
 ## `native_state.py`
 
 Read-only bounded JSON observations for Claude Code skill visibility,
-OpenCode skill permissions and the Gemini CLI skill switches.
+OpenCode skill permissions and the Gemini CLI skill switches, plus bounded
+TOML observations of Codex `[[skills.config]]` (stdlib `tomllib`, so Python
+>= 3.11). `observe_native_entries()` is the per-row seam `scopes` calls:
+Codex matches an absolute `SKILL.md` path, so it is observed per row
+(`observe_codex_states()`), while every other consumer shares one name batch.
+A Codex `path` entry is canonicalized and must name one `SKILL.md`; a `name`
+entry matches every same-name skill; the last matching entry wins; an entry
+with zero or two selectors or a non-boolean `enabled` is counted under
+`invalid_entries` and ignored; at most 1,000 entries are read.
 `observe_native_states()` loads each selected source once per scope batch;
 `observe_native_state()` serves one name. Nothing is cached across requests or
 written. Reports disclose selected declarations with explicit uncertainty, not

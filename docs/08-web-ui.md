@@ -389,7 +389,7 @@ stated beside the setting and in every result.
 | GET | `/api/catalog/profiles/<name>/preview` | read-only profile membership states: observed, disabled, divergent, or missing, with observed `{name, scope, path}` instances |
 | DELETE | `/api/catalog/profiles/<name>` | removes only the saved profile metadata |
 | POST | `/api/batch/preview` | body `{operation, targets[], options?}` → backend re-resolves exact physical targets and returns target count, plan hash, before-state evidence, and recovery/partial-failure policy |
-| POST | `/api/batch/execute` | body `{operation, targets[], options?, plan_id}` → per-target results; stale or widened plans are rejected |
+| POST | `/api/batch/execute` | body `{operation, targets[], options?, plan_id}` → per-target results; stale or widened plans are rejected. The plan id binds each target's `content_hash` and `disabled` state and, for `sync`, the observed destination copies, so a document rewritten, toggled or overwritten after the preview is a clean `stale` 400 (2026-11-07) |
 | GET | `/api/workspaces?project=DIR` | read-only adapter catalog plus contained project-root observation; outside paths are redacted |
 | POST | `/api/install` | Legacy body `{source, runner?, scope?, agents[], skills[], copy?, list_only?, run?}` builds/runs `skills add`; `{preview: true, trust_confirmed?, registry_hash?, description?}` returns the offline bridge plan with no request/execution. Registry body uses one of `{browse: true, page?, per_page?, view?, allow_stale?}`, `{search: QUERY, limit?, owner?, allow_stale?}`, `{curated: true, allow_stale?}`, `{fetch: true, source: ID, registry_hash?, allow_stale?, external_scan?}` for a read-only review, or `{fetch: true, review_id: ID, trust_confirmed: true}` for a no-network commit. Browse/search/curated return bounded catalog data. Fetch is global-store-only, writes a private expiring review artifact after full validation/risk evidence, and only the separate reviewed commit writes credential-free `.skillsmgr-provenance.json` and calls `Store.add`. Cache state is returned under `_registry`; stale fallback is opt-in. |
 
@@ -519,8 +519,9 @@ Styles are in `webui/v2/tools.css` and use only declared v2 tokens.
 | Source update | Exact-instance candidate review, per-file comparison, validation/risk evidence, apply/cancel, retained whole-tree snapshots and reviewed rollback |
 | Recovery | Global trash restore/empty, explicit permanent per-copy removal, skill/full archive modes, import outcomes, persistent scoped history and older text-snapshot rollback |
 
-**[SPEC] Operation identity.** Batch previews freeze target identities/options,
-not source bytes; per-target failures remain visible. Exact-instance editing
+**[SPEC] Operation identity.** Batch previews freeze target identities, options,
+content hashes, enabled state and (for sync) destination copies; per-target
+failures remain visible. Exact-instance editing
 starts from that copy's description/body/metadata and selects its scope. PATCH
 omission preserves a field; an explicit empty optional field/body clears it.
 Empty descriptions are rejected. Folder import approval is bound to the selected

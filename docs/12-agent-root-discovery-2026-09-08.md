@@ -241,7 +241,9 @@ instance states and effective-resolution fields retain their meanings.
   CLI, environment, remote, plugin and additional config-directory sources are
   incomplete. Every observation says `partial: true` and
   `effective_state: unknown`. This evidence does not prove discovery, loading
-  or invocation. Unsupported consumers are explicit; Codex TOML is deferred.
+  or invocation. Unsupported consumers are explicit. Codex `[[skills.config]]` is read from
+  `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) since 2026-11-07;
+  see @docs/34-agent-skill-loading-research-2026-11-07.md.
 
 **[NOTE] Primary source check (2026-11-06, Gemini row added 2026-11-07):**
 [Claude skill visibility](https://code.claude.com/docs/en/skills#override-skill-visibility-from-settings),

@@ -312,14 +312,15 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 ## Verification loop (run all, all must pass)
 
 **[SPEC] Run the suite on every interpreter CI runs, not just the default
-one.** This repository supports 3.10-3.14. A green run on the default
+one.** This repository supports 3.11-3.14 (3.10 was dropped on 2026-11-07,
+after its 2026-10-01 end of life; see @docs/35-open-decisions-resolved-2026-11-07.md). A green run on the default
 interpreter says nothing about the others — two CI failures on 2026-10-05
 (passing 3.12/3.13, failing 3.10/3.11/3.14) were invisible locally for exactly
 that reason, and one of them was a real product bug. `uv python list` shows
 what is available:
 
 ```bash
-for py in python3.11 python3 "$(uv python find 3.13)" "$(uv python find 3.14)"; do
+for v in 3.11 3.12 3.13 3.14; do py="$(uv python find $v)"
   PYTHONDONTWRITEBYTECODE=1 "$py" -m unittest discover -s tests 2>&1 | grep -E '^(OK|FAILED|Ran )'
 done
 ```

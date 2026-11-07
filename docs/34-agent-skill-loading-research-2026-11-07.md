@@ -1,6 +1,6 @@
 # Agent Skill Loading Research — 2026-11-07
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest**: Primary-source facts, read on 2026-11-07, about where nine agents load `SKILL.md` skills from, which wins on a same-name clash, and which frontmatter keys each documents. Feeds R12 (new `effective.py` consumer rows), the OpenCode precedence correction, and the docs/29 H1 "ignored frontmatter" finding. Every row cites the vendor's own page. A blank means the page does not say; it is never filled with a guess.
 
@@ -97,3 +97,29 @@ it assumed.
 **[NOTE]** Because the list is a union, any single readable file that lists a
 name is enough to say "disabled". An unreadable file can only leave the answer
 partial; it can never turn a listed name back on.
+
+## Codex native skill switch
+
+**[SPEC]** From OpenAI's Codex skills page
+(`developers.openai.com/codex/skills` → `learn.chatgpt.com/docs/build-skills`),
+read 2026-11-07:
+
+- `[[skills.config]]` entries in `~/.codex/config.toml` turn a skill off
+  without deleting it: `enabled = false`.
+- Each entry uses **exactly one selector**: an absolute `path` that "matches
+  one `SKILL.md` file", or a `name` that "matches every skill with that name".
+- When more than one entry matches a skill, "the last matching entry wins".
+  Codex must be restarted to pick up a change.
+- The page shows the switch only in the user file. Project `.codex/config.toml`
+  is documented for `[skills.bundled] enabled = false`; the earlier user
+  research (docs/26) records that a project file is ignored for
+  `[[skills.config]]` (openai/codex #20210).
+
+**[NOTE]** `$CODEX_HOME` as the config root comes from Codex's own code (the
+change that added `[[skills.config]]` writes through a `CODEX_HOME`-based
+path), not from that page. The reader therefore uses `$CODEX_HOME/config.toml`
+when the variable is set and `~/.codex/config.toml` otherwise, and says so in
+every observation's `reason`. A `path` that names a directory rather than a
+`SKILL.md` matches nothing; the maintainer's own config has exactly that shape
+(`path = "~/.agents/skills"`, `enabled = true`), and on 2026-11-07 all 558
+Codex-scope rows read as "not disabled by the files read".
