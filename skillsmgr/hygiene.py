@@ -1020,6 +1020,10 @@ def _listing_hidden_reason(record: dict, state) -> str | None:
     "user-invocable-only" are "Hidden" from the listing, and frontmatter
     ``disable-model-invocation: true`` keeps the description out of context.
     """
+    if record.get("disabled"):
+        return "disabled"
+    if record.get("document_missing") or record.get("decode_error"):
+        return "unreadable"
     if state == "off":
         return "skillOverrides_off"
     if state == "user-invocable-only":
@@ -1032,12 +1036,6 @@ def _listing_hidden_reason(record: dict, state) -> str | None:
 def _listing_entry(record: dict, cap: int, setting: dict | None,
                    excluded: dict, home_prefix: str) -> tuple[dict, str] | None:
     """One listed entry and its listing text, or ``None`` when not listed."""
-    if record.get("disabled"):
-        excluded["disabled"] += 1
-        return None
-    if record.get("document_missing") or record.get("decode_error"):
-        excluded["unreadable"] += 1
-        return None
     hidden = _listing_hidden_reason(record, (setting or {}).get("observed_setting"))
     if hidden:
         excluded[hidden] += 1

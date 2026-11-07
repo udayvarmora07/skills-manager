@@ -1472,8 +1472,8 @@
     },
     "skillsmgr/hygiene.py::_claude_listing_finding": {
       "complexity": 1,
-      "end_lineno": 1219,
-      "lineno": 1198
+      "end_lineno": 1243,
+      "lineno": 1222
     },
     "skillsmgr/hygiene.py::_claude_listing_records": {
       "complexity": 7,
@@ -1482,13 +1482,13 @@
     },
     "skillsmgr/hygiene.py::_claude_listing_section": {
       "complexity": 12,
-      "end_lineno": 1281,
-      "lineno": 1222
+      "end_lineno": 1305,
+      "lineno": 1246
     },
     "skillsmgr/hygiene.py::_collect_listing": {
       "complexity": 4,
-      "end_lineno": 1056,
-      "lineno": 1040
+      "end_lineno": 1080,
+      "lineno": 1063
     },
     "skillsmgr/hygiene.py::_context_findings": {
       "complexity": 10,
@@ -1527,13 +1527,18 @@
     },
     "skillsmgr/hygiene.py::_finding_sort_key": {
       "complexity": 1,
-      "end_lineno": 1370,
-      "lineno": 1364
+      "end_lineno": 1394,
+      "lineno": 1388
     },
     "skillsmgr/hygiene.py::_frontmatter_keys": {
       "complexity": 4,
       "end_lineno": 757,
       "lineno": 750
+    },
+    "skillsmgr/hygiene.py::_frontmatter_value": {
+      "complexity": 4,
+      "end_lineno": 1013,
+      "lineno": 1008
     },
     "skillsmgr/hygiene.py::_groups": {
       "complexity": 3,
@@ -1547,8 +1552,8 @@
     },
     "skillsmgr/hygiene.py::_hygiene_report": {
       "complexity": 3,
-      "end_lineno": 1574,
-      "lineno": 1488
+      "end_lineno": 1598,
+      "lineno": 1512
     },
     "skillsmgr/hygiene.py::_identity": {
       "complexity": 5,
@@ -1587,8 +1592,8 @@
     },
     "skillsmgr/hygiene.py::_listing_budget": {
       "complexity": 4,
-      "end_lineno": 1124,
-      "lineno": 1088
+      "end_lineno": 1148,
+      "lineno": 1112
     },
     "skillsmgr/hygiene.py::_listing_description": {
       "complexity": 4,
@@ -1596,14 +1601,19 @@
       "lineno": 953
     },
     "skillsmgr/hygiene.py::_listing_entry": {
-      "complexity": 12,
-      "end_lineno": 1037,
-      "lineno": 1008
+      "complexity": 10,
+      "end_lineno": 1060,
+      "lineno": 1036
+    },
+    "skillsmgr/hygiene.py::_listing_hidden_reason": {
+      "complexity": 7,
+      "end_lineno": 1033,
+      "lineno": 1016
     },
     "skillsmgr/hygiene.py::_listing_partial_reasons": {
       "complexity": 3,
-      "end_lineno": 1149,
-      "lineno": 1134
+      "end_lineno": 1173,
+      "lineno": 1158
     },
     "skillsmgr/hygiene.py::_listing_path": {
       "complexity": 3,
@@ -1612,13 +1622,13 @@
     },
     "skillsmgr/hygiene.py::_listing_status": {
       "complexity": 3,
-      "end_lineno": 1131,
-      "lineno": 1127
+      "end_lineno": 1155,
+      "lineno": 1151
     },
     "skillsmgr/hygiene.py::_lockfile_section": {
       "complexity": 6,
-      "end_lineno": 1421,
-      "lineno": 1395
+      "end_lineno": 1445,
+      "lineno": 1419
     },
     "skillsmgr/hygiene.py::_memoized_identity": {
       "complexity": 3,
@@ -1627,13 +1637,13 @@
     },
     "skillsmgr/hygiene.py::_name_only_candidates": {
       "complexity": 4,
-      "end_lineno": 1085,
-      "lineno": 1059
+      "end_lineno": 1109,
+      "lineno": 1083
     },
     "skillsmgr/hygiene.py::_native_partial": {
       "complexity": 4,
-      "end_lineno": 1164,
-      "lineno": 1152
+      "end_lineno": 1188,
+      "lineno": 1176
     },
     "skillsmgr/hygiene.py::_normalized_tokens": {
       "complexity": 3,
@@ -1642,8 +1652,8 @@
     },
     "skillsmgr/hygiene.py::_note_listing_scope": {
       "complexity": 2,
-      "end_lineno": 1177,
-      "lineno": 1167
+      "end_lineno": 1201,
+      "lineno": 1191
     },
     "skillsmgr/hygiene.py::_path": {
       "complexity": 4,
@@ -1657,8 +1667,8 @@
     },
     "skillsmgr/hygiene.py::_project_listing_state": {
       "complexity": 2,
-      "end_lineno": 1195,
-      "lineno": 1180
+      "end_lineno": 1219,
+      "lineno": 1204
     },
     "skillsmgr/hygiene.py::_public_aliases": {
       "complexity": 3,
@@ -1697,8 +1707,8 @@
     },
     "skillsmgr/hygiene.py::_redact_lockfile_paths": {
       "complexity": 13,
-      "end_lineno": 1439,
-      "lineno": 1424
+      "end_lineno": 1463,
+      "lineno": 1448
     },
     "skillsmgr/hygiene.py::_redacted_path": {
       "complexity": 5,
@@ -1717,8 +1727,8 @@
     },
     "skillsmgr/hygiene.py::_report_extras": {
       "complexity": 3,
-      "end_lineno": 1452,
-      "lineno": 1442
+      "end_lineno": 1476,
+      "lineno": 1466
     },
     "skillsmgr/hygiene.py::_resolve_identity": {
       "complexity": 2,
@@ -1727,8 +1737,8 @@
     },
     "skillsmgr/hygiene.py::_safe_source": {
       "complexity": 4,
-      "end_lineno": 1349,
-      "lineno": 1339
+      "end_lineno": 1373,
+      "lineno": 1363
     },
     "skillsmgr/hygiene.py::_scan_project_claude_listing": {
       "complexity": 5,
@@ -1737,8 +1747,8 @@
     },
     "skillsmgr/hygiene.py::_source_lock_findings": {
       "complexity": 12,
-      "end_lineno": 1336,
-      "lineno": 1284
+      "end_lineno": 1360,
+      "lineno": 1308
     },
     "skillsmgr/hygiene.py::_stable_finding_id": {
       "complexity": 2,
@@ -1747,13 +1757,13 @@
     },
     "skillsmgr/hygiene.py::_summary": {
       "complexity": 2,
-      "end_lineno": 1392,
-      "lineno": 1373
+      "end_lineno": 1416,
+      "lineno": 1397
     },
     "skillsmgr/hygiene.py::_unavailable_signals": {
       "complexity": 1,
-      "end_lineno": 1361,
-      "lineno": 1352
+      "end_lineno": 1385,
+      "lineno": 1376
     },
     "skillsmgr/hygiene.py::_unique_issues": {
       "complexity": 3,
@@ -1767,8 +1777,8 @@
     },
     "skillsmgr/hygiene.py::_validated_window": {
       "complexity": 2,
-      "end_lineno": 1461,
-      "lineno": 1455
+      "end_lineno": 1485,
+      "lineno": 1479
     },
     "skillsmgr/hygiene.py::_validation_findings": {
       "complexity": 13,
@@ -1777,8 +1787,8 @@
     },
     "skillsmgr/hygiene.py::hygiene_report": {
       "complexity": 1,
-      "end_lineno": 1485,
-      "lineno": 1464
+      "end_lineno": 1509,
+      "lineno": 1488
     },
     "skillsmgr/hygiene.py::near_duplicate_candidates": {
       "complexity": 31,
