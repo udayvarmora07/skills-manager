@@ -35,6 +35,12 @@ from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
 from .atomic_io import register_lock_root as _register_lock_root
 from . import archive as _archive
 from .path_safety import mkdir_private
+from .errors import (  # noqa: F401  (re-exported for compatibility)
+    LockTimeoutError,
+    SkillNotFound,
+    StoreError,
+    StoreLayoutError,
+)
 from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
 from .validator import (
     MAX_COMPATIBILITY,
@@ -441,10 +447,6 @@ def _skills_tree_size(skills_dir: Path) -> int:
     )
 
 
-class StoreError(Exception):
-    """Raised for any store-level failure (validation, I/O, conflicts)."""
-
-
 def _without_transaction_artifacts(entries: list[dict]) -> list[dict]:
     """Drop scan rows that name a transaction artifact of this store.
 
@@ -473,39 +475,6 @@ def _driver_errors(action: str):
         yield
     except sqlite3.Error as exc:
         raise StoreError(f"skill index {action} failed: {exc}") from exc
-
-
-class SkillNotFound(StoreError):
-    """Raised when an operation targets a skill that does not exist."""
-
-
-class LockTimeoutError(StoreError):
-    """Another process held a mutation lock past ``MUTATION_LOCK_TIMEOUT`` (R5).
-
-    Routed as ``409`` by the web layer's existing ``status`` attribute: the
-    request was valid, the library is busy, and a retry is the remedy.
-    """
-
-    status = 409
-
-
-class StoreLayoutError(StoreError):
-    """Raised when the managed data layout exists but cannot be used.
-
-    A component of ``<data>`` -- usually ``skills`` -- is a regular file, or the
-    index is present but unusable.  This is distinct from "nothing is
-    installed": there is nothing to read *and* nothing the reader may create,
-    so the message names the path and the repair rather than leaving a caller
-    to discover it (docs/24 §D3-4).
-
-    Every write path raises this too, via ``_ensure_store_dirs``' guard, so the
-    condition has one name wherever a user meets it.
-    """
-
-    # The web layer already routes a ``StoreError`` through this attribute, so a
-    # broken layout answers 404 -- the resource cannot be read, and nothing the
-    # caller sent caused it -- instead of 400 with an internal path.
-    status = 404
 
 
 def now_iso() -> str:

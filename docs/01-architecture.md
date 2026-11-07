@@ -15,7 +15,8 @@ skills-manager/
     cli_parser.py    # argparse construction (27 top-level + 3 aliases; 7 nested)
     cli_handlers.py  # command behavior + name/data validation
     cli_output.py    # JSON/errors/table rendering
-    store.py         # Store: FS + SQLite index; StoreError, SkillNotFound
+    store.py         # Store: FS + SQLite index (re-exports the errors below)
+    errors.py        # leaf exception hierarchy; no package imports
     scopes.py        # agent-scope model + per-agent filesystem ops
     loader.py        # shared SKILL.md loader + dir scanner (Store + scopes)
     tokens.py        # token/context estimation
@@ -185,7 +186,7 @@ CLI process and a web UI process on one data directory exclude one another.
   file is opened with `O_NOFOLLOW` and mode `0600`, so a planted symlink cannot
   redirect the create.
 - A blocking acquisition waits at most `atomic_io.MUTATION_LOCK_TIMEOUT`
-  (60 s) for **another process**, then raises `store.LockTimeoutError` — a
+  (60 s) for **another process**, then raises `errors.LockTimeoutError` — a
   `StoreError` with `status = 409` — instead of blocking forever. An explicit
   `acquire(timeout=…)` still returns `False`. In-process (thread) contention is
   not bounded, because those holders are this process's own code. **[?]** Two

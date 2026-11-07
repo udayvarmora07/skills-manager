@@ -37,7 +37,7 @@ from pathlib import Path
 
 from .atomic_io import tree_content_hash
 from .launcher_security import trusted_executable
-from .store import StoreError
+from .errors import StoreError
 
 TOOL = "SkillSpector"
 EXECUTABLE = "skillspector"

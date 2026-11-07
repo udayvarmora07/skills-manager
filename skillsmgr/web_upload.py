@@ -11,7 +11,7 @@ from email.utils import collapse_rfc2231_value, unquote
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
-from .store import StoreError
+from .errors import StoreError
 
 
 MAX_UPLOAD_PARTS = 200

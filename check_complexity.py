@@ -34,6 +34,7 @@ TARGET_FILES = (
     "skillsmgr/cli_parser.py",
     "skillsmgr/cli_handlers.py",
     "skillsmgr/store.py",
+    "skillsmgr/errors.py",
     "skillsmgr/frontmatter.py",
     "skillsmgr/scopes.py",
     "skillsmgr/registry.py",

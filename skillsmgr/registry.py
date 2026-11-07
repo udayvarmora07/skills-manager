@@ -22,7 +22,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .store import StoreError
+from .errors import StoreError
 
 
 REGISTRY_BASE_URL = "https://skills.sh"
