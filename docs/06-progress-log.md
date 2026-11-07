@@ -8,6 +8,57 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — Phase B: nine stdlib checks in `risk_scan()` with a warning-context rule
+
+**[SPEC]** Implemented Phase B of
+@docs/superpowers/plans/2026-11-06-external-skill-scanner.md as nine
+single-purpose checks added to `insights.risk_scan()`, written fresh with this
+project's own kind names and wording (nothing copied from SkillSpector's
+Apache-2.0 patterns or ids): `remote-exec`, `decoded-exec`, `credential-path`,
+`suppression`, `persistence`, `bytecode`, `padding`, `broad-trigger` and
+`dynamic-code`. Every finding keeps the existing `kind`/`severity`/`evidence`/
+`why`/`confidence` shape, is `advisory` with `authority: "advisory"`, and
+evidence is control-escaped and length-bounded.
+
+Inputs are the record's `name`, `description`, `body` and an optional `files`
+listing of `{path, contents}` entries — the registry snapshot shape. No
+filesystem read, import, execution or new dependency was added, and no CLI
+command, route or Store method changed. Bundled `.py` sources are parsed with
+stdlib `ast` (at most 50 files, 256 KiB each);
+`SyntaxError`, oversize and count-limit skips each become one counted
+`low` note so an unanalyzed file is never silent. The new findings are capped
+at `MAX_RISK_FINDINGS = 200` with an omitted note; a match is
+`itertools.islice`-bounded per pattern so a hostile 12 MB file cannot turn the
+scan into an unbounded loop.
+
+**[SPEC] The warning-context rule is the false-positive guard the plan asked
+for.** A match whose containing line says `do not`, `don't`, `never`, `avoid`,
+`instead of` or `unsafe` is still reported, but at `low` with that reason in
+`why`. The matched text is removed before the guard test, so a suppression
+phrase such as `never refuse` is not mistaken for the warning word `never` that
+would otherwise downgrade it. Fenced code blocks are not exempt: a fenced
+`bash` block containing `curl … | bash` is reported normally.
+
+**[NOTE] Verification.** New tests are `tests/test_risk_scan_phase_b.py`
+(37 tests: one positive and one benign negative per check, the 1-5
+warning-context guard, AST syntax-error/oversize skips, the truncation bound,
+JSON serializability and the finding shape). Red-first against the unchanged
+`insights.py`: **21 failures + 3 errors = 24 of 37 failed**; 37/37 pass after.
+`tests/test_insights_contracts.py` (60) still passes, including its 5 s budget
+on a 200,000-line body. Full suite: **1,549 tests, 2 failures + 2 errors**, the
+four already-recorded environmental failures (`backup_sync` trusted-git,
+`localhost` bind DNS, and the two HOME/data-root permission tests) — none touch
+these modules. `check_docs.py` and `check_complexity.py` pass (810 functions
+across 20 files; no baseline change; every new function is ≤ 9 against the
+budget of 15). `insights.py` is not a complexity target, so the ratchet was
+measured for the budget but not re-baselined.
+
+**[?] The plan's measured-noise step is unavailable in this sandbox.** It asks
+for a `risk_scan()` run over a real library before and after; `HOME` here is an
+isolated `/sandbox-home` with no skill roots and `scopes.list_all()` returns 0
+records, so there is no number to report. Recorded in `task.md` rather than
+claimed.
+
 ## 2026-11-07 — R12 consumer rows and the ignored-frontmatter finding
 
 **[SPEC]** Docs/34 (vendor pages read 2026-11-07) drove two changes with no new
@@ -550,10 +601,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-11-07)
 
-**[NOTE]** 39 indexed entries; full text follows.
+**[NOTE]** 40 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-07 | Phase B: nine stdlib checks in `risk_scan()` with a warning-context rule |
 | 2026-11-07 | R12 consumer rows and the ignored-frontmatter finding |
 | 2026-11-07 | R11: read-only `skills` CLI lockfile evidence in the hygiene report |
 | 2026-11-06 | Integrate the verified performance work into main |

@@ -11,7 +11,11 @@ Phase B (stdlib patterns).
 
 **Status:** Phase A shipped 2026-11-06 (`skillsmgr/external_scan.py`; D-A and
 D-B accepted as proposed; the maintainer also asked for the LLM stage, built as
-bring-your-own-key from the environment). Phase B and D-C remain open.
+bring-your-own-key from the environment). Phase B shipped 2026-11-07 as nine
+single-purpose stdlib checks in `insights.risk_scan()` (body, description and
+an optional in-memory `files` listing; no filesystem read, no new dependency,
+CLI command, route or Store method), with the warning-context downgrade rule
+and red-first coverage in `tests/test_risk_scan_phase_b.py`. D-C remains open.
 
 ## Constraints this plan keeps
 

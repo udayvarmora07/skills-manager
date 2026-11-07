@@ -170,8 +170,12 @@ The maintainer chose both phases, hook first.
   restores the prior binding. `tests/test_cli_store_binding.py`.
 - [ ] AI features (BYOK): proposal in @docs/33-ai-features-design-2026-11-06.md;
   answer D-AI-1…D-AI-7 before any implementation.
-- [ ] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
-  `insights.risk_scan()`, with measured noise on a real library.
+- [x] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
+  `insights.risk_scan()` — nine checks, `tests/test_risk_scan_phase_b.py`,
+  2026-11-07.
+- [?] Phase B measured-noise run on a real library is not available in this
+  sandbox (`HOME` is isolated and `scopes.list_all()` returns 0 records); it
+  stays open until it can produce a number.
 
 ## Research roadmap — not yet started (docs/28 R-table, docs/29; recorded 2026-11-06)
 
