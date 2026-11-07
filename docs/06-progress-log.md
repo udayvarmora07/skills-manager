@@ -8,6 +8,52 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — Second pass: what review and real data changed
+
+**[NOTE]** Lead plus DeepSeek workers again, with one new step. A read-only
+code-reviewer agent reviewed every worker-written diff before it shipped. The
+entries below record each feature; this one records what only the cross-checks
+found.
+
+**[SPEC] Found by a real browser, not by tests.** v2's lazy body loading kept
+the skill page's Edit button disabled forever, because
+`Object.prototype.hasOwnProperty.call` on a reactive object is not tracked by
+Vue. The sandboxed unit tests passed. The Playwright suite failed. Fixed and
+pinned.
+
+**[SPEC] Found by real data.**
+- On the real 131-entry global lock, 58 of 70 "differs" results were skills this
+  tool had disabled by renaming `SKILL.md`. They are now compared under their
+  enabled name, which gives 114 exact tree matches.
+- Phase B's first `credential-path` check rated 192 bare `.env`/`.ssh` mentions
+  high across 1,764 instances. Only the lines that act on the path stay high
+  now, which leaves 18.
+
+**[SPEC] Found by the independent review.** Every finding was reproduced,
+fixed with a red-first test, and merged:
+- an earlier harmless mention could hide a later exfiltration line;
+- hostile Python crashed the `ast` check;
+- one hygiene request could hash about 32 GB;
+- a credential could leak through the lockfile source fallback;
+- linked copies showed "Loading document…" forever;
+- same-name duplicates all showed one body;
+- Phase B's file and description checks were never called by any production
+  path.
+
+The review also confirmed two areas with no defect: the `home` root
+confinement in `effective.py` and the `errors.py` move.
+
+**[NOTE] Facts are cited, not remembered.**
+@docs/34-agent-skill-loading-research-2026-11-07.md records primary-source
+precedence and frontmatter facts for 11 agents, Claude Code's listing budget,
+and Gemini's `skills.disabled` UNION merge from gemini-cli source. It also
+corrects the earlier "OpenCode documents no order".
+
+**[?] Still open.**
+- Codex TOML (D-1) and shared review plumbing (R15 remainder).
+- The v2 page for the listing estimate.
+- Every maintainer decision, and every human sign-off.
+
 ## 2026-11-07 — Gemini CLI native skill switch (R4, read-only)
 
 **[SPEC]** `observe_native_states('gemini', …)` now reads the four documented

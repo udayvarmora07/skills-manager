@@ -175,9 +175,11 @@ The maintainer chose both phases, hook first.
 - [x] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
   `insights.risk_scan()` — nine checks, `tests/test_risk_scan_phase_b.py`,
   2026-11-07.
-- [?] Phase B measured-noise run on a real library is not available in this
-  sandbox (`HOME` is isolated and `scopes.list_all()` returns 0 records); it
-  stays open until it can produce a number.
+- [x] Phase B noise measured on the maintainer's real library (1,764
+  instances): high `credential-path` findings fell 192 → 18 after the
+  mention-vs-access fix; numbers in the external-scanner plan. Independent
+  review fixes (severity-downgrade bypass, hostile-AST crashes) and the
+  production wiring of files/description into `risk_scan` landed 2026-11-07.
 
 ## Research roadmap — not yet started (docs/28 R-table, docs/29; recorded 2026-11-06)
 
@@ -199,7 +201,9 @@ the docs mark them as not needing maintainer approval.
   and Copilot, Windsurf/Devin (undocumented, no winner), from the cited
   @docs/34-agent-skill-loading-research-2026-11-07.md. OpenCode corrected to its
   now-documented order (2026-11-07, `tests/test_effective_new_consumers.py`).
-- [ ] **R13** residency ranking: skills to demote to name-only (no).
+- [x] **R13** name-only candidates ranked by description size in the
+  hygiene `claude_listing` section (2026-11-07). Usage-ranked demotion would
+  need transcript counts, which stay a ⚠ decision.
 - [/] **R15** install argv now rendered only by `insights.install_argv`
   (2026-11-07, 22-case characterization) and the exception hierarchy lives in
   `skillsmgr/errors.py`, re-exported from `store`. Still open: shared review
@@ -270,7 +274,12 @@ needs a maintainer decision before work starts (⚠ = locked constraint 5).
   native setting (⚠); Codex's switch is user-level only and must say so.
 - [ ] Decide: interoperate with Microsoft APM `apm.yml` instead of a new lockfile.
 - [ ] Decide: Hermes-Curator-style stale → archive with pin/restore/dry-run (⚠).
-- [ ] "What the model sees" listing-budget view per project (1% rule, dropped descriptions).
+- [x] "What the model sees": `claude_listing` in `doctor --hygiene` estimates
+  the Claude Code listing against its documented budget (env, settings
+  fraction or 1%; the char/token conversion is stated as an assumption), honours
+  `name-only`/`user-invocable-only`/`off` and `disable-model-invocation`, and
+  marks the estimate partial when project settings are unread. This machine:
+  77,516 chars vs ~40,000 (2026-11-07). A v2 page for it is not built yet.
 - [x] Resident-token effect on every v2 toggle toast and switch (2026-11-07).
 - [x] Silent-failure lint: the >1,536-char cap (R6), plus empty frontmatter and
   unquoted `: ` in plain scalars (2026-11-07, `tests/test_validator_silent_failures.py`).
