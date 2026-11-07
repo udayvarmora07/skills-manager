@@ -150,7 +150,7 @@ class HygieneMemoContracts(unittest.TestCase):
     def test_nested_and_failing_reports_restore_outer_memo(self):
         record = {'name': 'alpha', 'scope': 'global', 'path': '/tmp/alpha'}
         outer_memo = None
-        def nested(records, *, scope, max_instances):
+        def nested(records, *, scope, max_instances, window):
             nonlocal outer_memo
             if scope == 'outer':
                 outer_memo = hygiene._RESOLVED_IDENTITIES.get()
@@ -170,7 +170,7 @@ class HygieneMemoContracts(unittest.TestCase):
     def test_concurrent_reports_do_not_share_memo(self):
         barrier = threading.Barrier(2)
         record = {'name': 'alpha', 'scope': 'global', 'path': '/tmp/alpha'}
-        def report(records, *, scope, max_instances):
+        def report(records, *, scope, max_instances, window):
             hygiene._identity(record)
             barrier.wait(timeout=3)
             hygiene._identity(record)

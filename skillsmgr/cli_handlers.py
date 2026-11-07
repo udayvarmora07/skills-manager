@@ -838,6 +838,25 @@ def _render_lockfile_text(lockfiles: dict | None) -> None:
         print(f"    unavailable {_display(str(signal.get('signal', '')))}: {_display(str(signal.get('explanation', '')))}")
 
 
+def _render_claude_listing_text(section: dict | None) -> None:
+    """One bounded summary line for the Claude Code listing-budget estimate."""
+    if not section:
+        return
+    chars = int(section.get("listing_chars", 0) or 0)
+    budget = (section.get("budget") or {}).get("budget_chars_estimate") or 0
+    candidates = (section.get("name_only_candidates") or {}).get("total", 0)
+    if section.get("status") == "unknown":
+        print(
+            f"  Claude Code listing: {chars:,} chars; budget unknown "
+            f"(partial settings evidence); {candidates} name-only candidates"
+        )
+        return
+    print(
+        f"  Claude Code listing: {chars:,} chars vs ~{budget:,} budget (estimate); "
+        f"{candidates} name-only candidates"
+    )
+
+
 def _render_hygiene_text(report: dict) -> None:
     """Render report evidence through the terminal sanitization seam."""
     summary = report.get("summary", {})
@@ -852,6 +871,7 @@ def _render_hygiene_text(report: dict) -> None:
         "unavailable {unavailable})".format(**summary)
     )
     _render_lockfile_text(report.get("lockfiles"))
+    _render_claude_listing_text(report.get("claude_listing"))
     if summary.get("findings_truncated"):
         print("  findings returned are bounded; inspect the JSON limits/degraded evidence")
     for finding in report.get("findings", []):

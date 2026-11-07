@@ -17,6 +17,21 @@ MAX_PATTERN = 512
 _CLAUDE_VALUES = frozenset(('on', 'name-only', 'user-invocable-only', 'off'))
 _OPENCODE_VALUES = frozenset(('allow', 'ask', 'deny'))
 
+#: Default per-entry cap for ``description`` + ``when_to_use`` and the default
+#: share of the context window the skill listing is allowed to use, both from
+#: ``docs/34-agent-skill-loading-research-2026-11-07.md`` ("Claude Code skill
+#: listing budget").  They are defaults, not observations: a settings file that
+#: declares one wins, and the evidence always says which source was used.
+DEFAULT_LISTING_MAX_DESC_CHARS = 1_536
+DEFAULT_LISTING_BUDGET_FRACTION = 0.01
+#: A declared cap above this is not a plausible listing cap, so it is reported
+#: as unusable evidence instead of applied.
+MAX_LISTING_MAX_DESC_CHARS = 1_000_000
+#: The environment variable Claude Code documents as a fixed character budget.
+LISTING_BUDGET_ENV = 'SLASH_COMMAND_TOOL_CHAR_BUDGET'
+_CLAUDE_LISTING_KEYS = ('skillListingMaxDescChars', 'skillListingBudgetFraction')
+_CLAUDE_REASON = 'Managed, CLI, and plugin settings are not observed.'
+
 
 def _unique_object(pairs: list) -> dict:
     result = {}
@@ -121,7 +136,7 @@ def observe_native_states(consumer: str, names: list[str], *, home: Path | None 
         files = [('user', home / '.claude/settings.json'),
                  ('project', project / '.claude/settings.json' if project else None),
                  ('project-local', project / '.claude/settings.local.json' if project else None)]
-        reason = 'Managed, CLI, and plugin settings are not observed.'
+        reason = _CLAUDE_REASON
     elif consumer == 'opencode':
         files = [('user', home / '.config/opencode/opencode.json'),
                  ('project', project / 'opencode.json' if project else None)]
@@ -148,7 +163,13 @@ def _observation(consumer: str, name: str, reason: str, prepared: list) -> dict:
         if status == 'ok':
             entry.update(_match_rules(consumer, rules, name))
         result['sources'].append(entry)
-    if consumer == 'claude-code' and all(e['status'] in ('ok', 'missing') for e in result['sources']):
+    # ``unobserved`` means the caller supplied no project context, not that a
+    # file was unreadable -- so it must not suppress a declaration that *was*
+    # observed.  ``partial`` stays true and ``effective_state`` stays unknown,
+    # because a project file we never looked at could still override it.
+    if consumer == 'claude-code' and all(
+        e['status'] in ('ok', 'missing', 'unobserved') for e in result['sources']
+    ):
         declarations = [e['declared'] for e in result['sources'] if 'declared' in e]
         if declarations:
             result['observed_setting'] = declarations[-1]
@@ -159,3 +180,99 @@ def observe_native_state(consumer: str, name: str, *, home: Path | None = None,
                          project: Path | None = None) -> dict:
     """Observe selected settings without inferring effective state or loading."""
     return observe_native_states(consumer, [name], home=home, project=project)[name]
+
+
+def _listing_cap(value: object) -> int | None:
+    """A declared per-entry cap, or ``None`` when it is not usable evidence."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 0 < value <= MAX_LISTING_MAX_DESC_CHARS else None
+
+
+def _listing_fraction(value: object) -> float | None:
+    """A declared window share, or ``None`` when it is not usable evidence."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if 0.0 < value <= 1.0 else None
+
+
+def _listing_entry(source: str, path: Path | None) -> dict:
+    """Read one settings file's listing declarations, bounded and typed."""
+    status, config = _load(path)
+    entry = {'source': source, 'status': status}
+    if config is None:
+        return entry
+    declared = {}
+    cap = _listing_cap(config.get('skillListingMaxDescChars'))
+    if cap is not None:
+        declared['skillListingMaxDescChars'] = cap
+    fraction = _listing_fraction(config.get('skillListingBudgetFraction'))
+    if fraction is not None:
+        declared['skillListingBudgetFraction'] = fraction
+    if declared:
+        entry['declared'] = declared
+    invalid = sorted(key for key in _CLAUDE_LISTING_KEYS if key in config and key not in declared)
+    if invalid:
+        entry['invalid_keys'] = invalid
+    return entry
+
+
+def _last_declared(sources: list[dict], key: str):
+    """The last source that declares *key* wins, mirroring rule observation.
+
+    The file order is the documented settings order (``user`` then ``project``
+    then ``project-local``), so the last declaration is the most specific one.
+    This is an observed declaration, never a claim about effective state.
+    """
+    value = None
+    for entry in sources:
+        declared = entry.get('declared')
+        if isinstance(declared, dict) and key in declared:
+            value = declared[key]
+    return value
+
+
+def _env_budget() -> dict:
+    """Read the documented fixed character budget from the environment."""
+    raw = os.environ.get(LISTING_BUDGET_ENV)
+    if raw is None:
+        return {'status': 'unset', 'value': None}
+    text = raw.strip()
+    if not (text.isascii() and text.isdigit()) or int(text) <= 0:
+        # The value is never echoed: an environment variable is not a place to
+        # assume a number, and this report is rendered in a terminal.
+        return {'status': 'invalid', 'value': None, 'reason': 'not a positive integer'}
+    return {'status': 'set', 'value': int(text)}
+
+
+def observe_claude_listing(*, home: Path | None = None,
+                           project: Path | None = None) -> dict:
+    """Observe the Claude Code skill-listing budget inputs (read-only).
+
+    Reads only the two documented settings keys from the same three settings
+    files :func:`observe_native_states` reads, plus the documented
+    ``SLASH_COMMAND_TOOL_CHAR_BUDGET`` environment variable.  Nothing is
+    cached, written, or treated as effective state: ``partial`` is true when a
+    settings file exists but could not be parsed, which is exactly the case
+    where a hidden ``skillOverrides`` declaration could exist.
+    """
+    home = Path.home() if home is None else Path(home)
+    project = Path(project) if project is not None else None
+    files = [('user', home / '.claude/settings.json'),
+             ('project', project / '.claude/settings.json' if project else None),
+             ('project-local', project / '.claude/settings.local.json' if project else None)]
+    sources = [_listing_entry(source, path) for source, path in files]
+    return {
+        'consumer': 'claude-code',
+        'effective_state': 'unknown',
+        # ``unobserved`` (no project context) and ``missing`` (no file) cannot
+        # hide a declaration.  A file that exists but could not be parsed can,
+        # which is what ``partial`` means everywhere in this module.
+        'partial': any(entry['status'] in ('unavailable', 'invalid') for entry in sources),
+        'sources': sources,
+        'max_desc_chars': _last_declared(sources, 'skillListingMaxDescChars'),
+        'budget_fraction': _last_declared(sources, 'skillListingBudgetFraction'),
+        'env_budget': _env_budget(),
+        'reason': _CLAUDE_REASON,
+    }

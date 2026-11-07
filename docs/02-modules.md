@@ -164,6 +164,36 @@ observations. Validation keeps mapping-valued compatibility as an error with
 portability guidance, warns once for non-spec top-level keys, and warns when
 description plus `when_to_use` exceeds 1,536 characters.
 
+**[SPEC] `claude_listing` — the "what the model sees" estimate (R13).** One
+read-only section estimates Claude Code's skill listing from the instances in
+the `claude-code` scope, plus project `.claude/skills` instances only when the
+caller supplied a `project_root` (otherwise `project_skills.state` is
+`unavailable` and says so). Entries are one per listed skill: a `skillOverrides`
+state of `off` is excluded, `name-only` contributes its name only, and every
+other listed skill contributes its name plus
+`min(len(description + when_to_use), cap)`. The cap is
+`skillListingMaxDescChars` from the same settings sources `native_state` reads,
+defaulting to 1,536; `SKILL.md.disabled` instances are never listed.
+`listing_chars` sums the entries, `listing_tokens_estimate` comes from
+`tokens.count_tokens()` with its method reported, and the budget is the
+`SLASH_COMMAND_TOOL_CHAR_BUDGET` value when it is a positive integer, otherwise
+`skillListingBudgetFraction` (default 0.01) times `WINDOWS[window]` with
+`budget_chars_estimate = tokens x 4` and the conversion stated as an
+assumption. `status` is `within_budget`, `over_budget_estimate`, or `unknown`
+when a settings source exists but could not be parsed (`confidence: "partial"`;
+the numbers are still computed). It also reports `chars_to_free`, an
+`over_cap` count and names, and `name_only_candidates` (R13): listed skills
+sorted by description size, bounded to 25 with `total`/`omitted`, each with a
+home-redacted path and the `freed_chars` switching to name-only would save.
+Those candidates are ordered **by size only** — Claude Code drops descriptions
+starting with the least-invoked skills, which this tool cannot observe, so it
+never claims which descriptions are actually dropped. One advisory `info`
+finding appears under `claude-listing-budget` when the estimate is over
+budget. `hygiene_report()` accepts an optional `window` (default
+`tokens.DEFAULT_WINDOW`; an unknown value is a clean `HygieneError`). No CLI
+command, REST route, Store method, SQLite state, write, or network request is
+added.
+
 ## `key_support.py`
 
 Pure, stdlib-only table of the frontmatter keys each consumer documents, copied
@@ -526,3 +556,22 @@ source once per scope batch; `observe_native_state()` serves one name. Nothing
 is cached across requests or written. Reports disclose selected declarations
 with explicit uncertainty, not effective loading. See
 @docs/12-agent-root-discovery-2026-09-08.md for file ordering and parser bounds.
+
+`observe_claude_listing()` reads the two documented listing-budget keys
+(`skillListingMaxDescChars`, `skillListingBudgetFraction`) from the same three
+Claude settings files, with the same `_load` bounds and typed validation, plus
+the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable. It returns ordered
+per-file `sources` evidence, an `invalid_keys` list for a declared value that is
+not usable, `max_desc_chars`/`budget_fraction` resolved as the last declaration
+across `user` -> `project` -> `project-local`, `env_budget` evidence, and
+`partial: true` only when a file exists but could not be parsed (a `missing` or
+`unobserved` source cannot hide a declaration). It establishes no effective
+state and writes nothing.
+
+**[NOTE] `observed_setting` no longer requires a project context.** The rule
+observation treats an `unobserved` source (the caller supplied no project) the
+same as `missing` when deciding whether the last Claude declaration is worth
+reporting; `partial` and `effective_state: "unknown"` are unchanged, because a
+project file that was never read could still override it. Without this, no
+`skillOverrides` declaration could ever be observed from the CLI or REST paths,
+which never pass a project root.

@@ -16,8 +16,8 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import key_support, loader, lockfiles, source_lock, validator
-from .tokens import estimate
+from . import key_support, loader, lockfiles, native_state, paths, source_lock, validator
+from .tokens import DEFAULT_WINDOW, WINDOWS, count_tokens, estimate
 
 
 MAX_PAIRS = 100_000
@@ -29,6 +29,29 @@ MAX_DESCRIPTION_CHARS = 1_024
 MAX_HEADING_CHARS = 16_384
 MAX_SHARED_FEATURES = 20
 MAX_STRING = 512
+MAX_LISTING_CANDIDATES = 25
+MAX_LISTING_OVER_CAP = 50
+
+#: Claude Code scope ids.  ``claude-code`` is the personal ``~/.claude/skills``
+#: root; a project ``.claude/skills`` root is the ``project-claude`` facade id.
+_CLAUDE_PERSONAL_SCOPE = "claude-code"
+_CLAUDE_PROJECT_SCOPE = "project-claude"
+_CLAUDE_LISTING_SOURCE = "https://code.claude.com/docs/en/skills"
+_LISTING_SEPARATOR = "\n"
+LISTING_CHARS_PER_TOKEN = 4
+LISTING_TOKEN_ASSUMPTION = (
+    "4 characters per token; the documented budget is in characters but scales "
+    "from a token window and the conversion is not documented"
+)
+LISTING_TEXT_BASIS = (
+    "'<name>: <description>' per entry, joined by one newline; the documented "
+    "listing serialization is not published"
+)
+LISTING_CANDIDATE_WORDING = (
+    "Candidates by size only. Claude Code drops descriptions starting with the "
+    "least-invoked skills, which this tool cannot observe, so it cannot say "
+    "which descriptions are actually dropped."
+)
 
 _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 _HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
@@ -42,6 +65,7 @@ _CATEGORY_ORDER = (
     "activation-description",
     "ignored-frontmatter",
     "context-over-limit",
+    "claude-listing-budget",
     "same-name-identical",
     "divergent-name",
     "exact-document-duplicate",
@@ -897,6 +921,347 @@ def _context_findings(records: list[dict]) -> tuple[list[dict], list[dict]]:
     return findings, largest[:20]
 
 
+def _home_prefix(home) -> str:
+    """The resolved home directory, for displaying paths as ``~/…``."""
+    base = home
+    if base is None:
+        try:
+            base = paths.home_dir()
+        except (OSError, RuntimeError):
+            return ""
+    try:
+        return str(Path(str(base)).expanduser().resolve())
+    except (OSError, RuntimeError, ValueError):
+        return ""
+
+
+def _redacted_path(value, home_prefix: str) -> str:
+    """A bounded path with the home directory shown as ``~``."""
+    if not value:
+        return "path unavailable"
+    text = _bounded(value, MAX_STRING)
+    if home_prefix and (text == home_prefix or text.startswith(home_prefix + os.sep)):
+        return "~" + text[len(home_prefix):]
+    return text
+
+
+def _listing_path(record: dict, home_prefix: str) -> str:
+    """A bounded, home-redacted path for the listing evidence."""
+    return _redacted_path(record.get("physical_path") or record.get("path") or "", home_prefix)
+
+
+def _listing_description(record: dict) -> str:
+    """``description`` plus ``when_to_use``, the two fields the cap applies to."""
+    description = record.get("description")
+    description = description if isinstance(description, str) else ""
+    extensions = record.get("frontmatter_extensions")
+    when = extensions.get("when_to_use") if isinstance(extensions, dict) else None
+    return description + (when if isinstance(when, str) else "")
+
+
+def _record_scopes(record: dict) -> set[str]:
+    scopes = {str(record.get("scope") or "")}
+    for alias in record.get("_aliases", []):
+        if isinstance(alias, dict):
+            scopes.add(str(alias.get("scope") or ""))
+    return scopes
+
+
+def _scan_project_claude_listing(project_root, degraded: list[dict]) -> list[dict]:
+    """Observe project ``.claude/skills`` for a report that carries a project root."""
+    try:
+        root = Path(project_root).expanduser() / ".claude" / "skills"
+        if not root.is_dir():
+            return []
+        rows = loader.scan_dir(root)
+    except (OSError, RuntimeError, ValueError) as exc:
+        degraded.append({"section": "claude-listing", "reason": _bounded(str(exc))})
+        return []
+    for row in rows:
+        row["scope"] = _CLAUDE_PROJECT_SCOPE
+        row["scope_label"] = "Project .claude"
+        row["consumer"] = "claude-code"
+        row["path"] = row.get("path") or str(root / str(row.get("name", "")))
+        row["physical_path"] = _memoized_identity(row["path"])
+    return rows
+
+
+def _claude_listing_records(prepared: list[dict], project_root,
+                            degraded: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Split observed instances into Claude Code's personal and project roots."""
+    personal, project, seen = [], [], set()
+    for record in prepared:
+        scopes = _record_scopes(record)
+        if _CLAUDE_PERSONAL_SCOPE in scopes:
+            personal.append(record)
+        elif _CLAUDE_PROJECT_SCOPE in scopes:
+            project.append(record)
+        seen.add(_identity(record))
+    if project_root is not None:
+        for row in _scan_project_claude_listing(project_root, degraded):
+            if _identity(row) not in seen:
+                project.append(row)
+                seen.add(_identity(row))
+    return personal, project
+
+
+def _listing_entry(record: dict, cap: int, setting: dict | None,
+                   excluded: dict, home_prefix: str) -> tuple[dict, str] | None:
+    """One listed entry and its listing text, or ``None`` when not listed."""
+    if record.get("disabled"):
+        excluded["disabled"] += 1
+        return None
+    if record.get("document_missing") or record.get("decode_error"):
+        excluded["unreadable"] += 1
+        return None
+    state = (setting or {}).get("observed_setting")
+    if state == "off":
+        excluded["skillOverrides_off"] += 1
+        return None
+    name = _bounded(record.get("name", ""), 128)
+    combined = _listing_description(record)
+    listing = "name-only" if state == "name-only" else "full"
+    if listing == "name-only":
+        excluded["name_only"] += 1
+    text = name if listing == "name-only" or not combined else f"{name}: {combined[:cap]}"
+    entry = {
+        "name": name,
+        "scope": _bounded(record.get("scope", ""), 128),
+        "path": _listing_path(record, home_prefix),
+        "listing": listing,
+        "description_chars": len(combined),
+        "counted_description_chars": min(len(combined), cap) if listing == "full" else 0,
+        "over_cap": listing == "full" and len(combined) > cap,
+        "entry_chars": len(text),
+    }
+    return entry, text
+
+
+def _collect_listing(records: list[dict], cap: int, settings: dict,
+                     home_prefix: str) -> tuple[list[tuple[dict, str, dict]], list[str], dict]:
+    """Build the listing entries in stable input order."""
+    pairs: list[tuple[dict, str, dict]] = []
+    over_cap: list[str] = []
+    excluded = {"disabled": 0, "skillOverrides_off": 0, "unreadable": 0, "name_only": 0}
+    for record in records:
+        built = _listing_entry(
+            record, cap, settings.get(str(record.get("name", ""))), excluded, home_prefix
+        )
+        if built is None:
+            continue
+        entry, text = built
+        pairs.append((entry, text, record))
+        if entry["over_cap"]:
+            over_cap.append(entry["name"])
+    return pairs, over_cap, excluded
+
+
+def _name_only_candidates(pairs: list[tuple[dict, str, dict]],
+                          limit: int) -> tuple[dict, list[dict]]:
+    """Largest descriptions that switching to name-only would remove from the listing."""
+    ranked = sorted(
+        ((entry, record) for entry, _text, record in pairs if entry["listing"] == "full"),
+        key=lambda item: (
+            -item[0]["description_chars"],
+            str(item[0]["name"]).casefold(),
+            str(item[0]["path"]),
+        ),
+    )
+    shown = ranked[:limit]
+    section = {
+        "candidates": [
+            {
+                "name": entry["name"],
+                "path": entry["path"],
+                "description_chars": entry["description_chars"],
+                "freed_chars": max(0, entry["entry_chars"] - len(entry["name"])),
+            }
+            for entry, _record in shown
+        ],
+        "total": len(ranked),
+        "omitted": max(0, len(ranked) - len(shown)),
+        "wording": LISTING_CANDIDATE_WORDING,
+    }
+    return section, [record for _entry, record in shown]
+
+
+def _listing_budget(observation: dict, window: str) -> dict:
+    """Resolve the documented character budget, stating which basis was used."""
+    env = observation.get("env_budget") or {}
+    window_tokens = WINDOWS.get(window, WINDOWS[DEFAULT_WINDOW])
+    if env.get("status") == "set":
+        chars = int(env["value"])
+        return {
+            "basis": f"env {native_state.LISTING_BUDGET_ENV}",
+            "budget_chars": chars,
+            "budget_tokens": None,
+            "budget_chars_estimate": chars,
+            "window": window,
+            "window_tokens": window_tokens,
+            "fraction": None,
+            "env_status": env.get("status"),
+            "assumption": (
+                "the environment variable states the budget directly in characters; "
+                "no token conversion is applied"
+            ),
+        }
+    fraction = observation.get("budget_fraction")
+    basis = "skillListingBudgetFraction setting"
+    if fraction is None:
+        fraction = native_state.DEFAULT_LISTING_BUDGET_FRACTION
+        basis = "default 1% of the context window (no skillListingBudgetFraction setting observed)"
+    tokens = fraction * window_tokens
+    return {
+        "basis": basis,
+        "budget_chars": None,
+        "budget_tokens": int(round(tokens)),
+        "budget_chars_estimate": int(round(tokens * LISTING_CHARS_PER_TOKEN)),
+        "window": window,
+        "window_tokens": window_tokens,
+        "fraction": fraction,
+        "env_status": env.get("status"),
+        "assumption": LISTING_TOKEN_ASSUMPTION,
+    }
+
+
+def _listing_status(listing_chars: int, budget_chars: int, partial: bool) -> str:
+    """The budget verdict; partial settings evidence could hide overrides."""
+    if partial:
+        return "unknown"
+    return "over_budget_estimate" if listing_chars > budget_chars else "within_budget"
+
+
+def _native_partial(observation: object) -> bool:
+    """True when a settings source exists but could not be parsed.
+
+    ``missing`` (no file) and ``unobserved`` (no project context) cannot hide a
+    declaration; only an unreadable or invalid file can, and that is the case
+    the listing estimate must disclose.
+    """
+    if not isinstance(observation, dict):
+        return True
+    return any(
+        isinstance(entry, dict) and entry.get("status") in ("unavailable", "invalid")
+        for entry in observation.get("sources", [])
+    )
+
+
+def _note_listing_scope(unavailable: list[dict], section: dict) -> None:
+    """Record that this report observed no Claude Code instances at all."""
+    if section.get("instances_observed"):
+        return
+    unavailable.append({
+        "signal": "claude-listing-scope",
+        "explanation": (
+            "no Claude Code scope instances were observed in this report, so the "
+            "skill-listing budget was not estimated"
+        ),
+    })
+
+
+def _project_listing_state(project_root, project_records: list[dict],
+                           home_prefix: str) -> dict:
+    """Project-root context, or an explicit unavailable signal."""
+    if project_root is None:
+        return {
+            "state": "unavailable",
+            "reason": (
+                "this report carries no project root, so project .claude/skills "
+                "instances were not observed"
+            ),
+        }
+    return {
+        "state": "observed",
+        "root": _redacted_path(project_root, home_prefix),
+        "instances": len(project_records),
+    }
+
+
+def _claude_listing_finding(section: dict, records: list[dict]) -> dict:
+    """One advisory finding when the estimate exceeds the budget."""
+    budget = section["budget"]
+    return _finding(
+        "claude-listing-budget", "info", "heuristic",
+        "Claude Code's skill listing may exceed its character budget",
+        (
+            f"The observed listing is {section['listing_chars']} characters against an "
+            f"estimated budget of {budget['budget_chars_estimate']} "
+            f"({budget['basis']}); the conversion is an estimate, not a measurement."
+        ),
+        records,
+        {
+            "status": section["status"],
+            "listing_chars": section["listing_chars"],
+            "budget": budget,
+            "chars_to_free": section["chars_to_free"],
+            "name_only_candidates": section["name_only_candidates"]["total"],
+            "candidates_by_size_only": True,
+        },
+        "Review the name-only candidates in the claude_listing section; this tool cannot know which descriptions are actually dropped.",
+    )
+
+
+def _claude_listing_section(prepared: list[dict], *, home, project_root, window: str,
+                            degraded: list[dict]) -> tuple[dict, list[dict]]:
+    """Estimate Claude Code's skill-listing budget from observed instances."""
+    home_prefix = _home_prefix(home)
+    observation = native_state.observe_claude_listing(
+        home=home_prefix or None, project=project_root
+    )
+    personal, project = _claude_listing_records(prepared, project_root, degraded)
+    cap = observation.get("max_desc_chars") or native_state.DEFAULT_LISTING_MAX_DESC_CHARS
+    names = sorted({str(r.get("name", "")) for r in personal + project if r.get("name")})
+    settings = native_state.observe_native_states(
+        "claude-code", names, home=home_prefix or None, project=project_root
+    )
+    partial = bool(observation.get("partial")) or any(
+        _native_partial(item) for item in settings.values()
+    )
+    pairs, over_cap, excluded = _collect_listing(
+        personal + project, cap, settings, home_prefix
+    )
+    listing_text = _LISTING_SEPARATOR.join(text for _entry, text, _record in pairs)
+    listing_chars = len(listing_text)
+    listing_tokens, method = count_tokens(listing_text)
+    budget = _listing_budget(observation, window)
+    budget_chars = int(budget["budget_chars_estimate"])
+    candidates, candidate_records = _name_only_candidates(pairs, MAX_LISTING_CANDIDATES)
+    section = {
+        "version": 1,
+        "consumer": "claude-code",
+        "source": _CLAUDE_LISTING_SOURCE,
+        "effective_state": "unknown",
+        "confidence": "partial" if partial else "observed",
+        "status": _listing_status(listing_chars, budget_chars, partial),
+        "instances_observed": len(personal) + len(project),
+        "listed_skills": len(pairs),
+        "entries": [entry for entry, _text, _record in pairs[:MAX_GROUP_INSTANCES]],
+        "entries_total": len(pairs),
+        "entries_truncated": len(pairs) > MAX_GROUP_INSTANCES,
+        "listing_chars": listing_chars,
+        "listing_tokens_estimate": listing_tokens,
+        "listing_tokens_method": method,
+        "listing_text_basis": LISTING_TEXT_BASIS,
+        "max_description_chars": cap,
+        "budget": budget,
+        "chars_to_free": max(0, listing_chars - budget_chars),
+        "name_only_candidates": candidates,
+        "over_cap": {
+            "count": len(over_cap),
+            "names": over_cap[:MAX_LISTING_OVER_CAP],
+            "omitted": max(0, len(over_cap) - MAX_LISTING_OVER_CAP),
+            "max_description_chars": cap,
+        },
+        "excluded": excluded,
+        "settings": observation,
+        "project_skills": _project_listing_state(project_root, project, home_prefix),
+    }
+    findings = []
+    if section["status"] == "over_budget_estimate":
+        findings.append(_claude_listing_finding(section, candidate_records))
+    return section, findings
+
+
 def _source_lock_findings(records: list[dict], unavailable: list[dict], degraded: list[dict]) -> list[dict]:
     findings = []
     for record in records:
@@ -1047,6 +1412,15 @@ def _report_extras(project_root, home, xdg_state_home) -> dict:
     return extras
 
 
+def _validated_window(window: str) -> str:
+    """A known context window, or a clean error naming the valid choices."""
+    if window not in WINDOWS:
+        raise HygieneError(
+            f"unknown context window {window!r}; choose one of: " + ", ".join(sorted(WINDOWS))
+        )
+    return window
+
+
 def hygiene_report(
     records: list[dict],
     *,
@@ -1055,6 +1429,7 @@ def hygiene_report(
     project_root=None,
     home=None,
     xdg_state_home=None,
+    window: str = DEFAULT_WINDOW,
 ) -> dict:
     """Build a stable JSON-safe read-only hygiene report."""
     token = _RESOLVED_IDENTITIES.set({})
@@ -1063,6 +1438,7 @@ def hygiene_report(
             records,
             scope=scope,
             max_instances=max_instances,
+            window=_validated_window(window),
             **_report_extras(project_root, home, xdg_state_home),
         )
     finally:
@@ -1074,6 +1450,7 @@ def _hygiene_report(
     *,
     scope: str,
     max_instances: int,
+    window: str,
     project_root=None,
     home=None,
     xdg_state_home=None,
@@ -1113,6 +1490,15 @@ def _hygiene_report(
         home=home,
         xdg_state_home=xdg_state_home,
     )
+    claude_listing, listing_findings = _claude_listing_section(
+        prepared,
+        home=home,
+        project_root=project_root,
+        window=window,
+        degraded=degraded,
+    )
+    findings.extend(listing_findings)
+    _note_listing_scope(unavailable, claude_listing)
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))
     full_summary["unavailable"] += len(unavailable)
@@ -1127,6 +1513,7 @@ def _hygiene_report(
         "findings": findings[:MAX_FINDINGS],
         "largest_instances": largest,
         "lockfiles": lockfile_section,
+        "claude_listing": claude_listing,
         "unavailable_signals": sorted(unavailable, key=lambda item: (str(item.get("signal", "")), str(item.get("name", "")))),
         "degraded": sorted(degraded, key=lambda item: (str(item.get("section", "")), str(item.get("instance", "")), str(item.get("reason", "")))),
         "limits": {
@@ -1140,6 +1527,8 @@ def _hygiene_report(
             "max_heading_characters": MAX_HEADING_CHARS,
             "max_shared_features": MAX_SHARED_FEATURES,
             "max_string": MAX_STRING,
+            "max_listing_candidates": MAX_LISTING_CANDIDATES,
+            "max_listing_over_cap": MAX_LISTING_OVER_CAP,
         },
     }
     return result

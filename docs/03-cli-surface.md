@@ -171,6 +171,22 @@ findings return exit 0 once the scan completes, while a total acquisition
 failure returns exit 1. `--hygiene` and `--explain` are incompatible and
 produce a clean exit-1 error.
 
+The report's `claude_listing` section estimates what the Claude Code skill
+listing puts in front of the model: one entry per listed `claude-code` scope
+skill, `off` overrides excluded, `name-only` counted as its name, every other
+entry capped at `skillListingMaxDescChars` (default 1,536) for
+`description` plus `when_to_use`, and `SKILL.md.disabled` instances never
+listed. The character budget comes from `SLASH_COMMAND_TOOL_CHAR_BUDGET` when
+it is set, otherwise `skillListingBudgetFraction` (default 0.01) times the
+token window, with the character figure reported as an estimate because the
+documented conversion is not published. The section also lists name-only
+candidates ordered by description size and an over-cap count. Those candidates
+are **by size only**: Claude Code drops descriptions starting with the
+least-invoked skills, which this tool cannot observe, so it never claims which
+descriptions are dropped. The human output prints one summary line, for example
+`Claude Code listing: 41,200 chars vs ~40,000 budget (estimate); 25 name-only
+candidates`. Every number is read-only evidence; no listing is edited.
+
 ### `stats [--json] [--scope SCOPE]`
 Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts. Category names are sanitized before printing (see *Untrusted display text*).
 
