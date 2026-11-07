@@ -83,6 +83,12 @@ PyPI publishing remains a separate human release gate.
   case. Source fingerprints confirm no product/test/browser edit landed during
   the final ladder.
 
+**[NOTE]** Final comment review clarified that review-directory permissions
+apply to the directory itself, that the filesystem owns global skill truth,
+and that reading a peer link does not prove effective agent loading. Python
+executable ASTs were unchanged by these wording corrections; focused contracts,
+syntax and documentation gates were repeated.
+
 **[NOTE] Hostile-review disposition.** Checked linked paths before hashing,
 read-only write refusal, physical alias voting, stale approvals, duplicate
 attempts, corrupt/missing evidence, descriptor/temp cleanup and both single-

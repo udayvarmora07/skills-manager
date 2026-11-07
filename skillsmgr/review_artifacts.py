@@ -99,7 +99,7 @@ def has_review_header(value: object) -> bool:
 
 
 def ensure_private_directory(directory: str | Path) -> None:
-    """Create *directory* (and parents) owner-only, tightening an existing one."""
+    """Create or tighten the review directory itself to owner-only permissions."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(directory, 0o700)

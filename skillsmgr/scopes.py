@@ -135,10 +135,10 @@ def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
 def _peer_link_roots(scope: "Scope") -> tuple[Path, ...]:
     """Resolved bases of the *other* managed agent roots (SCOPE-2).
 
-    The global store is deliberately excluded: it keeps refusing every link,
-    because its index is the authority for installed skills.  A root that is
-    missing, unreadable, or the same physical directory as this scope is not a
-    peer.
+    The global store is deliberately excluded to retain its containment policy;
+    its filesystem remains authoritative and SQLite is only an index. A root is
+    not a peer when missing, unreadable, or the same physical directory as this
+    scope.
     """
     if scope.id == "global":
         return ()
@@ -227,7 +227,7 @@ def _scope_read_dir(scope: "Scope", name: str) -> tuple[Path, dict | None]:
 
     Returns ``(directory, link)`` where ``link`` is the peer-link description
     for a followed link and ``None`` for an ordinary skill.  Writers must not
-    use this: :func:`_safe_scope_skill_path` keeps refusing every link.
+    use this: :func:`_safe_scope_skill_path` still refuses out-of-root links.
     """
     try:
         skill_dir = _safe_scope_skill_path(scope, name)

@@ -77,7 +77,7 @@
     const broken = state === "invalid" || state === "malformed" || state === "unaddressable" || state === "undecodable";
     const linked = state === "linked";
     /* SCOPE-2: a link into another managed scope root is read read-only. It is
-     * a readable copy -- the peer agent loads that document anyway -- but it is
+     * a readable copy in another managed root; effective loading is unknown. It is
      * not the agent's own copy, so nothing here may toggle or edit it. */
     const readOnly = !!obs.linkFollowed;
     /* The list request omits document bodies, so an absent `body` key means

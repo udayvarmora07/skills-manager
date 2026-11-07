@@ -854,7 +854,7 @@ def scan_dir(
             # than dropping it silently: the filesystem is the source of truth.
             #
             # A link into another managed scope root is the one exception: the
-            # peer scope loads that document anyway, so it is read read-only
+            # target is already in a managed root, so it is read read-only
             # here instead of being shown empty (SCOPE-2).
             followed = _peer_link_record(child, link_roots)
             if followed is not None:

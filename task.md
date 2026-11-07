@@ -14,6 +14,8 @@
 - [x] Fix review findings in batch whole-tree approval, transactional sidecar
   bindings (including failed rollback evidence), active Store identity and
   linked agent-trash roots; retain regression coverage.
+- [x] Correct comment claims about review-directory permissions, filesystem
+  authority and unknown effective loading; preserve executable Python ASTs.
 - [x] Current-tree ladder: 1,724 cases on each Python 3.11–3.14 (two optional
   skips, separately exercised), v2 36 scenarios, classic 38 scenarios / 342
   assertions, six-viewport harness, both smokes, compilation/syntax, all gates,
