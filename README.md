@@ -196,6 +196,38 @@ The short version is read-only inventory first (`skills-mgr scopes`, then
 sync, and recovery checks. The manager does not infer undocumented precedence,
 delete project files, upload skill bodies, or install an update daemon.
 
+## What it will not do, and what leaves your machine
+
+Verified against the source on 2026-11-07. Only `skillsmgr/registry.py` opens
+a network connection itself; every other egress below happens through a
+program you chose to run.
+
+It will not:
+
+- send telemetry, analytics, crash reports or update checks;
+- run in the background or install a daemon;
+- write an agent's native settings files (Claude Code `skillOverrides`,
+  OpenCode `permission.skill` and similar are read for display only);
+- pick a winner where an agent's loading order is undocumented;
+- delete a skill outright unless you ask it to purge (removal goes to trash);
+- listen on anything but loopback. The web UI has no authentication, so the
+  `127.0.0.1` binding is its only security boundary. Do not forward, tunnel or
+  publish its port.
+
+Network traffic happens only in these cases:
+
+| When | Where it goes | What is sent |
+|---|---|---|
+| You browse, search or fetch from the registry (`install --browse/--search/--curated/--fetch`, or the Install dialog) | `https://skills.sh` only; other hosts and redirects are refused | The query or skill id, plus `SKILLS_MANAGER_REGISTRY_TOKEN` / `VERCEL_OIDC_TOKEN` if you set one |
+| You run a package install (`install SOURCE` without `--dry-run`/`--preview`) | Whatever `npx`/`pnpm`/`yarn`/`bunx skills add` contacts | Decided by that tool, not by this one |
+| You opt into the SkillSpector scan (`--external-scan`) | `api.osv.dev`, from SkillSpector | Declared dependency names |
+| You opt into its LLM mode (`--external-scan-llm`) | The LLM provider you configured | Skill file contents, using your own key from the environment |
+| `tiktoken` is installed (optional) | tiktoken's download host, once, then cached by tiktoken | A request for the `cl100k_base` encoding file |
+
+Skill bodies are never uploaded except in the SkillSpector LLM mode you turn on
+yourself. `webui` also opens your default browser on the local URL; pass
+`--no-browser` to skip that.
+
 ## Security
 
 See [`SECURITY.md`](SECURITY.md) for disclosure policy. Design notes: [`security_best_practices_report.md`](security_best_practices_report.md), [`skills-manager-threat-model.md`](skills-manager-threat-model.md).

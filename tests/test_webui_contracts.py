@@ -239,8 +239,12 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
             return proc
 
         real_time = harness.time.sleep
+        real_chrome = harness._chrome
         harness.subprocess.Popen = fake_popen
         harness.time.sleep = lambda *_: None
+        # Resolving Chrome is not what this test is about; without a stub it
+        # raised before the first launch on any machine without Chrome.
+        harness._chrome = lambda: "/nonexistent/chrome"
         try:
             with self.assertRaises(RuntimeError):
                 harness._launch_chrome(
@@ -249,6 +253,7 @@ console.log(JSON.stringify({summary, invalidLabel: methods.qualityStateLabel(rec
         finally:
             harness.subprocess.Popen = real_popen
             harness.time.sleep = real_time
+            harness._chrome = real_chrome
         self.assertEqual(len(attempts), 3,
                          "a browser that cannot start must be retried, not "
                          "reported as a product failure on the first attempt")
