@@ -190,3 +190,26 @@ number rather than a claim.
 - **D-C — Quality / hygiene integration** (scan every installed skill on
   demand) needs a new route or a new hygiene parameter. Deferred to after
   Phase A ships.
+
+## Phase B noise measurement (2026-11-07)
+
+**[SPEC]** Measured over every distinct physical instance on the maintainer's
+machine (1,764), counting `risk_scan()` findings per kind. Existing kinds were
+unchanged (`link` 3,120, `pattern` 327, `script` 935).
+
+| Kind | As first written | After the noise fix |
+|---|---|---|
+| `remote-exec` | 31 (all high) | 31 (all high; every one a real `curl … \| sh` installer line) |
+| `credential-path` | 240 (192 high) | 121 (18 high, 103 low) |
+| `suppression` | 39 | 39 (30 medium, 9 low) |
+| `persistence` | 30 | 16 |
+| `broad-trigger` | 7 | 7 |
+
+The fix: a token repeated through one document is reported once, with its line
+as evidence instead of the bare token. A credential path only rates high when
+the same line acts on it (a read/copy/upload verb or an input redirect); a bare
+mention such as "put the key in .env" stays low and says why. A bare `|` is not
+an access signal, because a detector regex's alternation looks identical.
+`decoded-exec`, `padding`, `bytecode` and `dynamic-code` found nothing on this
+library. The last two need bundled file listings, which installed-skill records
+do not carry, so on this measurement they are untested rather than proven quiet.

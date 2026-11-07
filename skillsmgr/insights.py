@@ -661,6 +661,35 @@ def _match_line(text: str, start: int, end: int) -> str:
     return text[line_start:line_end]
 
 
+# A credential path is only high-risk when the same line acts on it. Measured
+# on a real 1,764-instance library on 2026-11-07, bare mentions such as "put
+# the key in .env" were 172 of 240 credential findings, all reported high.
+# A bare "|" is not an access signal: regex alternation in a detector pattern
+# looks the same, and a real pipe always has a command the verb list catches.
+_CREDENTIAL_ACCESS_RE = re.compile(
+    r"\b(?:cat|less|more|head|tail|read|open|load|source|cp|copy|scp|rsync|"
+    r"mv|curl|wget|upload|send|post|exfiltrat\w*|base64|tar|zip|grep|print|"
+    r"dump|export|echo)\b|<\s*(?:$|[~$.\w])",
+    re.IGNORECASE,
+)
+_CREDENTIAL_MENTION_NOTE = (
+    "; the path is only mentioned here, with no command acting on it on the "
+    "same line, so it is kept at low severity"
+)
+
+
+def _match_severity(kind: str, severity: str, why: str, line: str,
+                    matched: str) -> tuple[str, str]:
+    """Return the severity and reason for one match on *line*."""
+    if _warning_context(line, matched):
+        return "low", why + _WARNING_CONTEXT_NOTE
+    if kind == "credential-path":
+        residual = line.replace(matched, " ", 1)
+        if not _CREDENTIAL_ACCESS_RE.search(residual):
+            return "low", why + _CREDENTIAL_MENTION_NOTE
+    return severity, why
+
+
 def _warning_context(line: str, matched: str) -> bool:
     """Say whether the surrounding line warns about the matched text.
 
@@ -673,23 +702,31 @@ def _warning_context(line: str, matched: str) -> bool:
 
 def _pattern_findings(text: str, label: str, pattern: re.Pattern,
                       kind: str, severity: str, why: str) -> list[dict]:
-    """Build one finding per bounded match, downgrading warned-about text."""
+    """Build one finding per distinct bounded match, downgrading warned text.
+
+    The same token repeated through a document is reported once, and the
+    evidence is its line rather than the bare token, so a reviewer can judge it.
+    """
     findings: list[dict] = []
     truncated = False
+    seen: set[str] = set()
     for match in itertools.islice(pattern.finditer(text),
-                                 MAX_RISK_FINDINGS + 1):
+                                 MAX_RISK_FINDINGS * 4 + 1):
+        matched = match.group(0)
+        if matched.lower() in seen:
+            continue
+        seen.add(matched.lower())
         if len(findings) >= MAX_RISK_FINDINGS:
             truncated = True
             break
-        matched = match.group(0)
-        warns = _warning_context(
-            _match_line(text, match.start(), match.end()), matched)
+        line = _match_line(text, match.start(), match.end())
+        level, reason = _match_severity(kind, severity, why, line, matched)
         findings.append({
             "kind": kind,
-            "severity": "low" if warns else severity,
-            "evidence": _bounded_evidence(f"{label}{matched}"),
+            "severity": level,
+            "evidence": _bounded_evidence(f"{label}{line.strip()}"),
             "confidence": "heuristic",
-            "why": why + _WARNING_CONTEXT_NOTE if warns else why,
+            "why": reason,
         })
     if truncated:
         last = dict(findings[-1])
