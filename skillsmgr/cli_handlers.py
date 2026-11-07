@@ -815,6 +815,29 @@ def _hygiene_records(store: Store, scope: str) -> tuple[list[dict], list[dict]]:
     return records, degraded
 
 
+def _render_lockfile_text(lockfiles: dict | None) -> None:
+    """Print one bounded summary line plus any unusable lock state."""
+    lockfiles = lockfiles or {}
+    summary = lockfiles.get("summary") or {}
+    if summary:
+        print(
+            "  lockfiles: declared {declared}; present {present}; missing {missing}; "
+            "hash match {match}, differs {differs}, unverifiable {unverifiable}, "
+            "not recorded {not_recorded}".format(**summary)
+        )
+    for key in ("global", "project"):
+        lock = lockfiles.get(key) or {}
+        if lock.get("state") and lock.get("state") != "ok":
+            print(
+                f"    {_display(str(key))} lock: {_display(str(lock.get('state')))} "
+                f"({_display(str(lock.get('reason', '')))})"
+            )
+    if lockfiles.get("undeclared", {}).get("names"):
+        print(f"    undeclared installed skills: {len(lockfiles['undeclared']['names'])}")
+    for signal in lockfiles.get("unavailable_signals", []):
+        print(f"    unavailable {_display(str(signal.get('signal', '')))}: {_display(str(signal.get('explanation', '')))}")
+
+
 def _render_hygiene_text(report: dict) -> None:
     """Render report evidence through the terminal sanitization seam."""
     summary = report.get("summary", {})
@@ -828,6 +851,7 @@ def _render_hygiene_text(report: dict) -> None:
         "  findings: {finding_count} (errors {errors}, warnings {warnings}, info {informational}, "
         "unavailable {unavailable})".format(**summary)
     )
+    _render_lockfile_text(report.get("lockfiles"))
     if summary.get("findings_truncated"):
         print("  findings returned are bounded; inspect the JSON limits/degraded evidence")
     for finding in report.get("findings", []):

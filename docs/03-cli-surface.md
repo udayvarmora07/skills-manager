@@ -152,10 +152,16 @@ deduplicated observed instances from the configured scope roots. The report
 covers malformed/unreadable documents, validator references and description
 guidance, exact duplicate and same-name drift groups, bounded heuristic
 near-duplicate candidates, context hotspots, and source-lock evidence. It also
-lists degraded and unavailable signals. It never mutates files or makes a
-combined quality claim; findings return exit 0 once the scan completes, while a
-total acquisition failure returns exit 1. `--hygiene` and `--explain` are
-incompatible and produce a clean exit-1 error.
+lists degraded and unavailable signals. The report's `lockfiles` section reads
+the `skills` CLI's global `.skill-lock.json` (version 3) and, when a project
+root context exists, its project `skills-lock.json` (version 1), then reports
+declared/present/disabled state, `computedHash` and `skillFolderHash` comparison
+status, undeclared installed skills, and an unavailable signal for an
+`apm.lock.yaml` it will not parse. The human output adds one bounded lockfile
+summary line. It never mutates files or makes a combined quality claim;
+findings return exit 0 once the scan completes, while a total acquisition
+failure returns exit 1. `--hygiene` and `--explain` are incompatible and
+produce a clean exit-1 error.
 
 ### `stats [--json] [--scope SCOPE]`
 Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts. Category names are sanitized before printing (see *Untrusted display text*).

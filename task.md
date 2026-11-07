@@ -185,8 +185,10 @@ the docs mark them as not needing maintainer approval.
   all five Dependabot targets are themselves superseded; recommend one reviewed
   pin PR, done as #20 with a passing release dry run (draft release, deleted).
   Issue #14 stays open on its F-2 `[ASK]`.
-- [ ] **R11** read `skills-lock.json` / `apm.lock.yaml`: declared vs present vs
-  hash (⚠ unless folded into `doctor`; decision D-3).
+- [x] **R11** read `skills-lock.json` / `.skill-lock.json` / `apm.lock.yaml`:
+  declared vs present vs hash, folded into the existing `doctor --hygiene`
+  report as a read-only `lockfiles` section (2026-11-07, `skillsmgr/lockfiles.py`).
+  `apm.lock.yaml` is reported as an unavailable signal and never parsed.
 - [ ] **R12** consumer rows for Amp, Roo, Cline, Kiro, Copilot, Zed,
   Windsurf/Devin with cited orders (no).
 - [ ] **R13** residency ranking: skills to demote to name-only (no).

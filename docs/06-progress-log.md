@@ -8,6 +8,40 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — R11: read-only `skills` CLI lockfile evidence in the hygiene report
+
+**[SPEC]** New `skillsmgr/lockfiles.py` parses the project `skills-lock.json`
+(version 1) and global `.skill-lock.json` (version 3) written by
+vercel-labs/skills, compares every declared skill with
+`<root>/.agents/skills/<sanitizeName>` and adds a `lockfiles` section to the
+existing `doctor --hygiene` / `GET /api/doctor?scope=…&hygiene=1` report. No new
+CLI command, REST route, Store method, SQLite state, cache, network request, or
+write was added. Malformed JSON, a symlinked/oversized lockfile, a wrong version
+or a non-dict entry is reported `invalid` with a reason and never raises; at most
+500 entries per lock carry an `omitted` count, and each skill hash shares a
+2,000-file / 64 MiB budget (`too_large` above it).
+
+`computedHash` is implemented twice (plain codepoint order and a case-insensitive
+approximation) because upstream sorts with JavaScript `localeCompare`, which the
+standard library cannot reproduce; a match under either order is `match`, and
+neither is `mismatch_or_unverifiable` with that explanation, never "modified".
+`skillFolderHash` is the git tree object SHA-1 with blob/tree headers, git's
+byte-order entry sort, executable and symlink modes, and `.git` skipped; the test
+compares it against a real `git write-tree` for nested dirs, an executable file
+and a symlink. A mismatch is `differs_from_recorded_tree` and is worded as
+"differs from the recorded upstream tree", not tampering. Source URLs lose
+userinfo/query, `~/.agents/skills` entries missing from the global lock are
+listed as bounded `undeclared` names, and an existing `apm.lock.yaml` is an
+unavailable signal (YAML parsing is not in the standard library) and is never
+parsed. The CLI human output gains one bounded summary line.
+
+**[NOTE] Verification.** 27 new tests in `tests/test_lockfiles.py`; the four
+remaining full-suite failures (`backup_sync` trusted-git, `localhost` bind DNS,
+two HOME/data-root permission tests) reproduce on unmodified `HEAD` in this
+sandbox and are environmental. `check_docs.py` passes; `lockfiles.py` joined the
+complexity targets and the regenerated baseline raised no existing entry
+(29 added, all ≤ 11 against a budget of 15).
+
 ## 2026-11-07 — Remaining approval-free tasks, lead + DeepSeek workers
 
 **[NOTE]** The maintainer asked for every remaining task to be done and granted
@@ -472,12 +506,13 @@ entries that introduced them:
 - **The 1.0.2 artifact hashes of record are those built from `522b81f`.** The
   `6733da9` hashes remain only inside the superseded 2026-09-23 entry.
 
-## Resident entry index (2026-09-23 … 2026-11-06)
+## Resident entry index (2026-09-23 … 2026-11-07)
 
-**[NOTE]** 37 indexed entries; full text follows.
+**[NOTE]** 38 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-07 | R11: read-only `skills` CLI lockfile evidence in the hygiene report |
 | 2026-11-06 | Integrate the verified performance work into main |
 | 2026-11-06 | Complete the performance session's missing verification |
 | 2026-11-06 | Refuse oversized tar metadata before chunked reads |
