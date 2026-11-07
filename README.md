@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/udayvarmora07/skills-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/udayvarmora07/skills-manager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg)](pyproject.toml)
 [![PyPI](https://img.shields.io/pypi/v/skill-control-plane.svg)](https://pypi.org/project/skill-control-plane/)
 
 ![Skills Manager v2 Tools with the existing warm-paper design and integrated workflows](docs/images/v2-tools-2026-11-06.png)
@@ -27,7 +27,7 @@ The read-only `doctor --hygiene` report surfaces duplicates, drift, malformed fi
 
 ## Install
 
-Requires Python ≥ 3.10. The runtime is **stdlib-only** — no dependencies.
+Requires Python ≥ 3.11. The runtime is **stdlib-only** — no dependencies.
 
 The published PyPI package is the recommended installation path:
 

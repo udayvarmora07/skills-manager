@@ -47,6 +47,15 @@ _GEMINI_REASON = (
     'case sensitivity is not documented.'
 )
 _GEMINI_NON_LINUX = 'Documented settings path is Linux-only; not observed here.'
+#: Codex ``[[skills.config]]`` entries (docs/34, "Codex").  Only the user file
+#: is read: CLI flags, profiles, managed requirements and project files are not.
+MAX_CODEX_ENTRIES = 1_000
+_CODEX_REASON = (
+    'Only $CODEX_HOME/config.toml (default ~/.codex/config.toml) is read; CLI '
+    'flags, profiles, managed requirements and project configuration are not '
+    'observed. A path entry matches one SKILL.md; a name entry matches every '
+    'skill with that name; the last matching entry wins.'
+)
 
 
 def _unique_object(pairs: list) -> dict:
@@ -313,7 +322,8 @@ def observe_native_states(consumer: str, names: list[str], *, home: Path | None 
                  ('project', project / 'opencode.json' if project else None)]
         reason = 'Environment, remote, .opencode, and managed settings are not observed; cross-file rule merging is not inferred.'
     elif consumer == 'codex':
-        reason = 'Codex TOML observation is deferred'
+        states = observe_codex_states([(name, None) for name in names], home=home)
+        return dict(zip(names, states))
     else:
         reason = 'native settings observation is unsupported for this consumer'
     prepared = []
@@ -447,3 +457,131 @@ def observe_claude_listing(*, home: Path | None = None,
         'env_budget': _env_budget(),
         'reason': _CLAUDE_REASON,
     }
+
+
+def _load_toml(path: Path) -> tuple[str, dict | None]:
+    """Read one bounded TOML file; never raises (mirrors :func:`_load`)."""
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - the supported floor is 3.11
+        return 'unavailable', None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0))
+        with os.fdopen(descriptor, 'rb') as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                return 'unavailable', None
+            data = stream.read(MAX_CONFIG_BYTES + 1)
+        if len(data) > MAX_CONFIG_BYTES:
+            return 'unavailable', None
+        return 'ok', tomllib.loads(data.decode('utf-8'))
+    except FileNotFoundError:
+        return 'missing', None
+    except (OSError, UnicodeError, ValueError, RecursionError):
+        return 'unavailable', None
+
+
+def _codex_config_path(home: Path) -> Path:
+    root = os.environ.get('CODEX_HOME', '').strip()
+    return (Path(root).expanduser() if root else home / '.codex') / 'config.toml'
+
+
+def _codex_rule(entry: object) -> tuple | None:
+    """One valid ``(selector, value, enabled)`` rule, or ``None`` if invalid."""
+    if not isinstance(entry, dict) or not isinstance(entry.get('enabled'), bool):
+        return None
+    selectors = [key for key in ('path', 'name') if key in entry]
+    if len(selectors) != 1 or not isinstance(entry[selectors[0]], str):
+        return None
+    value = entry[selectors[0]]
+    if not value or len(value) > MAX_PATTERN or '\x00' in value:
+        return None
+    if selectors[0] == 'path':
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
+            return None
+        value = os.path.realpath(expanded)
+    return selectors[0], value, entry['enabled']
+
+
+def _prepare_codex(home: Path) -> dict:
+    status, config = _load_toml(_codex_config_path(home))
+    prepared = {'status': status, 'rules': [], 'invalid_entries': 0}
+    if config is None:
+        return prepared
+    skills = config.get('skills', {})
+    entries = skills.get('config', []) if isinstance(skills, dict) else None
+    if not isinstance(entries, list):
+        prepared['status'] = 'invalid'
+        return prepared
+    if len(entries) > MAX_CODEX_ENTRIES:
+        prepared['status'] = 'unavailable'
+        return prepared
+    for entry in entries:
+        rule = _codex_rule(entry)
+        if rule is None:
+            prepared['invalid_entries'] += 1
+        else:
+            prepared['rules'].append(rule)
+    return prepared
+
+
+def _codex_match(name: str, document: Path | None, rules: list, resolved: dict) -> tuple | None:
+    """The last matching ``(selector, enabled)``; resolves *document* lazily."""
+    match = None
+    for selector, value, enabled in rules:
+        if selector == 'name':
+            hit = value == name
+        elif document is None:
+            hit = False
+        else:
+            if 'path' not in resolved:
+                resolved['path'] = os.path.realpath(document)
+            hit = resolved['path'] == value
+        if hit:
+            match = (selector, enabled)
+    return match
+
+
+def _codex_observation(name: str, document: Path | None, prepared: dict) -> dict:
+    evidence = {'source': 'user', 'status': prepared['status']}
+    if prepared['invalid_entries']:
+        evidence['invalid_entries'] = prepared['invalid_entries']
+    result = {'consumer': 'codex', 'effective_state': 'unknown', 'partial': True,
+              'sources': [evidence], 'reason': _CODEX_REASON}
+    if prepared['status'] not in ('ok', 'missing'):
+        return result
+    match = _codex_match(name, document, prepared['rules'], {})
+    if match is None:
+        result['observed_setting'] = 'not disabled by the files read'
+        return result
+    evidence['declared'] = 'enabled' if match[1] else 'disabled'
+    evidence['matched_selector'] = match[0]
+    result['observed_setting'] = evidence['declared']
+    return result
+
+
+def observe_codex_states(entries: list[tuple[str, Path | None]], *,
+                         home: Path | None = None) -> list[dict]:
+    """Observe Codex's ``[[skills.config]]`` switch for each ``(name, SKILL.md)``.
+
+    The config file is read once per batch.  A ``None`` document can still be
+    matched by a ``name`` entry, never by a ``path`` entry.  Read-only: no file
+    is written and ``effective_state`` stays unknown.
+    """
+    if not entries:
+        return []
+    prepared = _prepare_codex(Path.home() if home is None else Path(home))
+    return [_codex_observation(name, document, prepared) for name, document in entries]
+
+
+def observe_native_entries(consumer: str, entries: list[tuple[str, Path | None]], *,
+                           home: Path | None = None, project: Path | None = None) -> list[dict]:
+    """Per-row observations, aligned with *entries* of ``(name, SKILL.md path)``.
+
+    Codex matches a document path, so it is observed per row; every other
+    consumer matches by name and shares one batch read.
+    """
+    if consumer == 'codex':
+        return observe_codex_states(entries, home=home)
+    states = observe_native_states(consumer, [name for name, _ in entries], home=home, project=project)
+    return [states[name] for name, _ in entries]

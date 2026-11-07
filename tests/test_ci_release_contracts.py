@@ -118,16 +118,24 @@ class CiWorkflowContractTests(unittest.TestCase):
 
     def test_ruff_configuration_is_only_the_three_undefined_name_rules(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn('[tool.ruff]\ntarget-version = "py310"', pyproject)
+        self.assertIn('[tool.ruff]\ntarget-version = "py311"', pyproject)
         self.assertIn('select = ["F821", "F822", "F823"]', pyproject)
         self.assertNotIn("ruff", pyproject.split("[project]", 1)[1].split("[project.urls]", 1)[0].lower())
 
     def test_ci_matrix_covers_supported_interpreters(self):
         text = _workflow_text("ci.yml")
-        self.assertIn('"3.10"', text)
-        self.assertIn('"3.14"', text)
-        for version in ("3.10", "3.11", "3.12", "3.13", "3.14"):
+        for version in ("3.11", "3.12", "3.13", "3.14"):
             self.assertIn(f'"{version}"', text, f"CI matrix is missing Python {version}")
+        # D-1 (2026-11-07): 3.10 reached end of life on 2026-10-01 (PEP 619),
+        # so it is no longer a supported interpreter.
+        self.assertNotIn('"3.10"', text)
+
+    def test_supported_floor_is_python_3_11(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('requires-python = ">=3.11"', pyproject)
+        self.assertNotIn("Programming Language :: Python :: 3.10", pyproject)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertNotIn("3.10", readme)
 
     def test_ci_declares_least_privilege_permissions(self):
         text = _workflow_text("ci.yml")

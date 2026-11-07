@@ -83,7 +83,9 @@ class NativeStateTests(unittest.TestCase):
         result = observe_native_state('codex', 'deploy', home=self.home)
         self.assertEqual(result['effective_state'], 'unknown')
         self.assertTrue(result['partial'])
-        self.assertIn('deferred', str(result))
+        # D-1 (2026-11-07): Codex TOML is read now; with no config file the
+        # observation names its source and declares nothing.
+        self.assertEqual(result['sources'], [{'source': 'user', 'status': 'missing'}])
         result = observe_native_state('shared', 'deploy', home=self.home)
         self.assertEqual(result['effective_state'], 'unknown')
 

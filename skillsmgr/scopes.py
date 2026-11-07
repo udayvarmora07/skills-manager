@@ -361,13 +361,18 @@ def _annotate_scope_entries(entries: list[dict], scope: Scope, physical_root: st
     return _annotate_native_entries(entries, scope)
 
 
-def _annotate_native_entries(entries: list[dict], scope: Scope) -> list[dict]:
-    from .native_state import observe_native_states
+def _skill_document(entry: dict) -> Path | None:
+    return Path(entry["path"]) / "SKILL.md" if entry.get("path") else None
 
-    states = observe_native_states(scope.consumer, [entry["name"] for entry in entries],
-                                   home=paths.home_dir(), project=_cwd())
-    for entry in entries:
-        entry["native_state"] = states[entry["name"]]
+
+def _annotate_native_entries(entries: list[dict], scope: Scope) -> list[dict]:
+    from .native_state import observe_native_entries
+
+    documents = [(entry["name"], _skill_document(entry)) for entry in entries]
+    states = observe_native_entries(scope.consumer, documents,
+                                    home=paths.home_dir(), project=_cwd())
+    for entry, state in zip(entries, states):
+        entry["native_state"] = state
     return entries
 
 
