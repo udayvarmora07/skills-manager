@@ -60,7 +60,8 @@ defect (the Chrome test above), and the rest re-ran green on the host.
 **[?] Still open, by design.** Human perceptual/screen-reader sign-offs,
 consented sessions, every `Decide:` item, R12 (needs cited primary sources per
 agent), R13, R17–R19, Phase B, the rest of R15, and the Dependabot pin update,
-which touches `release.yml` and cannot be exercised without a release dry run.
+which was then done the same day as #20 with a passing release dry run
+(see @docs/23-github-actions-dependency-pr-review-2026-09-23.md).
 
 ## 2026-11-07 — The default-interface redirect broke CI on Python 3.10
 
