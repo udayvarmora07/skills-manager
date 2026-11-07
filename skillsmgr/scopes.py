@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import threading
+import contextlib
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +54,21 @@ _SCOPE_READ_FLIGHTS_LOCK = threading.Lock()
 def set_global_store(store: Store | None) -> None:
     """Override the Store used for global-scope operations (or reset with None)."""
     _GLOBAL_STORE.set(store)
+
+
+@contextlib.contextmanager
+def _bound_global_store(store: Store):
+    """Bind ``store`` for the ``global`` scope, restoring the prior binding.
+
+    An in-process caller (the CLI) must resolve ``global`` through the Store it
+    was asked for, not one a previously constructed ``WebAppServer`` left bound
+    in this thread.
+    """
+    token = _GLOBAL_STORE.set(store)
+    try:
+        yield store
+    finally:
+        _GLOBAL_STORE.reset(token)
 
 
 def _global_store() -> Store:

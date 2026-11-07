@@ -69,6 +69,7 @@ from .cli_handlers import (
 from .cli_output import err as _output_err, print_json as _output_print_json, render_table as _output_render_table, truncate as _output_truncate
 from .cli_parser import add_scope_arg, build_parser as _build_parser_impl
 from .store import Store, StoreError  # noqa: F401
+from .scopes import _bound_global_store
 
 # Historical private aliases (kept so external tools/tests keep working).
 _print_json = _output_print_json
@@ -96,6 +97,12 @@ def build_parser():
     return _build_parser_impl(COMMANDS)
 
 
+def _dispatch(args, store: Store) -> int:
+    """Run the command with ``global`` resolved through this invocation's Store."""
+    with _bound_global_store(store):
+        return args.func(args, store) or EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -105,8 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         validate_cli_names(args)
         validate_cli_combinations(args)
-        store = make_store(args)
-        return args.func(args, store) or EXIT_OK
+        return _dispatch(args, make_store(args))
     except (StoreError, ValueError, OSError) as exc:
         _err(str(exc))
         return EXIT_ERROR
