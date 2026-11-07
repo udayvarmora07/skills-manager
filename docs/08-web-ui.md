@@ -45,8 +45,27 @@ search and pagination; `body=1` or an absent flag preserves the existing
 response fields. This does not add bodies to metadata-only global rows.
 Blank, invalid or repeated flags are a clean 400 before scanning. Detail and
 raw-document routes still return full content. Opening an editor fetches the
-detail when necessary and refuses a missing or superseded selection. The v2
-UI retains its existing full-body list requests for diffs and editing.
+detail when necessary and refuses a missing or superseded selection.
+
+**[SPEC] v2 also requests `body=0` and reads documents lazily (2026-11-07).**
+`v2/app.js` starts with `GET /api/skills?scope=all&body=0`; identity, size and
+state fields (`content_hash`, `tokens`, `description`, `physical_path`, scope
+and observed state) keep the list usable, and `model.js` marks each copy with
+`bodyLoaded` so an empty document is distinguishable from one that has not
+been read. `ensureBodies(copies)` fetches `GET /api/skills/<name>?scope=<scope>`
+only for copies without a body, coalesces concurrent requests for one key, and
+caches by `scope + name + content_hash` so a changed document refetches. The
+cache is emptied on every list reload, because that reload produces fresh
+copies. Bodies are ensured before opening the reader, computing the reader's
+missing-line marks, the Inbox and Sync map diffs, the map's per-row line count,
+and the editor; the editor waits for the body and does nothing if the reader
+navigated away while it was fetched, and the reader shows "Loading document…"
+instead of rendering an unloaded body. Grouping, "copies differ" and reference
+selection stay keyed on `content_hash`, never on a body. Turning a copy off or
+on appends the observed token effect to the toast ("frees about N tokens of
+that agent's budget" / "uses about N tokens"), summing the copies for "turned
+on everywhere", and omits the clause when the count is zero or unknown; the
+same estimate sits beside each copy switch on the skill page.
 
 Bounded locale formatter caches and Vue-derived row metadata avoid repeated
 work during unrelated renders. Checkbox membership uses a Set; off-screen

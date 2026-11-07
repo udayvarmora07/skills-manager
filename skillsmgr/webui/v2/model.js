@@ -76,12 +76,17 @@
      * the target and agent loading remain unobserved. */
     const broken = state === "invalid" || state === "malformed" || state === "unaddressable" || state === "undecodable";
     const linked = state === "linked";
+    /* The list request omits document bodies, so an absent `body` key means
+     * "not loaded yet", never "empty document". Keep the two apart. */
+    const bodyLoaded = Object.prototype.hasOwnProperty.call(record, "body") && typeof record.body === "string";
     return {
+      name: String(record.name || ""),
       scope: record.scope, label: record.scope_label || record.scope,
       state: broken ? "broken" : linked ? "link" : state === "disabled" ? "off" : "on",
       kind: broken || linked ? state : "", hash: broken || linked ? "" : String(record.content_hash || ""),
       tokens: record.tokens || 0, path: record.physical_path || record.path || "",
-      body: record.body || "", description: record.description || "", record,
+      body: bodyLoaded ? record.body : "", bodyLoaded,
+      description: record.description || "", record,
     };
   }
 

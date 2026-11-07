@@ -319,6 +319,133 @@ class SyncUndoTests(unittest.TestCase):
 
 
 @unittest.skipUnless(NODE, "node is required")
+class BodyLazyLoadTests(unittest.TestCase):
+    """The list omits document bodies; a body is read only where one is needed."""
+
+    APP = json.dumps(str(V2 / "app.js"))
+
+    def _app(self, body: str):
+        return _node(
+            "ctx.Vue={createApp(options){ctx.options=options;return {component(){},mount(){}};},markRaw:x=>x};"
+            f"vm.runInContext(fs.readFileSync({self.APP},'utf8'),ctx);"
+            f"return (async()=>{{{body}}})();")
+
+    def test_a_copy_without_a_body_is_not_an_empty_document(self):
+        out = _node(HELPERS + """
+        const strip=(r)=>{const c={...r};delete c.body;return c;};
+        const full=M.build([rec('a','claude-code')],scopes).skills[0].copies[0];
+        const lite=M.build([strip(rec('a','claude-code'))],scopes).skills[0].copies[0];
+        const same=M.build([strip(rec('a','claude-code')),strip(rec('a','codex'))],scopes).skills[0].status.label;
+        const diff=M.build([strip(rec('a','claude-code')),strip(rec('a','codex',{content_hash:'h2'}))],scopes).skills[0].status.label;
+        return {full:{loaded:full.bodyLoaded,body:full.body},lite:{loaded:lite.bodyLoaded,body:lite.body,hash:lite.hash},same,diff};""")
+        self.assertTrue(out["full"]["loaded"])
+        self.assertEqual(out["full"]["body"], "b")
+        self.assertFalse(out["lite"]["loaded"])
+        self.assertEqual(out["lite"]["body"], "")
+        self.assertEqual(out["lite"]["hash"], "h1")
+        # Grouping stays keyed on content_hash, never on body presence.
+        self.assertEqual(out["same"], "Working")
+        self.assertEqual(out["diff"], "Copies differ")
+
+    def test_one_request_serves_two_concurrent_callers_and_a_changed_hash_refetches(self):
+        out = self._app_with_api("""
+        const M=ctx.options.methods;
+        const context={bodies:{},bodyInflight:{},bodyErrors:{},friendly:M.friendly,bodyKey:M.bodyKey,applyBody:M.applyBody};
+        const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false};
+        await Promise.all([M.ensureBodies.call(context,[copy]),M.ensureBodies.call(context,[copy])]);
+        const first={calls:calls.slice(),body:copy.body,loaded:copy.bodyLoaded,keyed:context.bodies[M.bodyKey.call(context,copy)]};
+        copy.hash='h2';copy.bodyLoaded=false;
+        await M.ensureBodies.call(context,[copy]);
+        return {first,calls:calls.slice(),second:copy.body};""")
+        self.assertEqual(len(out["first"]["calls"]), 1)
+        self.assertIn("/api/skills/a?scope=codex", out["first"]["calls"][0])
+        self.assertEqual(out["first"]["body"], "DOC 1")
+        self.assertTrue(out["first"]["loaded"])
+        self.assertEqual(out["first"]["keyed"], "DOC 1")
+        self.assertEqual(len(out["calls"]), 2)  # a changed content_hash refetches
+        self.assertEqual(out["second"], "DOC 2")
+
+    def _app_with_api(self, body: str):
+        return _node(
+            "let calls=[];"
+            "ctx.window.SkillManagerDomain={...ctx.window.SkillManagerDomain,"
+            "api:async(url)=>{calls.push(url);return {name:'a',scope:'codex',body:'DOC '+(calls.length)};}};"
+            "ctx.Vue={createApp(options){ctx.options=options;return {component(){},mount(){}};},markRaw:x=>x};"
+            f"vm.runInContext(fs.readFileSync({self.APP},'utf8'),ctx);"
+            f"return (async()=>{{{body}}})();")
+
+    def test_opening_the_editor_waits_for_the_document(self):
+        out = self._app("""
+        const M=ctx.options.methods;
+        const strip=(r)=>{const c={...r};delete c.body;return c;};
+        const copy=Object.assign(strip({name:'a',scope:'codex',description:'d',content_hash:'h1',tokens:5,
+          record:{category:'c',version:'',license:'',compatibility:'',allowed_tools:''}}),{body:'# Body\\n',bodyLoaded:false});
+        const skill={name:'a',copies:[copy]};
+        const context={skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
+          bodies:{},bodyErrors:{},toast(){},$nextTick(){},
+          bodyKey:M.bodyKey,bodyReady:M.bodyReady,bodyOf:M.bodyOf,bodyErrorOf:M.bodyErrorOf,friendly:M.friendly,
+          ensureBodies:async function(cs){cs[0].body='# Body\\n';cs[0].bodyLoaded=true;this.bodies[this.bodyKey(cs[0])]='# Body\\n';}};
+        await M.startEdit.call(context);
+        return {body:context.edit&&context.edit.body,name:context.edit&&context.edit.name};""")
+        self.assertEqual(out["name"], "a")  # never opens on an unloaded body
+        self.assertEqual(out["body"], "# Body\n")
+
+    def test_navigating_away_during_the_fetch_does_not_open_the_editor(self):
+        out = self._app("""
+        const M=ctx.options.methods;
+        const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false,description:'d',record:{}};
+        const skill={name:'a',copies:[copy]};
+        const context={skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
+          bodies:{},bodyErrors:{},toast(){},$nextTick(){},
+          bodyKey:M.bodyKey,bodyReady:M.bodyReady,bodyOf:M.bodyOf,bodyErrorOf:M.bodyErrorOf,friendly:M.friendly,
+          ensureBodies:async function(){this.skill={name:'b',copies:[]};this.route={page:'skills'};}};
+        await M.startEdit.call(context);
+        return context.edit;""")
+        self.assertIsNone(out)
+
+    def test_editor_does_not_open_when_the_document_cannot_be_read(self):
+        out = self._app("""
+        const M=ctx.options.methods;
+        const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false,description:'d',record:{}};
+        const skill={name:'a',copies:[copy]};
+        let toastText='';
+        const context={skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
+          bodies:{},bodyErrors:{},toast(t){toastText=t;},$nextTick(){},
+          bodyKey:M.bodyKey,bodyReady:M.bodyReady,bodyOf:M.bodyOf,bodyErrorOf:M.bodyErrorOf,friendly:M.friendly,
+          ensureBodies:async function(){this.bodyErrors[this.bodyKey(copy)]='The document could not be read.';}};
+        await M.startEdit.call(context);
+        return {edit:context.edit,toast:toastText};""")
+        self.assertIsNone(out["edit"])
+        self.assertIn("could not be read", out["toast"])
+
+    def test_a_toggle_toast_states_the_token_effect_and_omits_an_unknown_count(self):
+        out = self._app_with_api("""
+        const M=ctx.options.methods;
+        let toastText='';
+        const context={skill:{name:'alpha'},busy:false,fmt:(n)=>Number(n).toLocaleString('en-US'),
+          agentOf:()=>({name:'Codex'}),toast(t){toastText=t;},refresh:async()=>{},tokenClause:M.tokenClause};
+        const messages={};
+        await M.toggleCopy.call(context,{scope:'codex',state:'on',tokens:1240});messages.off=toastText;
+        await M.toggleCopy.call(context,{scope:'codex',state:'off',tokens:1240});messages.on=toastText;
+        await M.toggleCopy.call(context,{scope:'codex',state:'on',tokens:0});messages.zero=toastText;
+        const many={skill:{name:'alpha',copies:[{scope:'codex',state:'off',tokens:1000},{scope:'gemini',state:'off',tokens:240}]},
+          busy:false,fmt:context.fmt,agentOf:()=>({name:'Codex'}),toast(t){toastText=t;},refresh:async()=>{},
+          tokenClause:M.tokenClause,plural:M.plural};
+        await M.allOn.call(many);messages.all=toastText;
+        return messages;""")
+        self.assertIn("turned off in Codex.", out["off"])
+        self.assertIn("frees about 1,240 tokens of that agent's budget", out["off"])
+        self.assertIn("uses about 1,240 tokens", out["on"])
+        self.assertNotIn("token", out["zero"])
+        self.assertIn("turned on everywhere.", out["all"])
+        self.assertIn("uses about 1,240 tokens across 2 agents", out["all"])
+
+    def test_startup_list_request_omits_document_bodies(self):
+        app = (V2 / "app.js").read_text(encoding="utf-8")
+        self.assertIn('api("/api/skills?scope=all&body=0")', app)
+
+
+@unittest.skipUnless(NODE, "node is required")
 class TransportTests(unittest.TestCase):
     """R9: mutating requests declare JSON; forms and files keep their own type."""
 
@@ -459,6 +586,30 @@ class ServedTests(unittest.TestCase):
                 return r.status, r.headers.get("Content-Type", ""), r.read()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.headers.get("Content-Type", ""), exc.read()
+
+    def test_body_zero_list_projection_keeps_identity_and_size_fields(self):
+        import os
+
+        # A global Store row never carries a body; an agent-scope row does, so
+        # this uses a scope instance to prove the flag actually removes one.
+        folder = Path(os.environ["HOME"]) / ".claude" / "skills" / "payload-instance"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "SKILL.md").write_text(
+            "---\nname: payload-instance\ndescription: Prove the list projection.\n---\n\n# Body\n\nText.\n",
+            encoding="utf-8")
+        try:
+            status, _, raw = self._get("/api/skills?scope=all&body=1")
+            self.assertEqual(status, 200)
+            full = next(r for r in json.loads(raw) if r.get("name") == "payload-instance")
+            self.assertIn("body", full)
+            status, _, raw = self._get("/api/skills?scope=all&body=0")
+            self.assertEqual(status, 200)
+            row = next(r for r in json.loads(raw) if r.get("name") == "payload-instance")
+            self.assertNotIn("body", row)
+            self.assertIn("content_hash", row)
+            self.assertIn("tokens", row)
+        finally:
+            shutil.rmtree(folder.parent, ignore_errors=True)
 
     def test_the_interface_and_its_assets_are_served(self):
         for path, kind in (("/v2/", "text/html"), ("/v2/index.html", "text/html"), ("/v2/app.js", "javascript"),

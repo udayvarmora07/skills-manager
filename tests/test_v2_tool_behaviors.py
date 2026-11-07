@@ -143,8 +143,8 @@ class ToolBehaviorTests(unittest.TestCase):
           ctx.window.SkillsV2Model={stripFrontmatter:v=>v};
           Object.assign(ctx.window.SkillManagerDomain,{formatCompat:v=>v||'',formatTools:v=>v||''});
           vm.runInContext(fs.readFileSync(V2+'/app.js','utf8'),ctx);
-          const h={skill:{name:'divergent',description:'Primary description'},refCopy:{scope:'codex',description:'Selected copy description',body:'# Selected',record:{}},readCopyPath:'/codex/divergent',editTargets:[{scope:'codex'},{scope:'claude-code'}],$nextTick:()=>{}};
-          component.methods.startEdit.call(h);return h.edit;
+          const h={skill:{name:'divergent',description:'Primary description'},route:{page:'skill'},refCopy:{name:'divergent',scope:'codex',hash:'h1',description:'Selected copy description',body:'# Selected',bodyLoaded:true,record:{}},readCopyPath:'/codex/divergent',editTargets:[{scope:'codex'},{scope:'claude-code'}],$nextTick:()=>{},bodies:{},bodyErrors:{},ensureBodies:async()=>{},bodyKey:component.methods.bodyKey,bodyOf:component.methods.bodyOf,bodyReady:component.methods.bodyReady,bodyErrorOf:component.methods.bodyErrorOf,toast:()=>{}};
+          await component.methods.startEdit.call(h);return h.edit;
         """)
         self.assertEqual(out["desc"], "Selected copy description")
         self.assertEqual(out["baseDesc"], "Selected copy description")

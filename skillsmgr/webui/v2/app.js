@@ -66,6 +66,7 @@ const app = createApp({
       historyError: "", skillHistoryError: "", trashError: "", trashLoading: false, importFull: false, importResult: null, createTemplates: [], commandQuery: "",
       query: "", filter: "all", agentFilter: "all", extra: {}, sortBy: "name",
       front: null, skipped: [], dismissed: [], done: 0, srcChoice: "",
+      bodies: {}, bodyInflight: {}, bodyErrors: {},
       treeQuery: "", edit: null, highlight: true, compareWith: "",
       mapSelId: "", mapPicked: [], peek: null,
       trash: [], importFile: null, importForce: false,
@@ -146,14 +147,16 @@ const app = createApp({
     docHtml() {
       const s = this.skill;
       if (!s) return "";
-      const text = stripFrontmatter(this.refCopy.body || "");
+      const text = stripFrontmatter(this.bodyOf(this.refCopy));
       let marks = new Set();
-      if (this.cmp && this.highlight) {
-        const theirs = new Set(stripFrontmatter(this.cmp.body || "").split("\n").map((l) => l.trim()));
+      if (this.cmp && this.highlight && this.bodyReady(this.cmp)) {
+        const theirs = new Set(stripFrontmatter(this.bodyOf(this.cmp)).split("\n").map((l) => l.trim()));
         marks = new Set(text.split("\n").map((l) => l.trim()).filter((l) => l && !theirs.has(l)));
       }
       return renderDoc(text, marks);
     },
+    docPending() { return !!this.skill && !this.bodyReady(this.refCopy); },
+    docError() { return this.bodyErrorOf(this.refCopy); },
     editable() { return !!this.skill && this.skill.copies.some((c) => c.state !== "broken"); },
     editTargets() { return this.skill ? this.skill.copies.filter((c) => c.state !== "broken") : []; },
     editError() {
@@ -198,7 +201,8 @@ const app = createApp({
       const s = this.m.byName.get(this.peek);
       const mine = s && s.copies.find((c) => c.scope === this.mapSel.id);
       const ref = s && s.ref.holders[0];
-      return mine && ref ? changes(stripFrontmatter(mine.body), stripFrontmatter(ref.body)).slice(0, 80) : null;
+      if (!mine || !ref || !this.bodyReady(mine) || !this.bodyReady(ref)) return null;
+      return changes(stripFrontmatter(this.bodyOf(mine)), stripFrontmatter(this.bodyOf(ref))).slice(0, 80);
     },
     queue() {
       if (!this.m) return [];
@@ -217,7 +221,8 @@ const app = createApp({
       if (!s || !this.cur || this.cur.key !== "warn") return null;
       const src = s.copies.find((c) => c.scope === (this.srcChoice || (s.ref.holders[0] || {}).scope));
       const tgt = s.copies.find((c) => c.scope === this.cur.agents[0] && c !== src) || s.differing[0];
-      return src && tgt ? changes(stripFrontmatter(tgt.body), stripFrontmatter(src.body)).slice(0, 60) : null;
+      if (!src || !tgt || !this.bodyReady(src) || !this.bodyReady(tgt)) return null;
+      return changes(stripFrontmatter(this.bodyOf(tgt)), stripFrontmatter(this.bodyOf(src))).slice(0, 60);
     },
     curBig() {
       if (!this.cur || this.cur.key !== "info" || !this.m) return [];
@@ -245,9 +250,10 @@ const app = createApp({
   },
   watch: {
     libraryView(value) {try{localStorage.setItem("skillsmgr-v2-library-view",value);}catch(e){}},
-    cur: { immediate: true, handler(c) { this.srcChoice = c && c.key === "warn" && this.m && this.m.byName.get(c.skill) ? (this.m.byName.get(c.skill).ref.ambiguous ? "" : (this.m.byName.get(c.skill).ref.holders[0] || {}).scope || "") : ""; } },
-    "route.name"() { this.compareWith = ""; this.loadSkillHistory(); },
-    skill(s) { if (!s && this.edit) this.edit = null; },
+    cur: { immediate: true, handler(c) { this.srcChoice = c && c.key === "warn" && this.m && this.m.byName.get(c.skill) ? (this.m.byName.get(c.skill).ref.ambiguous ? "" : (this.m.byName.get(c.skill).ref.holders[0] || {}).scope || "") : ""; if (c && c.key === "warn" && this.curSkill) this.ensureBodies(this.curSkill.copies); } },
+    "route.name"() { this.compareWith = ""; this.loadSkillHistory(); this.primeBodies(); },
+    skill(s) { if (!s && this.edit) this.edit = null; if (s) this.ensureBodies(s.copies); },
+    mapSel() { this.ensureMapBodies(); },
   },
   methods: {
     enc: encodeURIComponent, plural, join, words, titleCase, shortPath, plainLine, renderDoc,
@@ -267,13 +273,17 @@ const app = createApp({
       this.loading = true; this.loadError = "";
       try {
         const [scopes, records, history] = await Promise.all([
-          api("/api/scopes"), api("/api/skills?scope=all"), api("/api/history?limit=8").then(r=>{this.historyError="";return r;}).catch(e => {this.historyError=this.friendly(e.message);return []; }),
+          api("/api/scopes"), api("/api/skills?scope=all&body=0"), api("/api/history?limit=8").then(r=>{this.historyError="";return r;}).catch(e => {this.historyError=this.friendly(e.message);return []; }),
         ]);
         this.scopes=markRaw(scopes);this.records=markRaw(records);
         this.m = markRaw(Model.build(records, scopes, { suggested: 100 }));
+        /* A reload produces fresh copies, so nothing is carried over from the
+         * previous list: a body is re-read only where a view needs one. */
+        this.bodies = {}; this.bodyInflight = {}; this.bodyErrors = {};
         this.history = Array.isArray(history) ? history : (history && history.history) || [];
         this.loadTrash();
         this.loadCatalog();
+        this.primeBodies();
       } catch (e) {
         this.loadError = this.friendly(e.message || "The skills could not be read.");
       } finally { this.loading = false; }
@@ -287,6 +297,60 @@ const app = createApp({
       } catch (e) { this.skillHistoryError=this.friendly(e.message); }
     },
     async loadCatalog() { try {this.catalog=await api("/api/catalog");this.catalogError="";} catch(e){this.catalogError=this.friendly(e.message);} },
+
+    /* ----- documents (fetched only where a view needs one) -----
+     * The list request omits document bodies; this fetches one lazily. The
+     * cache key includes the observed content hash, so a changed document
+     * always refetches, and two callers asking for the same copy share one
+     * request. A body is never assumed loaded: `bodyLoaded` tells an empty
+     * document from one that has not been read yet. */
+    bodyKey(c) { return `${c && c.scope ? c.scope : ""}\u0000${(c && c.name) || ""}\u0000${(c && c.hash) || ""}`; },
+    bodyReady(c) { if (!c) return false; return !!c.bodyLoaded || Object.prototype.hasOwnProperty.call(this.bodies, this.bodyKey(c)); },
+    bodyOf(c) { if (!c) return ""; if (c.bodyLoaded) return c.body || ""; const key = this.bodyKey(c); return Object.prototype.hasOwnProperty.call(this.bodies, key) ? this.bodies[key] : ""; },
+    bodyErrorOf(c) { return c ? this.bodyErrors[this.bodyKey(c)] || "" : ""; },
+    applyBody(c, body) { c.body = body; c.bodyLoaded = true; this.bodyErrors[this.bodyKey(c)] = ""; },
+    async ensureBodies(copies) {
+      /* A linked entry is deliberately not followed and an unaddressable name
+       * cannot be fetched by name, so neither is requested. */
+      const list = (Array.isArray(copies) ? copies : [copies])
+        .filter((c) => c && !c.bodyLoaded && c.name && c.scope && c.state !== "link" && (!c.record || c.record.addressable !== false));
+      await Promise.all(list.map(async (c) => {
+        const key = this.bodyKey(c);
+        try {
+          let request = this.bodyInflight[key];
+          if (!request) {
+            request = api(`/api/skills/${encodeURIComponent(c.name)}?scope=${encodeURIComponent(c.scope)}`)
+              .then((record) => (record && typeof record.body === "string" ? record.body : ""));
+            this.bodyInflight[key] = request;
+            request.then((body) => { this.bodies[key] = body; delete this.bodyErrors[key]; })
+              .catch(() => { /* the caller reports the failure next to its own view */ })
+              .finally(() => { if (this.bodyInflight[key] === request) delete this.bodyInflight[key]; });
+          }
+          this.applyBody(c, await request);
+        } catch (e) { this.bodyErrors[key] = this.friendly(e && e.message ? e.message : "The document could not be read."); }
+      }));
+    },
+    primeBodies() {
+      if (!this.m) return;
+      const page = this.route && this.route.page;
+      if (page === "skill" && this.skill) return this.ensureBodies(this.skill.copies);
+      if (page === "inbox" && this.curSkill) return this.ensureBodies(this.curSkill.copies);
+      if (page === "map") return this.ensureMapBodies();
+      return undefined;
+    },
+    /* The map computes line counts per visible row; load exactly the pairs it
+     * compares instead of every copy of every skill. */
+    ensureMapBodies() {
+      const sel = this.mapSel;
+      if (!sel) return undefined;
+      const copies = [];
+      for (const s of sel.differing.slice(0, 12)) {
+        const mine = s.copies.find((c) => c.scope === sel.id), ref = s.ref.holders[0];
+        if (mine) copies.push(mine);
+        if (ref && ref !== mine) copies.push(ref);
+      }
+      return this.ensureBodies(copies);
+    },
 
     /* ----- search / filter ----- */
     searchInput(v) { this.query = v; if (this.route.page !== "skills" && v.trim()) location.hash = "#/skills"; this.extra = {}; },
@@ -395,6 +459,13 @@ const app = createApp({
       return async () => { for (const [n, scope, snap, off] of list) await this.restoreSyncText(n, scope, snap, off); };
     },
     skipText(skipped) { return skipped.length ? ` ${skipped.length} could not be changed: ${skipped.map((s) => this.friendly(s.reason)).slice(0, 2).join("; ")}.` : ""; },
+    /* A copy's observed token count is what its agent would spend on it; say so
+     * when a switch changes that, and stay silent when the count is unknown. */
+    tokenClause(tokens, turning) {
+      const n = Number(tokens) || 0;
+      if (n <= 0) return "";
+      return turning === "off" ? ` — frees about ${this.fmt(n)} tokens of that agent's budget` : ` — uses about ${this.fmt(n)} tokens`;
+    },
 
     async syncDiffering() {
       const s = this.skill;
@@ -414,28 +485,33 @@ const app = createApp({
     },
     async toggleCopy(c) {
       const name = this.skill.name, to = c.state === "on" ? "disable" : "enable";
+      const clause = this.tokenClause(c.tokens, to === "disable" ? "off" : "on");
       this.busy = true;
       try {
         await api(`/api/skills/${encodeURIComponent(name)}/${to}?scope=${encodeURIComponent(c.scope)}`, { method: "POST" });
         await this.refresh();
         const back = to === "disable" ? "enable" : "disable";
-        this.toast(`${name} turned ${to === "disable" ? "off" : "on"} in ${this.agentOf(c.scope).name}.`, { undo: async () => { await api(`/api/skills/${encodeURIComponent(name)}/${back}?scope=${encodeURIComponent(c.scope)}`, { method: "POST" }); } });
+        this.toast(`${name} turned ${to === "disable" ? "off" : "on"} in ${this.agentOf(c.scope).name}.${clause}`, { undo: async () => { await api(`/api/skills/${encodeURIComponent(name)}/${back}?scope=${encodeURIComponent(c.scope)}`, { method: "POST" }); } });
       } catch (e) { this.toast(e.message, { err: true }); await this.refresh(); } finally { this.busy = false; }
     },
     async allOn() {
       const s = this.skill; this.busy = true; const turned = [];
+      const gained = s.copies.filter((x) => x.state === "off").reduce((n, x) => n + (Number(x.tokens) || 0), 0);
       try {
         for (const c of s.copies.filter((x) => x.state === "off")) { await api(`/api/skills/${encodeURIComponent(s.name)}/enable?scope=${encodeURIComponent(c.scope)}`, { method: "POST" }); turned.push(c.scope); }
         await this.refresh();
-        this.toast(`${s.name} turned on everywhere.`, { undo: async () => { for (const sc of turned) await api(`/api/skills/${encodeURIComponent(s.name)}/disable?scope=${encodeURIComponent(sc)}`, { method: "POST" }); } });
+        const clause = gained > 0 ? ` — uses about ${this.fmt(gained)} tokens across ${plural(turned.length, "agent")}` : "";
+        this.toast(`${s.name} turned on everywhere.${clause}`, { undo: async () => { for (const sc of turned) await api(`/api/skills/${encodeURIComponent(s.name)}/disable?scope=${encodeURIComponent(sc)}`, { method: "POST" }); } });
       } catch (e) { this.toast(e.message, { err: true }); await this.refresh(); } finally { this.busy = false; }
     },
     async turnOffIn(s, scope) {
       this.busy = true; const name = s.name;
+      const c = s.copies.find((x) => x.scope === scope);
+      const clause = this.tokenClause(c && c.tokens, "off");
       try {
         await api(`/api/skills/${encodeURIComponent(name)}/disable?scope=${encodeURIComponent(scope)}`, { method: "POST" });
         await this.refresh();
-        this.toast(`${name} turned off in ${this.agentOf(scope).name}.`, { undo: async () => { await api(`/api/skills/${encodeURIComponent(name)}/enable?scope=${encodeURIComponent(scope)}`, { method: "POST" }); } });
+        this.toast(`${name} turned off in ${this.agentOf(scope).name}.${clause}`, { undo: async () => { await api(`/api/skills/${encodeURIComponent(name)}/enable?scope=${encodeURIComponent(scope)}`, { method: "POST" }); } });
       } catch (e) { this.toast(e.message, { err: true }); } finally { this.busy = false; }
     },
     fixSkillBad() {
@@ -548,9 +624,15 @@ const app = createApp({
     },
 
     /* ----- editing ----- */
-    startEdit() {
+    async startEdit() {
       const s = this.skill, c = this.refCopy;
-      const body = stripFrontmatter(c.body || "");
+      if (!s || !c) return;
+      /* The editor must never open on a body that has not loaded: read it
+       * first, and abandon silently if the reader navigated away meanwhile. */
+      await this.ensureBodies([c]);
+      if (this.skill !== s || this.route.page !== "skill" || this.refCopy !== c) return;
+      if (!this.bodyReady(c)) { this.toast(this.bodyErrorOf(c) || "The document could not be read. Try again.", { err: true }); return; }
+      const body = stripFrontmatter(this.bodyOf(c));
       const metadata={category:c.record.category||"",version:c.record.version||"",license:c.record.license||"",compatibility:Domain.formatCompat(c.record.compatibility),allowed_tools:Domain.formatTools(c.record.allowed_tools)};
       this.edit = { name: s.name, desc: c.description, baseDesc: c.description, body, baseBody: body, metadata,baseMetadata:{...metadata},tab: "write", targets: this.readCopyPath ? [c.scope] : this.editTargets.map((x) => x.scope) };
       this.$nextTick(() => { this.growArea(); const d = document.getElementById("ed-desc"); if (d) d.focus(); });
@@ -606,7 +688,12 @@ const app = createApp({
     selectMap(id) { this.mapSelId = id; this.mapPicked = this.mapDefaults(id); this.peek = null; },
     mapDefaults(id) { const i = this.m.info(id); return i ? i.differing.filter((s) => !s.ref.ambiguous).map((s) => s.name) : []; },
     togglePick(n) { this.mapPicked = this.mapPicked.includes(n) ? this.mapPicked.filter((x) => x !== n) : [...this.mapPicked, n]; },
-    diffCount(s, scope) { const mine = s.copies.find((c) => c.scope === scope), ref = s.ref.holders[0]; return mine && ref ? changes(stripFrontmatter(mine.body), stripFrontmatter(ref.body)).filter((l) => l.t !== "same").length : 0; },
+    togglePeek(s) { const next = this.peek === s.name ? null : s.name; this.peek = next; if (next) { const mine = s.copies.find((c) => c.scope === this.mapSel.id); return this.ensureBodies([mine, s.ref.holders[0]]); } return undefined; },
+    diffCount(s, scope) {
+      const mine = s.copies.find((c) => c.scope === scope), ref = s.ref.holders[0];
+      if (!mine || !ref || !this.bodyReady(mine) || !this.bodyReady(ref)) return null;
+      return changes(stripFrontmatter(this.bodyOf(mine)), stripFrontmatter(this.bodyOf(ref))).filter((l) => l.t !== "same").length;
+    },
     brokenShort(s, scope) { const c = s.copies.find((x) => x.scope === scope); return (BROKEN_WHY[c && c.kind] || BROKEN_WHY.invalid)[0]; },
     async syncPicked() {
       const inf = this.mapSel, picked = this.mapPicked.filter((n) => inf.differing.some((s) => s.name === n));
@@ -657,6 +744,7 @@ const app = createApp({
           onConfirm: () => { this.edit = null; location.hash = target; } });
       }
       this.route = next; if (next.page !== "skill") this.edit = null;
+      this.primeBodies();
       document.title = (next.page === "skill" ? next.name : TITLES[next.page]) + " · Skills Manager";
       window.scrollTo(0, 0); this.focusH1();
     });
