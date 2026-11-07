@@ -16,7 +16,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import loader, lockfiles, source_lock, validator
+from . import key_support, loader, lockfiles, source_lock, validator
 from .tokens import estimate
 
 
@@ -40,6 +40,7 @@ _CATEGORY_ORDER = (
     "validation",
     "broken-reference",
     "activation-description",
+    "ignored-frontmatter",
     "context-over-limit",
     "same-name-identical",
     "divergent-name",
@@ -708,6 +709,156 @@ def _description_findings(records: list[dict]) -> list[dict]:
     return findings
 
 
+#: Scopes whose reading consumer(s) have a documented frontmatter key list in
+#: ``key_support``.  ``agents`` is the shared ``~/.agents/skills`` root read by
+#: these six consumers per docs/34.
+_KEY_SCOPE_CONSUMERS = {
+    "claude-code": ("claude-code",),
+    "codex": ("codex",),
+    "gemini": ("gemini",),
+    "opencode": ("opencode",),
+    "agents": ("codex", "gemini", "opencode", "amp", "roo", "zed"),
+}
+#: Bounds the unavailable-signal scope list like every other report string.
+_KEY_SCOPE_LIMIT = 20
+
+
+def _frontmatter_keys(record: dict) -> set[str]:
+    """Top-level frontmatter keys observed on one instance (bounded by input)."""
+    keys: set[str] = set()
+    for partition in ("portable_frontmatter", "frontmatter_extensions"):
+        mapping = record.get(partition)
+        if isinstance(mapping, dict):
+            keys.update(str(key) for key in mapping)
+    return keys
+
+
+def _record_key_scopes(record: dict) -> tuple[set[str], set[str]]:
+    """Consumers and unsupported scopes represented by one physical instance."""
+    scopes = {str(record.get("scope") or "")}
+    for alias in record.get("_aliases", []):
+        if isinstance(alias, dict):
+            scopes.add(str(alias.get("scope") or ""))
+    consumers: set[str] = set()
+    unsupported: set[str] = set()
+    for scope in scopes:
+        mapped = _KEY_SCOPE_CONSUMERS.get(scope)
+        if mapped is None:
+            if scope and scope != "all":
+                unsupported.add(scope)
+            continue
+        consumers.update(mapped)
+    return consumers, unsupported
+
+
+def _key_finding(key: str, documenting: list[str], missing: list[str],
+                 records: list[dict]) -> dict:
+    """One bounded advisory finding for a behavioural key some consumer ignores."""
+    documenting_labels = [key_support.label(consumer) for consumer in documenting]
+    missing_labels = [key_support.label(consumer) for consumer in missing]
+    sources = sorted(
+        {url for consumer in missing if (url := key_support.source(consumer))}
+    )
+    title = f"`{key}` has no documented effect in " + ", ".join(missing_labels)
+    explanation = (
+        f"`{key}` has a documented behavioural effect in Claude Code, but the "
+        "consumer(s) reading this instance do not document it. "
+    )
+    if documenting_labels:
+        explanation += "Documented by: " + ", ".join(documenting_labels) + ". "
+    explanation += (
+        "This is not a rejection claim: only the claude.ai upload and Skills API "
+        "surfaces are documented to reject unknown keys."
+    )
+    evidence = {
+        "key": key,
+        "documented_by": documenting_labels,
+        "not_documented_by": missing_labels,
+        "sources": sources,
+    }
+    if key == "disable-model-invocation" and "codex" in missing:
+        evidence["codex_implicit_invocation"] = (
+            "agents/openai.yaml -> policy.allow_implicit_invocation"
+        )
+        explanation += (
+            " Codex sets implicit invocation in agents/openai.yaml "
+            "(policy.allow_implicit_invocation)."
+        )
+    if sources:
+        explanation += " Source: " + ", ".join(sources) + "."
+    return _finding(
+        "ignored-frontmatter", "info", "documented", title, explanation, records,
+        evidence,
+        "Review whether this key is needed; it only has effect where documented.",
+    )
+
+
+def _bounded_scope_names(unsupported: set[str]) -> list[str]:
+    """Sorted, length-bounded scope names for the unavailable signal."""
+    return sorted(_bounded(name, 128) for name in unsupported)
+
+
+def _key_unavailable_signal(unsupported: set[str]) -> dict:
+    """One bounded signal naming scopes with no documented key list."""
+    names = _bounded_scope_names(unsupported)
+    signal = {
+        "signal": "frontmatter-key-support",
+        "explanation": "no documented frontmatter key list is recorded for scope(s): "
+        + ", ".join(names[:_KEY_SCOPE_LIMIT]),
+    }
+    if len(names) > _KEY_SCOPE_LIMIT:
+        signal["scopes_total"] = len(names)
+        signal["scopes_truncated"] = True
+    return signal
+
+
+def _extend_key_support(findings: list[dict], unavailable: list[dict],
+                        records: list[dict]) -> None:
+    """Append ignored-frontmatter findings and the unavailable scope signal."""
+    key_findings, key_unsupported = _key_support_findings(records)
+    findings.extend(key_findings)
+    if key_unsupported:
+        unavailable.append(_key_unavailable_signal(key_unsupported))
+
+
+def _key_support_findings(records: list[dict]) -> tuple[list[dict], set[str]]:
+    """Report behavioural keys the reading consumer(s) do not document.
+
+    A key is only reported when it appears in an instance's top-level
+    frontmatter, has a documented behavioural effect in Claude Code, and at
+    least one consumer reading that scope does not document it.  Unknown keys
+    with no documented effect anywhere are not reported: there is no effect to
+    lose.
+    """
+    grouped: dict[str, dict] = {}
+    unsupported: set[str] = set()
+    behavioural = set(key_support.BEHAVIOURAL_KEYS)
+    for record in records:
+        consumers, record_unsupported = _record_key_scopes(record)
+        unsupported.update(record_unsupported)
+        if not consumers:
+            continue
+        for key in sorted(_frontmatter_keys(record) & behavioural):
+            entry = grouped.setdefault(key, {"records": [], "consumers": set()})
+            entry["records"].append(record)
+            entry["consumers"].update(consumers)
+    findings = []
+    for key in sorted(grouped):
+        entry = grouped[key]
+        documenting = sorted(
+            consumer for consumer in entry["consumers"]
+            if key_support.documents(consumer, key)
+        )
+        missing = sorted(
+            consumer for consumer in entry["consumers"]
+            if not key_support.documents(consumer, key)
+        )
+        if not missing:
+            continue
+        findings.append(_key_finding(key, documenting, missing, entry["records"]))
+    return findings, unsupported
+
+
 def _context_findings(records: list[dict]) -> tuple[list[dict], list[dict]]:
     findings = []
     largest = []
@@ -952,6 +1103,7 @@ def _hygiene_report(
     degraded.extend(near.get("degraded", []))
     findings.extend(_reference_findings(prepared))
     findings.extend(_description_findings(prepared))
+    _extend_key_support(findings, unavailable, prepared)
     context_findings, largest = _context_findings(prepared)
     findings.extend(context_findings)
     findings.extend(_source_lock_findings(prepared, unavailable, degraded))

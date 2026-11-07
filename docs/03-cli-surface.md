@@ -137,9 +137,17 @@ stays `unresolved`. Consumers with a recorded precedence row: `commandcode`
 (six-way order), `codex` (explicit no-merge, so no winner is elected),
 `claude-code` (personal > project for the conflict pair, with nested copies
 reported under `also_loads` because they both load), `gemini` (built-in <
-extension < user < workspace, same-tier ties reported as `ambiguous`), plus
-`cursor`/`opencode`, which document no same-name order and therefore return
-`undocumented-precedence` instead of a guess. An unknown consumer returns
+extension < user < workspace, same-tier ties reported as `ambiguous`),
+`opencode` (built-in < `.claude/skills` < `.agents/skills` <
+`~/.config/opencode/skills` < project `.opencode/skills` < explicit `skills`
+config; the config tier is unobservable here, so a lower win is provisional),
+`cline` (global > project; the three project roots tie as `ambiguous`), `kiro`
+(workspace > global), `amp` (first frontmatter `name` in its documented search
+order), `roo` (project > global, `.roo` > `.agents`, mode-specific > generic —
+the four mode-specific tiers are unobservable without a mode slug), and `zed`
+(project > user `~/.agents/skills`). `cursor`, `copilot` and `devin` document no
+same-name order and therefore return `undocumented-precedence` instead of a
+guess. An unknown consumer returns
 `unknown-consumer` and exit 1; a missing `--project` directory returns
 `missing-project` and exit 1. Diagnostics that legitimately resolve nothing
 (`no-merge`, `undocumented-precedence`, `no-instances`) exit 0. `--skill NAME`

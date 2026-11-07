@@ -18,11 +18,13 @@ _RELOAD = {
 
 
 def _root_record(root: dict) -> dict:
-    known = bool(root.get("scope") or root.get("rel") or root.get("path"))
+    known = bool(root.get("scope") or root.get("rel") or root.get("path")
+                 or root.get("home"))
     return {
         "scope": root.get("scope"),
         "relative_path": root.get("rel"),
         "absolute_path": root.get("path"),
+        "home_path": root.get("home"),
         "path_known": known,
         "recursive": bool(root.get("recursive") or root.get("nested")),
         "nested": bool(root.get("nested")),

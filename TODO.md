@@ -327,8 +327,11 @@ them.
   personal > project for the conflict pair with project-root and nested copies
   both loading (`also_loads`), `gemini` built-in < extension < user <
   workspace with same-tier ties reported as `ambiguous`, and
-  `cursor`/`opencode` as `undocumented-precedence` (their order is not
-  documented). An unknown consumer returns `unknown-consumer` (CLI exit 1) and
+  `cursor` as `undocumented-precedence` (its order is not documented).
+  **Extended 2026-11-07:** `opencode` was corrected to its documented
+  lowest→highest order, and `cline`, `kiro`, `amp`, `roo` and `zed` were added
+  as ordered rows with `copilot`/`devin` undocumented (docs/34). An unknown
+  consumer returns `unknown-consumer` (CLI exit 1) and
   a missing project returns `missing-project` (exit 1); nothing that resolves
   nothing (`no-merge`, `undocumented-precedence`, `no-instances`) is an error.
   Observable tiers whose path this facade cannot read (Claude enterprise,

@@ -8,6 +8,48 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-07 — R12 consumer rows and the ignored-frontmatter finding
+
+**[SPEC]** Docs/34 (vendor pages read 2026-11-07) drove two changes with no new
+CLI command, REST route, Store method, SQLite state, cache, network request or
+runtime dependency.
+
+`effective.explain` gained a `home` root spec (resolved through
+`paths.home_dir()` at read time and redacted over HTTP exactly like an absolute
+`path` root), corrected `opencode` from `undocumented-precedence` to the
+documented lowest→highest order (built-in < `.claude/skills` < `.agents/skills`
+< `~/.config/opencode/skills` < project `.opencode/skills` < explicit `skills`
+config), and added `cline`, `kiro`, `amp`, `roo`, `zed` (ordered) plus
+`copilot` and `devin` (roots published, no precedence). `shadowed` entries now
+carry the winning tier as `shadowed_by`, which docs/02 already documented but
+the code did not emit. The three documented-mode tiers Roo cannot read without
+a mode slug, OpenCode's config tier and Amp's configured locations are
+`path_known: False` and produce a provisional-lower-win warning. No order was
+invented where docs/34 is silent.
+
+New `skillsmgr/key_support.py` is a pure table of the frontmatter keys each
+consumer's page documents (claude-code, claude.ai-api, codex, gemini, opencode,
+cline, kiro, amp, roo, zed) with its source URL. `hygiene.py` uses it to emit
+one advisory `ignored-frontmatter` finding per behavioural key that an
+instance's scope consumer(s) do not document. The `agents` scope names the six
+consumers that read `~/.agents/skills`; scopes with no recorded key list
+(`global`, `commandcode`, `cursor`, project scopes) add a
+`frontmatter-key-support` unavailable signal instead. The finding never claims a
+key was rejected — only the claude.ai/Skills API surfaces document that — and
+`disable-model-invocation` in a codex-read scope carries Codex's own
+`agents/openai.yaml` implicit-invocation switch.
+
+**[NOTE]** Verification on this tree: **1,510 tests** in the full suite, of
+which the four already-recorded environmental failures reproduce unchanged
+(`backup_sync` trusted-git, `localhost` bind DNS, and the two HOME/data-root
+permission tests); both smokes, compilation, `check_docs.py` and
+`check_complexity.py` (810 functions across 20 files, 0 existing metric raised,
+15 added) pass. No browser or packaged-artifact claim is made here. Test
+expectations changed or added: `tests/test_effective_new_consumers.py` (18)
+and `tests/test_key_support.py` (12). No existing test asserted OpenCode was
+undocumented, so nothing was deleted; the new `opencode` tests assert the
+documented order instead.
+
 ## 2026-11-07 — R11: read-only `skills` CLI lockfile evidence in the hygiene report
 
 **[SPEC]** New `skillsmgr/lockfiles.py` parses the project `skills-lock.json`
@@ -508,10 +550,11 @@ entries that introduced them:
 
 ## Resident entry index (2026-09-23 … 2026-11-07)
 
-**[NOTE]** 38 indexed entries; full text follows.
+**[NOTE]** 39 indexed entries; full text follows.
 
 | Date | Entry |
 |---|---|
+| 2026-11-07 | R12 consumer rows and the ignored-frontmatter finding |
 | 2026-11-07 | R11: read-only `skills` CLI lockfile evidence in the hygiene report |
 | 2026-11-06 | Integrate the verified performance work into main |
 | 2026-11-06 | Complete the performance session's missing verification |

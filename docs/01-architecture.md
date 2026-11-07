@@ -45,6 +45,7 @@ skills-manager/
     registry.py      # bounded skills.sh API, cache, snapshots, provenance
     external_scan.py # optional advisory SkillSpector hook (external program)
     lockfiles.py     # read-only skills-CLI lockfile evidence (project/global)
+    key_support.py   # documented per-consumer frontmatter keys (pure table)
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
     examples/       # the agent-facing management skill, shipped as package data
   smoke_store.py     # smoke test driving the Store API (hermetic fixture)

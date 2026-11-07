@@ -63,7 +63,10 @@ write SQLite or change skill documents. Full archive support is implemented in
 Read-only consumer adapter catalog derived from `effective.CONSUMERS` and the
 primary root-discovery evidence. It exposes candidate roots, tiered precedence
 evidence, reload guidance, verification date, and explicit unknown-precedence
-status. `project_observation()` validates resolved project containment and
+status. A candidate root carries `scope`, `relative_path`, `absolute_path` or
+`home_path` (the home-relative spec added 2026-11-07), with `path_known`
+distinguishing a documented-but-unreadable tier. `project_observation()`
+validates resolved project containment and
 redacts outside paths; `workspaces_payload()` combines that observation with
 adapter records. No project or consumer binding is persisted. Decision record:
 @docs/ADR-007-adapter-catalog-and-project-workspaces.md.
@@ -143,7 +146,15 @@ deduplicates resolved physical instances, reuses `validator.validate_skill()`,
 report structural/validation evidence, exact duplicate groups, same-name drift,
 bounded near-duplicate candidates, broken references, activation-description
 guidance, context limits, source-lock state, largest instances, degraded scans,
-and explicitly unavailable signals. `normalize_instruction_body()` owns the
+an advisory ignored-frontmatter section, and explicitly unavailable signals.
+The ignored-frontmatter findings use the pure `key_support` table below: a
+top-level key with a documented behavioural effect in Claude Code is reported
+(`info`) when a consumer reading that scope documents no such effect — grouped
+one finding per key, naming which consumers document it and which do not, and
+never claiming the key is rejected. Scopes without a documented key list
+(`global`, `commandcode`, `cursor`, project scopes) produce a
+`frontmatter-key-support` unavailable signal instead.
+`normalize_instruction_body()` owns the
 narrow exact-instruction comparison normalization; `near_duplicate_candidates()`
 uses bounded inverted-index features and weighted Jaccard scores. The module
 does not write files, SQLite, caches, history, or network state and exposes no
@@ -152,6 +163,19 @@ path and supplied state flags), with explicit total/truncation above 100
 observations. Validation keeps mapping-valued compatibility as an error with
 portability guidance, warns once for non-spec top-level keys, and warns when
 description plus `when_to_use` exceeds 1,536 characters.
+
+## `key_support.py`
+
+Pure, stdlib-only table of the frontmatter keys each consumer documents, copied
+from @docs/34-agent-skill-loading-research-2026-11-07.md: `claude-code`,
+`claude.ai-api`, `codex`, `gemini`, `opencode`, `cline`, `kiro`, `amp`, `roo`
+and `zed`, each with its source URL. `BEHAVIOURAL_KEYS` is the Claude Code set
+that the hygiene finding cares about. `documents(consumer, key)` answers the
+one question the finding asks (a dotted entry such as
+`metadata.opencode/autoinvoke` documents its top-level key), and
+`documents_anywhere(key)` names whether any recorded consumer documents it.
+Nothing here reads the filesystem, writes, caches, or makes a network request,
+and no `Store`/REST/CLI surface is added.
 
 ## `registry.py`
 
@@ -273,20 +297,33 @@ Read-only effective-resolution diagnostic behind `doctor --explain CONSUMER
 `explain()` derives, at read time, which instance of a skill a consumer would
 load for one `(consumer, project-CWD, skill)` triple, and returns a
 JSON-serialisable report: `resolution`, `policy`, per-skill `winner`,
-`shadowed` (with the winning tier as `shadowed_by`), `also_loads`, the `tiers`
-actually read with their `instances`/`skipped` detail, `warnings`,
-`unobservable_tiers`, and the cited `source` URL. Every precedence row lives in
-`CONSUMERS` and is sourced from
-@docs/12-agent-root-discovery-2026-09-08.md: `commandcode` documents a six-way
-order (project `.commandcode/` > project `.agents/` > user `~/.commandcode/` >
-user `~/.agents/` > extras > bundled), `codex` documents an explicit no-merge
-policy (so `policy: "no-merge"` elects no winner and reports every copy),
-`claude-code` documents personal > project for the conflict pair with
-project-root/nested copies both loading, `gemini` documents built-in <
-extension < user < workspace, and `cursor`/`opencode` document no same-name
-order at all. Consumers therefore never get an invented winner: an unrecorded
-order yields `undocumented-precedence`, and an unknown consumer yields
-`unknown-consumer` with the known list. A missing project directory yields
+`shadowed` (each entry carries the winning tier as `shadowed_by`), `also_loads`,
+the `tiers` actually read with their `instances`/`skipped` detail, `warnings`,
+`unobservable_tiers`, and the cited `source` URL. A root spec is one of
+`scope` (a facade root), `rel` (project-relative), `path` (absolute), or
+`home` (resolved against `paths.home_dir()` at read time). A `home` root is
+confined and redacted exactly like a `path` root: it is never inside the
+manager data directory, so the HTTP boundary replaces it with the redaction
+marker. Every precedence row lives in `CONSUMERS` and is sourced from
+@docs/12-agent-root-discovery-2026-09-08.md, refreshed from
+@docs/34-agent-skill-loading-research-2026-11-07.md: `commandcode` documents a
+six-way order (project `.commandcode/` > project `.agents/` > user
+`~/.commandcode/` > user `~/.agents/` > extras > bundled), `codex` an explicit
+no-merge policy (so `policy: "no-merge"` elects no winner and reports every
+copy), `claude-code` personal > project with nested copies both loading,
+`gemini` built-in < extension < user < workspace, and `opencode` built-in <
+`.claude/skills` < `.agents/skills` < `~/.config/opencode/skills` < project
+`.opencode/skills` < explicit `skills` config (its config tier is unobservable,
+so a lower win is provisional; the earlier "no documented order" row was
+corrected on 2026-11-07). The ordered additions are `cline` (global > project;
+its three project roots tie as `ambiguous`), `kiro` (workspace > global), `amp`
+(first `name` in its documented search order), `roo` (project > global,
+`.roo` > `.agents`, mode-specific > generic, with four unobservable
+mode-specific tiers), and `zed` (project > user). `cursor`, `copilot` and
+`devin` publish roots but no same-name order, so they stay
+`undocumented-precedence`. Consumers therefore never get an invented winner: an
+unrecorded order yields `undocumented-precedence`, and an unknown consumer
+yields `unknown-consumer` with the known list. A missing project directory yields
 `missing-project`; a documented tier whose path this tool cannot read
 (`path_known: False`, e.g. Claude's enterprise tier, Codex `SYSTEM`, Command
 Code `extras`/`bundled`) is reported as unobservable with a warning that a

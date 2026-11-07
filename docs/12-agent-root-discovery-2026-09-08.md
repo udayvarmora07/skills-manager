@@ -1,11 +1,16 @@
 # Agent Root Discovery Inventory — 2026-09-08
 
-**Version 1.2.0** (2026-09-11: this inventory is now *used* by shipped code.
-The read-only `doctor --explain CONSUMER --project DIR` diagnostic derives
-per-consumer precedence from these rows at read time; the runtime
-`ConsumerRootBinding` model and any facade correction remain approval-gated per
-ADR-002. Prior, 2026-09-09: closed the three `[?]`s against primary sources; no
-code, no locked-constraint changes.)
+**Version 1.3.0** (2026-11-07: added Cline, Kiro, Amp, Roo Code, Zed, GitHub
+Copilot and Windsurf/Devin rows, and corrected OpenCode's precedence from "not
+documented" to the order its own page states. Every new row cites the vendor
+page read on 2026-11-07 and recorded in
+@docs/34-agent-skill-loading-research-2026-11-07.md. Prior, 2026-09-11: this
+inventory is *used* by shipped code. The read-only
+`doctor --explain CONSUMER --project DIR` diagnostic derives per-consumer
+precedence from these rows at read time; the runtime `ConsumerRootBinding`
+model and any facade correction remain approval-gated per ADR-002. Prior,
+2026-09-09: closed the three `[?]`s against primary sources; no code, no
+locked-constraint changes.)
 
 **AI manifest:** Research inventory for the Milestone 4 root/consumer tasks.
 Official sources are listed for each supported consumer. Facts not confirmed by
@@ -28,9 +33,22 @@ an official source are marked `[?]` and are not implemented as policy.
 | Claude Code | `~/.claude/skills/` | `.claude/skills/` in the starting directory and parents; nested `.claude/skills/` is discovered on demand | Enterprise > personal > project for conflicts; nested skills are directory-qualified; live change detection is documented | Claude Code “Extend Claude with skills” |
 | Cursor | `~/.cursor/skills/` and `~/.agents/skills/` | `.cursor/skills/`, `.agents/skills/`, and nested project skill directories; Claude/Codex compatibility roots also load | Nested skills are scoped to files below the directory; startup discovery is documented | Cursor “Agent Skills” |
 | Gemini CLI | `~/.gemini/skills/` and `~/.agents/skills/` alias | `.gemini/skills/` and `.agents/skills/` in the workspace | Built-in < extension < user < workspace; `/skills reload` refreshes discovery | Gemini CLI “Managing Agent Skills” |
-| OpenCode | `~/.config/opencode/skills/`, compatibility `~/.claude/skills/`, `~/.agents/skills/` | `.opencode/skills/`, compatibility `.claude/skills/`, `.agents/skills/`, searched from current directory upward | Later source wins; project roots are considered from repository root toward current directory; runtime loads winning definition | OpenCode “Skills” |
+| OpenCode | `~/.config/opencode/skills/`, compatibility `~/.claude/skills/`, `~/.agents/skills/` | `.opencode/skills/`, compatibility `.claude/skills/`, `.agents/skills/`, searched from current directory upward, plus explicit `skills` config | Registered lowest → highest: built-in < `.claude/skills` < `.agents/skills` < `~/.config/opencode/skills` < project `.opencode/skills` < explicit `skills` config; a later source overrides an earlier one with the same ID (**corrected 2026-11-07** — the earlier “no documented order” row was wrong) | OpenCode “Skills” (`https://opencode.ai/docs/skills/`) |
 | Codex | `~/.codex/skills/` is NOT a documented skills root — the compatibility facade id is inferred-only (see note below) | `.agents/skills/` scanned in every directory from CWD up to the repo root (`REPO` scope); `$HOME/.agents/skills` (`USER`), `/etc/codex/skills` (`ADMIN`), bundled (`SYSTEM`) | No winner/precedence: same-`name` skills do NOT merge — both can appear in selectors; `$skill-installer`/plugins for distribution; restart only when auto-detect misses | OpenAI “Build skills” (`https://learn.chatgpt.com/docs/build-skills`, “Where Codex loads local skills”) |
 | Command Code | `~/.commandcode/skills/` (user) and `~/.agents/skills/` (user compat) | `.commandcode/skills/` (project), `.agents/skills/` (project compat, walked ≤10 levels from CWD stopping at `$HOME`), plus `settings.json` `skills` array and repeatable `--skill` flags / `--no-skills` | Full six-way selection order: project `.commandcode/` > project `.agents/` > user `~/.commandcode/` > user `~/.agents/` > extra locations (`--skill` flags, then settings entries) > bundled; project always trumps user, `.commandcode/` favored over `.agents/` at the same level; same-name losers surface as “Duplicate names” warnings, never dropped silently (`/skills` issues view, `cmd skills list --debug`); name-vs-builtin/command collisions resolve to the higher-precedence owner with `/skill:<name>` escape hatch; reload is live (startup discovery of name/description/path, edits apply immediately, no restart) | Command Code “Agent Skills” (`https://commandcode.ai/docs/skills`: Storage locations, .agents compatibility, Selection priority, Edit skills) |
+| Cline | `~/.cline/skills/` | project `.cline/skills/`, `.clinerules/skills/`, `.claude/skills/` | “The global skill takes precedence” over a project skill; the order among the three project dirs is not documented | Cline “Skills” (`https://docs.cline.bot/features/skills`) |
+| Kiro | `~/.kiro/skills/` | workspace `.kiro/skills/` | “Workspace skills take priority over global skills” | Kiro “Skills” (`https://kiro.dev/docs/skills/`) |
+| Amp | `~/.config/agents/skills/`, `~/.agents/skills/`, `~/.config/amp/skills/`, `~/.claude/skills/`, `~/.claude/plugins/cache` (recursive, five levels) | project and parents `.agents/skills/`, project `.claude/skills/` | “Amp uses the first skill with a given frontmatter `name`”, in that search order | Amp “Skills” (`https://ampcode.com/docs/customize/skills`) |
+| Roo Code | `~/.roo/skills/` and `~/.agents/skills/`, each mode-specific (`skills-<mode>`) or generic | project `.roo/skills/` and `.agents/skills/`, each mode-specific or generic | Project > global; `.roo` > `.agents`; mode-specific > generic (eight tiers) | Roo Code “Skills” (`https://roocodeinc.github.io/Roo-Code/features/skills`) |
+| Zed | `~/.agents/skills/` | `<worktree>/.agents/skills/` (direct children only) | “The project-local skill takes precedence” | Zed “Skills” (`https://zed.dev/docs/ai/skills`) |
+| GitHub Copilot | `~/.copilot/skills/`, `~/.agents/skills/` | `.github/skills/`, `.claude/skills/`, `.agents/skills/` | Not documented | GitHub Copilot “About agent skills” (`https://docs.github.com/en/copilot/concepts/agents/about-agent-skills`) |
+| Windsurf / Devin | `~/.config/devin/skills/`, `~/.agents/skills/` | `.devin/skills/`, `.agents/skills/`, legacy `.windsurf/skills/` | Not documented | Devin “Cascade skills” (`https://docs.devin.ai/desktop/cascade/skills`) |
+
+**[NOTE]** The Cline, Kiro, Amp, Roo, Zed, Copilot and Devin rows, and the
+corrected OpenCode order, were read from each vendor's page on 2026-11-07 and
+recorded in @docs/34-agent-skill-loading-research-2026-11-07.md before they were
+added to `effective.py`. `docs.windsurf.com` redirected to `docs.devin.ai`, so
+the Windsurf row is the Devin page's own statement.
 
 ## Current repository mapping
 
@@ -149,10 +167,13 @@ One surface is deliberately narrower and stronger than that: `effective.explain`
 (`skillsmgr/effective.py`) *does* apply a precedence rule — but only for the
 consumers with a recorded row in this document's table above, only for one
 `(consumer, project, skill)` triple, only at read time, and it returns
-`undocumented-precedence` for `cursor`/`opencode` (whose same-name order is
-documented nowhere) and `unknown-consumer` for anything unrecorded rather than
-guessing. A consumer may be added to it only together with a primary-source row
-here.
+`undocumented-precedence` for `cursor`, `copilot` and `devin` (whose same-name
+order is documented nowhere) and `unknown-consumer` for anything unrecorded
+rather than guessing. A consumer may be added to it only together with a
+primary-source row here. `opencode` was **corrected** on 2026-11-07: its page
+does document an order (see the table above), so it now resolves under
+`policy: "ordered"`; its explicit `skills` config remains an unobservable tier,
+so a lower-tier win stays provisional.
 
 ## Sources
 
@@ -167,7 +188,12 @@ here.
   `https://commandcode.ai/docs/skills`
 - Cursor: `https://prod.cursor.com/docs/skills`
 - Gemini CLI: `https://geminicli.com/docs/cli/using-agent-skills/`
-- OpenCode: `https://opencode.ai/v2/docs/skills`
+- OpenCode: `https://opencode.ai/docs/skills/` (refreshed 2026-11-07; the
+  earlier `https://opencode.ai/v2/docs/skills` row said no order was documented,
+  which the current page contradicts)
+- Cline, Kiro, Amp, Roo Code, Zed, GitHub Copilot, Windsurf/Devin (read
+  2026-11-07): @docs/34-agent-skill-loading-research-2026-11-07.md lists each
+  vendor URL beside its row.
 
 ## Native settings observations (R4, 2026-11-06)
 

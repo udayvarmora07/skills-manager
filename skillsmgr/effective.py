@@ -14,8 +14,9 @@ Scope rules honoured here:
   module is a diagnostic, not the approval-gated runtime
   ``ConsumerRootBinding`` model.
 * Every precedence row cites the primary source recorded in
-  ``docs/12-agent-root-discovery-2026-09-08.md``. A consumer whose same-name
-  order is not recorded there (Cursor, Opencode) returns an explicit
+  ``docs/12-agent-root-discovery-2026-09-08.md``, refreshed from
+  ``docs/34-agent-skill-loading-research-2026-11-07.md``. A consumer whose
+  same-name order is documented nowhere (Cursor) returns an explicit
   ``undocumented-precedence`` result, and an unknown consumer returns
   ``unknown-consumer`` — never a guess.
 
@@ -30,6 +31,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import paths
 from .loader import scan_dir
 
 #: Bounds: a diagnostic must never walk an unbounded tree. ``MAX_ROOTS`` caps
@@ -73,8 +75,12 @@ POLICY_OUTCOMES = {
 
 # Root specs: ``scope`` reuses a facade root from ``scopes.known_scopes`` (one
 # place owns the path), ``rel`` is a documented project-relative path, ``path``
-# is a documented absolute path, ``nested`` marks the both-load nested scan, and
-# ``path_known`` False marks a documented tier whose path this tool cannot read.
+# is a documented absolute path, ``home`` is a documented home-relative path
+# resolved against ``paths.home_dir()`` at read time, ``nested`` marks the
+# both-load nested scan, and ``path_known`` False marks a documented tier whose
+# path this tool cannot read.  A ``home`` root is confined and redacted exactly
+# like a ``path`` root: it is never inside the manager data directory, so the
+# HTTP boundary replaces it with the redaction marker (SEC-2/SEC-3).
 CONSUMERS: dict[str, dict] = {
     "claude-code": {
         "label": "Claude Code",
@@ -165,20 +171,239 @@ CONSUMERS: dict[str, dict] = {
     "opencode": {
         "label": "Opencode",
         "source": "https://opencode.ai/docs/skills/",
-        "policy": "undocumented",
+        "policy": "ordered",
         "tiers": (
-            {"id": "user", "label": "User (~/.config/opencode/skills)", "roots": ({"scope": "opencode"},)},
-            {"id": "user-claude", "label": "User compat (~/.claude/skills)", "roots": ({"scope": "claude-code"},)},
-            {"id": "user-agents", "label": "User (~/.agents/skills)", "roots": ({"scope": "agents"},)},
+            {
+                "id": "config",
+                "label": "Explicit skills config (opencode.json)",
+                "roots": ({"path_known": False},),
+                "note": "skills registered in opencode.json are the highest documented "
+                "source, but this diagnostic does not read opencode.json, so a "
+                "lower-tier winner is provisional",
+            },
             {"id": "project", "label": "Project (.opencode/skills)", "roots": ({"rel": ".opencode/skills"},)},
-            {"id": "project-claude", "label": "Project compat (.claude/skills)", "roots": ({"rel": ".claude/skills"},)},
-            {"id": "project-agents", "label": "Project compat (.agents/skills)", "roots": ({"rel": ".agents/skills"},)},
+            {"id": "user", "label": "User (~/.config/opencode/skills)", "roots": ({"scope": "opencode"},)},
+            {
+                "id": "agents-compat",
+                "label": "Agents compatibility (.agents/skills)",
+                "roots": ({"rel": ".agents/skills"}, {"scope": "agents"}),
+                "note": "the documented .agents/skills source does not say whether that "
+                "means the project or the home copy, so both are one tier and a clash "
+                "between them is reported as ambiguous",
+            },
+            {
+                "id": "claude-compat",
+                "label": "Claude compatibility (.claude/skills)",
+                "roots": ({"rel": ".claude/skills"}, {"scope": "claude-code"}),
+                "note": "the documented .claude/skills source does not say whether that "
+                "means the project or the home copy, so both are one tier and a clash "
+                "between them is reported as ambiguous",
+            },
+            {
+                "id": "built-in",
+                "label": "Built-in",
+                "roots": ({"path_known": False},),
+                "note": "bundled skills are not on the paths read here",
+            },
         ),
         "notes": (
-            "Opencode documents that the later source wins and that project roots are "
-            "searched from the repository root toward the current directory, but this "
-            "facade carries no repository-root input and exposes three compatibility "
-            "roots per level, so the cross-root order is not derived",
+            "documented order, lowest to highest: built-in < .claude/skills < "
+            ".agents/skills < ~/.config/opencode/skills < project .opencode/skills < "
+            "explicit skills config; a later source overrides an earlier one with the "
+            "same ID",
+        ),
+    },
+    "cline": {
+        "label": "Cline",
+        "source": "https://docs.cline.bot/features/skills",
+        "policy": "ordered",
+        "tiers": (
+            {"id": "global", "label": "Global (~/.cline/skills)", "roots": ({"home": ".cline/skills"},)},
+            {
+                "id": "project",
+                "label": "Project",
+                "roots": (
+                    {"rel": ".cline/skills"},
+                    {"rel": ".clinerules/skills"},
+                    {"rel": ".claude/skills"},
+                ),
+                "note": "the three documented project roots have no recorded order "
+                "between them, so a same-tier tie is reported as ambiguous",
+            },
+        ),
+        "notes": (
+            "documented: the global skill takes precedence over a project skill; the "
+            "order among the three project roots is not documented",
+        ),
+    },
+    "kiro": {
+        "label": "Kiro",
+        "source": "https://kiro.dev/docs/skills/",
+        "policy": "ordered",
+        "tiers": (
+            {"id": "workspace", "label": "Workspace (.kiro/skills)", "roots": ({"rel": ".kiro/skills"},)},
+            {"id": "global", "label": "Global (~/.kiro/skills)", "roots": ({"home": ".kiro/skills"},)},
+        ),
+        "notes": "documented: workspace skills take priority over global skills",
+    },
+    "amp": {
+        "label": "Amp",
+        "source": "https://ampcode.com/docs/customize/skills",
+        "policy": "ordered",
+        "tiers": (
+            {
+                "id": "config-agents",
+                "label": "User (~/.config/agents/skills)",
+                "roots": ({"home": ".config/agents/skills"},),
+            },
+            {"id": "user-agents", "label": "User (~/.agents/skills)", "roots": ({"scope": "agents"},)},
+            {
+                "id": "config-amp",
+                "label": "User (~/.config/amp/skills)",
+                "roots": ({"home": ".config/amp/skills"},),
+            },
+            {
+                "id": "repo-agents",
+                "label": "Project and parents (.agents/skills)",
+                "roots": ({"rel": ".agents/skills", "recursive": True},),
+                "note": "the documented search walks project parents; this diagnostic "
+                "receives one project root and applies the same bounded recursive read "
+                "the Codex REPO tier uses, so copies above the project are not included",
+            },
+            {"id": "project-claude", "label": "Project (.claude/skills)", "roots": ({"rel": ".claude/skills"},)},
+            {"id": "user-claude", "label": "User (~/.claude/skills)", "roots": ({"scope": "claude-code"},)},
+            {
+                "id": "plugins",
+                "label": "Plugins (~/.claude/plugins/cache)",
+                "roots": ({"home": ".claude/plugins/cache", "recursive": True},),
+                "note": "Amp searches up to five levels below this root; the read here "
+                "is recursive and bounded by the shared instance budget",
+            },
+            {
+                "id": "configured",
+                "label": "amp.skills.path, personal/workspace repositories, official skills",
+                "roots": ({"path_known": False},),
+                "note": "these locations are configured outside the paths read here, so "
+                "a lower-tier winner is provisional",
+            },
+        ),
+        "notes": (
+            "documented: Amp uses the first skill with a given frontmatter `name` in "
+            "this search order",
+        ),
+    },
+    "roo": {
+        "label": "Roo Code",
+        "source": "https://roocodeinc.github.io/Roo-Code/features/skills",
+        "policy": "ordered",
+        "tiers": (
+            {
+                "id": "project-roo-mode",
+                "label": "Project mode-specific (.roo/skills-<mode>)",
+                "roots": ({"path_known": False},),
+                "note": "mode-specific directories need a mode slug this diagnostic "
+                "does not have",
+            },
+            {"id": "project-roo", "label": "Project (.roo/skills)", "roots": ({"rel": ".roo/skills"},)},
+            {
+                "id": "project-agents-mode",
+                "label": "Project mode-specific (.agents/skills-<mode>)",
+                "roots": ({"path_known": False},),
+                "note": "mode-specific directories need a mode slug this diagnostic "
+                "does not have",
+            },
+            {"id": "project-agents", "label": "Project (.agents/skills)", "roots": ({"rel": ".agents/skills"},)},
+            {
+                "id": "global-roo-mode",
+                "label": "Global mode-specific (~/.roo/skills-<mode>)",
+                "roots": ({"path_known": False},),
+                "note": "mode-specific directories need a mode slug this diagnostic "
+                "does not have",
+            },
+            {"id": "global-roo", "label": "Global (~/.roo/skills)", "roots": ({"home": ".roo/skills"},)},
+            {
+                "id": "global-agents-mode",
+                "label": "Global mode-specific (~/.agents/skills-<mode>)",
+                "roots": ({"path_known": False},),
+                "note": "mode-specific directories need a mode slug this diagnostic "
+                "does not have",
+            },
+            {
+                "id": "global-agents",
+                "label": "Global (~/.agents/skills)",
+                "roots": ({"scope": "agents"},),
+            },
+        ),
+        "notes": (
+            "documented order: project > global; .roo > .agents; mode-specific > "
+            "generic (eight tiers)",
+        ),
+    },
+    "zed": {
+        "label": "Zed",
+        "source": "https://zed.dev/docs/ai/skills",
+        "policy": "ordered",
+        "tiers": (
+            {
+                "id": "project",
+                "label": "Project (<worktree>/.agents/skills)",
+                "roots": ({"rel": ".agents/skills"},),
+                "note": "only the direct children of this root are skills, not a "
+                "recursive walk",
+            },
+            {"id": "user", "label": "User (~/.agents/skills)", "roots": ({"scope": "agents"},)},
+        ),
+        "notes": "documented: the project-local skill takes precedence",
+    },
+    "copilot": {
+        "label": "GitHub Copilot",
+        "source": "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills",
+        "policy": "undocumented",
+        "tiers": (
+            {
+                "id": "project",
+                "label": "Project",
+                "roots": (
+                    {"rel": ".github/skills"},
+                    {"rel": ".claude/skills"},
+                    {"rel": ".agents/skills"},
+                ),
+            },
+            {
+                "id": "user",
+                "label": "User",
+                "roots": ({"home": ".copilot/skills"}, {"scope": "agents"}),
+            },
+        ),
+        "notes": (
+            "the documentation lists these locations but states no same-name "
+            "precedence, so no winner is elected",
+        ),
+    },
+    "devin": {
+        "label": "Windsurf / Devin",
+        "source": "https://docs.devin.ai/desktop/cascade/skills",
+        "policy": "undocumented",
+        "tiers": (
+            {
+                "id": "project",
+                "label": "Project",
+                "roots": (
+                    {"rel": ".devin/skills"},
+                    {"rel": ".agents/skills"},
+                    {"rel": ".windsurf/skills"},
+                ),
+                "note": ".windsurf/skills is the legacy location",
+            },
+            {
+                "id": "user",
+                "label": "User",
+                "roots": ({"home": ".config/devin/skills"}, {"scope": "agents"}),
+            },
+        ),
+        "notes": (
+            "the documentation lists these locations but states no same-name "
+            "precedence, so no winner is elected",
         ),
     },
     "gemini": {
@@ -268,15 +493,33 @@ def _facade_root(scope_id: str) -> Path | None:
     return None
 
 
+def _home_root(rel: str) -> Path | None:
+    """Resolve a documented home-relative root at read time."""
+    try:
+        return paths.home_dir() / rel
+    except (OSError, RuntimeError):
+        return None
+
+
+def _relative_root(root_spec: dict, project: Path | None) -> Path | None:
+    """Resolve a documented project-relative root, if there is a project."""
+    if project is None:
+        return None
+    rel = root_spec.get("rel")
+    if not rel:
+        return None
+    return project / str(rel)
+
+
 def _resolve_root(root_spec: dict, project: Path | None) -> Path | None:
     """Resolve one root spec to a physical path, or ``None`` when unreadable."""
     if root_spec.get("scope"):
         return _facade_root(str(root_spec["scope"]))
     if root_spec.get("path"):
         return Path(str(root_spec["path"]))
-    if root_spec.get("rel") and project is not None:
-        return project / str(root_spec["rel"])
-    return None
+    if root_spec.get("home"):
+        return _home_root(str(root_spec["home"]))
+    return _relative_root(root_spec, project)
 
 
 def _physical(path: Path | str | None) -> Path | None:
@@ -534,7 +777,7 @@ def _resolve_ordered(skill: str, tiers: list[dict]) -> dict:
             continue
         winner_physical = _physical(matches[0].get("path"))
         shadowed = [
-            _public_instance(item)
+            dict(_public_instance(item), shadowed_by=tier["id"])
             for lower in tiers[index + 1:]
             for item in lower["loadable"]
             if item.get("name") == skill
