@@ -155,9 +155,20 @@ const app = createApp({
       }
       return renderDoc(text, marks);
     },
-    docPending() { return !!this.skill && !this.bodyReady(this.refCopy); },
+    /* A copy this tool never reads (a link it refuses to follow, or a folder
+     * name it cannot address) is not "still loading": it is unreadable here,
+     * and the reader says why instead of waiting forever. */
+    docPending() { const c = this.refCopy; return !!this.skill && !!c && this.bodyFetchable(c) && !this.bodyReady(c); },
+    docWhy() {
+      const c = this.refCopy;
+      if (!c || this.bodyFetchable(c)) return null;
+      const why = BROKEN_WHY[c.kind];
+      return why ? { title: why[0], text: why[1] } : { title: "Not readable here", text: "" };
+    },
     docError() { return this.bodyErrorOf(this.refCopy); },
     editable() { return !!this.skill && this.skill.copies.some((c) => c.state !== "broken"); },
+    canEdit() { return !!this.skill && this.editable && this.bodyFetchable(this.refCopy); },
+    editWhy() { return this.docWhy ? `${this.docWhy.title}. ${this.docWhy.text}` : ""; },
     editTargets() { return this.skill ? this.skill.copies.filter((c) => c.state !== "broken") : []; },
     editError() {
       if (!this.edit) return "";
@@ -312,24 +323,95 @@ const app = createApp({
     bodyOf(c) { if (!c) return ""; if (c.bodyLoaded) return c.body || ""; const key = this.bodyKey(c); return key in this.bodies ? this.bodies[key] : ""; },
     bodyErrorOf(c) { return c ? this.bodyErrors[this.bodyKey(c)] || "" : ""; },
     applyBody(c, body) { c.body = body; c.bodyLoaded = true; this.bodyErrors[this.bodyKey(c)] = ""; },
+    /* The one predicate for "this tool can read this copy's document at all".
+     * A linked entry is deliberately not followed and a folder name that is
+     * not a valid skill name cannot be addressed, so neither is requested. */
+    bodyFetchable(c) {
+      return !!(c && c.name && c.scope && c.state !== "link" && (!c.record || c.record.addressable !== false));
+    },
+    /* A recursive scope can hold two instances of one name; a name-addressed
+     * read would then serve one document to both copies. The pair key is what
+     * those two share. */
+    bodyPairKey(c) { return `${c && c.scope ? c.scope : ""}\u0000${(c && c.name) || ""}`; },
+    modelCopies() { return this.m ? this.m.skills.reduce((all, s) => all.concat(s.copies), []) : []; },
+    /* (scope, name) → the copies the current model holds for that pair. The
+     * record's own `duplicated` state is not used: in the merged view it is
+     * raised for one skill held by several agents, which is ordinary and is
+     * still read exactly by name. */
+    bodyPairs(copies) {
+      const pairs = new Map();
+      const add = (c) => {
+        if (!c || !c.name || !c.scope) return;
+        const key = this.bodyPairKey(c);
+        const held = pairs.get(key);
+        if (!held) pairs.set(key, [c]); else if (held.indexOf(c) < 0) held.push(c);
+      };
+      const pool = this.modelCopies();
+      for (const c of (pool.length ? pool : (Array.isArray(copies) ? copies : [copies]))) add(c);
+      return pairs;
+    },
+    bodyDuplicated(c, pairs) {
+      const held = c && pairs ? pairs.get(this.bodyPairKey(c)) : null;
+      return !!(held && held.length > 1);
+    },
+    pairCopies(c) {
+      const mine = this.modelCopies().filter((x) => this.bodyPairKey(x) === this.bodyPairKey(c));
+      return mine.length ? mine : [c];
+    },
+    /* Rows from one scoped list read, keyed by the physical path that tells
+     * the copies apart. A name-addressed read cannot make that distinction. */
+    bodiesByPath(c, rows) {
+      const byPath = new Map();
+      for (const r of rows) {
+        if (!r || String(r.name) !== String(c.name)) continue;
+        if (r.scope && c.scope && String(r.scope) !== String(c.scope)) continue;
+        const path = r.physical_path || r.path || "";
+        if (path && typeof r.body === "string") byPath.set(path, r.body);
+      }
+      return byPath;
+    },
+    duplicateBodyMap(c) {
+      const flightKey = "list\u0000" + this.bodyPairKey(c);
+      let request = this.bodyInflight[flightKey];
+      if (!request) {
+        request = api(`/api/skills?scope=${encodeURIComponent(c.scope)}&q=${encodeURIComponent(c.name)}`)
+          .then((rows) => this.bodiesByPath(c, Array.isArray(rows) ? rows : []));
+        this.bodyInflight[flightKey] = request;
+        request.then((byPath) => {
+          for (const sibling of this.pairCopies(c)) {
+            const body = byPath.get(sibling.path);
+            if (typeof body === "string") this.applyBody(sibling, body);
+          }
+        }).catch(() => { /* the caller reports the failure next to its own view */ })
+          .finally(() => { if (this.bodyInflight[flightKey] === request) delete this.bodyInflight[flightKey]; });
+      }
+      return request;
+    },
+    namedBody(c) {
+      const key = this.bodyKey(c);
+      let request = this.bodyInflight[key];
+      if (!request) {
+        request = api(`/api/skills/${encodeURIComponent(c.name)}?scope=${encodeURIComponent(c.scope)}`)
+          .then((record) => (record && typeof record.body === "string" ? record.body : ""));
+        this.bodyInflight[key] = request;
+        request.then((body) => { this.bodies[key] = body; delete this.bodyErrors[key]; })
+          .catch(() => { /* the caller reports the failure next to its own view */ })
+          .finally(() => { if (this.bodyInflight[key] === request) delete this.bodyInflight[key]; });
+      }
+      return request;
+    },
     async ensureBodies(copies) {
-      /* A linked entry is deliberately not followed and an unaddressable name
-       * cannot be fetched by name, so neither is requested. */
-      const list = (Array.isArray(copies) ? copies : [copies])
-        .filter((c) => c && !c.bodyLoaded && c.name && c.scope && c.state !== "link" && (!c.record || c.record.addressable !== false));
+      const list = (Array.isArray(copies) ? copies : [copies]).filter((c) => c && !c.bodyLoaded && this.bodyFetchable(c));
+      if (!list.length) return;
+      const pairs = this.bodyPairs(list);
       await Promise.all(list.map(async (c) => {
         const key = this.bodyKey(c);
         try {
-          let request = this.bodyInflight[key];
-          if (!request) {
-            request = api(`/api/skills/${encodeURIComponent(c.name)}?scope=${encodeURIComponent(c.scope)}`)
-              .then((record) => (record && typeof record.body === "string" ? record.body : ""));
-            this.bodyInflight[key] = request;
-            request.then((body) => { this.bodies[key] = body; delete this.bodyErrors[key]; })
-              .catch(() => { /* the caller reports the failure next to its own view */ })
-              .finally(() => { if (this.bodyInflight[key] === request) delete this.bodyInflight[key]; });
-          }
-          this.applyBody(c, await request);
+          if (!this.bodyDuplicated(c, pairs)) { this.applyBody(c, await this.namedBody(c)); return; }
+          /* Never guess: a copy that matches no single row keeps its error. */
+          const body = (await this.duplicateBodyMap(c)).get(c.path);
+          if (typeof body !== "string") throw new Error("This copy could not be matched to a single document.");
+          this.applyBody(c, body);
         } catch (e) { this.bodyErrors[key] = this.friendly(e && e.message ? e.message : "The document could not be read."); }
       }));
     },
@@ -629,11 +711,13 @@ const app = createApp({
     /* ----- editing ----- */
     async startEdit() {
       const s = this.skill, c = this.refCopy;
-      if (!s || !c) return;
+      if (!s || !c || !this.bodyFetchable(c)) return;
       /* The editor must never open on a body that has not loaded: read it
-       * first, and abandon silently if the reader navigated away meanwhile. */
+       * first, and abandon silently if the reader navigated away meanwhile.
+       * A periodic re-read replaces `skill` with an equal-named object, so the
+       * identity that matters is the name and the route, not the object. */
       await this.ensureBodies([c]);
-      if (this.skill !== s || this.route.page !== "skill" || this.refCopy !== c) return;
+      if (!this.skill || this.skill.name !== s.name || this.route.page !== "skill") return;
       if (!this.bodyReady(c)) { this.toast(this.bodyErrorOf(c) || "The document could not be read. Try again.", { err: true }); return; }
       const body = stripFrontmatter(this.bodyOf(c));
       const metadata={category:c.record.category||"",version:c.record.version||"",license:c.record.license||"",compatibility:Domain.formatCompat(c.record.compatibility),allowed_tools:Domain.formatTools(c.record.allowed_tools)};

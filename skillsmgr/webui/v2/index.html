@@ -156,7 +156,7 @@
           <div class="nb-bar"><a href="#/skills">Skills</a><span aria-hidden="true">/</span><b>{{ skill.name }}</b>
             <span class="acts" v-if="!edit">
               <button type="button" class="btn btn-line btn-sm" @click="openShare()" v-if="shareTargets.length"><ic name="share" cls="i-s"></ic>Add to agent</button>
-              <button type="button" class="btn btn-ink btn-sm" @click="startEdit()" :disabled="!editable || docPending"><ic name="pencil" cls="i-s"></ic>Edit</button></span></div>
+              <button type="button" class="btn btn-ink btn-sm" @click="startEdit()" :disabled="!canEdit || docPending" :title="editWhy || null"><ic name="pencil" cls="i-s"></ic>Edit<span class="sr-only" v-if="editWhy"> — {{ editWhy }}</span></button></span></div>
 
           <!-- read -->
           <div class="sheet" v-if="!edit">
@@ -166,7 +166,7 @@
               <p class="doc-lead">{{ skill.description || 'No description yet.' }}</p>
               <div class="inline-note bad" v-if="skill.status.key === 'bad'"><b>Problem:</b> {{ brokenText }}<br><button type="button" class="btn btn-ink btn-sm" @click="fixSkillBad()">{{ brokenAction }}</button></div>
               <div class="inline-note warn" v-if="skill.status.key === 'warn' && cmp"><b>{{ agentOf(cmp.scope).name }} has a different copy.</b> The highlighted lines are not in it. Sync also copies file enabled state and companion files. Undo restores document text and file enabled state only.<br><button type="button" class="btn btn-ink btn-sm" @click="syncDiffering()" :disabled="skill.ref.ambiguous">{{ matchLabel }}</button></div>
-              <p class="state-note" v-if="readCopyPath && refCopy.path===readCopyPath">Reading the exact copy in {{agentOf(refCopy.scope).name}} · {{shortPath(refCopy.path)}}</p><p class="state-note" role="status" v-if="docPending">Loading document…</p><p class="state-note err" role="alert" v-if="docError">{{ docError }}</p><div class="doc" v-if="!docPending && !docError" v-html="docHtml"></div>
+              <p class="state-note" v-if="readCopyPath && refCopy.path===readCopyPath">Reading the exact copy in {{agentOf(refCopy.scope).name}} · {{shortPath(refCopy.path)}}</p><p class="state-note" role="status" v-if="docPending">Loading document…</p><p class="state-note err" role="alert" v-if="docError">{{ docError }}</p><div class="state-note" v-if="docWhy"><b>{{ docWhy.title }}</b> {{ docWhy.text }}</div><div class="doc" v-if="!docPending && !docError && !docWhy" v-html="docHtml"></div>
             </article>
             <aside class="margin" aria-label="About this skill">
               <div class="note warn" v-if="skill.status.key === 'warn' && cmp"><h2 class="note-h">Note</h2>

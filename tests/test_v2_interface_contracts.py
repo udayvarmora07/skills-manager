@@ -55,6 +55,22 @@ const rec=(name,scope,over)=>Object.assign({name,scope,scope_label:scope,descrip
  instance_states:['active'],disabled:0,malformed:false,addressable:true,decode_error:''},over||{});
 """
 
+# The lazy-body methods an app.js context needs; bound from the real component so
+# a test exercises the shipped implementation rather than a copy of it.
+BODY_CONTEXT_JS = (
+    "const BODY_METHODS=['bodyKey','bodyReady','bodyOf','bodyErrorOf','applyBody','bodyFetchable',"
+    "'bodyPairKey','modelCopies','bodyPairs','bodyDuplicated','pairCopies','bodiesByPath','duplicateBodyMap',"
+    "'namedBody','ensureBodies'];"
+    "const bodyContext=(M,extra)=>{"
+    "const context=Object.assign({},extra||{});"
+    "if(!context.bodies)context.bodies={};"
+    "if(!context.bodyInflight)context.bodyInflight={};"
+    "if(!context.bodyErrors)context.bodyErrors={};"
+    "if(!context.friendly)context.friendly=M.friendly;"
+    "for(const key of BODY_METHODS)if(context[key]===undefined)context[key]=M[key];"
+    "return context;};"
+)
+
 
 @unittest.skipUnless(NODE, "node is required")
 class ModelStatusTests(unittest.TestCase):
@@ -328,6 +344,7 @@ class BodyLazyLoadTests(unittest.TestCase):
         return _node(
             "ctx.Vue={createApp(options){ctx.options=options;return {component(){},mount(){}};},markRaw:x=>x};"
             f"vm.runInContext(fs.readFileSync({self.APP},'utf8'),ctx);"
+            + BODY_CONTEXT_JS +
             f"return (async()=>{{{body}}})();")
 
     def test_a_copy_without_a_body_is_not_an_empty_document(self):
@@ -350,7 +367,7 @@ class BodyLazyLoadTests(unittest.TestCase):
     def test_one_request_serves_two_concurrent_callers_and_a_changed_hash_refetches(self):
         out = self._app_with_api("""
         const M=ctx.options.methods;
-        const context={bodies:{},bodyInflight:{},bodyErrors:{},friendly:M.friendly,bodyKey:M.bodyKey,applyBody:M.applyBody};
+        const context=bodyContext(M,{});
         const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false};
         await Promise.all([M.ensureBodies.call(context,[copy]),M.ensureBodies.call(context,[copy])]);
         const first={calls:calls.slice(),body:copy.body,loaded:copy.bodyLoaded,keyed:context.bodies[M.bodyKey.call(context,copy)]};
@@ -372,6 +389,18 @@ class BodyLazyLoadTests(unittest.TestCase):
             "api:async(url)=>{calls.push(url);return {name:'a',scope:'codex',body:'DOC '+(calls.length)};}};"
             "ctx.Vue={createApp(options){ctx.options=options;return {component(){},mount(){}};},markRaw:x=>x};"
             f"vm.runInContext(fs.readFileSync({self.APP},'utf8'),ctx);"
+            + BODY_CONTEXT_JS +
+            f"return (async()=>{{{body}}})();")
+
+    def _app_with_stub(self, api_js: str, body: str):
+        """Run ``body`` against app.js whose ``api`` is the caller's stub."""
+        return _node(
+            "let calls=[];"
+            "ctx.window.SkillManagerDomain={...ctx.window.SkillManagerDomain,"
+            "api:async(url)=>{calls.push(url);" + api_js + "}};"
+            "ctx.Vue={createApp(options){ctx.options=options;return {component(){},mount(){}};},markRaw:x=>x};"
+            f"vm.runInContext(fs.readFileSync({self.APP},'utf8'),ctx);"
+            + BODY_CONTEXT_JS +
             f"return (async()=>{{{body}}})();")
 
     def test_opening_the_editor_waits_for_the_document(self):
@@ -381,10 +410,9 @@ class BodyLazyLoadTests(unittest.TestCase):
         const copy=Object.assign(strip({name:'a',scope:'codex',description:'d',content_hash:'h1',tokens:5,
           record:{category:'c',version:'',license:'',compatibility:'',allowed_tools:''}}),{body:'# Body\\n',bodyLoaded:false});
         const skill={name:'a',copies:[copy]};
-        const context={skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
-          bodies:{},bodyErrors:{},toast(){},$nextTick(){},
-          bodyKey:M.bodyKey,bodyReady:M.bodyReady,bodyOf:M.bodyOf,bodyErrorOf:M.bodyErrorOf,friendly:M.friendly,
-          ensureBodies:async function(cs){cs[0].body='# Body\\n';cs[0].bodyLoaded=true;this.bodies[this.bodyKey(cs[0])]='# Body\\n';}};
+        const context=bodyContext(M,{skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
+          toast(){},$nextTick(){},
+          ensureBodies:async function(cs){cs[0].body='# Body\\n';cs[0].bodyLoaded=true;this.bodies[this.bodyKey(cs[0])]='# Body\\n';}});
         await M.startEdit.call(context);
         return {body:context.edit&&context.edit.body,name:context.edit&&context.edit.name};""")
         self.assertEqual(out["name"], "a")  # never opens on an unloaded body
@@ -395,10 +423,9 @@ class BodyLazyLoadTests(unittest.TestCase):
         const M=ctx.options.methods;
         const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false,description:'d',record:{}};
         const skill={name:'a',copies:[copy]};
-        const context={skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
-          bodies:{},bodyErrors:{},toast(){},$nextTick(){},
-          bodyKey:M.bodyKey,bodyReady:M.bodyReady,bodyOf:M.bodyOf,bodyErrorOf:M.bodyErrorOf,friendly:M.friendly,
-          ensureBodies:async function(){this.skill={name:'b',copies:[]};this.route={page:'skills'};}};
+        const context=bodyContext(M,{skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
+          toast(){},$nextTick(){},
+          ensureBodies:async function(){this.skill={name:'b',copies:[]};this.route={page:'skills'};}});
         await M.startEdit.call(context);
         return context.edit;""")
         self.assertIsNone(out)
@@ -409,14 +436,141 @@ class BodyLazyLoadTests(unittest.TestCase):
         const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false,description:'d',record:{}};
         const skill={name:'a',copies:[copy]};
         let toastText='';
-        const context={skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
-          bodies:{},bodyErrors:{},toast(t){toastText=t;},$nextTick(){},
-          bodyKey:M.bodyKey,bodyReady:M.bodyReady,bodyOf:M.bodyOf,bodyErrorOf:M.bodyErrorOf,friendly:M.friendly,
-          ensureBodies:async function(){this.bodyErrors[this.bodyKey(copy)]='The document could not be read.';}};
+        const context=bodyContext(M,{skill,refCopy:copy,route:{page:'skill'},edit:null,readCopyPath:'',editTargets:[copy],
+          toast(t){toastText=t;},$nextTick(){},
+          ensureBodies:async function(){this.bodyErrors[this.bodyKey(copy)]='The document could not be read.';}});
         await M.startEdit.call(context);
         return {edit:context.edit,toast:toastText};""")
         self.assertIsNone(out["edit"])
         self.assertIn("could not be read", out["toast"])
+
+    def test_a_linked_copy_is_explained_instead_of_loading_forever(self):
+        # A copy this tool refuses to follow is never requested, so waiting for
+        # its body would keep "Loading document…" on screen forever.
+        out = self._app_with_stub(
+            "throw new Error('a linked copy must not be requested: '+url);", """
+        const M=ctx.options.methods;
+        const copy={name:'a',scope:'codex',state:'link',kind:'linked',hash:'',path:'/p/codex/a',
+          body:'',bodyLoaded:false,description:'d',record:{addressable:true}};
+        const base=bodyContext(M,{skill:{name:'a',copies:[copy]},refCopy:copy,m:null,editable:true});
+        const pending=ctx.options.computed.docPending.call(base);
+        const why=ctx.options.computed.docWhy.call(base);
+        const context=bodyContext(M,{skill:base.skill,refCopy:copy,m:null,editable:true,docWhy:why});
+        const canEdit=ctx.options.computed.canEdit.call(context);
+        const editWhy=ctx.options.computed.editWhy.call(context);
+        await M.ensureBodies.call(context,[copy]);
+        return {pending,why,canEdit,editWhy,calls,loaded:copy.bodyLoaded,body:copy.body};""")
+        self.assertFalse(out["pending"])
+        self.assertEqual(out["why"]["title"], "Linked outside its folder")
+        self.assertIn("does not follow", out["why"]["text"])
+        self.assertFalse(out["canEdit"])
+        self.assertIn("Linked outside its folder", out["editWhy"])
+        self.assertEqual(out["calls"], [])
+        self.assertFalse(out["loaded"])
+        self.assertEqual(out["body"], "")
+
+    def test_an_unaddressable_copy_is_explained_instead_of_loading_forever(self):
+        out = self._app_with_stub(
+            "throw new Error('an unaddressable copy must not be requested: '+url);", """
+        const M=ctx.options.methods;
+        const copy={name:'Bad Name',scope:'codex',state:'broken',kind:'unaddressable',hash:'',
+          path:'/p/codex/Bad Name',body:'',bodyLoaded:false,description:'d',record:{addressable:false}};
+        const context=bodyContext(M,{skill:{name:'Bad Name',copies:[copy]},refCopy:copy,m:null,editable:false});
+        const pending=ctx.options.computed.docPending.call(context);
+        const why=ctx.options.computed.docWhy.call(context);
+        await M.ensureBodies.call(context,[copy]);
+        return {pending,why,calls,loaded:copy.bodyLoaded,canEdit:ctx.options.computed.canEdit.call(context)};""")
+        self.assertFalse(out["pending"])
+        self.assertEqual(out["why"]["title"], "Unusual folder name")
+        self.assertFalse(out["canEdit"])
+        self.assertEqual(out["calls"], [])
+        self.assertFalse(out["loaded"])
+
+    def test_a_readable_copy_still_waits_for_its_document(self):
+        out = self._app("""
+        const M=ctx.options.methods;
+        const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false,record:{}};
+        const context=bodyContext(M,{skill:{name:'a',copies:[copy]},refCopy:copy,m:null});
+        return {pending:ctx.options.computed.docPending.call(context),why:ctx.options.computed.docWhy.call(context)};""")
+        self.assertTrue(out["pending"])
+        self.assertIsNone(out["why"])
+
+    def _duplicates(self, rows: str, records: str):
+        return self._app_with_stub(rows, HELPERS + f"""
+        const strip=(r)=>{{const c={{...r}};delete c.body;return c;}};
+        const m=M.build(({records}).map(strip),scopes);
+        const A=ctx.options.methods;
+        const copies=m.skills[0].copies;
+        const context=bodyContext(A,{{m}});
+        await A.ensureBodies.call(context,copies);
+        return {{calls,bodies:Object.fromEntries(copies.map(c=>[c.path,c.body])),
+          loaded:Object.fromEntries(copies.map(c=>[c.path,c.bodyLoaded])),
+          errors:Object.fromEntries(copies.map(c=>[c.path,context.bodyErrors[A.bodyKey(c)]||'']))}};""")
+
+    def test_two_copies_of_one_name_in_one_scope_read_their_own_bodies(self):
+        # The list route is name-addressed, so a name read would serve one
+        # document to both copies and a diff would compare a body with itself.
+        out = self._duplicates(
+            "if(url.indexOf('/api/skills?')===0)return ["
+            "{name:'a',scope:'opencode',physical_path:'/p/one/a',body:'ONE'},"
+            "{name:'a',scope:'opencode',physical_path:'/p/two/a',body:'TWO'}];"
+            "throw new Error('unexpected '+url);",
+            "[rec('a','opencode',{content_hash:'h1',physical_path:'/p/one/a',path:'/p/one/a'}),"
+            "rec('a','opencode',{content_hash:'h2',physical_path:'/p/two/a',path:'/p/two/a'})]")
+        self.assertEqual(len(out["calls"]), 1)
+        self.assertIn("/api/skills?scope=opencode&q=a", out["calls"][0])
+        self.assertEqual(out["bodies"], {"/p/one/a": "ONE", "/p/two/a": "TWO"})
+        self.assertEqual(out["loaded"], {"/p/one/a": True, "/p/two/a": True})
+        self.assertEqual(out["errors"], {"/p/one/a": "", "/p/two/a": ""})
+
+    def test_an_unmatched_duplicate_copy_keeps_an_error_instead_of_a_guess(self):
+        out = self._duplicates(
+            "if(url.indexOf('/api/skills?')===0)return ["
+            "{name:'a',scope:'opencode',physical_path:'/p/one/a',body:'ONE'}];"
+            "throw new Error('unexpected '+url);",
+            "[rec('a','opencode',{content_hash:'h1',physical_path:'/p/one/a',path:'/p/one/a'}),"
+            "rec('a','opencode',{content_hash:'h2',physical_path:'/p/two/a',path:'/p/two/a'})]")
+        self.assertEqual(out["bodies"], {"/p/one/a": "ONE", "/p/two/a": ""})
+        self.assertEqual(out["loaded"], {"/p/one/a": True, "/p/two/a": False})
+        self.assertEqual(out["errors"]["/p/one/a"], "")
+        self.assertIn("could not be matched to a single document", out["errors"]["/p/two/a"])
+
+    def test_a_unique_copy_keeps_the_name_addressed_read(self):
+        out = self._duplicates(
+            "if(url.indexOf('/api/skills?')===0)return ["
+            "{name:'a',scope:'opencode',physical_path:'/p/one/a',body:'ONE'},"
+            "{name:'a',scope:'opencode',physical_path:'/p/two/a',body:'TWO'}];"
+            "if(url.indexOf('/api/skills/a?scope=codex')===0)return {name:'a',scope:'codex',body:'CX'};"
+            "throw new Error('unexpected '+url);",
+            "[rec('a','opencode',{content_hash:'h1',physical_path:'/p/one/a',path:'/p/one/a'}),"
+            "rec('a','opencode',{content_hash:'h2',physical_path:'/p/two/a',path:'/p/two/a'}),"
+            "rec('a','codex',{content_hash:'h3',physical_path:'/p/codex/a',path:'/p/codex/a'})]")
+        self.assertEqual(len([u for u in out["calls"] if u.startswith("/api/skills?")]), 1)
+        self.assertIn("/api/skills/a?scope=codex", out["calls"])
+        self.assertEqual(out["bodies"], {"/p/one/a": "ONE", "/p/two/a": "TWO", "/p/codex/a": "CX"})
+
+    def test_the_editor_survives_an_equal_named_refresh_but_not_a_different_skill(self):
+        # A periodic re-read replaces `skill` with a new object for the same
+        # name; comparing objects would silently drop the editor.
+        out = self._app("""
+        const M=ctx.options.methods;
+        const run=async(nextSkill)=>{
+          const copy={name:'a',scope:'codex',hash:'h1',body:'',bodyLoaded:false,description:'d',record:{}};
+          const context=bodyContext(M,{skill:{name:'a',copies:[copy]},refCopy:copy,route:{page:'skill'},edit:null,
+            readCopyPath:'',editTargets:[copy],toast(){},$nextTick(){},
+            ensureBodies:async function(cs){cs[0].body='# Body\\n';cs[0].bodyLoaded=true;this.skill=nextSkill();}});
+          await M.startEdit.call(context);
+          return {name:context.edit&&context.edit.name,body:context.edit&&context.edit.body};
+        };
+        return {same:await run(()=>({name:'a',copies:[]})),other:await run(()=>({name:'b',copies:[]}))};""")
+        self.assertEqual(out["same"]["name"], "a")
+        self.assertEqual(out["same"]["body"], "# Body\n")
+        self.assertIsNone(out["other"]["name"])
+
+    def test_no_reactive_body_check_uses_an_untracked_own_property_test(self):
+        app = (V2 / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("hasOwnProperty.call(this.bodies", app)
+        self.assertIn("in this.bodies", app)
 
     def test_a_toggle_toast_states_the_token_effect_and_omits_an_unknown_count(self):
         out = self._app_with_api("""

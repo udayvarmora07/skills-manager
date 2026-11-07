@@ -60,12 +60,23 @@ copies. Bodies are ensured before opening the reader, computing the reader's
 missing-line marks, the Inbox and Sync map diffs, the map's per-row line count,
 and the editor; the editor waits for the body and does nothing if the reader
 navigated away while it was fetched, and the reader shows "Loading document…"
-instead of rendering an unloaded body. Grouping, "copies differ" and reference
-selection stay keyed on `content_hash`, never on a body. Turning a copy off or
-on appends the observed token effect to the toast ("frees about N tokens of
-that agent's budget" / "uses about N tokens"), summing the copies for "turned
-on everywhere", and omits the clause when the count is zero or unknown; the
-same estimate sits beside each copy switch on the skill page.
+instead of rendering an unloaded body. The reader waits only for a copy it can
+actually read: a linked entry the tool refuses to follow and a folder whose name
+it cannot address are never requested, so the reader states why (the shared
+`BROKEN_WHY` wording) instead of waiting, and Edit stays disabled with the same
+explanation. When one `(scope, name)` pair occurs twice in the model — a
+recursive scope holding two instances of one name — `ensureBodies` reads
+`GET /api/skills?scope=<scope>&q=<name>` once for that pair and matches each
+copy by `physical_path`, recording "This copy could not be matched to a single
+document." rather than guessing, while every unique copy keeps the
+name-addressed read; the editor's post-fetch identity check compares the skill
+name and route, so a periodic re-read that replaces the object for the same
+skill does not silently discard the editor. Grouping, "copies differ" and
+reference selection stay keyed on `content_hash`, never on a body. Turning a
+copy off or on appends the observed token effect to the toast ("frees about N
+tokens of that agent's budget" / "uses about N tokens"), summing the copies for
+"turned on everywhere", and omits the clause when the count is zero or unknown;
+the same estimate sits beside each copy switch on the skill page.
 
 Bounded locale formatter caches and Vue-derived row metadata avoid repeated
 work during unrelated renders. Checkbox membership uses a Set; off-screen
