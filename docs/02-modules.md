@@ -200,7 +200,8 @@ included) contain `agents` but not `claude-code` and whose name has no `claude-
 code` copy, bounded by `MAX_BRIDGE_NAMES = 50`. It cites Claude Code's
 documented roots, offers the existing `sync` copy and a caveated manual link as
 remedies, emits one `agents-bridge-gap` info finding, and writes nothing. Other
-scopes report `state: unavailable`.
+scopes report `state: unavailable`; a truncated scan reports `state: partial`
+and names nothing, because the missing copy could be past the limit.
 
 ## `key_support.py`
 

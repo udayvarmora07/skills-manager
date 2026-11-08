@@ -1358,7 +1358,19 @@ def _bridge_missing(prepared: list[dict]) -> list[dict]:
     return sorted(missing, key=_record_sort_key)
 
 
-def _agents_bridge_section(prepared: list[dict], *, scope: str, home) -> tuple[dict, list[dict]]:
+def _bridge_unavailable_reason(scope: str, degraded: list[dict]) -> tuple[str, str] | None:
+    """Why the comparison cannot be made, as ``(state, reason)``, or ``None``."""
+    if scope != "all":
+        return "unavailable", "Comparing ~/.agents/skills with ~/.claude/skills needs --scope all."
+    if any(item.get("truncated") for item in degraded):
+        # A copy past the instance limit could be the one that closes a gap,
+        # so a truncated scan must not name anything as missing.
+        return "partial", "The physical-instance limit was reached, so the comparison is incomplete."
+    return None
+
+
+def _agents_bridge_section(prepared: list[dict], *, scope: str, home,
+                           degraded: list[dict]) -> tuple[dict, list[dict]]:
     """Explain, read-only, which ~/.agents/skills skills Claude Code cannot see."""
     section = {
         "version": 1,
@@ -1372,9 +1384,9 @@ def _agents_bridge_section(prepared: list[dict], *, scope: str, home) -> tuple[d
         "missing_total": 0,
         "omitted": 0,
     }
-    if scope != "all":
-        section["state"] = "unavailable"
-        section["reason"] = "Comparing ~/.agents/skills with ~/.claude/skills needs --scope all."
+    blocked = _bridge_unavailable_reason(scope, degraded)
+    if blocked is not None:
+        section["state"], section["reason"] = blocked
         return section, []
     home_prefix = _home_prefix(home)
     missing = _bridge_missing(prepared)
@@ -1678,7 +1690,9 @@ def _hygiene_report(
     )
     findings.extend(listing_findings)
     _note_listing_scope(unavailable, claude_listing)
-    agents_bridge, bridge_findings = _agents_bridge_section(prepared, scope=scope, home=home)
+    agents_bridge, bridge_findings = _agents_bridge_section(
+        prepared, scope=scope, home=home, degraded=degraded
+    )
     findings.extend(bridge_findings)
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))

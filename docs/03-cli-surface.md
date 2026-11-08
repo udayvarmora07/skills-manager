@@ -196,7 +196,8 @@ home-redacted paths plus `missing_total`/`omitted`, and two remedies. One is
 the existing `skills-mgr sync <name> --from agents --to claude-code` copy. The
 other is a manual link, with the caveat that anthropics/claude-code #14836
 reports symlinked skill folders as unreliable. It needs `--scope all`; any
-other scope reports `state: unavailable`. One `agents-bridge-gap` info finding
+other scope reports `state: unavailable`, and a scan that hit the instance limit
+reports `state: partial` and names nothing. One `agents-bridge-gap` info finding
 appears when the gap is non-empty, and the human output adds one summary line.
 Nothing is linked, copied or written.
 

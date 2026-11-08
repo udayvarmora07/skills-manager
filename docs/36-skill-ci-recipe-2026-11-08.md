@@ -14,14 +14,14 @@
 
 ## The script
 
-**[SPEC]** Save it as `scripts/check-skills.sh` in the repository that holds the skills. Its one argument is the folder that holds one sub-folder per skill (default `skills`). `SKILLS_MGR` overrides the command, which is how the test runs it against this checkout.
+**[SPEC]** Save it as `scripts/check-skills.sh` in the repository that holds the skills. Its one argument is the folder that holds one sub-folder per skill (default `skills`). `SKILLS_MGR` overrides the command, which is how the test runs it against this checkout. It is split on whitespace into words without glob expansion, so `python -m skillsmgr` works and a `*` stays literal. A command whose own path contains a space therefore cannot be named here; put a wrapper script on a path without spaces instead.
 
 <!-- skill-ci-script:begin -->
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 root="${1:-skills}"
-mgr="${SKILLS_MGR:-skills-mgr}"
+read -r -a mgr <<< "${SKILLS_MGR:-skills-mgr}"
 SKILLS_MANAGER_DATA="$(mktemp -d)"
 export SKILLS_MANAGER_DATA
 trap 'rm -rf "$SKILLS_MANAGER_DATA"' EXIT
@@ -30,7 +30,7 @@ found=0
 for dir in "$root"/*/; do
   [ -f "$dir/SKILL.md" ] || [ -f "$dir/SKILL.md.disabled" ] || continue
   found=$((found + 1))
-  $mgr validate --path "$dir" || status=1
+  "${mgr[@]}" validate --path "$dir" || status=1
 done
 if [ "$found" -eq 0 ]; then
   echo "no skill folders found under $root" >&2

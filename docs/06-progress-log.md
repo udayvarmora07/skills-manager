@@ -42,10 +42,31 @@ done and `AGENTS-1.md` removed; the seven `prototype-*` directories and
 is the maintainer's call. PyPI still lists 1.0.1, so the 1.0.2 publish is still
 waiting on the human `release` approval.
 
-**[NOTE] Tooling.** The `deepseek-worker` MCP connection dropped mid-session
-(the bridge doctor passed every check). The user reconnected it, and a
-read-only DeepSeek review of this commit ran in a snapshot. Its findings are
-recorded below once verified.
+**[NOTE] Independent review (DeepSeek, `max` effort, read-only snapshot).** The
+`deepseek-worker` MCP connection dropped mid-session (the bridge doctor passed
+every check). The user reconnected it. A first broad review hit the worker's
+output limit (exit 137, about 10M input tokens). A narrowed brief at `max`
+effort returned five findings, each checked against the code:
+- **Fixed:** a scan truncated at `max_instances` could name a skill as missing
+  when its Claude copy lay past the limit. It now reports `state: partial` and
+  names nothing (red test).
+- **Fixed, narrower than proposed:** unquoted `$mgr` was also glob-expanded.
+  The script now uses `read -r -a`; a glob-character test is red on the old
+  form. A command path containing a space cannot coexist with multi-word
+  `SKILLS_MGR` values, so it is documented rather than "fixed".
+- **Not a defect, pinned:** "SIGTERM leaves the temp dir". Bash runs the `EXIT`
+  trap when an untrapped SIGTERM kills it; a test sends SIGTERM mid-run and
+  asserts cleanup.
+- **Not a defect:** "the finding carries 100 raw records". `_finding` publishes
+  the same bounded `_public_instance` projection every finding uses.
+- **Not a defect:** "alias-level disabled state". Aliases collapse by physical
+  identity, so their document state is identical by construction.
+
+**[NOTE] A time bomb found by the ladder.** `tests/test_agent_scope_trash.py`
+asserted `trashed_at` started with `2026-11-07` and failed on every interpreter
+the next day, on `main` as well. It now checks the parsed timestamp falls
+between UTC instants taken around the removal. No other hardcoded-date
+assertion exists in `tests/`.
 
 ## 2026-11-07 — Resume the interrupted remaining-tasks sub-session
 

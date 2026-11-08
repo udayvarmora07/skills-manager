@@ -119,6 +119,15 @@ class AgentsBridgeTests(unittest.TestCase):
         self.assertEqual(section["missing_total"], hygiene.MAX_BRIDGE_NAMES + 6)
         self.assertEqual(section["omitted"], 6)
 
+    def test_a_truncated_scan_makes_no_claim(self):
+        records = scopes.list_all()
+        report = hygiene.hygiene_report(records, scope="all", home=self.home, max_instances=2)
+        section = report["agents_bridge"]
+        self.assertEqual(section["state"], "partial")
+        self.assertIn("limit", section["reason"])
+        self.assertEqual(section["missing"], [])
+        self.assertFalse([f for f in report["findings"] if f["category"] == "agents-bridge-gap"])
+
     def test_cli_prints_one_summary_line(self):
         buffer = io.StringIO()
         with redirect_stdout(buffer):

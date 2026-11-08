@@ -6,6 +6,7 @@ breaks this test, and the exit codes the doc states are measured here.
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -84,6 +85,45 @@ class SkillCiRecipeTests(unittest.TestCase):
         self._skill("alpha")
         before = {p.name for p in self.base.iterdir()}
         self.assertEqual(self._run().returncode, 0)
+        self.assertEqual({p.name for p in self.base.iterdir()}, before)
+
+    def _env(self, mgr: str) -> dict:
+        env = dict(os.environ)
+        env.pop("SKILLS_MANAGER_DATA", None)
+        env.update({"TMPDIR": str(self.base), "SKILLS_MGR": mgr,
+                    "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1"})
+        return env
+
+    def test_the_command_is_not_glob_expanded(self):
+        self._skill("alpha")
+        (self.base / "decoy-file").write_text("", encoding="utf-8")
+        result = subprocess.run(
+            ["bash", str(self.script), str(self.skills)],
+            env=self._env(f"{sys.executable} -m skillsmgr --color decoy*"),
+            cwd=str(self.base), capture_output=True, text=True, timeout=120,
+        )
+        # Unquoted expansion would have turned decoy* into decoy-file; the
+        # literal word reaches the CLI, which rejects it as a usage error.
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("decoy*", result.stderr)
+        self.assertNotIn("decoy-file", result.stderr)
+
+    def test_a_terminated_run_still_removes_its_data_directory(self):
+        self._skill("alpha")
+        slow = self.base / "slow-mgr"
+        slow.write_text("#!/bin/sh\nexec sleep 30\n", encoding="utf-8")
+        slow.chmod(0o700)
+        before = {p.name for p in self.base.iterdir()}
+        process = subprocess.Popen(
+            ["bash", str(self.script), str(self.skills)], env=self._env(str(slow)),
+            cwd=str(self.base), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        deadline = __import__("time").monotonic() + 10
+        while {p.name for p in self.base.iterdir()} == before and __import__("time").monotonic() < deadline:
+            __import__("time").sleep(0.05)
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=30)
+        self.assertNotEqual(process.returncode, 0)
         self.assertEqual({p.name for p in self.base.iterdir()}, before)
 
     def test_workflow_pins_match_this_repository(self):
