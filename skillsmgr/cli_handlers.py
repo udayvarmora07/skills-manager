@@ -857,6 +857,21 @@ def _render_claude_listing_text(section: dict | None) -> None:
     )
 
 
+def _render_agents_bridge_text(section: dict | None) -> None:
+    """One summary line for skills Claude Code cannot see (docs/29 H2)."""
+    if not section or section.get("state") != "observed":
+        return
+    total = int(section.get("missing_total", 0) or 0)
+    if not total:
+        return
+    noun = "skill that is" if total == 1 else "skills that are"
+    copy = next((r.get("command") for r in section.get("remedies", []) if r.get("kind") == "copy"), "")
+    print(
+        f"  Claude Code cannot see {total} {noun} only in ~/.agents/skills "
+        f"(copy it with: {_display(str(copy))})"
+    )
+
+
 def _render_hygiene_text(report: dict) -> None:
     """Render report evidence through the terminal sanitization seam."""
     summary = report.get("summary", {})
@@ -872,6 +887,7 @@ def _render_hygiene_text(report: dict) -> None:
     )
     _render_lockfile_text(report.get("lockfiles"))
     _render_claude_listing_text(report.get("claude_listing"))
+    _render_agents_bridge_text(report.get("agents_bridge"))
     if summary.get("findings_truncated"):
         print("  findings returned are bounded; inspect the JSON limits/degraded evidence")
     for finding in report.get("findings", []):

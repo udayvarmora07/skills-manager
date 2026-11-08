@@ -194,6 +194,14 @@ budget. `hygiene_report()` accepts an optional `window` (default
 command, REST route, Store method, SQLite state, write, or network request is
 added.
 
+**[SPEC] `agents_bridge` — explain-only H2 (2026-11-08).** With `scope=all`,
+`hygiene_report()` lists enabled, readable instances whose scopes (aliases
+included) contain `agents` but not `claude-code` and whose name has no `claude-
+code` copy, bounded by `MAX_BRIDGE_NAMES = 50`. It cites Claude Code's
+documented roots, offers the existing `sync` copy and a caveated manual link as
+remedies, emits one `agents-bridge-gap` info finding, and writes nothing. Other
+scopes report `state: unavailable`.
+
 ## `key_support.py`
 
 Pure, stdlib-only table of the frontmatter keys each consumer documents, copied

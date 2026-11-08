@@ -31,6 +31,9 @@ MAX_SHARED_FEATURES = 20
 MAX_STRING = 512
 MAX_LISTING_CANDIDATES = 25
 MAX_LISTING_OVER_CAP = 50
+#: docs/29 H2: at most this many agents-only names are listed in the bridge
+#: section; the rest are counted as ``omitted``.
+MAX_BRIDGE_NAMES = 50
 
 #: Claude Code scope ids.  ``claude-code`` is the personal ``~/.claude/skills``
 #: root; a project ``.claude/skills`` root is the ``project-claude`` facade id.
@@ -66,6 +69,7 @@ _CATEGORY_ORDER = (
     "ignored-frontmatter",
     "context-over-limit",
     "claude-listing-budget",
+    "agents-bridge-gap",
     "same-name-identical",
     "divergent-name",
     "exact-document-duplicate",
@@ -1306,6 +1310,94 @@ def _claude_listing_section(prepared: list[dict], *, home, project_root, window:
     return section, findings
 
 
+_BRIDGE_SOURCE_SCOPE = "agents"
+_BRIDGE_COPY_COMMAND = "skills-mgr sync <name> --from agents --to claude-code"
+_BRIDGE_EXPLANATION = (
+    "Claude Code documents ~/.claude/skills, project .claude/skills, managed and "
+    "plugin skills, but not ~/.agents/skills, so a skill that exists only there "
+    "is not loaded by Claude Code (anthropics/claude-code #31005 asks for it and "
+    "is open)."
+)
+_BRIDGE_REMEDIES = (
+    {
+        "kind": "copy",
+        "command": _BRIDGE_COPY_COMMAND,
+        "note": "An independent copy; the hygiene report flags it if the copies later differ.",
+    },
+    {
+        "kind": "link",
+        "command": "ln -s ~/.agents/skills/<name> ~/.claude/skills/<name>",
+        "note": (
+            "Claude Code's handling of symlinked skill folders is reported unreliable "
+            "(anthropics/claude-code #14836, open). This tool shows such a link "
+            "read-only and keeps edits in ~/.agents/skills."
+        ),
+    },
+)
+
+
+def _bridge_candidate(record: dict) -> bool:
+    """An enabled, readable copy in ``~/.agents/skills`` only."""
+    scopes_seen = _record_scopes(record)
+    return (
+        _BRIDGE_SOURCE_SCOPE in scopes_seen
+        and _CLAUDE_PERSONAL_SCOPE not in scopes_seen
+        and not record.get("disabled")
+        and not record.get("malformed")
+    )
+
+
+def _bridge_missing(prepared: list[dict]) -> list[dict]:
+    claude_names = {
+        str(r.get("name", "")) for r in prepared if _CLAUDE_PERSONAL_SCOPE in _record_scopes(r)
+    }
+    missing = [
+        r for r in prepared
+        if _bridge_candidate(r) and str(r.get("name", "")) not in claude_names
+    ]
+    return sorted(missing, key=_record_sort_key)
+
+
+def _agents_bridge_section(prepared: list[dict], *, scope: str, home) -> tuple[dict, list[dict]]:
+    """Explain, read-only, which ~/.agents/skills skills Claude Code cannot see."""
+    section = {
+        "version": 1,
+        "consumer": "claude-code",
+        "source_scope": _BRIDGE_SOURCE_SCOPE,
+        "source": _CLAUDE_LISTING_SOURCE,
+        "explanation": _BRIDGE_EXPLANATION,
+        "remedies": [dict(item) for item in _BRIDGE_REMEDIES],
+        "writes_nothing": True,
+        "missing": [],
+        "missing_total": 0,
+        "omitted": 0,
+    }
+    if scope != "all":
+        section["state"] = "unavailable"
+        section["reason"] = "Comparing ~/.agents/skills with ~/.claude/skills needs --scope all."
+        return section, []
+    home_prefix = _home_prefix(home)
+    missing = _bridge_missing(prepared)
+    section["state"] = "observed"
+    section["missing"] = [
+        {"name": _bounded(r.get("name", ""), 128), "path": _listing_path(r, home_prefix)}
+        for r in missing[:MAX_BRIDGE_NAMES]
+    ]
+    section["missing_total"] = len(missing)
+    section["omitted"] = max(0, len(missing) - MAX_BRIDGE_NAMES)
+    if not missing:
+        return section, []
+    finding = _finding(
+        "agents-bridge-gap", "info", "observed",
+        f"{len(missing)} skill(s) in ~/.agents/skills are not visible to Claude Code",
+        _BRIDGE_EXPLANATION,
+        missing[:MAX_GROUP_INSTANCES],
+        {"missing_total": len(missing), "copy_command": _BRIDGE_COPY_COMMAND},
+        "Copy the ones Claude Code should use with the sync command; nothing was changed.",
+    )
+    return section, [finding]
+
+
 def _source_lock_status(record: dict, path: str, degraded: list[dict]) -> dict:
     """Read one instance's source-lock state, degrading instead of raising."""
     try:
@@ -1586,6 +1678,8 @@ def _hygiene_report(
     )
     findings.extend(listing_findings)
     _note_listing_scope(unavailable, claude_listing)
+    agents_bridge, bridge_findings = _agents_bridge_section(prepared, scope=scope, home=home)
+    findings.extend(bridge_findings)
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))
     full_summary["unavailable"] += len(unavailable)
@@ -1601,6 +1695,7 @@ def _hygiene_report(
         "largest_instances": largest,
         "lockfiles": lockfile_section,
         "claude_listing": claude_listing,
+        "agents_bridge": agents_bridge,
         "unavailable_signals": sorted(unavailable, key=lambda item: (str(item.get("signal", "")), str(item.get("name", "")))),
         "degraded": sorted(degraded, key=lambda item: (str(item.get("section", "")), str(item.get("instance", "")), str(item.get("reason", "")))),
         "limits": {
@@ -1616,6 +1711,7 @@ def _hygiene_report(
             "max_string": MAX_STRING,
             "max_listing_candidates": MAX_LISTING_CANDIDATES,
             "max_listing_over_cap": MAX_LISTING_OVER_CAP,
+            "max_bridge_names": MAX_BRIDGE_NAMES,
         },
     }
     return result

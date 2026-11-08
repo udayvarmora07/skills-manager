@@ -1,6 +1,6 @@
 # Open Decisions Resolved — 2026-11-07
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 **AI manifest**: The maintainer delegated every open product and locked-rule decision on 2026-11-07 ("think harder, do in-depth research and choose the best solution"). This file records each choice, the evidence behind it, and what was built. A decision here supersedes the matching `Decide:` line in `task.md`. Items marked *deferred* or *declined* are decisions too, with the reason; none was skipped silently.
 
@@ -21,6 +21,8 @@
 | R2 follow-up: sidecar binding | **Recorded physical path plus content digest**, kept in the manager's private data directory. HMAC was rejected. | A per-install HMAC needs a key file, so it adds key creation, rotation and loss handling, and it protects against nothing a 0700 data directory does not already protect against. A record in `<data>/sidecar-bindings/` cannot be written by a skill package, needs no secret, and also catches a sidecar copied to another directory (sync) or edited after writing. Older tool versions are unaffected, because the sidecar files themselves do not change. | `skillsmgr/sidecar_binding.py` |
 | Agent-scope trash restore | **Build** it as module functions plus the existing `/api/trash` route with `?scope=` | Agent-scope removals were irreversible from the UI. The same route also ignored `?scope=` and restored from the global trash, which is a latent wrong-target bug. No new CLI command and no new Store method. | `scopes.scope_trash_list`, `scopes.restore_trashed` |
 | SCOPE-2 / D-2 symlinked skill dirs | **Follow read-only**, but only when the link lands inside another managed scope root. Writes through the link stay refused. | All 276 links in `~/.claude/skills` on the maintainer's machine point into `~/.agents/skills` (108) or `~/.codex/skills` (168), roots this tool already manages. Refusing them showed 15% of the library as empty without protecting anything. A link into an unmanaged directory keeps the old refusal, so the tool still never reads or writes outside a managed root. | `loader.scan_dir(link_roots=…)` |
+| docs/29 H2 bridge (2026-11-08) | **Explain-only, inside `doctor --hygiene`**; a link-writing bridge command stays deferred | Claude Code's documented roots exclude `~/.agents/skills`, and both anthropics/claude-code #31005 (`.agents/skills` support) and #14836 (symlinked skill folders unreliable) were open on 2026-11-08. A written link may therefore not work, and a new command needs approval. The existing `sync` copy is the remedy named. On the maintainer's machine 7 skills sit only in `~/.agents/skills`. | `hygiene._agents_bridge_section` |
+| Skill CI (docs/29 row 25, 2026-11-08) | **Documented recipe**, no new command or published Action | It needs no approval, uses the existing `validate --path`, and its script is executed by a test. | @docs/36-skill-ci-recipe-2026-11-08.md |
 | R15 remainder | Shared review-artifact plumbing, behaviour-preserving, with characterization tests captured from the old code first | Engineering item; needed no decision | `skillsmgr/review_artifacts.py` |
 
 ## Closed without a change

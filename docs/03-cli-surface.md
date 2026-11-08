@@ -187,6 +187,19 @@ descriptions are dropped. The human output prints one summary line, for example
 `Claude Code listing: 41,200 chars vs ~40,000 budget (estimate); 25 name-only
 candidates`. Every number is read-only evidence; no listing is edited.
 
+The report's `agents_bridge` section (docs/29 H2, explain-only) names enabled,
+readable skills that exist in `~/.agents/skills` but have no copy or link in
+`~/.claude/skills`. Claude Code's documented roots do not include
+`~/.agents/skills` (@docs/34-agent-skill-loading-research-2026-11-07.md), so it
+does not load them. The section carries the cited source, up to 50 names with
+home-redacted paths plus `missing_total`/`omitted`, and two remedies. One is
+the existing `skills-mgr sync <name> --from agents --to claude-code` copy. The
+other is a manual link, with the caveat that anthropics/claude-code #14836
+reports symlinked skill folders as unreliable. It needs `--scope all`; any
+other scope reports `state: unavailable`. One `agents-bridge-gap` info finding
+appears when the gap is non-empty, and the human output adds one summary line.
+Nothing is linked, copied or written.
+
 ### `stats [--json] [--scope SCOPE]`
 Counts and summary (skills, disabled, trash, categories, sizes). With `--scope all`, also lists per-scope counts. Category names are sanitized before printing (see *Untrusted display text*).
 

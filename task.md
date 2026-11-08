@@ -1,8 +1,26 @@
 # Task Checklist — Skills Manager
 
-**Version 0.9.1**
+**Version 0.9.2**
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
+
+## Remaining eligible work, second continuation (2026-11-08)
+
+- [x] docs/29 H2, explain-only: `doctor --hygiene --scope all` gains a read-only
+  `agents_bridge` section and an `agents-bridge-gap` info finding naming enabled
+  `~/.agents/skills` skills Claude Code cannot see (its documented roots exclude
+  `~/.agents/skills`, docs/34). Remedy is the existing `sync` copy; the link
+  remedy carries the open anthropics/claude-code #14836 caveat. Real data: 7
+  skills. `tests/test_agents_bridge.py` (9; 8 red before). A bridge that writes
+  links stays deferred: it would be a new command, and #14836/#31005 are open.
+- [x] docs/29 row 25: documented Skill CI recipe,
+  @docs/36-skill-ci-recipe-2026-11-08.md. Its script block is executed by
+  `tests/test_skill_ci_recipe.py` (5; mutation-checked).
+- [x] Pre-existing order dependence: `tests/test_sidecar_binding.py` failed
+  after four web test modules left a deleted Store bound in the `scopes`
+  context; the fixture now starts unbound and restores the prior binding.
+- [x] Release live state re-checked 2026-11-08: PyPI latest is still 1.0.1, so
+  the 1.0.2 publish still waits on the human `release` approval.
 
 ## Interrupted sub-session continuation complete (2026-11-07)
 
@@ -215,9 +233,11 @@ The maintainer chose both phases, hook first.
 These were in the research docs but missing from this checklist. "No" means
 the docs mark them as not needing maintainer approval.
 
-- [/] **R7** repo hygiene: `git gc` run (pack 67.6 → 63.3 MiB) and `AGENTS-1.md`
-  removed with maintainer authorization (2026-11-07). Prototype dirs and large
-  root files kept: they are tracked, linked from docs and record design history.
+- [x] **R7** repo hygiene, closed 2026-11-08 with this disposition: `git gc` run
+  (pack 67.6 → 63.3 MiB; 64.7 MiB on 2026-11-08) and `AGENTS-1.md` removed with
+  maintainer authorization (2026-11-07). The seven `prototype-*` directories and
+  `.specs/prototypes/` are tracked design history cited by the progress log; they
+  are kept, and deleting them stays the maintainer's call (docs/28 R7).
 - [x] **R8** triage refreshed 2026-11-07 in @docs/23-github-actions-dependency-pr-review-2026-09-23.md:
   all five Dependabot targets are themselves superseded; recommend one reviewed
   pin PR, done as #20 with a passing release dry run (draft release, deleted).
@@ -252,8 +272,8 @@ the docs mark them as not needing maintainer approval.
   per-agent key lists (`skillsmgr/key_support.py`, 2026-11-07).
 - [x] docs/29 H1: README "what it will not do" and a source-verified privacy
   statement (2026-11-07), including tiktoken's first-use download.
-- [ ] docs/29 H2: `.agents/skills` → `.claude/skills` bridge, explain-only
-  first (⚠ if a new command); documented Skill CI recipe (no).
+- [x] docs/29 H2 explain-only and the Skill CI recipe (2026-11-08; see the top
+  section). A link-writing bridge command remains deferred (⚠ new command).
 - [x] docs/29 D-2…D-10 resolved or deferred with reasons in
   @docs/35-open-decisions-resolved-2026-11-07.md (D-3 already shipped as R11;
   owner questions D-4/5/6/9/10 deferred).
@@ -299,9 +319,10 @@ the docs mark them as not needing maintainer approval.
 Proposals from @docs/26-user-research-skills-context-2026-10-30.md — each
 needs a maintainer decision before work starts (⚠ = locked constraint 5).
 
-- [/] **Defect:** observed state ignores each agent's native switch. Claude
-  Code, OpenCode and Gemini CLI JSON declarations are now read (R4,
-  `native_state`); Codex TOML is blocked on decision D-1. Original note: (Codex
+- [x] **Defect:** observed state ignores each agent's native switch. Claude
+  Code, OpenCode and Gemini CLI JSON declarations are read (R4,
+  `native_state`), and Codex `[[skills.config]]` TOML since 2026-11-07 (D-1,
+  Python >= 3.11). Effective state stays unknown. Original note: (Codex
   `[[skills.config]]` in `~/.codex/config.toml`, Claude Code `skillOverrides`,
   OpenCode `permission.skill`, Gemini workspace/user disable), so the UI can
   show **Active** for a skill Codex has disabled. Latent: no disable rule exists
