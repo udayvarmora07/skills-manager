@@ -21,6 +21,11 @@
   context; the fixture now starts unbound and restores the prior binding.
 - [x] Release live state re-checked 2026-11-08: PyPI latest is still 1.0.1, so
   the 1.0.2 publish still waits on the human `release` approval.
+- [x] Independent DeepSeek review (max effort): 2 findings fixed with red tests
+  (truncated-scan claim; glob expansion), 1 pinned as not-a-defect (SIGTERM
+  cleanup), 2 refuted; the hardcoded-date time bomb in
+  `tests/test_agent_scope_trash.py` fixed. Ladder: 1,741 tests × 3.11–3.14,
+  v2 36/36, classic 38/342, all gates green.
 
 ## Interrupted sub-session continuation complete (2026-11-07)
 

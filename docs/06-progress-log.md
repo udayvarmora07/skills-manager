@@ -68,6 +68,15 @@ the next day, on `main` as well. It now checks the parsed timestamp falls
 between UTC instants taken around the removal. No other hardcoded-date
 assertion exists in `tests/`.
 
+**[NOTE] Verification on the committed tree (`095becd`).** 1,741 tests on each of
+Python 3.11, 3.12, 3.13 and 3.14, with the 2 optional reference-oracle skips. v2
+browser suite: 36 scenarios, no failures and no uncaught page errors. Classic
+suite: 38 scenarios / 342 assertions, no failures. Also passed: both smokes,
+compilation, `check_docs`, `check_complexity` (899 functions, nothing raised),
+`check_design_tokens`, Ruff 0.16.8 (F821/F822/F823) and Bandit 1.9.4. Not
+claimed: a human visual or spoken screen-reader review, live registry
+execution, and the PyPI release approval.
+
 ## 2026-11-07 — Resume the interrupted remaining-tasks sub-session
 
 **[NOTE]** Recovered the named Claude sub-session and both completed worker
