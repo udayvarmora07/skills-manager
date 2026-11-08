@@ -15,6 +15,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -126,7 +127,9 @@ class AgentScopeTrashTests(unittest.TestCase):
         original = "---\nname: demo\ndescription: Demo skill\n---\nexact bytes\n"
         self.write_skill(original)
 
+        before = datetime.now(timezone.utc).replace(microsecond=0)
         removed = self.remove_skill()
+        after = datetime.now(timezone.utc)
         self.assertTrue(removed["trash_path"])
         self.assertFalse((self.skills_dir / "demo").exists())
 
@@ -137,7 +140,10 @@ class AgentScopeTrashTests(unittest.TestCase):
         self.assertEqual(row["name"], "demo")
         self.assertEqual(row["scope"], "agents")
         self.assertEqual(row["trash_path"], removed["trash_path"])
-        self.assertTrue(row["trashed_at"].startswith("2026-11-07"))
+        # The removal's own UTC second, not a hardcoded date: the original
+        # assertion pinned "2026-11-07" and failed the day after it was written.
+        trashed = datetime.strptime(row["trashed_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        self.assertTrue(before <= trashed <= after, (before, trashed, after))
         self.assertGreater(row["size_bytes"], 0)
 
         status, payload = self.request(

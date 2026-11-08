@@ -8,6 +8,45 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-08 — H2 explain-only bridge, Skill CI recipe, checklist reconciliation
+
+**[SPEC] docs/29 H2, explain-only.** `doctor --hygiene --scope all` (and the
+same REST report) gains a read-only `agents_bridge` section plus one
+`agents-bridge-gap` info finding. They name enabled, readable skills in
+`~/.agents/skills` that have no copy or link in `~/.claude/skills`. Claude
+Code's documented roots exclude `~/.agents/skills` (docs/34). The remedy given
+is the existing `sync` copy. The manual-link remedy carries the open
+anthropics/claude-code #14836 caveat; #31005 (`.agents/skills` support) was also
+still open on 2026-11-08. Alias records count as present, so a link already
+in `~/.claude/skills` closes the gap. On the maintainer's machine: 7 skills. A
+link-writing bridge stays deferred: it is a new command and may not work while
+#14836 is open. `tests/test_agents_bridge.py`: 9 tests, 8 red before.
+
+**[SPEC] Skill CI recipe.** @docs/36-skill-ci-recipe-2026-11-08.md documents a
+pull-request check over the existing `validate --path`. Its marked script block
+is executed by `tests/test_skill_ci_recipe.py` (5 tests). Removing
+`|| status=1` from the doc turns the suite red, which was checked by mutation.
+Its workflow pins must be SHAs this repository's own CI reviewed.
+
+**[NOTE] A pre-existing order dependence.** Running `tests.test_sidecar_binding`
+after `test_webapp`, `test_web_client_contracts`, `test_audit_route_table` or
+`test_audit_d1_lazy_observations` failed 3 tests on unchanged `a01efdd`: those
+modules leave a since-deleted Store bound in the `scopes` context, and sidecar
+bindings resolve through it. The fixture now starts unbound and restores the
+prior binding. All four pairs pass.
+
+**[NOTE] Checklist reconciliation.** The Codex native-switch defect line now
+records the shipped D-1 reader. R7 is closed with its disposition: `git gc`
+done and `AGENTS-1.md` removed; the seven `prototype-*` directories and
+`.specs/prototypes/` are tracked design history and stay, because deleting them
+is the maintainer's call. PyPI still lists 1.0.1, so the 1.0.2 publish is still
+waiting on the human `release` approval.
+
+**[NOTE] Tooling.** The `deepseek-worker` MCP connection dropped mid-session
+(the bridge doctor passed every check). The user reconnected it, and a
+read-only DeepSeek review of this commit ran in a snapshot. Its findings are
+recorded below once verified.
+
 ## 2026-11-07 — Resume the interrupted remaining-tasks sub-session
 
 **[NOTE]** Recovered the named Claude sub-session and both completed worker
