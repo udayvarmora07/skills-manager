@@ -64,10 +64,10 @@ function filenameFromResponse(res) {
   return match ? match[1] : "";
 }
 
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
 /* Intl formatters are expensive to construct (each one resolves locale data)
@@ -460,6 +460,7 @@ function formatTools(v) {
 
 window.SkillManagerDomain = Object.freeze({
   withJsonType,
+  esc,
   api,
   apiText,
   apiBlob,

@@ -1069,14 +1069,6 @@ createApp({
       ]);
     },
 
-    openInstallCenter() {
-      this.switchView("install");
-    },
-
-    openRecoveryCenter() {
-      this.switchView("recovery");
-    },
-
     updateTarget(record = this.selected) {
       if (!record) return null;
       return {
@@ -1100,12 +1092,6 @@ createApp({
         error: null, loading: false, confirmingClose: false, confirmed: false,
         success: null, snapshotId: null,
       });
-    },
-
-    updateReviewIsBlocked(review) {
-      return !!(review && (review.review_state === "blocked"
-        || review.review_state === "no-change"
-        || (review.validation && review.validation.valid === false)));
     },
 
     updateReviewCanApply(modal = this.modals.update) {
@@ -1161,7 +1147,7 @@ createApp({
       modal.error = null;
       try {
         modal.review = await api("/api/source-updates/reviews/from-snapshot", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST",
           body: JSON.stringify({ name: modal.target.name, scope: modal.target.scope,
             target_path: modal.target.physical_path, snapshot_id: snapshot.snapshot_id }),
         });
@@ -1194,7 +1180,7 @@ createApp({
       modal.error = null;
       try {
         const result = await api("/api/source-updates/reviews/" + encodeURIComponent(modal.review.review_id) + "/commit", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST",
           body: JSON.stringify({ name: modal.target.name, scope: modal.target.scope,
             target_path: modal.target.physical_path, approve: true }),
         });
@@ -1320,7 +1306,7 @@ createApp({
             list_only: !!this.install.listOnly,
             preview: true,
           };
-          this.install.preview = await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          this.install.preview = await api("/api/install", { method: "POST", body: JSON.stringify(payload) });
         } catch (e) {
           this.install.preview = null;
           this.toast(this.installPreview(), "info");
@@ -1342,7 +1328,7 @@ createApp({
           list_only: !!this.install.listOnly,
           run: true,
         };
-        const res = await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const res = await api("/api/install", { method: "POST", body: JSON.stringify(payload) });
         this.install.lastResult = res;
         if (res.exit_code === 0) {
           this.toast(`Installed via ${res.runner}: ${res.source}`, "ok");
@@ -1387,7 +1373,7 @@ createApp({
           view: this.install.view || "all-time",
           allow_stale: !!this.install.allowStale,
         };
-        const res = await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const res = await api("/api/install", { method: "POST", body: JSON.stringify(payload) });
         this.install.lastResult = res;
         if (op === "fetch") {
           this.install.review_id = res.review_id || null;
@@ -1414,7 +1400,6 @@ createApp({
       try {
         const res = await api("/api/install", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ fetch: true, review_id: review.review_id, trust_confirmed: true }),
         });
         this.install.lastResult = res;
@@ -1970,7 +1955,6 @@ createApp({
       try {
         this.catalog = await api("/api/catalog/tags", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ operation, names: [...new Set(this.selectedTargets.map((record) => record.name))], tags }),
         });
         this.selectedKeys = [];
@@ -2007,7 +1991,6 @@ createApp({
       try {
         modal.plan = await api("/api/batch/preview", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ operation: modal.operation, targets: modal.targets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
         });
       } catch (e) { this.toast(e.message, "err"); }
@@ -2021,7 +2004,6 @@ createApp({
       try {
         const result = await api("/api/batch/execute", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ operation: modal.operation, plan_id: modal.plan.plan_id, targets: modal.targets, to_scopes: modal.to_scopes || [], force: !!modal.force }),
         });
         const failed = (result.results || []).filter((item) => item.status === "failed").length;
@@ -2042,7 +2024,6 @@ createApp({
       try {
         this.catalog = await api("/api/catalog/profiles", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: form.name.trim(),
             description: form.description.trim(),
@@ -2202,10 +2183,6 @@ createApp({
       const mode = value === "large" ? "large" : "standard";
       this.textSize = mode;
       document.documentElement.dataset.textSize = mode;
-    },
-
-    setTextSize(value) {
-      this.textSize = value === "large" ? "large" : "standard";
     },
 
     toggleTheme() {
@@ -2390,14 +2367,12 @@ createApp({
         if (m.mode === "create") {
           await api("/api/skills?scope=" + encodeURIComponent(createScope), {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
           this.toast('Skill "' + payload.name + '" created in ' + createScope + '.');
         } else {
           const res = await api("/api/skills/" + encodeURIComponent(m.mode) + "?scope=" + encodeURIComponent(editScope), {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
           this.toast(res.changed ? 'Skill "' + m.mode + '" updated.' : 'No changes to "' + m.mode + '".');
@@ -2585,7 +2560,6 @@ createApp({
       try {
         m.result = await api("/api/validate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: m.name, scope: (this.selected && this.selected.scope) || this.activeScope || "global" }),
         });
       } catch (e) {
@@ -2717,7 +2691,6 @@ createApp({
       try {
         await api("/api/templates", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: m.name.trim(), body: m.body || null }),
         });
         this.closeModal("newtemplate");
@@ -2797,7 +2770,6 @@ createApp({
       try {
         const res = await api("/api/sync", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: m.name, from_scope: m.from_scope, to_scopes: to, force: !!m.force }),
         });
         this.closeModal("sync");

@@ -519,7 +519,7 @@ const app = createApp({
         before[t] = new Set(await this.snapshotIds(name, t));
         prior[t] = await api(`/api/skills/${encodeURIComponent(name)}?scope=${encodeURIComponent(t)}`).catch(() => null);
       }
-      const res = await api("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, from_scope: from, to_scopes: tos, force: true }) });
+      const res = await api("/api/sync", { method: "POST", body: JSON.stringify({ name, from_scope: from, to_scopes: tos, force: true }) });
       const synced = res.synced || [];
       const undo = []; let manualRecovery = false;
       for (const t of synced) {
@@ -663,7 +663,7 @@ const app = createApp({
         onConfirm: async (d) => {
           const f = d.form; this.busy = true;
           try {
-            await api("/api/skills?scope=" + encodeURIComponent(f.scope), { method: "POST", headers: { "Content-Type": "application/json" },
+            await api("/api/skills?scope=" + encodeURIComponent(f.scope), { method: "POST",
               body: JSON.stringify({ name: f.name.trim(), description: f.desc.trim(), category:f.category,version:f.version,license:f.license,compatibility:f.compatibility,allowed_tools:f.allowed_tools,body:f.body.replaceAll("{name}",f.name.trim()) }) });
             this.dialog=null;
             await this.refresh();
@@ -796,7 +796,7 @@ const app = createApp({
         const snaps = {};
         for (const sc of e.targets) snaps[sc] = new Set(await this.snapshotIds(e.name, sc));
         for (const sc of e.targets) {
-          await api(`/api/skills/${encodeURIComponent(e.name)}?scope=${encodeURIComponent(sc)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields) });
+          await api(`/api/skills/${encodeURIComponent(e.name)}?scope=${encodeURIComponent(sc)}`, { method: "PATCH", body: JSON.stringify(fields) });
           const fresh = (await this.snapshotIds(e.name, sc)).find((id) => !snaps[sc].has(id));
           if (fresh) saved.push([sc, fresh]);
         }

@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const { api } = window.SkillManagerDomain;
-  const request = (url, payload) => api(url, { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" } });
+  const request = (url, payload) => api(url, { method: "POST", body: JSON.stringify(payload) });
   const key = (r) => JSON.stringify([r.name, r.scope, r.physical_path || r.path || ""]);
   const exact = (r) => ({ name: r.name, scope: r.scope, path: r.path || r.physical_path || "", physical_path: r.physical_path || r.path || "" });
 
@@ -22,7 +22,6 @@
       selectedRows() { const ids = new Set(this.selected); return (this.records || []).filter(r => ids.has(key(r))); },
       hidden() { const ids = new Set(this.rows.map(key)); return this.selected.filter(id => !ids.has(id)).length; },
       writableScopes() { return (this.scopes || []).filter(s => s.writable); },
-      logicalNames() { return [...new Set(this.selectedRows.map(r => r.name))]; },
       syncAmbiguous() { return this.operation === "sync" && new Set(this.frozen.map(r => r.name)).size !== this.frozen.length; },
     },
     methods: {

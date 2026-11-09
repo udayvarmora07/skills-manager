@@ -2,7 +2,7 @@
 (function () {
   const api = window.SkillManagerDomain.api;
 
-  const json = (body) => ({method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const json = (body) => ({method:'POST', body:JSON.stringify(body)});
 
   const enc = encodeURIComponent;
   function stored(key,fallback){try{return localStorage.getItem(key)||fallback}catch(e){return fallback}}

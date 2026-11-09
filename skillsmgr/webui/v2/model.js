@@ -12,8 +12,7 @@
   const D = window.SkillManagerDomain;
 
   /* ---------- Small helpers ---------- */
-  const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESC[c]);
+  const esc = D.esc;
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + "s"}`;
   const join = (a) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
   const words = (tokens) => Math.round((tokens * 0.75) / 10) * 10;

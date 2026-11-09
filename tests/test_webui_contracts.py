@@ -653,7 +653,7 @@ if (ctx.theme !== 'dark' || ctx.resolvedTheme !== 'dark' || listeners.length !==
 ctx.setThemePreference('system');
 ctx.applyThemePreference(ctx.theme); ctx.setupThemeListener(); store['skillsmgr-theme'] = ctx.theme;
 if (listeners.length !== 2) throw new Error('system listener not restored');
-ctx.setTextSize('large');
+ctx.textSize = 'large';
 ctx.applyTextSize(ctx.textSize); store['skillsmgr-text-size'] = ctx.textSize;
 if (ctx.textSize !== 'large' || sandbox.document.documentElement.dataset.textSize !== 'large' || store['skillsmgr-text-size'] !== 'large') throw new Error('text size failed');
 ctx.removeThemeListener();
