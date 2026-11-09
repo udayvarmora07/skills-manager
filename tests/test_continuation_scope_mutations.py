@@ -99,7 +99,7 @@ class ScopeMutationTests(unittest.TestCase):
             code = 'from skillsmgr import scopes; print("ready", flush=True); scopes.toggle_skill("agents", "alias", enable=False)'
             process = None
             try:
-                with scopes._mutation_lock(directory / "SKILL.md"):
+                with scopes.mutation_lock(directory / "SKILL.md"):
                     process = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     self.assertEqual(process.stdout.readline().strip(), "ready")
                     with self.assertRaises(subprocess.TimeoutExpired):

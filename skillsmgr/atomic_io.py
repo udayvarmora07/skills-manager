@@ -20,6 +20,8 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .errors import LockTimeoutError
+from . import paths
+from .path_safety import mkdir_private
 
 
 _MUTATION_LOCKS: "OrderedDict[str, threading.RLock]" = OrderedDict()
@@ -107,6 +109,14 @@ def register_lock_root(data_dir: Path) -> None:
             _LOCK_ROOTS.popitem(last=False)
 
 
+def registered_root_containing(path: Path) -> Path | None:
+    """The longest registered data root that contains *path*, if any."""
+    with _LOCK_ROOTS_GUARD:
+        roots = list(_LOCK_ROOTS.values())
+    matches = [root for root in roots if path.is_relative_to(root)]
+    return max(matches, key=lambda root: len(root.parts)) if matches else None
+
+
 def _lock_root_for(identity: Path) -> Path:
     """Choose the data root whose ``locks/`` directory serialises *identity*.
 
@@ -116,28 +126,16 @@ def _lock_root_for(identity: Path) -> Path:
     agree.  With no registered root the validated ``paths.data_dir()`` is used.
     Unlike ``tempfile.gettempdir()``, none of these depend on ``TMPDIR`` (S3).
     """
+    containing = registered_root_containing(identity)
+    if containing is not None:
+        return containing
     with _LOCK_ROOTS_GUARD:
-        roots = list(_LOCK_ROOTS.values())
-    best = None
-    for root in roots:
-        try:
-            identity.relative_to(root)
-        except ValueError:
-            continue
-        if best is None or len(root.parts) > len(best.parts):
-            best = root
-    if best is not None:
-        return best
-    if roots:
-        return roots[-1]
-    from . import paths  # lazy: paths -> path_safety only, but keep import order cheap
-
-    return paths.data_dir()
+        latest = next(reversed(_LOCK_ROOTS.values()), None)
+    return latest if latest is not None else paths.data_dir()
 
 
 def _private_lock_dir(root: Path) -> Path:
     """Create or verify ``<root>/locks`` as an owner-only, non-symlink directory."""
-    from .path_safety import mkdir_private
 
     directory = root / LOCK_DIRNAME
     mkdir_private(directory)
@@ -330,7 +328,6 @@ def atomic_write_text(
     text: str,
     *,
     encoding: str = "utf-8",
-    replace=os.replace,
 ) -> None:
     """Write text through a sibling temp file, fsync, then atomically replace."""
     path = Path(path)
@@ -344,7 +341,7 @@ def atomic_write_text(
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        replace(temp_path, path)
+        os.replace(temp_path, path)
         try:
             directory_fd = os.open(path.parent, os.O_RDONLY)
         except OSError:

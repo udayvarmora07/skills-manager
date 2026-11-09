@@ -20,22 +20,26 @@ from pathlib import Path
 from . import paths
 from .diagnostics import diagnose as _diagnose
 from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
-from .loader import (
-    load_skill,
-    read_skill_text_strict,
+from .documents import (
+    ACTIVE_DOCUMENT,
+    DOCUMENT_NAMES,
+    document_path,
+    document_text,
+    has_document,
     read_skill_text,
+    read_skill_text_strict,
     reject_conflicting_documents,
-    scan_dir,
+    toggle_document,
 )
+from .loader import load_skill, scan_dir
 from . import root_discovery as _root_discovery
+from .atomic_io import atomic_write_text, mutation_lock
 from .context import active_store
 from .store import (
     SkillNotFound,
     Store,
     StoreError,
     _coalesced_read,
-    _atomic_write_text,
-    _mutation_lock,
 )
 from .validator import validate_skill_name
 
@@ -63,11 +67,6 @@ def _global_skills_dir() -> Path:
     return store.skills_dir if store is not None else paths.skills_dir()
 
 
-def _holds_document(path: Path) -> bool:
-    """True when *path* is a directory holding a skill document."""
-    return (path / "SKILL.md").is_file() or (path / "SKILL.md.disabled").is_file()
-
-
 def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
     """Return a validated skill path contained by an agent scope root.
 
@@ -85,7 +84,7 @@ def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
         # then contradicted each other (scan listed the skill, get_skill
         # reported SkillNotFound).  Only short-circuit when the flat path really
         # is a skill; a non-recursive scope keeps the historical contract.
-        if not scope.recursive or _holds_document(direct):
+        if not scope.recursive or has_document(direct):
             return direct
         # Recursive consumers may discover a skill below a project/category
         # directory. Preserve the existing name-based public API by resolving
@@ -495,11 +494,7 @@ def _enrich_global_row(r: dict, store: Store, physical_root: str) -> None:
             from .tokens import estimate as _est
 
             p = paths.safe_skill_path(store.skills_dir, r["name"])
-            raw = ""
-            for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                if cand.is_file():
-                    raw, _ = read_skill_text(cand)
-                    break
+            raw = document_text(p)
             tok = _est(raw)
             r["tokens"] = tok["tokens"]
             r["tokens_method"] = tok["method"]
@@ -668,11 +663,7 @@ def get_skill(scope_id: str, name: str) -> dict:
                 if rec.get("path")
                 else paths.safe_skill_path(paths.skills_dir(), name)
             )
-            raw = ""
-            for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                if cand.is_file():
-                    raw, _ = read_skill_text(cand)
-                    break
+            raw = document_text(p)
             tok = _est(raw)
             rec["tokens"] = tok["tokens"]
             rec["tokens_method"] = tok["method"]
@@ -700,7 +691,7 @@ def get_skill(scope_id: str, name: str) -> dict:
         entry["provenance"]["consumer"] = scope.consumer
     # Try to enrich from raw frontmatter (compatibility, allowed-tools).
     try:
-        raw, _ = read_skill_text(skill_dir / ("SKILL.md" if (skill_dir / "SKILL.md").is_file() else "SKILL.md.disabled"))
+        raw = document_text(skill_dir)
         data, _ = parse_frontmatter(raw)
         if isinstance(data.get("compatibility"), str):
             entry["compatibility"] = data["compatibility"]
@@ -731,14 +722,14 @@ def get_raw(scope_id: str, name: str) -> str:
         if scope is None:
             raise StoreError(f"unknown scope {scope_id!r}")
         p, _link = _scope_read_dir(scope, name)
-    for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-        if cand.is_file():
-            return read_skill_text(cand)[0]
+    document = document_path(p)
+    if document is not None:
+        return read_skill_text(document)[0]
     raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
 
 
 def _check_mutation_documents(skill_dir: Path) -> None:
-    for filename in ("SKILL.md", "SKILL.md.disabled"):
+    for filename in DOCUMENT_NAMES:
         if (skill_dir / filename).is_symlink():
             raise StoreError("cannot mutate a symlinked skill document; replace the link with a regular file first")
 
@@ -748,7 +739,7 @@ def _scope_mutation_lock(skill_dir: Path):
     # Refuse it before calculating the same key used by Store, then recheck
     # inside the lock before touching either document.
     _check_mutation_documents(skill_dir)
-    return _mutation_lock(skill_dir.resolve() / "SKILL.md")
+    return mutation_lock(skill_dir.resolve() / ACTIVE_DOCUMENT)
 
 
 def create_skill(
@@ -829,7 +820,7 @@ def create_skill(
         content = dump_frontmatter(data, key_order=list(data.keys())) + body
         try:
             skill_dir.mkdir(parents=True, exist_ok=True)
-            _atomic_write_text(skill_dir / "SKILL.md", content)
+            atomic_write_text(skill_dir / "SKILL.md", content)
         except OSError as exc:
             shutil.rmtree(skill_dir, ignore_errors=True)
             raise StoreError(f"could not create skill '{name}' safely: {exc}") from exc
@@ -923,7 +914,7 @@ def edit_skill(
             _write_snapshot(_global_store().data_dir, scope_id, name, text)
             order = orig_keys + [k for k in data if k not in orig_keys]
             try:
-                _atomic_write_text(md, dump_frontmatter(data, key_order=order) + orig_body)
+                atomic_write_text(md, dump_frontmatter(data, key_order=order) + orig_body)
             except OSError as exc:
                 raise StoreError(f"could not edit skill '{name}' safely: {exc}") from exc
         return {"name": name, "changed": changed, "scope": scope_id}
@@ -1208,38 +1199,11 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     skill_dir = _safe_scope_skill_path(scope, name)
-    src = skill_dir / ("SKILL.md.disabled" if enable else "SKILL.md")
-    dst = skill_dir / ("SKILL.md" if enable else "SKILL.md.disabled")
-    # STORE-11: the existence checks and the rename below must be one atomic
-    # step, so they run together under the same lock key the sibling scope
-    # writers use.  Without it this was check-then-rename with no exclusion at
-    # all, and a concurrent toggle in another process could move the document
-    # between the checks and the rename.
+    # STORE-11: the checks and the rename are one step under the same lock key
+    # the sibling scope writers use.
     with _scope_mutation_lock(skill_dir):
         _check_mutation_documents(skill_dir)
-        if not src.is_file():
-            if dst.is_file():
-                raise StoreError(f"skill '{name}' is already {'enabled' if enable else 'disabled'} in scope '{scope_id}'")
-            raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
-        # SCOPE-13: with both documents present the rename below would land on top
-        # of the other one and destroy it, with no snapshot.  Refuse instead of
-        # guessing which document the user meant.  The guard is the shared one
-        # (docs/24 §C4 #4) so the scope adapter and the store cannot drift apart;
-        # it used to re-implement the condition inline with ``dst.is_file()``.
-        # ``src.is_file()`` is already true here, so the shared predicate (which
-        # tests both names) cannot disagree with the old inline check.
-        reject_conflicting_documents(skill_dir, name, scope_id=scope_id)
-        try:
-            src.rename(dst)
-        except FileNotFoundError:
-            # The advisory lock excludes cooperating writers on this data dir, but
-            # a change made outside the tool can still land between the check and
-            # the rename.  Report that as a clean, actionable conflict instead of
-            # letting a raw FileNotFoundError reach the caller as a traceback/500.
-            raise StoreError(
-                f"skill '{name}' changed concurrently in scope '{scope_id}' "
-                "(another process moved its document); retry the toggle"
-            ) from None
+        toggle_document(skill_dir, name, enable=enable, scope_id=scope_id)
     return {"name": name, "disabled": not enable, "scope": scope_id}
 
 
@@ -1420,7 +1384,7 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
         current = read_skill_text_strict(md, subject=f"skill '{name}' in scope '{scope_id}'")
         _write_snapshot(_global_store().data_dir, scope_id, name, current)
         try:
-            _atomic_write_text(md, content)
+            atomic_write_text(md, content)
         except OSError as exc:
             raise StoreError(f"could not restore skill '{name}' safely: {exc}") from exc
     return {"name": name, "snapshot": snapshot, "scope": scope_id}

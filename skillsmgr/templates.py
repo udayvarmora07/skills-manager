@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .store import _atomic_write_text, _mutation_lock
+from .atomic_io import atomic_write_text, mutation_lock
 from .validator import NAME_RE, validate_skill_name
 
 __all__ = [
@@ -70,9 +70,9 @@ def create_template(
     # before the directory exists would create a lock file inside a directory
     # that does not exist yet.
     templates_dir.mkdir(parents=True, exist_ok=True)
-    with _mutation_lock(path):
+    with mutation_lock(path):
         if path.exists():
             raise FileExistsError(f"template '{name}' already exists")
         content = body if body is not None else DEFAULT_TEMPLATE.format(name=name)
-        _atomic_write_text(path, content)
+        atomic_write_text(path, content)
     return path

@@ -10,7 +10,7 @@ The invariant was enforced in four places with four different wordings:
 * ``scopes.toggle_skill`` -> an inline ``dst.is_file()`` check and a *different*
   ``StoreError`` message that also names the scope,
 * ``archive.has_skill_document`` -> ``ArchiveError`` (tar and ZIP import),
-* ``loader.conflicting_documents`` -> the predicate the first two disagreed
+* ``documents.conflicting_documents`` -> the predicate the first two disagreed
   about calling.
 
 Measured before the change: the two toggle guards are **behaviourally
@@ -44,7 +44,7 @@ import zipfile
 from pathlib import Path
 
 from skillsmgr import context
-from skillsmgr import loader, scopes
+from skillsmgr import documents, loader, scopes
 from skillsmgr.store import SkillNotFound, Store, StoreError
 
 ACTIVE = "SKILL.md"
@@ -120,7 +120,7 @@ class TestSharedEnforcementPoint(InvariantHomeTestCase):
     """The predicate and the raise have exactly one home."""
 
     def test_the_predicate_lives_in_loader_only(self):
-        """``loader.conflicting_documents`` is the single predicate.
+        """``documents.conflicting_documents`` is the single predicate.
 
         The audit's suggestion to move the guard into ``path_safety`` is not
         possible: that module raises only ``ValueError``, knows nothing of
@@ -128,9 +128,9 @@ class TestSharedEnforcementPoint(InvariantHomeTestCase):
         there would need ``path_safety -> store`` while ``store -> path_safety``
         already exists, i.e. a real cycle.
         """
-        self.assertTrue(callable(loader.conflicting_documents))
-        self.assertTrue(loader.conflicting_documents(self._mixed_global("d1")))
-        self.assertFalse(loader.conflicting_documents(self._global_dir("d2")))
+        self.assertTrue(callable(documents.conflicting_documents))
+        self.assertTrue(documents.conflicting_documents(self._mixed_global("d1")))
+        self.assertFalse(documents.conflicting_documents(self._global_dir("d2")))
 
     def test_both_toggles_route_through_the_one_predicate(self):
         """Neither toggle re-implements the condition.
@@ -142,14 +142,14 @@ class TestSharedEnforcementPoint(InvariantHomeTestCase):
         self._mixed_scope("agents", "probed")
 
         calls: list[Path] = []
-        original = loader.conflicting_documents
+        original = documents.conflicting_documents
 
         def counting(skill_dir: Path) -> bool:
             calls.append(Path(skill_dir))
             return original(skill_dir)
 
-        loader.conflicting_documents = counting
-        self.addCleanup(setattr, loader, "conflicting_documents", original)
+        documents.conflicting_documents = counting
+        self.addCleanup(setattr, documents, "conflicting_documents", original)
 
         with self.assertRaises(StoreError):
             scopes.toggle_skill("agents", "probed", enable=False)
@@ -178,7 +178,7 @@ class TestSharedEnforcementPoint(InvariantHomeTestCase):
         ]
         self.assertEqual(
             hits,
-            ["loader.py"],
+            ["documents.py"],
             f"the one-document refusal message must be written in one place, found in {hits}",
         )
 
@@ -190,7 +190,7 @@ class TestSharedEnforcementPoint(InvariantHomeTestCase):
         """
         d = self._mixed_global("cls")
         with self.assertRaises(StoreError):
-            loader.reject_conflicting_documents(d, "cls")
+            documents.reject_conflicting_documents(d, "cls")
 
     def test_the_shared_guard_is_a_noop_for_every_other_state(self):
         for files, expected in (
@@ -205,10 +205,10 @@ class TestSharedEnforcementPoint(InvariantHomeTestCase):
                     (d / f).write_text(_doc("s"), encoding="utf-8")
                 if expected:
                     with self.assertRaises(StoreError):
-                        loader.reject_conflicting_documents(d, "s")
+                        documents.reject_conflicting_documents(d, "s")
                 else:
                     self.assertIsNone(
-                        loader.reject_conflicting_documents(d, "s")
+                        documents.reject_conflicting_documents(d, "s")
                     )
 
 

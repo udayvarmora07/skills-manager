@@ -18,7 +18,8 @@ import tempfile
 from pathlib import Path
 
 from . import colors
-from . import install
+from . import doctor, install
+from .documents import document_path, document_text
 from . import search as search_mod
 from . import templates as templates_mod
 from .diagnostics import diagnose as _diagnose
@@ -86,11 +87,9 @@ def skill_md_path(store: Store, name: str) -> Path:
     record = store.get(name)
     if record["path"] is None:
         raise StoreError(f"skill '{name}' has no directory on disk")
-    root = Path(record["path"])
-    for candidate in ("SKILL.md", "SKILL.md.disabled"):
-        candidate_path = root / candidate
-        if candidate_path.is_file():
-            return candidate_path
+    document = document_path(Path(record["path"]))
+    if document is not None:
+        return document
     raise StoreError(f"skill '{name}' has no SKILL.md (or SKILL.md.disabled)")
 
 
@@ -726,91 +725,6 @@ def cmd_restore(args, store: Store) -> int:
     return EXIT_OK
 
 
-def _doctor_scope_report(scope_id: str) -> dict:
-    """Audit one non-global scope directly from its filesystem tree.
-
-    Agent scopes have no Store/index to compare, so the shared loader scan is
-    the source of truth.  In particular, malformed documents must remain
-    visible to this command instead of being hidden behind ``store.doctor()``.
-    """
-    from . import scopes
-    from .loader import scan_dir
-
-    scope = next(item for item in scopes.known_scopes() if item.id == scope_id)
-    entries = scan_dir(scope.base, recursive=scope.recursive, include_husks=True)
-    malformed = sorted(
-        str(entry["name"])
-        for entry in entries
-        if entry.get("malformed")
-    )
-    undecodable = sorted(
-        str(entry["name"])
-        for entry in entries
-        if entry.get("encoding_error")
-    )
-    conflicting = sorted(
-        str(entry["name"])
-        for entry in entries
-        if entry.get("document_conflict")
-    )
-    return {
-        "scope": scope_id,
-        "path": str(scope.base),
-        "skills_on_disk": len(entries),
-        "malformed_documents": malformed,
-        "undecodable_documents": undecodable,
-        "conflicting_documents": conflicting,
-        "ok": not malformed,
-    }
-
-
-def _global_hygiene_records(store: Store) -> list[dict]:
-    """Scan the global tree directly so unindexed husks remain evidence."""
-    from .loader import scan_dir
-
-    rows = scan_dir(store.skills_dir, include_husks=True)
-    physical_root = str(store.skills_dir.resolve())
-    for row in rows:
-        row["scope"] = "global"
-        row["scope_label"] = "Global"
-        row["consumer"] = "skills-manager"
-        row["physical_root"] = physical_root
-        row["path"] = row.get("path") or str(store.skills_dir / row["name"])
-        try:
-            row["physical_path"] = str(Path(row["path"]).resolve())
-        except OSError:
-            row["physical_path"] = str(row["path"])
-    return rows
-
-
-def _hygiene_records(store: Store, scope: str) -> tuple[list[dict], list[dict]]:
-    """Acquire bounded-scope observations without widening filesystem roots."""
-    from . import scopes
-
-    if scope == "global":
-        return _global_hygiene_records(store), []
-    if scope != "all":
-        return scopes.scan_scope(scope), []
-    records = []
-    degraded = []
-    for descriptor in scopes.known_scopes():
-        if descriptor.id != "global" and not descriptor.base.is_dir():
-            continue
-        try:
-            records.extend(
-                _global_hygiene_records(store)
-                if descriptor.id == "global"
-                else scopes.scan_scope(descriptor.id)
-            )
-        except Exception as exc:
-            degraded.append({
-                "section": "scope-scan",
-                "scope": descriptor.id,
-                "reason": _truncate(str(exc), 512),
-            })
-    return records, degraded
-
-
 def _render_lockfile_text(lockfiles: dict | None) -> None:
     """Print one bounded summary line plus any unusable lock state."""
     lockfiles = lockfiles or {}
@@ -937,47 +851,13 @@ def _print_doctor_index_report(report: dict) -> None:
 
 def cmd_doctor(args, store: Store) -> int:
     scope = scope_from_args(args)
-    from . import scopes
-
-    known = {item.id: item for item in scopes.known_scopes()}
-    if scope != "all" and scope not in known:
-        raise StoreError(f"unknown scope {scope!r}")
+    doctor.require_scope(scope)
     explain_consumer = getattr(args, "explain", None)
     if explain_consumer:
         return _cmd_doctor_explain(args, explain_consumer)
     hygiene = bool(getattr(args, "hygiene", False))
-    report = (
-        store.doctor()
-        if scope == "global"
-        else _doctor_scope_report(scope)
-        if scope != "all"
-        else store.doctor()
-    )
-    if hygiene:
-        from .hygiene import hygiene_report
-
-        records, degraded = _hygiene_records(store, scope)
-        report["hygiene"] = hygiene_report(records, scope=scope)
-        report["hygiene"]["degraded"].extend(degraded)
-        report["hygiene"]["degraded"] = sorted(
-            report["hygiene"]["degraded"],
-            key=lambda item: (str(item.get("section", "")), str(item.get("scope", "")), str(item.get("reason", ""))),
-        )
+    report = doctor.doctor_report(store, scope, hygiene=hygiene)
     if args.json:
-        if scope == "all":
-            try:
-                from .scopes import find_duplicates as _dupes_json
-
-                report["duplicates"] = _dupes_json()
-            except Exception as exc:
-                _diagnose("doctor scope=all duplicate enrichment failed", exc)
-                report["duplicates"] = []
-                report.setdefault("degraded", []).append(
-                    {
-                        "section": "scope/duplicates",
-                        "reason": "duplicate enrichment was unavailable",
-                    }
-                )
         _print_json(report)
         return EXIT_OK
     if report.get("ok"):
@@ -1007,20 +887,14 @@ def cmd_doctor(args, store: Store) -> int:
     _print_doctor_index_report(report)
     # Also show scope summary when --scope all.
     if scope == "all":
-        try:
-            from .scopes import find_duplicates as _dupes
-            from .scopes import list_scopes as _list_scopes
-
-            for s in _list_scopes():
-                print(f"  {s['label']} ({s['id']}): {s['count']} skills at {s['path']}")
-            dupes = _dupes()
-            if dupes:
-                print(f"  {len(dupes)} skill name(s) present in multiple scopes:")
-                for d in dupes:
-                    flag = " (descriptions differ)" if d["descriptions_differ"] else ""
-                    print(f"    {d['name']}: {', '.join(d['scopes'])}{flag}")
-        except Exception as exc:
-            _diagnose("doctor scope=all enrichment failed", exc)
+        for s in report["scopes"]:
+            print(f"  {s['label']} ({s['id']}): {s['count']} skills at {s['path']}")
+        if report["duplicates"]:
+            print(f"  {len(report['duplicates'])} skill name(s) present in multiple scopes:")
+            for d in report["duplicates"]:
+                flag = " (descriptions differ)" if d["descriptions_differ"] else ""
+                print(f"    {d['name']}: {', '.join(d['scopes'])}{flag}")
+        if any(item.get("section") == "scopes/duplicates" for item in report.get("degraded", [])):
             print("  scope and duplicate summary unavailable; inspect diagnostics", file=sys.stderr)
     if hygiene:
         _render_hygiene_text(report["hygiene"])
@@ -1305,15 +1179,8 @@ def cmd_tokens(args, store: Store) -> int:
             if rec is None:
                 raise StoreError(f"skill '{args.name}' not found")
             rec = _get_skill(rec.get("scope", "global"), args.name)
-        p = Path(rec.get("path", "")) if rec.get("path") else None
-        raw = ""
-        if p and p.is_dir():
-            for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                if cand.is_file():
-                    raw = cand.read_text(encoding="utf-8")
-                    break
-        if not raw:
-            raw = rec.get("body", "") or ""
+        raw = document_text(Path(rec["path"])) if rec.get("path") else ""
+        raw = raw or rec.get("body") or ""
         est = _est(raw, window=window)
         est["name"] = args.name
         est["scope"] = rec.get("scope", scope)

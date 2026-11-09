@@ -18,6 +18,8 @@ from pathlib import Path
 
 from . import atomic_io
 from .context import active_store
+from . import paths
+from .path_safety import mkdir_private
 
 
 PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
@@ -41,14 +43,8 @@ def _binding_root(resolved: Path) -> Path:
         return Path(os.path.realpath(Path(store.data_dir).expanduser()))
     # Preserve direct operations on a Store's own tree without allowing an
     # unrelated Store registration to redirect external agent-scope records.
-    with atomic_io._LOCK_ROOTS_GUARD:
-        roots = list(atomic_io._LOCK_ROOTS.values())
-    matches = [root for root in roots if resolved.is_relative_to(root)]
-    if matches:
-        return max(matches, key=lambda root: len(root.parts))
-    from . import paths
-
-    return paths.data_dir()
+    containing = atomic_io.registered_root_containing(resolved)
+    return containing if containing is not None else paths.data_dir()
 
 
 def _binding_dir(skill_dir: str | Path) -> Path:
@@ -63,7 +59,7 @@ def _record_name(resolved: Path, sidecar_name: str) -> str:
     return hashlib.sha256(key).hexdigest() + ".json"
 
 
-def _record_path(skill_dir: str | Path, sidecar_name: str) -> Path:
+def record_path(skill_dir: str | Path, sidecar_name: str) -> Path:
     """Return the full record path for one install and sidecar name."""
     resolved = _real_skill_dir(skill_dir)
     return _binding_root(resolved) / BINDING_DIRNAME / _record_name(
@@ -73,7 +69,6 @@ def _record_path(skill_dir: str | Path, sidecar_name: str) -> Path:
 
 def _ensure_binding_dir(root: Path) -> Path:
     """Create or verify ``<root>/sidecar-bindings`` as owner-only, non-symlink."""
-    from .path_safety import mkdir_private
 
     directory = root / BINDING_DIRNAME
     mkdir_private(directory)

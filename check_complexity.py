@@ -51,6 +51,9 @@ TARGET_FILES = (
     "skillsmgr/lockfiles.py",
     "skillsmgr/key_support.py",
     "skillsmgr/install.py",
+    "skillsmgr/documents.py",
+    "skillsmgr/doctor.py",
+    "skillsmgr/atomic_io.py",
     "skillsmgr/risk.py",
 )
 DEFAULT_THRESHOLD = 15

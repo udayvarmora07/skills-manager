@@ -21,7 +21,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import install
+from . import doctor, install
+from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
 from .diagnostics import diagnose as _diagnose
@@ -186,48 +187,11 @@ def _doctor_query(qs: dict) -> tuple[str, bool, str]:
     return scope, hygiene, consumer
 
 
-def _validate_hygiene_query(scope: str, hygiene: bool, consumer: str) -> None:
-    if not hygiene:
-        return
-    from . import scopes
-
-    known = {item.id for item in scopes.known_scopes()}
-    if scope != "all" and scope not in known:
-        raise StoreError(f"unknown scope {scope!r}")
-    if consumer:
+def _validated_doctor_query(qs: dict) -> tuple[str, bool, str]:
+    scope, hygiene, consumer = _doctor_query(qs)
+    if hygiene and consumer:
         raise StoreError("doctor hygiene cannot be combined with explain")
-
-
-def _doctor_scope_enrichment(report: dict, scope: str) -> None:
-    if scope != "all":
-        return
-    # BUG-8: this swallow made `/api/doctor?scope=all` return a payload
-    # *without* scopes/duplicates while still reporting success, so a client
-    # could not tell "no duplicates" from "the duplicate scan crashed".
-    try:
-        from .scopes import find_duplicates as _dupes
-        from .scopes import list_all as _list_all
-        from .scopes import list_scopes as _lscopes
-
-        # Take ONE merged filesystem snapshot and summarize both sections from
-        # it.  Without this the route walked every scope root twice: once
-        # inside list_scopes() (which falls back to its own per-root scan when
-        # no records are supplied) and again inside find_duplicates().  Both
-        # are O(N) document reads, which is what made this the slowest route in
-        # the app.  /api/stats already uses exactly this seam.
-        records = _list_all()
-        report["scopes"] = _lscopes(records=records)
-        report["duplicates"] = _dupes(records)
-    except Exception as exc:
-        _diagnose("doctor scope=all enrichment failed", exc)
-        report["scopes"] = []
-        report["duplicates"] = []
-        report.setdefault("degraded", []).append(
-            {
-                "section": "scopes/duplicates",
-                "reason": f"the scope and duplicate scan failed: {exc}",
-            }
-        )
+    return scope, hygiene, consumer
 
 
 def _doctor_explain(report: dict, qs: dict, consumer: str, diagnostics_roots) -> None:
@@ -256,77 +220,10 @@ def _doctor_payload(store: Store, qs: dict, diagnostics_roots=None) -> dict:
     complete inventory of skills installed for other agent tools.  The CLI
     passes no boundary (it already runs as the user); HTTP always does.
     """
-    scope, hygiene_requested, consumer = _doctor_query(qs)
-    _validate_hygiene_query(scope, hygiene_requested, consumer)
-    report = store.doctor()
-    _doctor_scope_enrichment(report, scope)
-    if hygiene_requested:
-        report["hygiene"] = _doctor_hygiene_payload(store, scope)
+    scope, hygiene_requested, consumer = _validated_doctor_query(qs)
+    report = doctor.doctor_report(store, scope, hygiene=hygiene_requested)
     _doctor_explain(report, qs, consumer, diagnostics_roots)
     return report
-
-
-def _doctor_hygiene_payload(store: Store, scope: str) -> dict:
-    """Acquire only configured scope observations and build hygiene evidence."""
-    from . import scopes
-    from .hygiene import hygiene_report
-    from .loader import scan_dir
-
-    def global_rows() -> list[dict]:
-        rows = scan_dir(store.skills_dir, include_husks=True)
-        root = str(store.skills_dir.resolve())
-        for row in rows:
-            row.update({"scope": "global", "scope_label": "Global", "consumer": "skills-manager"})
-            row["path"] = row.get("path") or str(store.skills_dir / row["name"])
-            row["physical_root"] = root
-            try:
-                row["physical_path"] = str(Path(row["path"]).resolve())
-            except OSError:
-                row["physical_path"] = str(row["path"])
-        return rows
-
-    records = []
-    degraded = []
-    descriptors = scopes.known_scopes()
-    if scope != "all":
-        descriptors = [item for item in descriptors if item.id == scope]
-    for descriptor in descriptors:
-        if descriptor.id != "global" and not descriptor.base.is_dir():
-            continue
-        try:
-            records.extend(global_rows() if descriptor.id == "global" else scopes.scan_scope(descriptor.id))
-        except Exception as exc:
-            degraded.append({
-                "section": "scope-scan",
-                "scope": descriptor.id,
-                "reason": str(exc)[:512],
-            })
-    try:
-        result = hygiene_report(records, scope=scope)
-    except Exception as exc:
-        result = hygiene_report([], scope=scope)
-        degraded.append({
-            "section": "hygiene-report",
-            "reason": "complete hygiene analysis was unavailable",
-            "detail": str(exc)[:512],
-        })
-    result["degraded"].extend(degraded)
-    result["degraded"] = sorted(
-        result["degraded"],
-        key=lambda item: (str(item.get("section", "")), str(item.get("scope", "")), str(item.get("reason", ""))),
-    )
-    return result
-
-
-def _skill_text(skill_dir: Path) -> str:
-    """Return a skill's document text, or ``""`` when there is none to read."""
-    for candidate in (skill_dir / "SKILL.md", skill_dir / "SKILL.md.disabled"):
-        try:
-            if candidate.is_file():
-                return candidate.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
-    return ""
 
 
 def _raw_document_response(handler, name: str, skill_dir: Path) -> None:
@@ -337,11 +234,10 @@ def _raw_document_response(handler, name: str, skill_dir: Path) -> None:
     produced a 400 carrying the interpreter's own ``"'utf-8' codec can't decode
     byte ..."`` text, and an unreadable file produced an unhandled 500 --
     while ``GET /api/skills/<name>`` on the same file correctly returned 200.
-    Reading through ``_skill_text`` keeps both answers inside the contract this
-    server already documents.  Kept as a module function so ``_route_get`` does
-    not grow another decision point.
+    An undecodable or unreadable document is now a clean 404: raw bytes are
+    served only when they are the document's real text.
     """
-    raw = _skill_text(skill_dir)
+    raw = document_text(skill_dir, lossy=False)
     if not raw:
         handler._send_error(404, f"skill '{name}' has no readable SKILL.md")
         return
@@ -383,7 +279,7 @@ def _enrich_one_row_with_tokens(store: Store, row: dict, physical_root: str) -> 
     if _row_needs_token_read(row):
         from .tokens import estimate as _est
 
-        _apply_token_estimate(row, _est(_skill_text(store.skills_dir / row["name"])))
+        _apply_token_estimate(row, _est(document_text(store.skills_dir / row["name"])))
 
 
 def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None:
@@ -1458,14 +1354,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         # validated before it can be used for a filesystem read.
         record = self.store.get(parts[2])
         _require_installed(record, parts[2])
-        skill_dir = Path(record["path"])
-        skill_file = skill_dir / "SKILL.md"
-        if not skill_file.is_file():
-            skill_file = skill_dir / "SKILL.md.disabled"
-        if not skill_file.is_file():
-            self._send_error(404, f"skill '{parts[2]}' has no SKILL.md")
-            return True
-        _raw_document_response(self, parts[2], skill_dir)
+        _raw_document_response(self, parts[2], Path(record["path"]))
         return True
 
     def _route_skill_detail_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
@@ -1493,7 +1382,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         try:
             from .tokens import estimate as _estD
 
-            tok = _estD(_skill_text(self.store.skills_dir / parts[2]))
+            tok = _estD(document_text(self.store.skills_dir / parts[2]))
             _apply_token_estimate(rec, tok)
             rec["lines"] = tok["lines"]
             rec["body_tokens"] = _estD(rec.get("body") or "")["tokens"]
@@ -1722,16 +1611,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _tokens_document(rec: dict) -> str:
         """Return the document text a token estimate should be run over."""
-        raw = ""
-        p = Path(rec.get("path", "")) if rec.get("path") else None
-        if p and p.is_dir():
-            for cand in (p / "SKILL.md", p / "SKILL.md.disabled"):
-                if cand.is_file():
-                    raw = cand.read_text(encoding="utf-8")
-                    break
-        if not raw and rec.get("body"):
-            raw = rec.get("body", "")
-        return raw or ""
+        raw = document_text(Path(rec["path"])) if rec.get("path") else ""
+        return raw or rec.get("body") or ""
 
     def _route_get(self):
         """Dispatch ``GET`` to one route guard, in order.

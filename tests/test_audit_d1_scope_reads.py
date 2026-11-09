@@ -43,7 +43,7 @@ from unittest import mock
 
 from skillsmgr import context
 import skillsmgr.paths as paths_module
-from skillsmgr import loader, observations, scopes
+from skillsmgr import documents, loader, observations, scopes
 from skillsmgr.store import Store
 
 _DOCUMENT_NAMES = {"SKILL.md", "SKILL.md.disabled"}
@@ -333,15 +333,6 @@ class DocumentProbeTests(ScopeReadCase):
             f"one read plus one conflict probe is enough; stat'ed {seen}",
         )
 
-    def test_read_skill_or_report_keeps_its_three_value_contract(self):
-        skill = self._skill(self.base / "skills" / "one", "one")
-        result = loader.read_skill_or_report(skill)
-        self.assertEqual(3, len(result))
-        text, disabled, read_error = result
-        self.assertIn("name: one", text)
-        self.assertEqual(0, disabled)
-        self.assertIsNone(read_error)
-
     def test_the_conflicting_document_state_is_still_reported(self):
         """All four presence combinations, through both the helper and the record."""
         cases = {
@@ -357,10 +348,7 @@ class DocumentProbeTests(ScopeReadCase):
                 for name in names:
                     (skill / name).write_text(self._document("one"), encoding="utf-8")
                 self.assertEqual(
-                    expected_conflict, loader.conflicting_documents(skill)
-                )
-                self.assertEqual(
-                    expected_disabled, loader.read_skill_or_report(skill)[1]
+                    expected_conflict, documents.conflicting_documents(skill)
                 )
                 if not names:
                     from skillsmgr.store import SkillNotFound
@@ -375,7 +363,7 @@ class DocumentProbeTests(ScopeReadCase):
 
     def test_a_disabled_only_document_is_read_and_not_a_conflict(self):
         skill = self._skill(self.base / "skills" / "parked", "parked", disabled=True)
-        self.assertFalse(loader.conflicting_documents(skill))
+        self.assertFalse(documents.conflicting_documents(skill))
         record = loader.load_skill(skill)
         self.assertEqual(1, record["disabled"])
         self.assertFalse(record["document_conflict"])
@@ -386,7 +374,6 @@ class DocumentProbeTests(ScopeReadCase):
 
         empty = self.base / "skills" / "empty"
         empty.mkdir(parents=True)
-        self.assertIsNone(loader.read_skill_or_report(empty)[0])
         with self.assertRaises(SkillNotFound):
             loader.load_skill(empty)
         self.assertTrue(loader.load_skill(empty, include_husks=True)["document_missing"])
@@ -724,7 +711,7 @@ class DocumentReuseAuthoritativenessTests(ScopeReadCase):
             document.write_bytes(
                 b"---\nname: latin\ndescription: caf" + bad + b"\n---\n"
             )
-            lossy[bad.hex()] = loader.read_skill_text(document)[0]
+            lossy[bad.hex()] = documents.read_skill_text(document)[0]
             record = loader.load_skill(skill)
             self.assertTrue(record["malformed"], bad)
             self.assertIn(f"0x{bad.hex()}", record["decode_error"])

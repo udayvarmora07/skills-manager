@@ -42,7 +42,7 @@ from .source_lock import (
     review_local_update,
     source_identity,
 )
-from .store import Store, StoreError, _index_lock_path
+from .store import Store, StoreError, index_lock_path
 from .validator import validate_skill_name
 
 
@@ -799,7 +799,7 @@ def commit_update_review(
     # store._skill_and_index_locks' index-first ordering, so the two orderings
     # cannot deadlock -- and hold it across the whole revalidate-then-swap
     # window rather than only the post-hoc resync.
-    with mutation_lock(_index_lock_path(Store(data_dir=data).skills_dir)):
+    with mutation_lock(index_lock_path(Store(data_dir=data).skills_dir)):
         with mutation_lock(directory / ".review.lock"):
             _, record = _load_record(data, review_id)
             if record["status"] == "pending" and _expired(record):

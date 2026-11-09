@@ -32,6 +32,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from . import frontmatter
+from .documents import document_path, read_skill_text
 from .tokens import count_tokens
 
 __all__ = [
@@ -577,18 +578,11 @@ def validate_skill(name: str, skill_dir: Path) -> ValidationResult:
     * the frontmatter ``name`` must equal the directory name (error).
     """
     result = ValidationResult()
-    skill_file = skill_dir / "SKILL.md"
-    if not skill_file.is_file():
-        disabled_file = skill_dir / "SKILL.md.disabled"
-        if disabled_file.is_file():
-            skill_file = disabled_file
-        else:
-            result.add("error", f"missing SKILL.md in {skill_dir}")
-            return result
-
+    skill_file = document_path(skill_dir)
+    if skill_file is None:
+        result.add("error", f"missing SKILL.md in {skill_dir}")
+        return result
     try:
-        from .loader import read_skill_text
-
         text, decode_error = read_skill_text(skill_file)
     except OSError as exc:
         result.add("error", f"cannot read SKILL.md: {exc}")

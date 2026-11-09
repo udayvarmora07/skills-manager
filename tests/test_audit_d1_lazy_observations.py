@@ -149,7 +149,7 @@ class TheListRouteReadsEachDocumentOnce(LazyObservationTestCase):
 
         counts = {"probe": 0, "direct": 0}
         real_probe = loader._probe_document
-        real_text = webapp._skill_text
+        real_text = webapp.document_text
 
         def counting_probe(path):
             counts["probe"] += 1
@@ -160,12 +160,12 @@ class TheListRouteReadsEachDocumentOnce(LazyObservationTestCase):
             return real_text(path)
 
         loader._probe_document = counting_probe
-        webapp._skill_text = counting_text
+        webapp.document_text = counting_text
         self.addCleanup(setattr, loader, "_probe_document", real_probe)
-        self.addCleanup(setattr, webapp, "_skill_text", real_text)
+        self.addCleanup(setattr, webapp, "document_text", real_text)
         self.get_rows(server, "/api/skills?scope=global")
         loader._probe_document = real_probe
-        webapp._skill_text = real_text
+        webapp.document_text = real_text
 
         total = counts["probe"] + counts["direct"]
         self.assertEqual(
@@ -190,17 +190,17 @@ class TheListRouteReadsEachDocumentOnce(LazyObservationTestCase):
         self.assertTrue(all(r.get("tokens") for r in rows))
 
         calls = {"n": 0}
-        real_text = webapp._skill_text
+        real_text = webapp.document_text
 
         def counting_text(path):
             calls["n"] += 1
             return real_text(path)
 
-        webapp._skill_text = counting_text
+        webapp.document_text = counting_text
         try:
             webapp._enrich_rows_with_tokens(store, rows, "test")
         finally:
-            webapp._skill_text = real_text
+            webapp.document_text = real_text
 
         self.assertEqual(
             0, calls["n"],
@@ -467,12 +467,12 @@ class TheFastPathIsNotASilentDefault(LazyObservationTestCase):
         store = self.store()
         rows = [{"name": "alpha"}]
 
-        original = webapp._skill_text
-        webapp._skill_text = lambda path: (_ for _ in ()).throw(OSError("boom"))
+        original = webapp.document_text
+        webapp.document_text = lambda path: (_ for _ in ()).throw(OSError("boom"))
         try:
             webapp._enrich_rows_with_tokens(store, rows, "test")
         finally:
-            webapp._skill_text = original
+            webapp.document_text = original
 
         self.assertEqual(0, rows[0]["tokens"])
         self.assertEqual("unavailable", rows[0]["tokens_method"])

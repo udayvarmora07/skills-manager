@@ -17,41 +17,16 @@ from pathlib import Path
 from .frontmatter import FrontmatterError, parse_frontmatter
 from .observations import document_observations
 from . import paths
+from .documents import (
+    ACTIVE_DOCUMENT,
+    DISABLED_DOCUMENT,
+    DOCUMENT_NAMES,
+    read_skill_text,
+)
 from .errors import SkillNotFound, StoreError
 from .tokens import estimate as _estimate_tokens
-
-
-def read_skill_text(path: Path) -> tuple[str, str | None]:
-    """Read a skill document, tolerating invalid UTF-8 (issue #13).
-
-    Returns ``(text, decode_error)``.  ``decode_error`` is ``None`` for a clean
-    UTF-8 document; otherwise ``text`` keeps the document readable with U+FFFD
-    replacement characters and the message names the file, the offending byte,
-    and the fix.  Read/report paths mark the row ``malformed`` with that
-    message; write paths must call :func:`read_skill_text_strict` instead, so
-    lossy replacement characters can never be written back to disk.
-    """
-    raw = path.read_bytes()
-    try:
-        return raw.decode("utf-8"), None
-    except UnicodeDecodeError as exc:
-        return raw.decode("utf-8", errors="replace"), (
-            f"{path} is not valid UTF-8 (byte 0x{raw[exc.start]:02x} at offset "
-            f"{exc.start}); re-save it as UTF-8"
-        )
-
-
-def read_skill_text_strict(path: Path, *, subject: str) -> str:
-    """Read a skill document that is about to be rewritten.
-
-    Undecodable input fails closed as a clean :class:`StoreError` naming
-    ``subject``; a caller must never rewrite a document it could only read
-    lossily.
-    """
-    text, decode_error = read_skill_text(path)
-    if decode_error is not None:
-        raise StoreError(f"cannot safely rewrite {subject}: {decode_error}")
-    return text
+from .registry import read_provenance
+from .validator import validate_skill_name
 
 
 def _coerce_str(value) -> str:
@@ -79,66 +54,6 @@ def required_field_gaps(data: dict) -> list[str]:
     return gaps
 
 
-#: The two names a skill document may hold.  ``active`` is what a loader reads,
-#: ``disabled`` the renamed form a disable/enable toggles between.
-_ACTIVE_DOCUMENT = "SKILL.md"
-_DISABLED_DOCUMENT = "SKILL.md.disabled"
-_DOCUMENT_NAMES = frozenset({_ACTIVE_DOCUMENT, _DISABLED_DOCUMENT})
-
-
-def conflicting_documents(skill_dir: Path) -> bool:
-    """True when a skill directory holds *both* SKILL.md and SKILL.md.disabled.
-
-    The store's one-document invariant: a skill is described by exactly one of
-    the two names.  With both present, exactly one is visible to reads while a
-    toggle (disable/enable) resolves the other as its source and renames it
-    over the first, silently destroying one of the two documents -- with no
-    snapshot taken.  Every entry point that toggles or installs a skill has to
-    refuse this state instead of guessing.
-    """
-    return (skill_dir / _ACTIVE_DOCUMENT).is_file() and (
-        skill_dir / _DISABLED_DOCUMENT
-    ).is_file()
-
-
-def reject_conflicting_documents(
-    skill_dir: Path, name: str, *, scope_id: str | None = None
-) -> None:
-    """Raise :class:`StoreError` unless *skill_dir* holds exactly one document.
-
-    **This is the single enforcement point of the one-document invariant.**
-    It was enforced in two places with two mechanisms and two wordings -- the
-    store toggles called :func:`conflicting_documents` while the scope toggle
-    re-implemented the condition with ``Path.is_file()`` inline -- so the two
-    copies could disagree about the same directory without any test failing
-    (docs/24 §C4 #4).  Every path that can install or toggle a skill routes
-    through here instead.
-
-    ``scope_id`` is optional because it is genuine diagnostic value the global
-    store has no equivalent of: the same skill name exists in several agent
-    roots, and "which copy is ambiguous?" needs an answer.  It is a clause on
-    one message, not a second message -- ``tests/test_one_document_invariant.py``
-    pins both shapes so a future edit cannot silently drop the clause or split
-    the wording again.
-
-    **[SPEC]** Raises ``StoreError``, not a new class: REST maps ``StoreError``
-    to ``400`` and the CLI to exit ``1``, and neither knows a subclass.
-    ``loader`` already imports ``StoreError`` from ``store`` at module level,
-    so this adds no import edge -- ``store`` imports ``loader`` lazily from
-    inside functions, which is what keeps that direction acyclic.  Raising it
-    from ``path_safety`` instead (the audit's suggestion) would need
-    ``path_safety -> store`` while ``store -> path_safety`` already exists at
-    module level, i.e. a real cycle.
-    """
-    if not conflicting_documents(skill_dir):
-        return
-    where = f" in scope '{scope_id}'" if scope_id else ""
-    raise StoreError(
-        f"skill '{name}' has both SKILL.md and SKILL.md.disabled{where}; "
-        "remove one of the two documents first"
-    )
-
-
 def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]:
     """Pick a skill's document, reporting unreadable files and the conflict state.
 
@@ -161,7 +76,7 @@ def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]
     document the only remaining question is whether the disabled one is also
     there, and with a disabled document the active one is already known absent.
     """
-    for filename, disabled in ((_ACTIVE_DOCUMENT, 0), (_DISABLED_DOCUMENT, 1)):
+    for filename, disabled in ((ACTIVE_DOCUMENT, 0), (DISABLED_DOCUMENT, 1)):
         candidate = skill_dir / filename
         try:
             os.stat(candidate)
@@ -173,25 +88,9 @@ def _probe_document(skill_dir: Path) -> tuple[str | None, int, str | None, bool]
             text, decode_error = read_skill_text(candidate)
         except OSError as exc:
             return None, disabled, f"{candidate} cannot be read ({exc.strerror or exc})", False
-        other = _DISABLED_DOCUMENT if not disabled else _ACTIVE_DOCUMENT
+        other = DISABLED_DOCUMENT if not disabled else ACTIVE_DOCUMENT
         return text, disabled, decode_error, (skill_dir / other).is_file()
     return None, 0, None, False
-
-
-def read_skill_or_report(skill_dir: Path) -> tuple[str | None, int, str | None]:
-    """Pick a skill's document and read it, reporting unreadable files.
-
-    Returns ``(text, disabled, read_error)``.  :func:`_probe_document` owns the
-    read and additionally reports the conflicting-document state this shape
-    has never carried; dropping it keeps the documented three-value contract.
-
-    **[NOTE]** This is the three-value view, not the read path: ``load_skill``
-    needs the conflict state as well and calls the probe directly, so nothing
-    in the package calls this today.  It is kept as the documented shape rather
-    than deleted, and can go if the maintainer prefers no unused surface.
-    """
-    text, disabled, read_error, _conflict = _probe_document(skill_dir)
-    return text, disabled, read_error
 
 
 def name_is_addressable(name: str) -> bool:
@@ -206,8 +105,6 @@ def name_is_addressable(name: str) -> bool:
     source of truth -- but they are marked so no caller presents them as
     addressable.
     """
-    from .validator import validate_skill_name
-
     try:
         validate_skill_name(name)
     except ValueError:
@@ -581,8 +478,6 @@ def _registry_provenance_fields(skill_dir: Path) -> dict:
     In a library that did not come from the registry it is one ``lexists``.
     """
     try:
-        from .registry import read_provenance
-
         provenance = read_provenance(skill_dir)
     except (OSError, StoreError) as exc:
         return {"registry_provenance_error": str(exc)}
@@ -648,7 +543,7 @@ def load_skill(
         # still observed.
         cache_key = _document_cache_key(
             skill_dir,
-            _DISABLED_DOCUMENT if disabled else _ACTIVE_DOCUMENT,
+            DISABLED_DOCUMENT if disabled else ACTIVE_DOCUMENT,
             text,
             disabled,
             conflict,
@@ -759,7 +654,7 @@ def _document_dirs(entries) -> set[Path]:
     recursive scope root was walked twice per request; ``rglob("*")`` visits
     exactly the same entries and the name test below selects the same set.
     """
-    return {path.parent for path in entries if path.name in _DOCUMENT_NAMES}
+    return {path.parent for path in entries if path.name in DOCUMENT_NAMES}
 
 
 def scan_dir(

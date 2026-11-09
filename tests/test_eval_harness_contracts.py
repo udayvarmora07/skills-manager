@@ -388,6 +388,8 @@ class ScoreAndRecordTests(unittest.TestCase):
 
         def interrupt_after_backup(source, destination):
             nonlocal calls
+            if not Path(source).is_dir():
+                return real_replace(source, destination)
             calls += 1
             if calls == 2:
                 self.assertEqual(Path(destination), final)
@@ -428,6 +430,10 @@ class ScoreAndRecordTests(unittest.TestCase):
 
         def failing_rollback(source, destination):
             nonlocal calls
+            if not Path(source).is_dir():
+                # File writes replace their temp copy too; only the
+                # iteration-directory moves are being interrupted.
+                return real_replace(source, destination)
             calls += 1
             if calls == 2:
                 raise KeyboardInterrupt("injected interrupt during commit")

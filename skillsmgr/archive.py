@@ -14,6 +14,7 @@ import zlib
 from pathlib import Path
 
 from . import paths, __version__
+from .errors import StoreError
 from .sidecar_binding import MANAGER_SIDECARS
 from .atomic_io import tree_content_hash
 from .diagnostics import diagnose as _diagnose
@@ -21,8 +22,8 @@ from .frontmatter import FrontmatterError, parse_frontmatter
 from .validator import validate_skill_name
 
 
-class ArchiveError(Exception):
-    """Raised for archive validation or extraction failures."""
+class ArchiveError(StoreError):
+    """Raised for archive validation or extraction failures (a ``StoreError``)."""
 
 
 MAX_ARCHIVE_COMPRESSED_BYTES = 25 * 1024 * 1024

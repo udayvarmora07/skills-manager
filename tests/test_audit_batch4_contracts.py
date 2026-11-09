@@ -284,7 +284,7 @@ class TemplateLockOrderTests(BatchFourCase):
             observed.append(templates_dir.is_dir())
             return real_lock(path)
 
-        with mock.patch.object(templates, "_mutation_lock", spy):
+        with mock.patch.object(templates, "mutation_lock", spy):
             templates.create_template(templates_dir, "demo")
 
         self.assertTrue(observed, "no lock was taken at all")

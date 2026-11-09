@@ -423,8 +423,8 @@ class DoctorScopeCliTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_OK)
         report = json.loads(out)
         self.assertEqual(report["duplicates"], [])
-        self.assertIn("scope/duplicates", json.dumps(report.get("degraded", [])))
-        self.assertIn("duplicate enrichment failed", err)
+        self.assertIn("scopes/duplicates", json.dumps(report.get("degraded", [])))
+        self.assertIn("doctor scope=all enrichment failed", err)
 
     def test_hygiene_report_is_opt_in_and_findings_do_not_fail_exit(self):
         self.assertEqual(

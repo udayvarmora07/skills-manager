@@ -6,6 +6,8 @@ import os
 import stat
 from pathlib import Path
 
+from .validator import validate_skill_name
+
 
 def mkdir_private(path: Path) -> Path:
     """Create missing directory components with owner-only permissions."""
@@ -205,8 +207,6 @@ def safe_skill_path_under(resolved_root: Path, name: str) -> Path:
     per row (docs/24 §D1); the name rule and the containment check are
     unchanged, so a hoist that dropped either one would be a regression.
     """
-    from .validator import validate_skill_name
-
     validate_skill_name(name)
     return contained_path_under(resolved_root, name)
 
@@ -236,8 +236,6 @@ def contained_entry_under(resolved_root: Path, *parts: str | Path) -> Path:
     (SEC-10).  ``resolved_root`` **must** already be resolved, or the containment
     check would compare a resolved target against an unresolved prefix.
     """
-    from .validator import validate_skill_name
-
     path_parts = tuple(Path(part) for part in parts)
     if not path_parts or any(part.is_absolute() for part in path_parts):
         raise ValueError("absolute paths are not valid below a managed root")

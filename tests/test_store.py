@@ -229,7 +229,7 @@ class TestEditToggle(IsolatedStoreTestCase):
         self.store.create("racing", "Placeholder")
         self.store.remove("racing")
 
-        real_lock = store_mod._mutation_lock
+        real_lock = store_mod.mutation_lock
         seen: list[int] = []
 
         def spy(path):
@@ -237,14 +237,14 @@ class TestEditToggle(IsolatedStoreTestCase):
             seen.append(id(lock))
             return lock
 
-        with mock.patch.object(store_mod, "_mutation_lock", spy):
+        with mock.patch.object(store_mod, "mutation_lock", spy):
             seen.clear()
             self.store.add(source, name="racing")
             add_locks = set(seen)
         installed = self.store.get("racing")
         self.assertEqual(installed["name"], "racing")
 
-        with mock.patch.object(store_mod, "_mutation_lock", spy):
+        with mock.patch.object(store_mod, "mutation_lock", spy):
             seen.clear()
             self.store.remove("racing")
             remove_locks = set(seen)

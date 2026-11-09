@@ -675,7 +675,7 @@ def _swap_and_bind(current: Path, staged_root: Path, backup: Path) -> None:
     """Swap trees and restore the prior tree and binding if binding fails."""
     if backup.exists() or backup.is_symlink():
         raise SourceLockError("rollback staging path already exists")
-    binding = sidecar_binding._record_path(current, SOURCE_LOCK_FILENAME)
+    binding = sidecar_binding.record_path(current, SOURCE_LOCK_FILENAME)
     binding_backup = _backup_source_binding(binding)
     recovery_required = False
     try:
@@ -711,7 +711,7 @@ def _swap_and_bind(current: Path, staged_root: Path, backup: Path) -> None:
 def _remove_stage_binding(staged_root: Path) -> None:
     # An obsolete staging record cannot grant trust to an install.
     try:
-        sidecar_binding._record_path(staged_root, SOURCE_LOCK_FILENAME).unlink(missing_ok=True)
+        sidecar_binding.record_path(staged_root, SOURCE_LOCK_FILENAME).unlink(missing_ok=True)
     except OSError:
         pass
 

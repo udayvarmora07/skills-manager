@@ -394,7 +394,7 @@ class IndexMutationLockTests(AuditStoreTestCase):
         self.store.create("existing", "existing skill")
         from skillsmgr.atomic_io import mutation_lock
 
-        lock = mutation_lock(store_mod._index_lock_path(self.store.skills_dir))
+        lock = mutation_lock(store_mod.index_lock_path(self.store.skills_dir))
         lock.acquire()
         done = threading.Event()
 
@@ -414,7 +414,7 @@ class IndexMutationLockTests(AuditStoreTestCase):
     def test_resync_and_create_share_a_lock(self):
         # The property the key exists for: a whole-tree scan and a mutation must
         # not be able to interleave, whatever key they use.
-        real_lock = store_mod._mutation_lock
+        real_lock = store_mod.mutation_lock
         seen: list[int] = []
 
         def spy(path):
@@ -422,12 +422,12 @@ class IndexMutationLockTests(AuditStoreTestCase):
             seen.append(id(lock))
             return lock
 
-        with mock.patch.object(store_mod, "_mutation_lock", spy):
+        with mock.patch.object(store_mod, "mutation_lock", spy):
             seen.clear()
             self.store.create("alpha", "alpha skill")
             create_locks = set(seen)
 
-        with mock.patch.object(store_mod, "_mutation_lock", spy):
+        with mock.patch.object(store_mod, "mutation_lock", spy):
             seen.clear()
             self.store.resync()
             resync_locks = set(seen)

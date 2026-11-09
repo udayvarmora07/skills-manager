@@ -296,7 +296,7 @@ class SidecarBindingTests(unittest.TestCase):
         from skillsmgr import source_lock as module
 
         current, candidate, kwargs = self._update_fixture()
-        binding = sidecar_binding._record_path(current, LOCK)
+        binding = sidecar_binding.record_path(current, LOCK)
         old_binding = binding.read_bytes()
         old_document = (current / "SKILL.md").read_bytes()
         real_bind = sidecar_binding.record_binding
@@ -327,7 +327,7 @@ class SidecarBindingTests(unittest.TestCase):
         from skillsmgr import source_lock as module
 
         current, candidate, kwargs = self._update_fixture()
-        binding = sidecar_binding._record_path(current, LOCK)
+        binding = sidecar_binding.record_path(current, LOCK)
         old_binding = binding.read_bytes()
         old_document = (current / "SKILL.md").read_bytes()
         real_bind = sidecar_binding.record_binding

@@ -11,16 +11,15 @@ from pathlib import Path
 from unittest import mock
 
 from skillsmgr import __version__
-from skillsmgr.store import (
+from skillsmgr.archive import (
     MAX_ARCHIVE_COMPRESSION_RATIO,
     MAX_ARCHIVE_EXPANDED_BYTES,
     MAX_ARCHIVE_MEMBER_BYTES,
     MAX_ARCHIVE_MEMBERS,
     MAX_ARCHIVE_NESTING,
     MAX_ARCHIVE_PATH_LENGTH,
-    Store,
-    StoreError,
 )
+from skillsmgr.store import Store, StoreError
 
 
 _CREATED = "2026-09-08T00:00:00Z"

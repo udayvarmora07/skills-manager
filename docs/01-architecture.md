@@ -198,7 +198,7 @@ CLI process and a web UI process on one data directory exclude one another.
   skill use different lock roots and do not exclude each other.
 - A mutation takes a **per-skill lock** on `<skill>/SKILL.md` and/or the
   **library-wide index lock** at `<data>/skills/.skillsmgr-index-lock`
-  (`store._index_lock_path`). `store._skill_and_index_locks()` holds both, always
+  (`store.index_lock_path`). `store._skill_and_index_locks()` holds both, always
   index-first, so a whole-tree scan (`resync`/`db rebuild`) and a per-skill write
   cannot interleave (STORE-2, STORE-12).
 - Whole-trash operations (`restore`, `purge_trash`) serialize on a single

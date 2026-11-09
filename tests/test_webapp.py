@@ -680,7 +680,7 @@ class DoctorScopeEnrichmentSeamTests(unittest.TestCase):
 
     def test_enrichment_merges_once_and_reports_identical_values(self):
         from skillsmgr import scopes
-        from skillsmgr.webapp import _doctor_scope_enrichment
+        from skillsmgr import doctor
 
         calls = []
         real_list_all = scopes.list_all
@@ -693,13 +693,12 @@ class DoctorScopeEnrichmentSeamTests(unittest.TestCase):
         expected_duplicates = scopes.find_duplicates()
 
         with unittest.mock.patch.object(scopes, "list_all", counting):
-            report = {"ok": True}
-            _doctor_scope_enrichment(report, "all")
+            report = doctor.doctor_report(self.store, "all")
 
         self.assertEqual(len(calls), 1, "the enrichment scanned the tree more than once")
         self.assertEqual(report["scopes"], expected_scopes)
         self.assertEqual(report["duplicates"], expected_duplicates)
-        self.assertNotIn("degraded", report)
+        self.assertFalse([d for d in report.get("degraded", []) if d.get("section") == "scopes/duplicates"])
         # The section must be genuinely populated, so this cannot pass by
         # comparing two empty results.
         self.assertEqual([d["name"] for d in report["duplicates"]], ["skill-03"])
@@ -707,13 +706,12 @@ class DoctorScopeEnrichmentSeamTests(unittest.TestCase):
 
     def test_a_failing_scan_still_reports_degraded_evidence(self):
         from skillsmgr import scopes
-        from skillsmgr.webapp import _doctor_scope_enrichment
+        from skillsmgr import doctor
 
         with unittest.mock.patch.object(
             scopes, "list_all", unittest.mock.Mock(side_effect=OSError("scan failed"))
         ):
-            report = {"ok": True}
-            _doctor_scope_enrichment(report, "all")
+            report = doctor.doctor_report(self.store, "all")
 
         self.assertEqual(report["scopes"], [])
         self.assertEqual(report["duplicates"], [])

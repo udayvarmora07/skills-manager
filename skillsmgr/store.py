@@ -35,6 +35,7 @@ from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
 from .atomic_io import register_lock_root as _register_lock_root
 from . import archive as _archive
 from .path_safety import mkdir_private
+from .documents import has_document, read_skill_text_strict, reject_conflicting_documents, toggle_document
 from .errors import (  # noqa: F401  (re-exported for compatibility)
     LockTimeoutError,
     SkillNotFound,
@@ -88,22 +89,6 @@ SNAPSHOT_KEEP = 5
 _SNAPSHOT_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z?(?:-\d+)?$")
 _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
-def _mutation_lock(path: Path):
-    return mutation_lock(path)
-
-
-def _reject_both_documents(skill_dir: Path, name: str) -> None:
-    """Refuse a directory that holds both SKILL.md and SKILL.md.disabled.
-
-    A thin adapter over :func:`loader.reject_conflicting_documents`, which is
-    the single enforcement point shared with the scope adapters (docs/24
-    §C4 #4).  Kept as a module-level name because the store call sites are
-    what they are; it holds no logic of its own.
-    """
-    from .loader import reject_conflicting_documents
-
-    reject_conflicting_documents(skill_dir, name)
-
 
 def _with_skill_lock(skill_dir: Path, func, *args, **kwargs):
     """Run *func* under the per-skill mutation lock shared with create/edit.
@@ -111,7 +96,7 @@ def _with_skill_lock(skill_dir: Path, func, *args, **kwargs):
     The nested lock/unlock body rarely changes, so centralizing it keeps the
     individual mutation methods from accumulating complexity-budget drift.
     """
-    lock = _mutation_lock(skill_dir / "SKILL.md")
+    lock = mutation_lock(skill_dir / "SKILL.md")
     lock.acquire()
     try:
         return func(*args, **kwargs)
@@ -119,7 +104,7 @@ def _with_skill_lock(skill_dir: Path, func, *args, **kwargs):
         lock.release()
 
 
-def _index_lock_path(skills_dir: Path) -> Path:
+def index_lock_path(skills_dir: Path) -> Path:
     """The lock key every library-wide mutation and index scan shares (STORE-12).
 
     ``resync()``/``db_rebuild()`` read the whole skills tree and then delete
@@ -134,17 +119,12 @@ def _index_lock_path(skills_dir: Path) -> Path:
 
 def _with_index_lock(skills_dir: Path, func, *args, **kwargs):
     """Run *func* under the shared library/index lock."""
-    lock = _mutation_lock(_index_lock_path(skills_dir))
+    lock = mutation_lock(index_lock_path(skills_dir))
     lock.acquire()
     try:
         return func(*args, **kwargs)
     finally:
         lock.release()
-
-
-def _with_scan_lock(root: Path, func, *args, **kwargs):
-    """Run an indexing pass under the shared library lock (STORE-12)."""
-    return _with_index_lock(root, func, *args, **kwargs)
 
 
 @contextmanager
@@ -155,8 +135,8 @@ def _skill_and_index_locks(skills_dir: Path, skill_dir: Path):
     mutation of the same skill (STORE-2), and the two locks are always taken in
     this order so they cannot deadlock against each other.
     """
-    with _mutation_lock(_index_lock_path(skills_dir)):
-        with _mutation_lock(skill_dir / "SKILL.md"):
+    with mutation_lock(index_lock_path(skills_dir)):
+        with mutation_lock(skill_dir / "SKILL.md"):
             yield
 
 
@@ -397,22 +377,6 @@ def _resync_row_update(conn, entry: dict, name: str) -> None:
     )
 
 
-def _atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
-    return atomic_write_text(path, text, encoding=encoding, replace=os.replace)
-
-
-def _tree_content_hash(root: Path) -> str:
-    return tree_content_hash(root)
-
-MAX_ARCHIVE_COMPRESSED_BYTES = _archive.MAX_ARCHIVE_COMPRESSED_BYTES
-MAX_ARCHIVE_EXPANDED_BYTES = _archive.MAX_ARCHIVE_EXPANDED_BYTES
-MAX_ARCHIVE_MEMBER_BYTES = _archive.MAX_ARCHIVE_MEMBER_BYTES
-MAX_ARCHIVE_MEMBERS = _archive.MAX_ARCHIVE_MEMBERS
-MAX_ARCHIVE_PATH_LENGTH = _archive.MAX_ARCHIVE_PATH_LENGTH
-MAX_ARCHIVE_NESTING = _archive.MAX_ARCHIVE_NESTING
-MAX_ARCHIVE_COMPRESSION_RATIO = _archive.MAX_ARCHIVE_COMPRESSION_RATIO
-
-
 def _live_index_totals(conn, live: list[str]) -> tuple[int, dict]:
     """Return ``(disabled_count, category_counts)`` for skills that exist on disk.
 
@@ -505,7 +469,7 @@ def _write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes)
     _check_snapshot_target(scope, name)
     snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
     snap_dir.mkdir(parents=True, exist_ok=True)
-    with _mutation_lock(snap_dir):
+    with mutation_lock(snap_dir):
         base = _trash_timestamp()
         snap_id = base
         counter = 1
@@ -513,7 +477,7 @@ def _write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes)
             snap_id = f"{base}-{counter}"
             counter += 1
         snapshot_path = snap_dir / f"{snap_id}.md"
-        _atomic_write_text(snapshot_path, content.decode("latin-1"), encoding="latin-1")
+        atomic_write_text(snapshot_path, content.decode("latin-1"), encoding="latin-1")
         files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
         while len(files) > SNAPSHOT_KEEP:
             files.pop(0).unlink()
@@ -540,7 +504,6 @@ def read_snapshot(data_dir: Path, scope: str, name: str, snapshot: str) -> str:
     path = paths.contained_path(Path(data_dir) / "snapshots", scope, name, f"{snapshot}.md")
     if not path.is_file():
         raise StoreError(f"no snapshot {snapshot!r} for '{name}' in scope '{scope}'")
-    from .loader import read_skill_text_strict
 
     return read_skill_text_strict(path, subject=f"snapshot {snapshot!r} for '{name}'")
 
@@ -723,67 +686,6 @@ def _doctor_is_clean(
     )
 
 
-def _normalize_archive_member_name(name: str) -> str:
-    try:
-        return _archive.normalize_member_name(name)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _validate_archive_members(
-    tar: tarfile.TarFile,
-    compressed_size: int,
-) -> list[tuple[tarfile.TarInfo, str]]:
-    """Compatibility adapter for the extracted archive inspector."""
-    try:
-        return _archive.validate_members(tar, compressed_size)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _validate_archive_manifest(manifest: object) -> list[dict]:
-    """Compatibility adapter for the extracted manifest validator."""
-    try:
-        return _archive.validate_manifest(manifest)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _extract_archive_members(
-    tar: tarfile.TarFile,
-    dest: Path,
-    members: list[tuple[tarfile.TarInfo, str]],
-) -> None:
-    """Compatibility adapter for the extracted safe extractor."""
-    try:
-        return _archive.extract_members(tar, dest, members)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _validate_zip_members(
-    archive: zipfile.ZipFile,
-    compressed_size: int,
-) -> list[tuple[zipfile.ZipInfo, str]]:
-    """Compatibility adapter for the ZIP member preflight."""
-    try:
-        return _archive.validate_zip_members(archive, compressed_size)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _extract_zip_members(
-    archive: zipfile.ZipFile,
-    dest: Path,
-    members: list[tuple[zipfile.ZipInfo, str]],
-) -> None:
-    """Compatibility adapter for the guarded ZIP extractor."""
-    try:
-        return _archive.extract_zip_members(archive, dest, members)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
 def _validate_full_payload(kind: str, source: Path) -> bool:
     """Return whether one preflighted full-import payload is usable."""
     if kind == "trash":
@@ -861,42 +763,18 @@ def _extract_import_archive(archive: Path, dest: Path) -> None:
     """
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive, "r") as zipped:
-            members = _validate_zip_members(zipped, archive.stat().st_size)
-            _extract_zip_members(zipped, dest, members)
+            members = _archive.validate_zip_members(zipped, archive.stat().st_size)
+            _archive.extract_zip_members(zipped, dest, members)
     else:
         _extract_tar_archive(archive, dest)
-    _strip_intake_sidecars(dest)
-
-
-def _strip_intake_sidecars(root: Path) -> None:
-    try:
-        _archive.strip_manager_sidecars(root)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
+    _archive.strip_manager_sidecars(dest)
 
 
 def _extract_tar_archive(archive: Path, dest: Path) -> None:
     """Walk a tar behind the streamed caps in ``archive.open_tar`` (R1/S1)."""
-    try:
-        with _archive.open_tar(archive) as tar:
-            members = _validate_archive_members(tar, archive.stat().st_size)
-            _extract_archive_members(tar, dest, members)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _has_skill_document(source: Path) -> bool:
-    try:
-        return _archive.has_skill_document(source)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
-
-
-def _validate_imported_skill(source: Path, name: str) -> None:
-    try:
-        return _archive.validate_imported_skill(source, name)
-    except _archive.ArchiveError as exc:
-        raise StoreError(str(exc)) from exc
+    with _archive.open_tar(archive) as tar:
+        members = _archive.validate_members(tar, archive.stat().st_size)
+        _archive.extract_members(tar, dest, members)
 
 
 def _safe_skill_path(root: Path, name: str) -> Path:
@@ -1116,7 +994,7 @@ class Store:
             # rebuilds so two Store instances/processes cannot bootstrap the
             # same file at once.  The lock is re-entrant for callers already
             # inside create/resync/db_rebuild critical sections.
-            with _mutation_lock(_index_lock_path(self.skills_dir)):
+            with mutation_lock(index_lock_path(self.skills_dir)):
                 conn = self._connect()
                 try:
                     self._bootstrap_schema(conn)
@@ -1283,7 +1161,7 @@ class Store:
             if _is_transaction_artifact(child.name):
                 continue
             try:
-                if (child / "SKILL.md").is_file() or (child / "SKILL.md.disabled").is_file():
+                if has_document(child):
                     continue
             except OSError:
                 continue
@@ -1319,7 +1197,7 @@ class Store:
         on disk are removed.  No history entries are written (this is an
         indexing operation).
         """
-        return _with_scan_lock(self.skills_dir, self._resync_locked)
+        return _with_index_lock(self.skills_dir, self._resync_locked)
 
     def _resync_locked(self) -> dict:
         self._init_db()
@@ -1657,7 +1535,7 @@ class Store:
         history_id: int | None = None
         try:
             skill_dir.mkdir(parents=True, exist_ok=True)
-            _atomic_write_text(skill_dir / "SKILL.md", content)
+            atomic_write_text(skill_dir / "SKILL.md", content)
             self._upsert_entry(name)
             conn = self._connect()
             try:
@@ -1724,7 +1602,7 @@ class Store:
         # invariant: the store would inherit a skill whose next toggle
         # destroys one of the two documents (STORE-3).  Checked before the
         # lock so the cheap validation stays outside the critical section.
-        _reject_both_documents(source, chosen)
+        reject_conflicting_documents(source, chosen)
         # The destination's per-skill lock covers the existence check *and* the
         # copy: without it a concurrent remove() can move the partly-copied
         # directory to the trash mid-copy, leaving a husk that doctor() still
@@ -1733,7 +1611,7 @@ class Store:
         # half-populated.  The lock key is derived from the same path create/
         # edit/remove use; it is resolved before the directory exists, so it
         # must be computed here rather than inside the helper.
-        lock = _mutation_lock(_index_lock_path(self.skills_dir))
+        lock = mutation_lock(index_lock_path(self.skills_dir))
         lock.acquire()
         try:
             return self._add_unlocked(source, chosen)
@@ -1810,7 +1688,6 @@ class Store:
             if (skill_dir / "SKILL.md.disabled").is_file():
                 raise StoreError(f"skill '{name}' is disabled; enable it first")
             raise SkillNotFound(f"skill '{name}' has no SKILL.md")
-        from .loader import read_skill_text_strict
 
         text = read_skill_text_strict(md_file, subject=f"skill '{name}'")
         try:
@@ -1880,7 +1757,7 @@ class Store:
             replaced = False
             try:
                 write_snapshot(self.data_dir, "global", name, text)
-                _atomic_write_text(md_file, content)
+                atomic_write_text(md_file, content)
                 replaced = True
                 self._upsert_entry(name)
                 conn = self._connect()
@@ -1891,7 +1768,7 @@ class Store:
             except OSError as exc:
                 if replaced:
                     try:
-                        _atomic_write_text(md_file, text)
+                        atomic_write_text(md_file, text)
                         self._upsert_entry(name)
                     except Exception as rollback_exc:
                         _diagnose(f"edit rollback failed for {name!r}", rollback_exc)
@@ -1899,7 +1776,7 @@ class Store:
             except Exception:
                 if replaced:
                     try:
-                        _atomic_write_text(md_file, text)
+                        atomic_write_text(md_file, text)
                         self._upsert_entry(name)
                     except Exception as rollback_exc:
                         _diagnose(f"edit rollback failed for {name!r}", rollback_exc)
@@ -1985,7 +1862,7 @@ class Store:
             return
         except OSError as exc:
             message = f"could not purge skill '{name}': {exc}"
-        if _has_skill_document(stage):
+        if _archive.has_skill_document(stage):
             try:
                 os.replace(stage, skill_dir)
             except OSError as rollback_exc:
@@ -2025,13 +1902,12 @@ class Store:
                 if (skill_dir / "SKILL.md.disabled").is_file():
                     raise StoreError(f"skill '{name}' is disabled; enable it first")
                 raise SkillNotFound(f"skill '{name}' has no SKILL.md")
-            with _mutation_lock(_index_lock_path(self.skills_dir)):
-                from .loader import read_skill_text_strict
-
+            with mutation_lock(index_lock_path(self.skills_dir)):
+        
                 current = read_skill_text_strict(md_file, subject=f"skill '{name}'")
                 write_snapshot(self.data_dir, "global", name, current)
                 try:
-                    _atomic_write_text(md_file, content)
+                    atomic_write_text(md_file, content)
                     self._upsert_entry(name)
                     conn = self._connect()
                     try:
@@ -2040,7 +1916,7 @@ class Store:
                         conn.close()
                 except Exception:
                     try:
-                        _atomic_write_text(md_file, current)
+                        atomic_write_text(md_file, current)
                         self._upsert_entry(name)
                     except Exception as rollback_exc:
                         _diagnose(f"snapshot rollback failed for {name!r}", rollback_exc)
@@ -2050,9 +1926,9 @@ class Store:
         # The whole read-then-move sequence runs under the trash lock so a
         # concurrent purge_trash() cannot delete the candidate we picked
         # between listing it and moving it (STORE-5).
-        index_lock = _mutation_lock(_index_lock_path(self.skills_dir))
+        index_lock = mutation_lock(index_lock_path(self.skills_dir))
         index_lock.acquire()
-        trash_lock = _mutation_lock(_trash_lock_dir(self.trash_dir))
+        trash_lock = mutation_lock(_trash_lock_dir(self.trash_dir))
         trash_lock.acquire()
         try:
             candidates = sorted(
@@ -2107,25 +1983,7 @@ class Store:
 
     def _disable_unlocked(self, name: str) -> bool:
         """Rename the enabled document to the disabled filename."""
-        skill_dir = _safe_skill_path(self.skills_dir, name)
-        md_file = skill_dir / "SKILL.md"
-        if not md_file.is_file():
-            if (skill_dir / "SKILL.md.disabled").is_file():
-                raise StoreError(f"skill '{name}' is already disabled")
-            raise SkillNotFound(f"skill '{name}' is not installed")
-        _reject_both_documents(skill_dir, name)
-        try:
-            md_file.rename(skill_dir / "SKILL.md.disabled")
-        except FileNotFoundError:
-            # STORE-11: the mutation lock excludes cooperating writers on this
-            # data dir (CLI + web UI), but a writer that did not take it -- or a
-            # change made outside the tool entirely -- can still move the document
-            # between the checks above and this rename.  Fail cleanly instead of
-            # leaking a raw FileNotFoundError that doctor() then cannot explain.
-            raise StoreError(
-                f"skill '{name}' changed concurrently (another process moved "
-                "SKILL.md); retry the disable"
-            ) from None
+        toggle_document(_safe_skill_path(self.skills_dir, name), name, enable=False)
         conn = self._connect()
         try:
             conn.execute(
@@ -2145,22 +2003,7 @@ class Store:
 
     def _enable_unlocked(self, name: str) -> bool:
         """Rename the disabled document back to SKILL.md."""
-        skill_dir = _safe_skill_path(self.skills_dir, name)
-        disabled_file = skill_dir / "SKILL.md.disabled"
-        if not disabled_file.is_file():
-            if (skill_dir / "SKILL.md").is_file():
-                raise StoreError(f"skill '{name}' is already enabled")
-            raise SkillNotFound(f"skill '{name}' is not installed")
-        _reject_both_documents(skill_dir, name)
-        try:
-            disabled_file.rename(skill_dir / "SKILL.md")
-        except FileNotFoundError:
-            # See the disable path: a cross-process move must not surface as a
-            # raw FileNotFoundError (STORE-11).
-            raise StoreError(
-                f"skill '{name}' changed concurrently (another process moved "
-                "SKILL.md.disabled); retry the enable"
-            ) from None
+        toggle_document(_safe_skill_path(self.skills_dir, name), name, enable=True)
         conn = self._connect()
         try:
             conn.execute(
@@ -2208,7 +2051,7 @@ class Store:
         """
         if not self.trash_dir.is_dir():
             return {"purged": []}
-        with _mutation_lock(_trash_lock_dir(self.trash_dir)):
+        with mutation_lock(_trash_lock_dir(self.trash_dir)):
             purged = self._purge_trash_files()
             self._drop_trash_rows(purged)
         return {"purged": purged}
@@ -2358,7 +2201,7 @@ class Store:
                     "license": e["license"],
                     "version": e["version"],
                     "category": e["category"],
-                    "content_hash": _tree_content_hash(
+                    "content_hash": tree_content_hash(
                         _safe_skill_path(self.skills_dir, e["name"])
                     ),
                 }
@@ -2446,7 +2289,7 @@ class Store:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 raise StoreError(f"invalid archive manifest: {exc}") from exc
-            skills = _validate_archive_manifest(manifest)
+            skills = _archive.validate_manifest(manifest)
             if full and not manifest.get("full"):
                 raise StoreError("archive is not a full export; re-export with --full")
             full_entries = _plan_full_restore(self, tmp, manifest) if full else []
@@ -2460,9 +2303,9 @@ class Store:
                 source = tmp / "skills" / name
                 if not source.is_dir():
                     raise StoreError(f"archive manifest skill path is missing: {name!r}")
-                if not _has_skill_document(source):
+                if not _archive.has_skill_document(source):
                     raise StoreError(f"archive manifest skill has no SKILL.md: {name!r}")
-                _validate_imported_skill(source, name)
+                _archive.validate_imported_skill(source, name)
                 _safe_skill_path(self.skills_dir, name)
                 planned.append((name, source, entry))
 
@@ -2478,10 +2321,10 @@ class Store:
                     if name in planned_names:
                         raise StoreError(f"duplicate skill in archive: {name!r}")
                     planned_names.add(name)
-                    if not _has_skill_document(source):
+                    if not _archive.has_skill_document(source):
                         skipped.append(source.name)
                         continue
-                    _validate_imported_skill(source, name)
+                    _archive.validate_imported_skill(source, name)
                     _safe_skill_path(self.skills_dir, name)
                     planned.append((name, source, {"name": name})
                     )
@@ -2542,12 +2385,9 @@ class Store:
                 from .catalog import catalog_path
 
                 catalog_existed = catalog_path(self.data_dir).is_file()
-                try:
-                    restored_trash, restored_templates, skipped_full = _archive.restore_full_payload(
-                        full_entries, replace=force
-                    )
-                except _archive.ArchiveError as exc:
-                    raise StoreError(str(exc)) from exc
+                restored_trash, restored_templates, skipped_full = _archive.restore_full_payload(
+                    full_entries, replace=force
+                )
                 _record_restored_trash(self, restored_trash)
                 restored_catalog = bool(manifest.get("catalog")) and (force or not catalog_existed)
         finally:
@@ -2744,7 +2584,7 @@ class Store:
         unlinked while a mutation is mid-flight, and so the rebuild cannot
         observe a half-applied skill.
         """
-        return _with_scan_lock(self.skills_dir, self._rebuild_index_locked)
+        return _with_index_lock(self.skills_dir, self._rebuild_index_locked)
 
     def _rebuild_index_locked(self) -> dict:
         for path in (
