@@ -11,6 +11,7 @@ from email.utils import collapse_rfc2231_value, unquote
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
+from .documents import DOCUMENT_NAMES
 from .errors import StoreError
 
 
@@ -215,6 +216,29 @@ def _plan_staging(file_parts: list[dict]) -> list[tuple[str, bytes]]:
     return planned
 
 
+def _check_limits(file_parts: list[dict], max_parts: int, max_bytes: int) -> None:
+    if len(file_parts) > max_parts:
+        raise StoreError(f"too many upload parts (max {max_parts})")
+    if sum(len(part.get("content") or b"") for part in file_parts) > max_bytes:
+        raise StoreError("upload too large")
+
+
+def _write_staged(tmp_root: Path, planned: list[tuple[str, bytes]]) -> None:
+    """Write planned parts below *tmp_root*, refusing anything that escapes it."""
+    for rel, content in planned:
+        target = _stage_path(tmp_root, rel).resolve()
+        if not _contained(target, tmp_root):
+            raise StoreError(f"uploaded file {rel!r} is unsafe: it escapes the upload root")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        except (OSError, ValueError) as exc:
+            # Never surface a raw Python exception as the client's error
+            # message (SEC-6); the OS's own wording is the useful part.
+            reason = getattr(exc, "strerror", None) or "unsupported file name"
+            raise StoreError(f"cannot stage uploaded file {rel!r}: {reason}") from exc
+
+
 def upload_folder(
     file_parts: list[dict],
     add_skill: Callable[[Path], dict],
@@ -234,10 +258,7 @@ def upload_folder(
     staging tree, and answers ``400`` naming the part the client sent.
     """
 
-    if len(file_parts) > max_parts:
-        raise StoreError(f"too many upload parts (max {max_parts})")
-    if sum(len(part.get("content") or b"") for part in file_parts) > max_bytes:
-        raise StoreError("upload too large")
+    _check_limits(file_parts, max_parts, max_bytes)
     skill_files = [
         part
         for part in file_parts
@@ -252,20 +273,7 @@ def upload_folder(
     imported: list[str] = []
     skipped: list[str] = []
     try:
-        for rel, content in planned:
-            target = _stage_path(tmp_root, rel).resolve()
-            if not _contained(target, tmp_root):
-                raise StoreError(
-                    f"uploaded file {rel!r} is unsafe: it escapes the upload root"
-                )
-            try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(content)
-            except (OSError, ValueError) as exc:
-                # Never surface a raw Python exception as the client's error
-                # message (SEC-6); the OS's own wording is the useful part.
-                reason = getattr(exc, "strerror", None) or "unsupported file name"
-                raise StoreError(f"cannot stage uploaded file {rel!r}: {reason}") from exc
+        _write_staged(tmp_root, planned)
         for skill_file in sorted(tmp_root.rglob("SKILL.md")):
             source_dir = skill_file.parent
             try:
@@ -292,12 +300,9 @@ def staged_single_skill(
     removes the temporary bytes when the caller has copied them into its own
     durable review artifact.
     """
-    if len(file_parts) > max_parts:
-        raise StoreError(f"too many upload parts (max {max_parts})")
-    if sum(len(part.get("content") or b"") for part in file_parts) > max_bytes:
-        raise StoreError("upload too large")
+    _check_limits(file_parts, max_parts, max_bytes)
     names = [part.get("filename") for part in file_parts if part.get("filename")]
-    primary = [name for name in names if PurePosixPath(name).name in {"SKILL.md", "SKILL.md.disabled"}]
+    primary = [name for name in names if PurePosixPath(name).name in DOCUMENT_NAMES]
     if len(primary) != 1:
         raise StoreError("upload must contain exactly one SKILL.md or SKILL.md.disabled")
     root_name = PurePosixPath(primary[0]).parent
@@ -305,17 +310,10 @@ def staged_single_skill(
         root_name = PurePosixPath(".")
     if any(PurePosixPath(name).parts[:len(root_name.parts)] != root_name.parts for name in names):
         raise StoreError("upload must contain exactly one skill root")
+    planned = _plan_staging(file_parts)
     tmp_root = Path(tempfile.mkdtemp(prefix="skillsmgr-update-"))
     try:
-        for part in file_parts:
-            rel = part.get("filename")
-            if not rel or rel.startswith("/") or "\\" in rel or ".." in PurePosixPath(rel).parts:
-                raise StoreError("uploaded file path is unsafe")
-            target = _stage_path(tmp_root, rel).resolve()
-            if not _contained(target, tmp_root):
-                raise StoreError("uploaded file path escapes its staging root")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(part.get("content") or b"")
+        _write_staged(tmp_root, planned)
         yield tmp_root if str(root_name) == "." else tmp_root / root_name
     except (OSError, ValueError) as exc:
         reason = getattr(exc, "strerror", None) or "unsupported file name"

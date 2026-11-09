@@ -18,8 +18,7 @@ from pathlib import Path
 from . import path_safety
 from . import colors
 from . import doctor, effective, evals, install, paths, scopes, source_update
-from .documents import document_path, document_text
-from . import search as search_mod
+from .documents import document_path
 from . import templates as templates_mod
 #: CLI-3: untrusted skill fields (description, category, notes) come from
 #: imported archives and from directories other tools wrote, so every printed
@@ -41,7 +40,6 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_USAGE = 2
 EXIT_INTERRUPT = 130
-
 
 
 #: A metadata key is emitted as a bare frontmatter mapping key, so it may not
@@ -581,37 +579,14 @@ def search_output_row(match: dict, scope: str) -> dict:
     return {key: value for key, value in match.items() if key not in ("scope", "scope_label")}
 
 
-def search_full_record(match: dict, scope: str, store: Store, get_skill) -> dict:
-    """Rehydrate one search match through the public detail seam."""
-    return _search_detail_or_observation(match, scope, store, get_skill)
-
-
-def _search_detail_or_observation(match: dict, scope: str, store: Store, get_skill) -> dict:
-    if match.get("link_escape") or match.get("addressable") is False:
-        return dict(match)
-    match_scope = match.get("scope", scope)
-    if match_scope == "global":
-        return store.get(match["name"])
-    return get_skill(match_scope, match["name"])
-
-
 def cmd_search(args, store: Store) -> int:
     if args.limit is not None and args.limit < 1:
         raise StoreError("--limit must be a positive integer")
     scope = scope_from_args(args)
-    matches = scopes.search_all(args.term, scope_id=scope, store=store)
-    # search_all returns the historical scope-facing rows. Rehydrate each
-    # match through the public detail seam so the CLI scorer sees bodies, but
-    # retain the original match row for output compatibility.
-    pool = []
-    output_by_id = {}
-    for match in matches:
-        full = search_full_record(match, scope, store, scopes.get_skill)
-        full.update({key: value for key, value in match.items() if key != "body"})
-        pool.append(full)
-        output_by_id[id(full)] = search_output_row(match, scope)
-    ranked_full = search_mod.rank_results(pool, args.term) if pool else []
-    ranked = [(output_by_id[id(record)], score) for record, score in ranked_full]
+    ranked = [
+        (search_output_row(row, scope), score)
+        for row, score in scopes.search_ranked(args.term, scope_id=scope, store=store)
+    ]
     if args.limit:
         ranked = ranked[: args.limit]
     if args.json:
@@ -1119,23 +1094,16 @@ def cmd_tokens(args, store: Store) -> int:
         print(f"tokens: {est['tokens']} ({est['method']})  window {window} {est['window_tokens']}  {est['pct_window']}%")
         return EXIT_OK
     if args.name:
-        if scope not in ("all", "global"):
-            rec = scopes.get_skill(scope, args.name)
-        else:
-            rec = next((r for r in scopes.list_all() if r["name"] == args.name), None)
-            if rec is None:
-                raise StoreError(f"skill '{args.name}' not found")
-            rec = scopes.get_skill(rec.get("scope", "global"), args.name)
-        raw = document_text(Path(rec["path"])) if rec.get("path") else ""
-        raw = raw or rec.get("body") or ""
-        est = estimate(raw, window=window)
+        rec = scopes.find_skill(args.name, scope)
+        est = estimate(scopes.record_text(rec), window=window)
         est["name"] = args.name
         est["scope"] = rec.get("scope", scope)
         if args.json:
             _print_json(est)
             return EXIT_OK
         print(f"{args.name} [{est['scope']}]  tokens: {est['tokens']} ({est['method']})  {est['pct_window']}% of {window} ({est['window_tokens']})")
-        print(f"  chars: {est['chars']}  lines: {est['lines']}  frontmatter ~{max(0, est['tokens'] - estimate(rec.get('body','') or '', window=window)['tokens'])} tok  body ~{estimate(rec.get('body','') or '', window=window)['tokens']} tok")
+        body_tokens = estimate(rec.get("body") or "", window=window)["tokens"]
+        print(f"  chars: {est['chars']}  lines: {est['lines']}  frontmatter ~{max(0, est['tokens'] - body_tokens)} tok  body ~{body_tokens} tok")
         return EXIT_OK
     agg = aggregate(scopes.list_all() if scope in ("all", None, "") else scopes.scan_scope(scope), window)
     wtok, pct = agg["window_tokens"], agg["pct_window"]

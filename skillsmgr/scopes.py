@@ -650,26 +650,20 @@ def get_skill(scope_id: str, name: str) -> dict:
     """Full record for one skill in one scope (includes body, path)."""
     if scope_id == "global":
         rec = _global_store().get(name)
+        if not rec.get("installed"):
+            # STORE-10 keeps a stale index row visible to doctor(); its stored
+            # body must not be served as if the document still existed.
+            raise SkillNotFound(
+                f"skill '{name}' is not installed; run doctor to see why the index "
+                "still has a row for it"
+            )
         rec["scope"] = "global"
         rec["scope_label"] = "Global"
-        # Token enrichment for detail view.
-        try:
-            p = (
-                Path(rec["path"])
-                if rec.get("path")
-                else path_safety.safe_skill_path(paths.skills_dir(), name)
-            )
-            raw = document_text(p)
-            tok = estimate(raw)
-            rec["tokens"] = tok["tokens"]
-            rec["tokens_method"] = tok["method"]
-            rec["tokens_pct"] = tok["pct_window"]
-            rec["chars"] = tok["chars"]
-            rec["lines"] = tok["lines"]
-            rec["body_tokens"] = estimate(rec.get("body") or "")["tokens"]
-            rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
-        except Exception as exc:
-            _diagnose("global scope detail enrichment failed", exc)
+        tok = estimate(document_text(Path(rec["path"])))
+        rec.update(tokens=tok["tokens"], tokens_method=tok["method"], tokens_pct=tok["pct_window"],
+                   chars=tok["chars"], lines=tok["lines"])
+        rec["body_tokens"] = estimate(rec.get("body") or "")["tokens"]
+        rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
         return rec
     scope = scope_by_id(scope_id)
     if scope is None:
@@ -720,6 +714,22 @@ def get_raw(scope_id: str, name: str) -> str:
     if document is not None:
         return read_skill_text(document)[0]
     raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
+
+
+def find_skill(name: str, scope_id: str = "all") -> dict:
+    """One skill's full record: from ``scope_id``, or the first scope holding it."""
+    if scope_id not in ("all", ""):
+        return get_skill(scope_id, name)
+    row = next((r for r in list_all() if r["name"] == name), None)
+    if row is None:
+        raise SkillNotFound(f"skill '{name}' not found")
+    return get_skill(row.get("scope", "global"), name)
+
+
+def record_text(record: dict) -> str:
+    """The text a token estimate covers: the document, else the stored body."""
+    raw = document_text(Path(record["path"])) if record.get("path") else ""
+    return raw or record.get("body") or ""
 
 
 def _check_mutation_documents(skill_dir: Path) -> None:
@@ -1420,14 +1430,14 @@ def search_all(
         _SCOPE_READ_FLIGHTS,
         _SCOPE_READ_FLIGHTS_LOCK,
         key,
-        lambda: _search_all_uncached(term, scope_id, store=selected_store),
+        lambda: [row for row, _score in search_ranked(term, scope_id, store=selected_store)],
     )
 
 
-def _search_all_uncached(
+def search_ranked(
     term: str, scope_id: str | None = None, *, store: Store | None = None
-) -> list[dict]:
-    """Case-insensitive search over name/description/body.
+) -> list[tuple[dict, int]]:
+    """``(row, score)`` pairs, best first: name/description/body search.
 
     scope_id == None or 'all' -> all scopes; otherwise one scope.  The
     optional store selects the global records for callers serving a requested
@@ -1456,10 +1466,9 @@ def _search_all_uncached(
     except ValueError as exc:
         raise StoreError(str(exc)) from exc
     ranked.sort(key=lambda p: (-p[1], p[0]["name"].lower()))
-    results = [r for r, _ in ranked]
     # Store.search historically omits body from global result rows.  Keep that
     # output shape while retaining the body in the private ranking pool.
-    for record in results:
+    for record, _score in ranked:
         if record.get("scope") == "global":
             record.pop("body", None)
-    return results
+    return ranked

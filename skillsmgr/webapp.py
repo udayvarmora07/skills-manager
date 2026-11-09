@@ -711,77 +711,55 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     # -- routing ----------------------------------------------------------
 
-    def do_GET(self):
+    def _serve(self, *steps) -> None:
+        """Validate the request, run each step, and map any failure to one response."""
         try:
             self._validate_request()
-            self._route_get()
+            for step in steps:
+                step()
         except Exception as exc:
             self._handle_exception(exc)
+
+    def do_GET(self):
+        self._serve(self._route_get)
 
     def do_POST(self):
-        try:
-            self._validate_request()
-            self._require_post_media_type()
-            self._route_post()
-        except Exception as exc:
-            self._handle_exception(exc)
+        self._serve(self._require_post_media_type, self._route_post)
 
     def do_PATCH(self):
-        try:
-            self._validate_request()
-            self._route_patch()
-        except Exception as exc:
-            self._handle_exception(exc)
+        self._serve(self._route_patch)
 
     def do_DELETE(self):
-        try:
-            self._validate_request()
-            self._route_delete()
-        except Exception as exc:
-            self._handle_exception(exc)
+        self._serve(self._route_delete)
 
     def do_PUT(self):
-        try:
-            self._validate_request()
-            self._route_put()
-        except Exception as exc:
-            self._handle_exception(exc)
+        self._serve(self._route_put)
 
     def do_HEAD(self):
         """Answer HEAD like the equivalent GET, headers only (BUG-9).
 
         The stdlib's default handler answered HEAD/OPTIONS/TRACE with a 501 HTML
         page that carried **no** security headers at all, so those verbs
-        bypassed the whole response policy.  HEAD now goes through the read
-        router with the body suppressed by ``_send``.
+        bypassed the whole response policy.  ``_send`` suppresses the body.
         """
-        try:
-            self._validate_request()
-            self._route_get()
-        except Exception as exc:
-            self._handle_exception(exc)
+        self._serve(self._route_get)
 
     def do_OPTIONS(self):
-        self._unsupported_method()
+        self._serve(self._method_not_allowed)
 
     def do_TRACE(self):
-        self._unsupported_method()
+        self._serve(self._method_not_allowed)
 
-    def _unsupported_method(self) -> None:
+    def _method_not_allowed(self) -> None:
         """Refuse an unrouted verb with the standard policy and headers."""
-        try:
-            self._validate_request()
-            self.send_response(405)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Allow", _ALLOWED_METHODS)
-            self.send_header("Content-Length", str(len(_METHOD_NOT_ALLOWED_BODY)))
-            self.send_header("Cache-Control", "no-store")
-            self._send_security_headers()
-            self.end_headers()
-            if self.command != "HEAD":
-                self._write_body(_METHOD_NOT_ALLOWED_BODY)
-        except Exception as exc:
-            self._handle_exception(exc)
+        self.send_response(405)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Allow", _ALLOWED_METHODS)
+        self.send_header("Content-Length", str(len(_METHOD_NOT_ALLOWED_BODY)))
+        self.send_header("Cache-Control", "no-store")
+        self._send_security_headers()
+        self.end_headers()
+        self._write_body(_METHOD_NOT_ALLOWED_BODY)
 
     def _require_post_media_type(self) -> None:
         """Every POST must declare ``application/json``, body or not (R9/S4).
@@ -1048,35 +1026,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def _route_skill_detail_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
         """Serve ``GET /api/skills/<name>`` -- one full record with counts.
 
-        The token breakdown is advisory: if the document cannot be estimated the
-        record still answers, with ``tokens_method: "unavailable"`` and the
-        reason diagnosed, rather than losing the whole response to a read error.
+        A row whose directory is gone answers 404 rather than its stored body
+        (docs/24 §D3-6).
         """
         if len(parts) != 3 or parts[:2] != ["api", "skills"]:
             return False
-        scope = _scope_param(qs)
-        if scope != "global":
-            record = scopes.get_skill(scope, parts[2])
-            _enrich_rows_with_catalog(self.store, [record])
-            self._send_json(record)
-            return True
-        # Use injected store for correct data_dir in tests, with token enrichment
-        rec = self.store.get(parts[2])
-        _require_installed(rec, parts[2])
-        rec.setdefault("scope", "global")
-        rec.setdefault("scope_label", "Global")
-        try:
-            tok = estimate(document_text(self.store.skills_dir / parts[2]))
-            _apply_token_estimate(rec, tok)
-            rec["lines"] = tok["lines"]
-            rec["body_tokens"] = estimate(rec.get("body") or "")["tokens"]
-            rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
-        except Exception as exc:
-            _diagnose(f"detail token enrichment failed for {parts[2]!r}", exc)
-            rec.setdefault("tokens", 0)
-            rec.setdefault("tokens_method", "unavailable")
-        _enrich_rows_with_catalog(self.store, [rec])
-        self._send_json(rec)
+        record = scopes.get_skill(_scope_param(qs), parts[2])
+        _enrich_rows_with_catalog(self.store, [record])
+        self._send_json(record)
         return True
 
     def _route_templates_get(self, parts: list[str]) -> bool:
@@ -1197,44 +1154,12 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(estimate(text, window=win))
             return True
         if name:
-            rec = self._tokens_record(name, scope)
-            self._send_json(estimate(self._tokens_document(rec), window=win))
+            self._send_json(estimate(scopes.record_text(scopes.find_skill(name, scope)), window=win))
             return True
         records = scopes.list_all() if scope in ("all", "") else scopes.scan_scope(scope)
         self._send_json(aggregate(records, win))
         return True
 
-    def _tokens_record(self, name: str, scope: str) -> dict:
-        """Return the record ``/api/tokens?name=`` estimates from.
-
-        With an explicit agent scope that scope answers directly; otherwise the
-        first record of that name across every scope wins.  The enrichment is
-        advisory: if the full record cannot be read the listing record is
-        still usable, and the reason is diagnosed rather than swallowed.
-        """
-        if scope and scope not in ("all", ""):
-
-            return scopes.get_skill(scope, name)
-        # Find first match across all scopes.
-
-        rec = next((r for r in scopes.list_all() if r["name"] == name), None)
-        if rec is None:
-            raise SkillNotFound(f"skill '{name}' not found")
-        # Enrich with full record for body.
-        try:
-
-            rec = scopes.get_skill(rec.get("scope", "global"), name)
-        except Exception as exc:
-            # The listing record is still usable; say why it is thin
-            # rather than silently returning a partial record.
-            _diagnose(f"tokens detail enrichment failed for {name!r}", exc)
-        return rec
-
-    @staticmethod
-    def _tokens_document(rec: dict) -> str:
-        """Return the document text a token estimate should be run over."""
-        raw = document_text(Path(rec["path"])) if rec.get("path") else ""
-        return raw or rec.get("body") or ""
 
     def _route_get(self):
         """Dispatch ``GET`` to one route guard, in order.
@@ -1379,9 +1304,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         from_scope = raw_from_scope.strip() or "global"
         to_scopes = batch.requested_scopes(data)
         force = bool(data.get("force"))
-        if not name:
-            raise StoreError("name is required for sync")
-
         self._send_json(scopes.sync_skill(name, from_scope, to_scopes, force=force))
         return True
 
