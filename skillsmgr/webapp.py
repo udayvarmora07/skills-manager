@@ -1191,6 +1191,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         data_dir = self.store.data_dir
         if parts == ["api", "ai", "settings"]:
             self._send_json(ai.public_settings(data_dir))
+        elif len(parts) == 4 and parts[2] == "prompt-sets":
+            self._send_json(ai_skills.read_prompt_set(data_dir, parts[3]))
         elif parts == ["api", "ai", "runs"]:
             self._send_json({"runs": ai_skills.list_runs(data_dir)})
         elif len(parts) == 4 and parts[2] == "runs":
@@ -1559,6 +1561,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             "overlap-judge": lambda body: ai_overlap.overlap_judge(data_dir, body),
             "fit-budget": lambda body: ai_budget.fit_budget(data_dir, body),
             "review-briefing": lambda body: ai_review.review_briefing(data_dir, body),
+            "prompt-sets": lambda body: ai_skills.save_prompt_set(data_dir, body),
         }
         handler = handlers.get(parts[2])
         if handler is None:

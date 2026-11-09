@@ -547,7 +547,9 @@ responses at 2 MiB, appends counts and an input hash to `<data>/ai/usage.jsonl`,
 and parses JSON answers with `extract_json()`. `ai_skills.py` builds an agent's
 listing (`build_listing`), runs the trigger test (`trigger_test`) and the
 held-out-verified description rewrite (`improve_description`), and saves runs
-under `<data>/ai/runs/`. `ai_overlap.py` (A3) judges bounded candidate
+under `<data>/ai/runs/`. Saved regression prompts (A7) live in
+`<data>/ai/prompt-sets/`; a saved-prompt run is compared per skill with the
+previous one (`save_prompt_set`, `read_prompt_set`). `ai_overlap.py` (A3) judges bounded candidate
 pairs in both orders and keeps only conflicts quoted verbatim from the files.
 `ai_budget.py` (A4) shortens the largest descriptions when a listing exceeds
 its budget and marks each shorter version safe only if it still triggers.

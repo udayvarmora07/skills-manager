@@ -47,7 +47,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A4 | Listing-budget fitter: shorten the largest descriptions to fit the agent's budget, each verified by A1 | #56710, #19679, #19090; existing `claude_listing` estimate | **Shipped** |
 | A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | **Shipped** (includes A6's demote-only opinions) |
 | A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
-| A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | Planned |
+| A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | **Shipped** |
 | A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | Planned |
 | A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | Planned |
 | A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | Planned |
@@ -101,6 +101,10 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[SPEC]** `ai_review.review_briefing` reads a pending review without changing it: for an update, each changed file's bounded unified diff plus the full text of added files from the staged candidate; for a registry fetch, the snapshot's files. At most 25 files and 40,000 characters are sent with the advisory risk findings. Claims, capabilities (network, shell, credentials, file-write, persistence) and description mismatches are kept only when their quote, whitespace-normalised and with diff markers removed, occurs in the file they name. The summary is shown but labelled unchecked. Each risk finding may receive an opinion (`likely-real`, `likely-false-positive`, `unclear`), shown beside the original, which keeps its severity. The v2 review panels embed the briefing as an opt-in *Explain with AI* step with the usual estimate-then-send.
 
-## 10. Next
+## 10. A7 regression pack
 
-A7 regression pack (saved prompt sets re-run after edits and model changes), then A8 eval runner.
+**[SPEC]** Any trigger-test result can be saved as the scope's regression prompts (`<data>/ai/prompt-sets/<scope>.json`; duplicates merged; at most 20 per skill and 500 per scope). A trigger test with `saved: true` re-runs them (skipping prompts whose skill is no longer listed) and compares every skill's hit rate with the most recent earlier saved-prompt run for that scope, listing each change and flagging regressions. The comparison spans whatever changed in between, edits or a different model; the run labels say which model answered each.
+
+## 11. Next
+
+A8 eval runner with and without the skill, then A9 ask your library.

@@ -351,23 +351,14 @@ def trigger_test(data_dir: Path, payload: dict) -> dict:
     estimate = bool(payload.get("estimate"))
     run = AiRun(data_dir, "trigger-test", estimate_only=estimate)
     repeats = _repeats(payload.get("repeats"))
-    raw = payload.get("prompts")
-    generated = False
-    if not raw:
-        targets = payload.get("generate_for") or []
-        if not isinstance(targets, list) or not all(isinstance(t, str) for t in targets):
-            raise AiError("generate_for must be a list of skill names", "ai-input")
-        if not targets:
-            raise AiError("give test prompts, or choose skills to generate prompts for", "ai-input")
-        raw = generate_prompts(run, listing, targets, per_skill=payload.get("per_skill") or 3,
-                               near_misses=payload.get("near_misses") or 0)
-        generated = True
+    raw, source = _trigger_prompts(data_dir, run, listing, payload)
     prompts = normalize_prompts(raw, names)
     passes = [_route(run, listing, prompts, {}, seed) for seed in range(repeats)]
     result = {
         "kind": "trigger-test", "scope": listing["scope"],
         "listed": len(listing["entries"]), "hidden": listing["hidden"],
-        "over_cap": listing["over_cap"], "repeats": repeats, "generated_prompts": generated,
+        "over_cap": listing["over_cap"], "repeats": repeats,
+        "generated_prompts": source == "generated", "prompt_source": source,
         "egress": _egress(listing, len(prompts), [], run),
         "run": run.label(),
     }
@@ -376,8 +367,106 @@ def trigger_test(data_dir: Path, payload: dict) -> dict:
         return result
     result.update(_summarize(listing, prompts, passes))
     result["run"] = run.label()
+    if source == "saved":
+        result["compared_with"], result["changes"] = _compare_with_previous(data_dir, result)
     result["run_id"] = _save_run(data_dir, result)
     return result
+
+
+def _trigger_prompts(data_dir: Path, run: AiRun, listing: dict, payload: dict) -> tuple[list, str]:
+    """Prompts for one trigger test: given, saved regression set, or generated."""
+    if payload.get("saved"):
+        names = {e["name"] for e in listing["entries"]}
+        saved = [p for p in read_prompt_set(data_dir, listing["scope"])["prompts"]
+                 if p["expected"] is None or p["expected"] in names]
+        if not saved:
+            raise AiError("no saved regression prompts for this agent yet", "ai-input")
+        return saved, "saved"
+    if payload.get("prompts"):
+        return payload["prompts"], "given"
+    targets = payload.get("generate_for") or []
+    if not isinstance(targets, list) or not all(isinstance(t, str) for t in targets):
+        raise AiError("generate_for must be a list of skill names", "ai-input")
+    if not targets:
+        raise AiError("give test prompts, or choose skills to generate prompts for", "ai-input")
+    return generate_prompts(run, listing, targets, per_skill=payload.get("per_skill") or 3,
+                            near_misses=payload.get("near_misses") or 0), "generated"
+
+
+# -- regression prompt sets (A7) ---------------------------------------------
+
+MAX_SAVED_PER_SKILL = 20
+MAX_SAVED = 500
+
+
+def _prompt_set_path(data_dir: Path, scope_id: str) -> Path:
+    if not isinstance(scope_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9:._-]{0,127}", scope_id):
+        raise AiError("invalid scope id", "ai-input")
+    return Path(data_dir) / "ai" / "prompt-sets" / f"{scope_id.replace(':', '_')}.json"
+
+
+def read_prompt_set(data_dir: Path, scope_id: str) -> dict:
+    """The saved regression prompts for one scope (empty when none)."""
+    path = _prompt_set_path(data_dir, scope_id)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"scope": scope_id, "prompts": []}
+    except (OSError, ValueError):
+        raise AiError("the saved prompt set cannot be read; delete it and save again", "ai-input") from None
+    prompts = [p for p in data.get("prompts", []) if isinstance(p, dict)
+               and isinstance(p.get("text"), str) and (p.get("expected") is None or isinstance(p.get("expected"), str))]
+    return {"scope": scope_id, "prompts": [{"text": p["text"], "expected": p.get("expected")} for p in prompts]}
+
+
+def save_prompt_set(data_dir: Path, payload: dict) -> dict:
+    """Merge prompts into a scope's regression set (``replace: true`` overwrites it)."""
+    payload = payload if isinstance(payload, dict) else {}
+    scope_id = payload.get("scope")
+    path = _prompt_set_path(data_dir, scope_id)
+    incoming = payload.get("prompts")
+    if not isinstance(incoming, list):
+        raise AiError("prompts must be a list", "ai-input")
+    current = [] if payload.get("replace") else read_prompt_set(data_dir, scope_id)["prompts"]
+    seen = {(p["text"], p["expected"]) for p in current}
+    per_skill: dict = {}
+    for p in current:
+        per_skill[p["expected"]] = per_skill.get(p["expected"], 0) + 1
+    for item in incoming[:MAX_PROMPTS]:
+        if not isinstance(item, dict):
+            continue
+        text = _clean_text(item.get("text"), "a prompt")
+        expected = item.get("expected") if isinstance(item.get("expected"), str) else None
+        if expected is not None:
+            validate_skill_name(expected)
+        if (text, expected) in seen or per_skill.get(expected, 0) >= MAX_SAVED_PER_SKILL:
+            continue
+        seen.add((text, expected))
+        per_skill[expected] = per_skill.get(expected, 0) + 1
+        current.append({"text": text, "expected": expected})
+    current = current[:MAX_SAVED]
+    mkdir_private(path.parent)
+    atomic_write_text(path, json.dumps({"scope": scope_id, "prompts": current}, indent=1))
+    return {"scope": scope_id, "prompts": current}
+
+
+def _compare_with_previous(data_dir: Path, result: dict) -> tuple[str | None, list[dict]]:
+    """Per-skill hit-rate change against the last saved-prompt run for this scope."""
+    for row in list_runs(data_dir, limit=KEEP_RUNS):
+        if row.get("kind") != "trigger-test" or row.get("scope") != result["scope"]:
+            continue
+        previous = read_run(data_dir, row["run_id"])
+        if previous.get("prompt_source") != "saved":
+            continue
+        before = {s["name"]: s["hit_rate"] for s in previous.get("skills", [])}
+        changes = []
+        for skill in result["skills"]:
+            old, new = before.get(skill["name"]), skill["hit_rate"]
+            if old is not None and new is not None and old != new:
+                changes.append({"name": skill["name"], "before": old, "after": new,
+                                "regressed": new < old})
+        return row["run_id"], sorted(changes, key=lambda c: (not c["regressed"], c["name"]))
+    return None, []
 
 
 # -- verified description rewrite -------------------------------------------

@@ -442,6 +442,35 @@ class AiFeatureTests(unittest.TestCase):
         with self.assertRaises(ai.AiError):
             ai_review.review_briefing(self.store.data_dir, {"kind": "other", "review_id": "x"})
 
+    # -- regression pack --------------------------------------------------
+
+    def test_saved_prompts_rerun_and_report_regressions(self):
+        self._configure()
+        prompts = [{"text": "bump release version and changelog for git", "expected": "git-release"},
+                   {"text": "my slow queries need a database index", "expected": "sql-tuning"},
+                   {"text": "write me a haiku", "expected": None}]
+        saved = ai_skills.save_prompt_set(self.store.data_dir, {"scope": "claude-code", "prompts": prompts + prompts})
+        self.assertEqual(len(saved["prompts"]), 3)            # duplicates merged
+        first = ai_skills.trigger_test(self.store.data_dir, {"scope": "claude-code", "saved": True})
+        self.assertEqual(first["prompt_source"], "saved")
+        self.assertIsNone(first["compared_with"])
+        doc = self.home / ".claude/skills/git-release/SKILL.md"
+        doc.write_text(doc.read_text().replace("Use for git release tagging and changelog version bumps.",
+                                               "Handles stuff."))
+        second = ai_skills.trigger_test(self.store.data_dir, {"scope": "claude-code", "saved": True})
+        self.assertEqual(second["compared_with"], first["run_id"])
+        self.assertEqual(second["changes"], [{"name": "git-release", "before": 1.0, "after": 0.0, "regressed": True}])
+
+    def test_prompt_set_input_is_validated(self):
+        with self.assertRaises(ai.AiError):
+            ai_skills.save_prompt_set(self.store.data_dir, {"scope": "../x", "prompts": []})
+        with self.assertRaises(Exception):
+            ai_skills.save_prompt_set(self.store.data_dir, {"scope": "claude-code",
+                                                            "prompts": [{"text": "x", "expected": "Bad Name"}]})
+        self._configure()
+        with self.assertRaises(ai.AiError):
+            ai_skills.trigger_test(self.store.data_dir, {"scope": "claude-code", "saved": True})
+
     # -- HTTP -------------------------------------------------------------
 
     def test_http_routes(self):

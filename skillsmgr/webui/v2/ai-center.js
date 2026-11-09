@@ -17,6 +17,7 @@
         busy: false, error: "", note: "", connection: null,
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
+        savedCount: 0, savedNote: "",
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
@@ -46,8 +47,8 @@
       usage() { return (this.settings && this.settings.usage) || null; },
     },
     watch: {
-      page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); } },
-      scope() { this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
+      page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
+      scope() { this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
     },
     methods: {
@@ -104,9 +105,16 @@
       async clearKey() { const s = await this.guard(() => post("/api/ai/settings", { clear_key: true })); if (s) { this.settings = s; this.note = "Stored key removed."; } },
       async turnOff() { const s = await this.guard(() => post("/api/ai/settings", { provider: null })); if (s) { this.settings = s; this.load(); this.note = "AI features are off and the stored key is deleted."; } },
       async testConnection() { const r = await this.guard(() => post("/api/ai/test-connection", {})); if (r) { this.connection = r; this.load(); } },
+      async loadSaved() { this.savedCount = 0; if (!this.scope) return; try { this.savedCount = (await api("/api/ai/prompt-sets/" + encodeURIComponent(this.scope))).prompts.length; } catch (e) { this.savedCount = 0; } },
+      async saveTests() {
+        const prompts = this.result.prompts.map((p) => ({ text: p.text, expected: p.expected }));
+        const r = await this.guard(() => post("/api/ai/prompt-sets", { scope: this.result.scope, prompts }));
+        if (r) { this.savedCount = r.prompts.length; this.savedNote = "Saved. " + r.prompts.length + " regression prompts for this agent; re-run them after edits or a model change."; }
+      },
       triggerBody(estimate) {
         const body = { scope: this.scope, repeats: Number(this.repeats), estimate };
-        if (this.mode === "generate") Object.assign(body, { generate_for: this.chosen, per_skill: Number(this.perSkill), near_misses: Number(this.nearMisses) });
+        if (this.mode === "saved") body.saved = true;
+        else if (this.mode === "generate") Object.assign(body, { generate_for: this.chosen, per_skill: Number(this.perSkill), near_misses: Number(this.nearMisses) });
         else body.prompts = this.parsedPrompts;
         return body;
       },
@@ -183,7 +191,7 @@
             <div class="tp-set-row"><label for="ai-scope"><b>Agent</b><small>Whose skill list to test.</small></label>
               <select id="ai-scope" class="field" v-model="scope"><option v-for="s in agentScopes" :key="s.id" :value="s.id">{{ s.label }} ({{ s.count }})</option></select></div>
             <div class="tp-set-row"><span><b>Test prompts</b><small>Let the model write realistic requests, or write your own.</small></span>
-              <div class="seg" role="group" aria-label="Prompt source"><button type="button" :aria-pressed="mode==='generate'" @click="mode='generate'">Generate</button><button type="button" :aria-pressed="mode==='manual'" @click="mode='manual'">Write my own</button></div></div>
+              <div class="seg" role="group" aria-label="Prompt source"><button type="button" :aria-pressed="mode==='generate'" @click="mode='generate'">Generate</button><button type="button" :aria-pressed="mode==='manual'" @click="mode='manual'">Write my own</button><button type="button" :aria-pressed="mode==='saved'" :disabled="!savedCount" @click="mode='saved'">Saved tests ({{ savedCount }})</button></div></div>
             <div class="tp-set-row"><label for="ai-rep"><b>Repeats</b><small>Answers vary; repeating shows how stable a choice is. The skill order is shuffled each time.</small></label>
               <select id="ai-rep" class="field" v-model.number="repeats"><option v-for="n in 5" :key="n" :value="n">{{ n }}</option></select></div>
           </div>
@@ -198,11 +206,12 @@
               <div class="tp-set-row"><label for="ai-nm"><b>Near-miss prompts</b><small>Requests that look related but should not load any chosen skill.</small></label><select id="ai-nm" class="field" v-model.number="nearMisses"><option v-for="n in [0,1,2,3,4,5,6,7,8,9,10]" :key="n" :value="n">{{ n }}</option></select></div>
             </div>
           </template>
+          <p v-else-if="mode==='saved'" class="tp-fine">Re-runs the {{ savedCount }} saved prompts and compares each skill with the last saved-test run, so a description edit or a model change that breaks triggering shows up.</p>
           <template v-else>
             <label for="ai-prompts" class="tp-fine">One request per line. End a line with <code>=&gt; skill-name</code> for the skill it should load, or <code>=&gt; none</code>.</label>
             <textarea id="ai-prompts" class="field ai-text" v-model="promptText" rows="8" placeholder="fill in this tax form PDF => pdf-forms"></textarea>
           </template>
-          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !scope || (mode==='generate' ? !chosen.length : !parsedPrompts.length)" @click="estimateTrigger()">Check what will be sent</button></div>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !scope || (mode==='generate' ? !chosen.length : mode==='saved' ? !savedCount : !parsedPrompts.length)" @click="estimateTrigger()">Check what will be sent</button></div>
           <div v-if="estimate" class="ai-confirm" role="region" aria-label="Before sending">
             <p v-for="(line,i) in estimate.egress" :key="i" class="tp-fine">{{ line }}</p>
             <p class="tp-fine">At most about {{ fmt(estimate.run.estimated_input_tokens) }} tokens to {{ estimate.run.model }}<span v-if="estimate.over_cap.length">; {{ estimate.over_cap.length }} descriptions are longer than the agent's cap and are cut, as the agent would.</span></p>
@@ -216,6 +225,11 @@
           <div class="ai-stats"><div><b class="num">{{ pct(result.recall) }}</b><small>of prompts picked the right skill</small></div>
             <div v-if="result.false_trigger_rate!=null"><b class="num">{{ pct(result.false_trigger_rate) }}</b><small>of near-misses loaded a skill anyway</small></div>
             <div><b class="num">{{ fmt(result.run.input_tokens) }}</b><small>input tokens used</small></div></div>
+          <div v-if="result.prompt_source==='saved'" class="ai-confirm">
+            <p v-if="!result.compared_with" class="tp-fine">First saved-test run for this agent; the next one will be compared with it.</p>
+            <p v-else-if="!result.changes.length" class="tp-fine">No skill changed since the last saved-test run.</p>
+            <p v-for="c in result.changes" :key="c.name" class="tp-fine"><span :class="['pill', c.regressed ? 'bad' : 'ok']">{{ c.regressed ? 'Worse' : 'Better' }}</span> <span class="tp-mono">{{ c.name }}</span>: {{ pct(c.before) }} → {{ pct(c.after) }}</p>
+          </div>
           <ul class="tp-rows">
             <li v-for="s in result.skills" :key="s.name" class="v2-tool-row">
               <span class="tp-row-main"><strong class="tp-mono">{{ s.name }}</strong><small>Won {{ pct(s.hit_rate) }} of its {{ s.prompts }} prompts<span v-if="s.lost_to.length">; lost to {{ s.lost_to.map(l => skillLabel(l.name) + ' ×' + l.count).join(', ') }}</span></small></span>
@@ -225,6 +239,8 @@
           <details class="tp-more"><summary>Every prompt and what was chosen</summary>
             <table class="ai-table"><thead><tr><th>Prompt</th><th>Should load</th><th>Chosen</th></tr></thead>
               <tbody><tr v-for="p in result.prompts" :key="p.id"><td>{{ p.text }}</td><td class="tp-mono">{{ p.expected || 'none' }}</td><td class="tp-mono">{{ choiceList(p.choices) }}</td></tr></tbody></table></details>
+          <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy" @click="saveTests()">Save these prompts as regression tests</button></div>
+          <p v-if="savedNote" class="tp-fine" role="status">{{ savedNote }}</p>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
         </section>
       </template>

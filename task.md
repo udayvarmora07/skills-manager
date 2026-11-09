@@ -13,7 +13,7 @@
 - [x] A3 overlap judge on near-duplicate candidates.
 - [x] A4 listing-budget fitter verified by A1.
 - [x] A5 review briefing for registry fetch and update review.
-- [ ] A7 regression pack: saved prompt sets re-run after edits and model changes.
+- [x] A7 regression pack: saved prompt sets re-run after edits and model changes.
 - [ ] A8 eval runner with and without the skill.
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
 - [ ] Measure trigger-test fidelity against a real agent's choices.

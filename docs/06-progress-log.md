@@ -43,6 +43,10 @@ review; claims must quote their file and risk opinions never change a finding
 (`POST /api/ai/review-briefing`, *Explain with AI* in both review panels). 2
 more tests; the panel was rendered against a real update review.
 
+**[SPEC]** A7 followed: trigger-test prompts can be saved per scope and re-run
+with `saved: true`; each skill's hit rate is compared with the previous saved
+run and regressions are flagged. 2 more tests; browser-checked.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any
