@@ -16,7 +16,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from skillsmgr import ai, ai_skills, context
+from skillsmgr import ai, ai_overlap, ai_skills, context
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
 
@@ -82,6 +82,19 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
             return {"prompts": [{"skill": n, "text": f"please help {n.replace('-', ' ')} zebra quartz {i}"}
                                 for n in names for i in range(per)],
                     "near_misses": [{"text": "brew some coffee beans please", "better": None}]}
+        if "You review two AI coding-agent skills" in system:
+            a = re.search(r"<untrusted kind=\"skill-a\">\nname: ([a-z0-9-]+)", user).group(1)
+            b = re.search(r"<untrusted kind=\"skill-b\">\nname: ([a-z0-9-]+)", user).group(1)
+            if FakeProvider.mode == "order-biased":
+                relation = "overlapping" if a < b else "distinct"
+            else:
+                relation = "overlapping" if a.split("-")[0] == b.split("-")[0] else "distinct"
+            return {"relation": relation, "router_confusion": relation != "distinct",
+                    "shared_requests": [f"help with {a}"],
+                    "conflicts": [{"a_quote": f"Body of {a}.", "b_quote": f"Body of {b}.", "why": "real"},
+                                  {"a_quote": "an invented instruction", "b_quote": "another one", "why": "fake"}],
+                    "recommendation": "narrow-descriptions",
+                    "a_boundary": f"Not for {b}.", "b_boundary": f"Not for {a}.", "merged_description": ""}
         if "improve the description" in system:
             name = re.search(r"Skill name: ([a-z0-9-]+)", user).group(1)
             return {"candidates": [{"description": f"Use for {name.replace('-', ' ')} zebra quartz help requests.",
@@ -307,6 +320,40 @@ class AiFeatureTests(unittest.TestCase):
         self._configure()
         with self.assertRaises(Exception):
             ai_skills.improve_description(self.store.data_dir, {"scope": "claude-code", "name": "../x"})
+
+    # -- overlap judge ----------------------------------------------------
+
+    def test_overlap_judge_checks_quotes_and_both_orders(self):
+        self._configure()
+        self._skill(self.home / ".claude/skills", "sql-indexes", "Use for database index design and slow queries.")
+        result = ai_overlap.overlap_judge(self.store.data_dir, {"scope": "claude-code"})
+        pairs = {tuple(j["skills"]): j for j in result["judgements"]}
+        judged = pairs[("sql-indexes", "sql-tuning")]
+        self.assertEqual(judged["relation"], "overlapping")
+        self.assertTrue(judged["consistent"])
+        self.assertIn("shared description words", judged["sources"])
+        self.assertEqual(len(judged["conflicts"]), 1)          # the invented quote is dropped
+        self.assertEqual(judged["unverified_quotes"], 2)       # once per order
+        self.assertEqual(len(FakeProvider.calls), 2 * result["pairs_judged"])
+
+    def test_overlap_judge_reports_order_dependent_verdicts_as_uncertain(self):
+        self._configure()
+        FakeProvider.mode = "order-biased"
+        result = ai_overlap.overlap_judge(self.store.data_dir, {
+            "scope": "claude-code", "pairs": [["git-release", "sql-tuning"]], "max_pairs": 1})
+        judged = result["judgements"][0]
+        self.assertEqual(judged["relation"], "uncertain")
+        self.assertFalse(judged["consistent"])
+        self.assertEqual(judged["sources"], ["chosen"])
+
+    def test_overlap_judge_estimate_sends_nothing_and_validates_pairs(self):
+        self._configure()
+        result = ai_overlap.overlap_judge(self.store.data_dir, {
+            "scope": "claude-code", "pairs": [["git-release", "pdf-forms"]], "estimate": True})
+        self.assertEqual(FakeProvider.calls, [])
+        self.assertEqual(result["pairs"][0]["skills"], ["git-release", "pdf-forms"])
+        with self.assertRaises(ai.AiError):
+            ai_overlap.overlap_judge(self.store.data_dir, {"scope": "claude-code", "pairs": ["x"]})
 
     # -- HTTP -------------------------------------------------------------
 

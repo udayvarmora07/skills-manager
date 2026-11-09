@@ -17,6 +17,7 @@
         busy: false, error: "", note: "", connection: null,
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
+        overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
       };
     },
@@ -45,12 +46,19 @@
     },
     watch: {
       page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); } },
-      scope() { this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
+      scope() { this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
     },
     methods: {
       pct,
       fmt(n) { return n == null ? "–" : Number(n).toLocaleString(); },
+      relationTone(r) { return { "same-purpose": "bad", overlapping: "warn", uncertain: "note", distinct: "ok" }[r] || "off"; },
+      relationLabel(r) { return { "same-purpose": "Same purpose", overlapping: "Overlapping", uncertain: "Uncertain: depends on order", distinct: "Distinct", unknown: "No clear answer" }[r] || r; },
+      actionLabel(a) { return { merge: "Merge them", "narrow-descriptions": "Sharpen both descriptions", "keep-both": "Keep both as they are", review: "Answers disagreed: review yourself" }[a] || a; },
+      addPair() { if (this.pairA && this.pairB && this.pairA !== this.pairB && this.pairs.length < 12) { this.pairs.push([this.pairA, this.pairB]); this.pairA = this.pairB = ""; } },
+      overlapBody(estimate) { return { scope: this.scope, max_pairs: Number(this.overlapLimit), pairs: this.pairs, estimate }; },
+      async estimateOverlap() { this.overlap = null; this.overlapEstimate = await this.guard(() => post("/api/ai/overlap-judge", this.overlapBody(true))); },
+      async runOverlap() { const r = await this.guard(() => post("/api/ai/overlap-judge", this.overlapBody(false))); if (r) { this.overlap = r; this.overlapEstimate = null; this.load(); } },
       verdictTone(v) { return v === "fires" ? "ok" : v === "never-fires" ? "bad" : "warn"; },
       verdictLabel(v) { return { fires: "Fires", "never-fires": "Never fires", unreliable: "Unreliable", unknown: "Unknown" }[v] || v; },
       skillLabel(n) { return n === "(none)" ? "no skill" : n; },
@@ -152,7 +160,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ page==='ai-trigger' ? 'Trigger test' : 'Improve a description' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -209,6 +217,43 @@
             <table class="ai-table"><thead><tr><th>Prompt</th><th>Should load</th><th>Chosen</th></tr></thead>
               <tbody><tr v-for="p in result.prompts" :key="p.id"><td>{{ p.text }}</td><td class="tp-mono">{{ p.expected || 'none' }}</td><td class="tp-mono">{{ choiceList(p.choices) }}</td></tr></tbody></table></details>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-overlap'">
+        <h1 class="h1" id="h1" tabindex="-1">Overlap check</h1>
+        <p class="lede">Pairs of skills an agent could confuse, or whose instructions contradict each other. Each pair is judged twice with the order swapped, and quoted conflicts must appear word for word in the files.</p>
+        <section class="card tp-panel" aria-labelledby="ai-ov-h">
+          <h2 id="ai-ov-h">Set up</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-scope3"><b>Agent</b></label><select id="ai-scope3" class="field" v-model="scope"><option v-for="s in agentScopes" :key="s.id" :value="s.id">{{ s.label }} ({{ s.count }})</option></select></div>
+            <div class="tp-set-row"><label for="ai-ovn"><b>Pairs to judge</b><small>The most similar pairs are found without AI first; only these are sent.</small></label><select id="ai-ovn" class="field" v-model.number="overlapLimit"><option v-for="n in 12" :key="n" :value="n">{{ n }}</option></select></div>
+            <div class="tp-set-row"><span><b>Also compare</b><small>Optional: two skills you suspect overlap.</small></span>
+              <span class="ai-row-acts"><select class="field" v-model="pairA" aria-label="First skill"><option value="">Skill…</option><option v-for="n in scopeSkills" :key="n" :value="n">{{ n }}</option></select><select class="field" v-model="pairB" aria-label="Second skill"><option value="">Skill…</option><option v-for="n in scopeSkills" :key="n" :value="n">{{ n }}</option></select><button class="btn btn-line btn-sm" type="button" :disabled="!pairA||!pairB||pairA===pairB" @click="addPair()">Add</button></span></div>
+          </div>
+          <p v-if="pairs.length" class="tp-fine">Chosen: <span v-for="(p,i) in pairs" :key="i" class="tp-mono">{{ p[0] }} + {{ p[1] }}<button class="btn btn-line btn-sm" type="button" @click="pairs.splice(i,1)" :aria-label="'Remove ' + p.join(' and ')">×</button> </span></p>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !scope" @click="estimateOverlap()">Find pairs and check what will be sent</button></div>
+          <div v-if="overlapEstimate" class="ai-confirm" role="region" aria-label="Before sending">
+            <p class="tp-fine">{{ overlapEstimate.candidates_found }} candidate pair{{ overlapEstimate.candidates_found===1?'':'s' }} found; {{ overlapEstimate.pairs_judged===1 ? 'this one' : 'the top ' + overlapEstimate.pairs_judged }} would be judged:</p>
+            <ul class="tp-fine ai-list"><li v-for="p in overlapEstimate.pairs" :key="p.skills.join('+')"><span class="tp-mono">{{ p.skills.join(' + ') }}</span> ({{ p.sources.join(', ') }})</li></ul>
+            <p v-for="(line,i) in overlapEstimate.egress" :key="i" class="tp-fine">{{ line }}</p>
+            <p class="tp-fine">At most about {{ fmt(overlapEstimate.run.estimated_input_tokens) }} tokens to {{ overlapEstimate.run.model }}.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy || !overlapEstimate.pairs_judged" @click="runOverlap()">Send and judge</button><button class="btn btn-line" :disabled="busy" @click="overlapEstimate=null">Cancel</button></div>
+          </div>
+        </section>
+        <section v-if="overlap" class="card tp-panel" aria-labelledby="ai-ovr-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-ovr-h">Judged pairs</h2><p>{{ overlap.pairs_judged }} pair{{ overlap.pairs_judged===1?'':'s' }} · {{ overlap.run.model }} · {{ fmt(overlap.run.input_tokens) }} input tokens</p></div></header>
+          <p v-if="!overlap.judgements.length" class="tp-empty">No pairs were judged.</p>
+          <div v-for="j in overlap.judgements" :key="j.skills.join('+')" class="ai-cand">
+            <h3><span class="tp-mono">{{ j.skills[0] }}</span> + <span class="tp-mono">{{ j.skills[1] }}</span> <span :class="['pill', relationTone(j.relation)]">{{ relationLabel(j.relation) }}</span></h3>
+            <p class="tp-fine">Found by {{ j.sources.join(', ') }}. Suggestion: {{ actionLabel(j.recommendation) }}<span v-if="j.router_confusion">; an agent could pick the wrong one</span>.</p>
+            <p v-if="j.shared_requests.length" class="tp-fine">Requests both could claim: {{ j.shared_requests.join(' · ') }}</p>
+            <div v-for="(c,i) in j.conflicts" :key="i" class="ai-conflict"><p><b>{{ j.skills[0] }}:</b> <q>{{ c.a_quote }}</q></p><p><b>{{ j.skills[1] }}:</b> <q>{{ c.b_quote }}</q></p><p class="tp-fine">{{ c.why }}</p></div>
+            <p v-if="j.unverified_quotes" class="tp-fine">{{ j.unverified_quotes }} quoted conflict(s) were dropped because the text is not in the files.</p>
+            <template v-for="n in j.skills" :key="n"><p v-if="j.boundaries[n]" class="tp-fine">Could add to <span class="tp-mono">{{ n }}</span>: “{{ j.boundaries[n] }}” <button class="btn btn-line btn-sm" @click="handoff(n)">Improve {{ n }}</button></p></template>
+            <p v-if="j.merged_description" class="tp-fine">Merged description idea: {{ j.merged_description }}</p>
+          </div>
+          <p class="tp-fine">{{ overlap.run.advisory }}</p>
         </section>
       </template>
 

@@ -363,6 +363,7 @@
     { key: "ai", label: "AI assist (your own key)", items: [
       { id: "ai-trigger", name: "Trigger test", text: "Check whether an agent actually picks each skill for realistic requests.", commandLabel: "AI trigger test" },
       { id: "ai-improve", name: "Improve a description", text: "Get rewrites that are re-tested and recommended only when they measurably help.", commandLabel: "AI improve description" },
+      { id: "ai-overlap", name: "Overlap check", text: "Find skills that compete for the same requests or give conflicting instructions.", commandLabel: "AI overlap check" },
       { id: "ai-settings", name: "AI settings", text: "Connect Anthropic, an OpenAI-compatible service or a local model, and set spending caps.", commandLabel: "AI settings" },
     ] },
   ].map((group) => Object.freeze({ ...group, items: Object.freeze(group.items.map((item) => Object.freeze(item))) }));

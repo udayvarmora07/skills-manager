@@ -275,3 +275,4 @@
 .ai-table th, .ai-table td { text-align: left; padding: 8px; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
 .ai-cand { display: grid; gap: 8px; padding: 16px 0; border-top: 1px solid var(--line); }
 .ai-cand h3 { display: flex; gap: 12px; align-items: center; font-size: 15px; }
+.ai-conflict { display: grid; gap: 4px; padding: 12px; border-left: 3px solid var(--line); background: var(--sunken); border-radius: 4px; }

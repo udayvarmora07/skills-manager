@@ -547,7 +547,8 @@ responses at 2 MiB, appends counts and an input hash to `<data>/ai/usage.jsonl`,
 and parses JSON answers with `extract_json()`. `ai_skills.py` builds an agent's
 listing (`build_listing`), runs the trigger test (`trigger_test`) and the
 held-out-verified description rewrite (`improve_description`), and saves runs
-under `<data>/ai/runs/`. Both are read-only towards skills; no Store method,
+under `<data>/ai/runs/`. `ai_overlap.py` (A3) judges bounded candidate
+pairs in both orders and keeps only conflicts quoted verbatim from the files. Both are read-only towards skills; no Store method,
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 

@@ -28,6 +28,11 @@ state or dependency was added. New router guards were extracted so existing
 complexity entries did not rise; `ai.py`/`ai_skills.py` joined the ratchet with
 every function ≤ 15.
 
+**[SPEC]** A3 followed: `ai_overlap.py` judges bounded candidate pairs in both
+orders, reports order-dependent verdicts as uncertain, and drops quoted
+conflicts that are not verbatim in the files (`POST /api/ai/overlap-judge`, v2
+Overlap check). 3 more tests; browser-checked against the fake model.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any

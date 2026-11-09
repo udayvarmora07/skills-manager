@@ -43,7 +43,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A0 | **BYOK foundation**: Anthropic + OpenAI-compatible + local endpoints, env-first key, run/day token caps, egress statement, usage ledger | All passes | **Shipped** |
 | A1 | **Trigger test (library arena)**: the agent's own listing with every other skill as a distractor; never-fires / unreliable / lost-to / near-miss false triggers; repeated, order-shuffled | §2.1–2.2; gap no competitor fills | **Shipped** |
 | A2 | **Verified description rewrite**: candidates from failures, re-tested; recommended only if better overall and not worse on held-out prompts | §2.3, skill-creator split, GEPA | **Shipped** |
-| A3 | Collision / overlap judge on `near_duplicate_candidates()` pairs, position-swapped, with optional merge draft | #35319, #27721, #10238; Cisco overlap check | Next |
+| A3 | Collision / overlap judge: candidate pairs from the near-duplicate heuristic, a description-word prefilter and user picks; judged in both orders; verbatim-checked conflicts; boundary sentences and merge idea | #35319, #27721, #10238; Cisco overlap check | **Shipped** |
 | A4 | Listing-budget fitter: shorten the fewest descriptions to fit the agent's budget, each verified by A1 | #56710, #19679, #19090; existing `claude_listing` estimate | Next |
 | A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | Next |
 | A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
@@ -89,6 +89,10 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[NOTE]** `tests/test_ai_features.py` (19 tests) runs against a fake provider on 127.0.0.1 that speaks both request shapes. It covers key privacy (header only, never in body, settings, ledger or responses), env precedence, clearing, plain-http refusal, redirect refusal, caps refusing before any request, estimate mode sending nothing, never-fires detection, held-out-verified recommendation, read-only behaviour and the HTTP routes. The v2 pages were exercised in a browser against the same fake model: settings save, connection test, trigger test, improve and apply (the edit left a snapshot). No real provider was called.
 
-## 7. Next
+## 7. A3 overlap judge
 
-A3 overlap judge, A4 budget fitter and A5 review briefing, in that order, each reusing the A0 seam and the A1 router.
+**[SPEC]** `ai_overlap.overlap_judge` gathers at most 12 candidate pairs without AI: the existing near-duplicate heuristic, a description-word Jaccard prefilter (≥ 0.18 after stop-words, which catches differently named skills doing the same job) and pairs the user names. Each pair goes to the model twice, A-then-B and B-then-A. If the relation differs between orders it is reported as `uncertain`; if the recommendation differs it becomes `review`. A conflict survives only when both quotes, whitespace-normalised, occur in the skill they are attributed to; others are dropped and counted. Boundary sentences link to Improve, which still has to prove a measured gain before recommending anything.
+
+## 8. Next
+
+A4 budget fitter and A5 review briefing, each reusing the A0 seam and the A1 router.

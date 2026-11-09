@@ -10,7 +10,7 @@
   (@docs/39-ai-features-research-and-catalogue-2026-11-09.md).
 - [x] A0 BYOK foundation: stdlib client, env-first key, 0600 settings, caps, ledger.
 - [x] A1 trigger test and A2 held-out-verified description rewrite, REST + v2 pages.
-- [ ] A3 overlap judge on near-duplicate candidates.
+- [x] A3 overlap judge on near-duplicate candidates.
 - [ ] A4 listing-budget fitter verified by A1.
 - [ ] A5 review briefing for registry fetch and update review.
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
