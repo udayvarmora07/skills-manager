@@ -56,6 +56,9 @@ TARGET_FILES = (
     "skillsmgr/batch.py",
     "skillsmgr/atomic_io.py",
     "skillsmgr/risk.py",
+    "skillsmgr/read_flights.py",
+    "skillsmgr/file_reads.py",
+    "skillsmgr/insights.py",
 )
 DEFAULT_THRESHOLD = 15
 DEFAULT_TOP_N = 10

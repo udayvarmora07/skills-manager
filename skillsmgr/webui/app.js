@@ -1550,7 +1550,6 @@ createApp({
     async loadDetail(name, scope) {
       const mySeq = ++this.detailSeq;
       const sc = scope || (this.selected && this.selected.scope) || this.activeScope;
-      const scopeParam = sc && sc !== "all" ? "?scope=" + encodeURIComponent(sc) : "";
       // When scope is "all", find the skill's scope from the list.
       let effScope = sc;
       if (!effScope || effScope === "all") {

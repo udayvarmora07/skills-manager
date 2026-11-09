@@ -132,6 +132,10 @@ def install_command_line(source: str, runner: str = "npx", scope: str = "global"
     return " ".join(install_argv(source, runner, scope, agents, skills, copy, list_only))
 
 
+class InstallTimeoutError(StoreError):
+    """The runner started but did not finish within its execution budget."""
+
+
 def run_install(argv: list[str]) -> dict:
     """Run a rendered argv; output is the bounded tail of each stream."""
     try:
@@ -141,9 +145,7 @@ def run_install(argv: list[str]) -> dict:
     except FileNotFoundError as exc:
         raise StoreError(f"runner not found: {exc}") from exc
     except subprocess.TimeoutExpired as exc:
-        error = StoreError(f"timed out after {INSTALL_TIMEOUT}s: {exc}")
-        error.status = 504
-        raise error from exc
+        raise InstallTimeoutError(f"timed out after {INSTALL_TIMEOUT}s: {exc}") from exc
     return {
         "exit_code": proc.returncode,
         "stdout": proc.stdout[-_OUTPUT_TAIL:],
@@ -151,7 +153,7 @@ def run_install(argv: list[str]) -> dict:
     }
 
 
-def _offline_registry_gate(trust_requested: object, content_hash: object) -> dict:
+def offline_registry_gate(trust_requested: object, content_hash: object) -> dict:
     """Describe what an offline preview can and cannot establish.
 
     ``trust_confirmed`` and ``may_install`` deliberately never become true
@@ -200,7 +202,7 @@ def registry_bridge_plan(spec: str, runner: str = "npx", scope: str = "global",
     targets = list(skills or []) or ([reference["slug"]] if reference["slug"] else [])
     command = install_command_line(reference["source"], runner, scope, agents,
                                    targets, copy, list_only)
-    gate = _offline_registry_gate(trust_confirmed, content_hash)
+    gate = offline_registry_gate(trust_confirmed, content_hash)
     has_description = isinstance(description, str) and bool(description.strip())
     return {
         "spec": reference["spec"],

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
-from skillsmgr import hygiene, store
+from skillsmgr import hygiene, read_flights
 
 
 class CoalescingContracts(unittest.TestCase):
@@ -19,7 +19,7 @@ class CoalescingContracts(unittest.TestCase):
         self.addCleanup(self.release.set)
 
     def read(self, key, fn):
-        return store._coalesced_read(self.flights, self.lock, key, fn)
+        return read_flights.coalesced_read(self.flights, self.lock, key, fn)
 
     def wait_for_waiters(self, count):
         deadline = time.monotonic() + 3

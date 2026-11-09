@@ -25,12 +25,22 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Fixed
 
+- Bound native settings, eval and lockfile reads to checked regular-file
+  descriptors, preserving each reader's size and symlink policy. Scope doctor
+  now shares managed-link inspection with scope listing and reports unreadable
+  roots; explicit invalid eval-run documents fail cleanly.
+
 - **`/` no longer breaks Python 3.10 clients.** The redirect to the default
   interface is now a temporary `307` instead of a permanent `308`, which
   Python 3.10's `urllib` does not follow and browsers cache indefinitely.
   Trailing-slash redirects (`/v2`, `/classic`) remain `308`.
 
 ### Changed
+
+- Share install, document, doctor, batch, eval and token workflows between CLI
+  and HTTP, with dedicated context, timestamp and read modules. Preserve the
+  documented Python compatibility APIs, and derive v2 tool navigation from one
+  inventory. No new runtime dependency, schema or public Store method.
 
 - **V2 is now the default web interface.** `/` and `/index.html` redirect to
   `/v2/`, preserving queries and hash routes; classic remains at `/classic/`.

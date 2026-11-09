@@ -8,6 +8,59 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Main integration of the completed untangle pass
+
+**[NOTE]** The maintainer explicitly requested pushing the completed refactor
+into `main`, superseding the preceding local-only stopping point, and requested
+Terra-only subagents. Fetched `origin/main` is `f323f16`, the refactor's exact
+base, so integration can use a normal fast-forward. The dirty primary checkout
+remains on `feat/v2-feature-parity` and is preserved with a content manifest.
+Terra's read-only integration audit found no blocker and confirmed that all
+new modules and restored compatibility files must be included. Fresh current-tree
+verification passes 1,765 Python 3.12 tests (two optional skips), both smokes,
+compilation/syntax, docs/design/complexity and pinned Ruff/Bandit checks.
+Integration and the normal push are recorded in the integration section of
+@docs/37-codebase-untangling-2026-11-09.md.
+
+## 2026-11-09 — Codebase untangling, Codex continuation
+
+**[NOTE]** Recovered Claude’s “Codebase untangling” session, its Comments/Tests
+scope, eight existing commits and five pending frontend files. Continued in
+its worktree, backed up the pending state and preserved the unrelated dirty
+primary checkout. Decisions and the original inventory are in
+@docs/37-codebase-untangling-2026-11-09.md.
+
+**[SPEC]** Install, document layout, doctor/hygiene, eval recording, reviewed
+batches and token-window workflows now have domain owners shared by CLI and
+HTTP. Active Store binding, timestamps, read-flight sharing and bounded file
+acquisition have leaf modules. V2 tool routing, listing and commands share
+model metadata; escaping and JSON headers have one owner. Filesystem authority,
+schema, public Store methods, application CLI, dependencies and UI framework
+remain unchanged.
+
+**[SPEC]** The continuation restores documented `insights`/CLI/key-support
+exports, preserving strict legacy guards. Installer timeout responses and CLI
+output limits remain compatible; malformed explicit eval-runs files cannot
+silently become read-only reports. Doctor shares managed peer-link policy,
+reports root-read degradation and sanitizes names in text output. Shared
+regular-file acquisition bounds bytes from the checked descriptor and
+preserves each parser's limits, link policy and error shape. Four duplicate
+risk checks and implementation-restating comments were removed; public API
+behavior coverage was restored.
+
+**[NOTE]** Luna/Terra review found no further worthwhile structural fix.
+Runtime export inspection preserves every baseline name in 17 explicit export
+lists. The final unit matrix passes 1,765 tests on each Python 3.11–3.14
+(two optional oracle skips per run). Both smokes, compilation/syntax, docs,
+design, pinned Ruff/Bandit and complexity pass (973 functions, 30 modules;
+no original budget raised). Hash-pinned wheel/sdist builds, package-data
+inspection and isolated installed CLI/API probes pass. Final browser replay:
+classic 38 scenarios / 342 assertions, v2 37 scenarios, zero failures; the
+six-viewport harness also passes. Two inherited whitespace defects were removed
+with complete AST equivalence checked; artifacts and installed probes were
+refreshed. Work remains local, without a new branch commit,
+merge, push or release action; the primary checkout is untouched.
+
 ## 2026-11-08 — H2 explain-only bridge, Skill CI recipe, checklist reconciliation
 
 **[SPEC] docs/29 H2, explain-only.** `doctor --hygiene --scope all` (and the

@@ -14,10 +14,12 @@ const fs=require('fs'),vm=require('vm');
 let calls=[],events=[],handler=async()=>({});
 const api=async(url,opts={})=>{calls.push({url,opts});return handler(url,opts)};
 class Form { constructor(){this.parts=[]} append(...part){this.parts.push(part)} }
-const ctx={window:{SkillManagerDomain:{api,observeRecord:()=>({linkEscape:false})}},console,
+const ctx={window:{SkillManagerDomain:{api,esc:s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),observeRecord:()=>({linkEscape:false})}},console,
  localStorage:{getItem:()=>null,setItem:()=>{}},matchMedia:()=>({matches:false}),
- FormData:Form,confirm:()=>true,navigator:{clipboard:{writeText:async()=>{}}}};
+ FormData:Form,confirm:()=>true,navigator:{clipboard:{writeText:async()=>{}}},location:{hash:''},
+ Vue:{createApp(def){ctx.appDef=def;return {component(){return this},mount(){}}},markRaw:v=>v}};
 vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(V2+'/model.js','utf8'),ctx);
 for(const name of ['library-tools.js','tool-center.js'])vm.runInContext(fs.readFileSync(V2+'/'+name,'utf8'),ctx);
 function mount(component,props={}){
  const h=Object.assign(component.data(),{records:[],scopes:[],names:[],agentFilter:'all',catalog:{},page:'tools',alive:true,target:null},props);
@@ -39,6 +41,41 @@ def run_node(body):
 
 @unittest.skipUnless(shutil.which("node"), "Node is required for frontend behavior checks")
 class ToolBehaviorTests(unittest.TestCase):
+    def test_tool_catalog_drives_routes_listing_and_command_choices(self):
+        out = run_node(r"""
+          ctx.Vue={createApp(def){ctx.appDef=def;return {component(){return this},mount(){}}},markRaw:v=>v};
+          vm.runInContext(fs.readFileSync(V2+'/app.js','utf8'),ctx);
+          const M=ctx.window.SkillsV2Model, route=()=>ctx.appDef.data().route;
+          const routes=[];
+          for(const id of M.toolIds){ctx.location.hash='#/tools/'+id;routes.push(route().tool)}
+          ctx.location.hash='#/tools/unknown';const unknown=route().tool;
+          ctx.location.hash='#/tools';const base=route().tool;
+          const choices=ctx.appDef.computed.commandChoices.call({commandQuery:''});
+          const groups=ctx.window.SkillsV2ToolCenter.computed.toolGroups.call({});
+          return {routes,ids:M.toolIds,unknown,base,groups,choices};
+        """)
+        self.assertEqual(out["routes"], out["ids"])
+        self.assertEqual(out["unknown"], "tools")
+        self.assertEqual(out["base"], "tools")
+        self.assertEqual([item["id"] for group in out["groups"] for item in group["items"]], out["ids"])
+        self.assertNotIn("#/tools/source-update", [item.get("path") for item in out["choices"]])
+        self.assertIn({"label": "Quality and validation", "path": "#/tools/quality"}, out["choices"])
+
+    def test_shared_name_guard_covers_lengths_and_malformed_library_records(self):
+        out = run_node(r"""
+          const valid=ctx.window.SkillsV2Model.validName;
+          const c=ctx.window.SkillsV2LibraryTools;
+          const h=mount(c,{scopes:[{id:'codex',writable:true}]});
+          return {valid64:valid('a'.repeat(64)),valid65:valid('a'.repeat(65)),validName:valid('valid-name'),
+            malformed:[{name:'Bad Name'},{name:'UPPER'},{name:'bad--name'},{name:'.'},{name:'a/b'}].map(r=>h.selectable(r)),
+            accepted:h.selectable({name:'valid-name',scope:'codex'})};
+        """)
+        self.assertTrue(out["valid64"])
+        self.assertFalse(out["valid65"])
+        self.assertTrue(out["validName"])
+        self.assertEqual(out["malformed"], [False] * 5)
+        self.assertTrue(out["accepted"])
+
     def test_independent_report_reads_do_not_discard_each_others_results(self):
         out = run_node(r"""
           const resolve={};handler=url=>new Promise(r=>resolve[url]=r);

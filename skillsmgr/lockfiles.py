@@ -19,6 +19,8 @@ import stat
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+from .file_reads import FileTooLarge, NotRegularFile, SymlinkNotAllowed, read_regular_file
+
 
 MAX_LOCK_BYTES = 4 * 1024 * 1024
 MAX_LOCK_ENTRIES = 500
@@ -341,15 +343,16 @@ def _missing_lock(target: Path, kind: str) -> dict:
 def _load_lock_document(target: Path, kind: str) -> tuple[dict | None, dict | None]:
     """Return ``(payload, invalid_record)``; exactly one of the two is set."""
     try:
-        if target.is_symlink():
-            return None, _invalid(target, kind, "lockfile is a symlink")
-        if not target.exists():
-            return None, _missing_lock(target, kind)
-        if not target.is_file():
-            return None, _invalid(target, kind, "lock path is not a regular file")
-        if target.stat().st_size > MAX_LOCK_BYTES:
-            return None, _invalid(target, kind, f"lockfile exceeds {MAX_LOCK_BYTES} bytes")
-        data = json.loads(target.read_text(encoding="utf-8"))
+        raw = read_regular_file(target, MAX_LOCK_BYTES, follow_symlinks=False)
+        data = json.loads(raw.decode("utf-8"))
+    except FileNotFoundError:
+        return None, _missing_lock(target, kind)
+    except SymlinkNotAllowed:
+        return None, _invalid(target, kind, "lockfile is a symlink")
+    except NotRegularFile:
+        return None, _invalid(target, kind, "lock path is not a regular file")
+    except FileTooLarge:
+        return None, _invalid(target, kind, f"lockfile exceeds {MAX_LOCK_BYTES} bytes")
     except (OSError, UnicodeError, ValueError) as exc:
         return None, _invalid(target, kind, f"lockfile cannot be read: {exc}")
     if not isinstance(data, dict):

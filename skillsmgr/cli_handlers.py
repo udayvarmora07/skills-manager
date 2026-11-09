@@ -504,6 +504,11 @@ def _load_eval_runs(path_text: str) -> dict:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, UnicodeDecodeError) as exc:
         raise StoreError(f"eval runs file is not valid JSON: {exc}") from exc
+    return _eval_runs_document(document)
+
+
+def _eval_runs_document(document) -> dict:
+    """Normalize the two accepted runs-file shapes before recording."""
     if isinstance(document, list):
         return {"iteration": 1, "runs": document}
     if not isinstance(document, dict):
@@ -511,6 +516,8 @@ def _load_eval_runs(path_text: str) -> dict:
     iteration = document.get("iteration", 1)
     if isinstance(iteration, bool) or not isinstance(iteration, int) or iteration < 1:
         raise StoreError("eval runs iteration must be a positive integer")
+    if not isinstance(document.get("runs"), list):
+        raise StoreError("eval runs must be a list")
     return {"iteration": iteration, "runs": document.get("runs")}
 
 
@@ -811,19 +818,7 @@ def cmd_doctor(args, store: Store) -> int:
         print(f"  {len(report['orphan_dirs'])} unindexed skill directories")
     if report.get("stale_rows"):
         print(f"  {len(report['stale_rows'])} database rows without files")
-    if report.get("malformed_documents"):
-        names = ", ".join(report["malformed_documents"][:5])
-        more = len(report["malformed_documents"]) - 5
-        suffix = f" (+{more} more)" if more > 0 else ""
-        print(f"  {len(report['malformed_documents'])} malformed skill document(s): {names}{suffix}")
-    if report.get("undecodable_documents"):
-        names = ", ".join(report["undecodable_documents"][:5])
-        more = len(report["undecodable_documents"]) - 5
-        suffix = f" (+{more} more)" if more > 0 else ""
-        print(
-            f"  {len(report['undecodable_documents'])} skill document(s) not valid UTF-8: "
-            f"{names}{suffix} - re-save as UTF-8"
-        )
+    _print_doctor_document_issues(report)
     _print_doctor_index_report(report)
     # Also show scope summary when --scope all.
     if scope == "all":
@@ -841,6 +836,24 @@ def cmd_doctor(args, store: Store) -> int:
         return EXIT_OK
     return EXIT_OK if report.get("ok") else EXIT_ERROR
 
+
+def _print_doctor_document_issues(report: dict) -> None:
+    if report.get("malformed_documents"):
+        names = ", ".join(_display(name) for name in report["malformed_documents"][:5])
+        more = len(report["malformed_documents"]) - 5
+        suffix = f" (+{more} more)" if more > 0 else ""
+        print(f"  {len(report['malformed_documents'])} malformed skill document(s): {names}{suffix}")
+    if report.get("undecodable_documents"):
+        names = ", ".join(_display(name) for name in report["undecodable_documents"][:5])
+        more = len(report["undecodable_documents"]) - 5
+        suffix = f" (+{more} more)" if more > 0 else ""
+        print(
+            f"  {len(report['undecodable_documents'])} skill document(s) not valid UTF-8: "
+            f"{names}{suffix} - re-save as UTF-8"
+        )
+    for issue in report.get("degraded", []):
+        if issue.get("section") == "scope-scan":
+            print(f"  scope scan unavailable: {_display(issue['reason'])}")
 
 def _print_explain(report: dict) -> None:
     """Human-readable effective-resolution report (read-only)."""
@@ -1248,7 +1261,8 @@ def cmd_install(args, store: Store) -> int:
         print(f"running: {cmd_str}")
     result = install.run_install(cmd)
     if args.json:
-        _print_json({"command": cmd_str, **result})
+        _print_json({"command": cmd_str, **result,
+                     "stdout": result["stdout"][-4000:], "stderr": result["stderr"][-4000:]})
     else:
         if result["stdout"]:
             print(result["stdout"])

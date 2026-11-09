@@ -13,6 +13,14 @@ aliases remain refused. `review_artifacts.py` shares review mechanics while
 preserving caller policies. Use the newest progress entry for verification;
 historical test counts below describe only their dated checkpoints.
 
+**Refactor anchor — 2026-11-09.** CLI and HTTP call `install`, `doctor`,
+`batch` and `evals` workflows. `documents` owns the file layout, `context`
+the active Store binding, `clock` timestamps, `read_flights` concurrent reads
+and `file_reads` bounded descriptor reads. Production callers use these owners;
+the documented `insights` API and public CLI handler exports remain compatible.
+V2 tool navigation/index/commands share `model.js` metadata. Decisions and
+current-tree verification: @docs/37-codebase-untangling-2026-11-09.md.
+
 **Current UI anchor — 2026-11-06.** V2 is the default: `/` and `/index.html`
 redirect to `/v2/`; classic remains at `/classic/`. The maintainer explicitly
 selected the existing warm-paper v2 design. Its visual authority is

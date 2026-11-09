@@ -34,11 +34,11 @@ from .loader import load_skill, scan_dir
 from . import root_discovery as _root_discovery
 from .atomic_io import atomic_write_text, mutation_lock
 from .context import active_store
+from .read_flights import coalesced_read
 from .store import (
     SkillNotFound,
     Store,
     StoreError,
-    _coalesced_read,
 )
 from .native_state import observe_native_entries
 from .search import MAX_SEARCH_LENGTH, rank_results
@@ -325,12 +325,9 @@ def known_scopes() -> list[Scope]:
         Scope("commandcode", "Command Code", home / ".commandcode/skills", "agent", True, consumer="commandcode"),
         Scope("agents", "Agents", home / ".agents/skills", "agent", True, recursive=True, consumer="shared-agent-skills"),
     ]
-    # Project-local scopes if present (shown last, only when they exist).
     for label, rel, recursive, consumer in _root_discovery.project_scope_specs():
         cand = cwd / rel
-        # Avoid duplicate when CWD scope equals a home scope path.
         if cand.is_dir() and all(cand.resolve() != s.base.resolve() for s in scopes if s.base.exists()):
-            # Use a stable id derived from label.
             sid = label.lower().replace(" ", "-").replace(".", "")
             scopes.append(Scope(sid, label, cand, "project", True, recursive, True, consumer))
     return scopes
@@ -509,7 +506,7 @@ def _enrich_global_row(r: dict, store: Store, physical_root: str) -> None:
     r["consumer"] = "skills-manager"
 
 
-def scan_scope(scope_id: str) -> list[dict]:
+def scan_scope(scope_id: str, *, include_husks: bool = False) -> list[dict]:
     """List skills in one scope, annotated with scope fields."""
     if scope_id == "global":
         store = _global_store()
@@ -528,6 +525,7 @@ def scan_scope(scope_id: str) -> list[dict]:
     entries = scan_dir(
         scope.base,
         recursive=scope.recursive,
+        include_husks=include_husks,
         annotate_paths=True,
         link_roots=_peer_link_roots(scope),
     )
@@ -556,7 +554,7 @@ def list_all(*, include_missing: bool = False) -> list[dict]:
     """Merged list across global + every existing agent scope."""
     store = _global_store()
     key = ("list-all", str(Path(store.data_dir).resolve()), include_missing)
-    return _coalesced_read(
+    return coalesced_read(
         _SCOPE_READ_FLIGHTS,
         _SCOPE_READ_FLIGHTS_LOCK,
         key,
@@ -679,7 +677,6 @@ def get_skill(scope_id: str, name: str) -> dict:
     if isinstance(entry.get("provenance"), dict):
         entry["provenance"]["scope"] = scope.id
         entry["provenance"]["consumer"] = scope.consumer
-    # Try to enrich from raw frontmatter (compatibility, allowed-tools).
     try:
         raw = document_text(skill_dir)
         data, _ = parse_frontmatter(raw)
@@ -773,7 +770,6 @@ def create_skill(
     scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    # Reuse Store.create logic but write to scope base.
     try:
         name = validate_skill_name(name.strip())
     except ValueError as exc:
@@ -932,7 +928,6 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
     if purge:
         shutil.rmtree(skill_dir)
         return {"name": name, "action": "purged", "scope": scope_id}
-    # Soft delete: move to sibling trash dir.
     trash = _scope_trash_dir(scope)
     trash.mkdir(parents=True, exist_ok=True)
     target = path_safety.unique_child(trash, f"{scope_id}__{name}-{stamp()}")
@@ -1426,7 +1421,7 @@ def search_all(
         term,
         scope_id or "all",
     )
-    return _coalesced_read(
+    return coalesced_read(
         _SCOPE_READ_FLIGHTS,
         _SCOPE_READ_FLIGHTS_LOCK,
         key,

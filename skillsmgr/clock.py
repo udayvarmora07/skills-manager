@@ -1,4 +1,4 @@
-"""The one timestamp format every record, review and sidecar uses."""
+"""UTC timestamps for records, reviews and filesystem artifact names."""
 
 from __future__ import annotations
 

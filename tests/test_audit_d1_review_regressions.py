@@ -37,7 +37,8 @@ from pathlib import Path
 
 from skillsmgr import context
 from skillsmgr import scopes as scopes_mod, store as store_mod
-from skillsmgr.store import Store, StoreError, StoreLayoutError, _coalesced_read
+from skillsmgr.read_flights import coalesced_read
+from skillsmgr.store import Store, StoreError, StoreLayoutError
 
 MINIMAL_SKILLS_TABLE = """
 CREATE TABLE skills (
@@ -297,7 +298,7 @@ class CoalescedReadInterruptTests(unittest.TestCase):
             raise KeyboardInterrupt
 
         with self.assertRaises(KeyboardInterrupt):
-            _coalesced_read(flights, lock, ("list",), interrupted)
+            coalesced_read(flights, lock, ("list",), interrupted)
         self.assertEqual(
             {}, flights,
             "the flight survived the interrupt, so the next caller waits forever",
@@ -313,11 +314,11 @@ class CoalescedReadInterruptTests(unittest.TestCase):
             raise KeyboardInterrupt
 
         with self.assertRaises(KeyboardInterrupt):
-            _coalesced_read(flights, lock, ("list",), interrupted)
+            coalesced_read(flights, lock, ("list",), interrupted)
 
         def read():
             entered.set()
-            results.append(_coalesced_read(flights, lock, ("list",), lambda: ["ok"]))
+            results.append(coalesced_read(flights, lock, ("list",), lambda: ["ok"]))
 
         worker = threading.Thread(target=read, daemon=True)
         worker.start()

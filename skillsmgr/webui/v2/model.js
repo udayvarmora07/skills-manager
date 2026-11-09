@@ -344,10 +344,31 @@
   }
 
   const ACRONYMS = { sql: "SQL", api: "API", pr: "PR", k8s: "K8s", a11y: "Accessibility", ui: "UI", ux: "UX", css: "CSS", ci: "CI", cd: "CD", aws: "AWS" };
+  /* The canonical skill-name rule, as the backend enforces it. */
+  const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+  const validName = (n) => typeof n === "string" && n.length <= 64 && NAME_RE.test(n);
+
+  const toolGroups = [
+    { key: "add", label: "Add and organize", items: [
+      { id: "install", name: "Install", text: "Bring skills in from the skills.sh registry, a package command or a local folder.", commandLabel: "Install" },
+      { id: "profiles", name: "Profiles", text: "Save named sets of skills and switch them on together.", commandLabel: "Profiles" },
+      { id: "templates", name: "Templates", text: "Keep starting documents for new skills.", commandLabel: "Templates" },
+    ] },
+    { key: "inspect", label: "Inspect and maintain", items: [
+      { id: "quality", name: "Quality", text: "Find broken documents, weak descriptions and copies that drifted apart.", commandLabel: "Quality and validation" },
+      { id: "workspaces", name: "Workspaces", text: "See where each agent looks for skills and what a project adds.", commandLabel: "Workspaces" },
+      { id: "source-update", name: "Update from folder", text: "Replace one exact copy with a newer folder, after a full review." },
+      { id: "settings", name: "Settings", text: "Theme, text size, number format and index maintenance.", commandLabel: "Settings and index maintenance" },
+    ] },
+  ].map((group) => Object.freeze({ ...group, items: Object.freeze(group.items.map((item) => Object.freeze(item))) }));
+  const toolItems = Object.freeze(toolGroups.flatMap((group) => group.items));
+  const toolIds = Object.freeze(toolItems.map((item) => item.id));
+
   const titleCase = (n) => String(n).split("-").map((w, i) => ACRONYMS[w.toLowerCase()] || (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(" ");
 
   window.SkillsV2Model = Object.freeze({
-    esc, plural, join, words, titleCase, shortPath, build, STATUS, BROKEN_WHY,
+    plural, join, words, titleCase, shortPath, build, STATUS, BROKEN_WHY, validName,
+    toolGroups: Object.freeze(toolGroups), toolItems, toolIds,
     diffLines, changes, plainLine, renderDoc, stripFrontmatter,
   });
 })();

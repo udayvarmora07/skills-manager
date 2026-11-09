@@ -8,6 +8,7 @@ hygiene evidence.  The CLI and ``GET /api/doctor`` render this one report.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from . import scopes
@@ -33,14 +34,13 @@ def scope_doctor_report(scope_id: str) -> dict:
     Malformed documents must stay visible here instead of being hidden behind
     ``store.doctor()``, which knows only the global tree.
     """
-    scope = next(item for item in scopes.known_scopes() if item.id == scope_id)
-    entries = scan_dir(scope.base, recursive=scope.recursive, include_husks=True)
+    scope, entries, scan_issues = _scope_doctor_scan(scope_id)
 
     def names(flag: str) -> list[str]:
         return sorted(str(entry["name"]) for entry in entries if entry.get(flag))
 
     malformed = names("malformed")
-    return {
+    report = {
         "scope": scope_id,
         "path": str(scope.base),
         "skills_on_disk": len(entries),
@@ -49,6 +49,27 @@ def scope_doctor_report(scope_id: str) -> dict:
         "conflicting_documents": names("document_conflict"),
         "ok": not malformed,
     }
+    report.update(scan_issues)
+    return report
+
+
+def _scope_doctor_scan(scope_id: str):
+    """Keep managed peer-link reads while distinguishing an unreadable root."""
+    scope = scopes.scope_by_id(scope_id)
+    if scope is None:
+        raise StoreError(f"unknown scope {scope_id!r}")
+    degraded = []
+    try:
+        with os.scandir(scope.base):
+            pass
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        degraded.append({"section": "scope-scan", "reason": str(exc)[:_MAX_REASON]})
+    entries = [] if degraded else scopes.scan_scope(scope_id, include_husks=True)
+
+    issues = {"ok": False, "degraded": degraded} if degraded else {}
+    return scope, entries, issues
 
 
 def _add_scope_summary(report: dict) -> None:

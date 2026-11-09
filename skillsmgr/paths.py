@@ -110,5 +110,3 @@ def ensure_dirs() -> None:
     """Create all data directories if they do not exist."""
     for path in (data_dir(), skills_dir(), trash_dir(), templates_dir(), backups_dir()):
         mkdir_private(path)
-
-

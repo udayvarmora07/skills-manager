@@ -515,7 +515,6 @@ def _validate_public_search(payload: object) -> dict:
 
 
 # Registry references are parsed offline (no request, cache or token).
-REGISTRY_BASE_URL = "https://skills.sh"
 # Documented partner slugs on the per-skill security page
 # (``/owner/repo/skill/security/{slug}``).
 REGISTRY_AUDIT_PROVIDERS = ("agent-trust-hub", "socket", "snyk")

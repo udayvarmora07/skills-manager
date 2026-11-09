@@ -28,7 +28,7 @@
       key,
       readOnly(r) { return window.SkillManagerDomain.observeRecord(r).readOnly; },
       writable(r) { const observed=window.SkillManagerDomain.observeRecord(r);return r.addressable !== false && !observed.linkEscape && !observed.readOnly && this.writableScopes.some(s => s.id === r.scope); },
-      selectable(r) {return typeof r.name==="string"&&r.name.length<=64&&/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.name);},
+      selectable(r) {return window.SkillsV2Model.validName(r.name);},
       fileState(r) {const state=window.SkillManagerDomain.observeRecord(r);return state.linkEscape?"Linked outside root":state.notAddressable?"Not addressable":state.isDisabled?"File disabled":"File enabled";},
       needsReview(r) {const state=window.SkillManagerDomain.observeRecord(r);return state.malformedDocument&&!state.linkEscape;},
       tagsFor(r) { return this.catalog?.tags?.[r.name] || []; },

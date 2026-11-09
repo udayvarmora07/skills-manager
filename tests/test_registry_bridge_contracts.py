@@ -18,7 +18,7 @@ from pathlib import Path
 from unittest import mock
 from urllib.request import Request, urlopen
 
-from skillsmgr import cli, install, registry
+from skillsmgr import cli, insights, install, registry
 from skillsmgr.errors import StoreError
 
 
@@ -121,6 +121,30 @@ class InstallCommandTests(unittest.TestCase):
             with self.subTest(source=source):
                 with self.assertRaises(StoreError):
                     install.install_argv(source)
+
+    def test_legacy_insights_renderer_preserves_strict_value_errors(self):
+        for source in ("--flag", "a;b", "$(whoami)", "a b", " owner/repo", 123, None):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                insights.install_argv(source)
+        for runner in ("unknown", "uvx", "", None, " npx "):
+            with self.subTest(runner=runner), self.assertRaises(ValueError):
+                insights.install_argv("owner/repo", runner)
+        for values in (["--evil"], [123], [" padded "]):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                insights.install_argv("owner/repo", skills=values)
+        self.assertEqual(insights.install_argv("owner/repo", "pnpm", skills=["demo"]),
+                         install.install_argv("owner/repo", "pnpm", skills=["demo"]))
+
+    def test_legacy_bridge_validates_before_delegation(self):
+        for runner in ("", "uvx"):
+            with self.subTest(runner=runner), self.assertRaises(ValueError):
+                insights.registry_bridge_plan("owner/repo/skill", runner=runner)
+        with self.assertRaises(ValueError):
+            insights.registry_bridge_plan("owner/repo/skill", skills=["--evil"])
+        result = insights.registry_bridge_plan("owner/repo/skill", trust_confirmed=True)
+        self.assertFalse(result["may_install"])
+        self.assertFalse(result["trust_verified"])
+        self.assertEqual(result, install.registry_bridge_plan("owner/repo/skill", trust_confirmed=True))
 
     def test_cli_rejects_traversal_absolute_and_oversized_install_values(self):
         for label, value in (

@@ -47,7 +47,7 @@ CLI command or `Store` method without approval.
 
 ### 1. Registry bridge ships the offline half only
 
-`insights.registry_reference()` parses a registry reference offline:
+`registry.registry_reference()` parses a registry reference offline:
 `owner/repo`, `owner/repo/slug`, `https://skills.sh/{source}/{slug}`, and the
 documented `installUrl` form `https://github.com/owner/repo`. Nothing is
 fetched, cached, or credentialed — there is no registry request at all, and one

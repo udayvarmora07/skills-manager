@@ -65,6 +65,61 @@ class CliContinuationTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(err, "")
 
+    def test_doctor_agrees_with_listing_for_a_managed_peer_link(self):
+        scopes.create_skill("agents", "demo", "Use this when testing peer links")
+        target = self.root / "home/.agents/skills/demo"
+        root = self.root / "home/.claude/skills"
+        root.mkdir(parents=True)
+        (root / "demo").symlink_to(target, target_is_directory=True)
+        listed = scopes.scan_scope("claude-code")
+        self.assertFalse(listed[0]["malformed"])
+        code, out, err = self.invoke(["doctor", "--scope", "claude-code", "--json"])
+        report = json.loads(out)
+        self.assertEqual((code, err), (0, ""))
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["skills_on_disk"], 1)
+        self.assertEqual(report["malformed_documents"], [])
+
+    def test_doctor_reports_unreadable_scope_as_incomplete(self):
+        root = self.root / "home/.claude/skills"
+        root.mkdir(parents=True)
+        from skillsmgr import doctor
+
+        real_scandir = doctor.os.scandir
+        def blocked(path):
+            if Path(path) == root:
+                raise PermissionError("scope cannot be scanned")
+            return real_scandir(path)
+        with patch.object(doctor.os, "scandir", side_effect=blocked):
+            code, out, err = self.invoke(["doctor", "--scope", "claude-code", "--json"])
+        report = json.loads(out)
+        self.assertEqual((code, err), (0, ""))
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["degraded"][0]["section"], "scope-scan")
+
+    def test_doctor_sanitizes_filesystem_names_in_text_only(self):
+        name = "bad\x1b[31m-name"
+        root = self.root / "home/.claude/skills" / name
+        root.mkdir(parents=True)
+        (root / "SKILL.md").write_bytes(b"\xff")
+        code, text, err = self.invoke(["doctor", "--scope", "claude-code"])
+        self.assertEqual((code, err), (1, ""))
+        self.assertNotIn("\x1b", text)
+        self.assertIn("bad?[31m-name", text)
+        _, raw, _ = self.invoke(["doctor", "--scope", "claude-code", "--json"])
+        self.assertIn(name, json.loads(raw)["malformed_documents"])
+
+    def test_install_json_preserves_the_stream_tail_limit(self):
+        from subprocess import CompletedProcess
+
+        result = CompletedProcess([], 0, stdout="old" + "o" * 9000, stderr="old" + "e" * 9000)
+        with patch("skillsmgr.install.subprocess.run", return_value=result):
+            code, out, err = self.invoke(["install", "owner/repo", "--json"])
+        self.assertEqual((code, err), (0, ""))
+        report = json.loads(out)
+        self.assertEqual(report["stdout"], "o" * 4000)
+        self.assertEqual(report["stderr"], "e" * 4000)
+
     def test_bare_db_is_usage_error_and_does_not_create_index(self):
         code, _, _ = self.invoke(["db"])
         self.assertEqual(code, 2)

@@ -21,6 +21,8 @@
               <p v-for="(n,i) in (${ev}.egress||[])" :key="'g'+i" class="tp-fine">Data sent: {{n}}.</p>
             </section>`;
 
+  const { toolGroups: TOOL_GROUPS } = window.SkillsV2Model;
+
   window.SkillsV2ToolCenter = {
     props: {page:String, records:{type:Array,default:()=>[]}, scopes:{type:Array,default:()=>[]}, target:Object},
     emits:['changed','inspect','preference'],
@@ -35,9 +37,7 @@
     };
        },
     computed:{
-      toolGroups(){return [
-        {key:'add',label:'Add and organize',items:[{id:'install',name:'Install',text:'Bring skills in from the skills.sh registry, a package command or a local folder.'},{id:'profiles',name:'Profiles',text:'Save named sets of skills and switch them on together.'},{id:'templates',name:'Templates',text:'Keep starting documents for new skills.'}]},
-        {key:'inspect',label:'Inspect and maintain',items:[{id:'quality',name:'Quality',text:'Find broken documents, weak descriptions and copies that drifted apart.'},{id:'workspaces',name:'Workspaces',text:'See where each agent looks for skills and what a project adds.'},{id:'source-update',name:'Update from folder',text:'Replace one exact copy with a newer folder, after a full review.'},{id:'settings',name:'Settings',text:'Theme, text size, number format and index maintenance.'}]}];},
+      toolGroups(){return TOOL_GROUPS;},
       fieldLabels(){return {name:'Name',description:'Description',category:'Category',version:'Version',license:'License',compatibility:'Compatibility',allowed_tools:'Allowed tools'};},
       severityNames(){return {all:'All',error:'Errors',warning:'Warnings',info:'Info'};},
       severityCounts(){const c={all:0};for(const f of (this.quality&&this.quality.findings)||[]){c.all++;c[f.severity]=(c[f.severity]||0)+1;}return c;},

@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -242,6 +243,24 @@ class InstallArgvSingleSourceTests(unittest.TestCase):
                 return response.status, json.loads(response.read())
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read())
+
+    def test_timeout_retains_command_and_execution_evidence(self):
+        argv = ["npx", "skills", "add", "owner/repo", "-g"]
+        timeout = subprocess.TimeoutExpired(argv, 120)
+        with mock.patch("skillsmgr.install.subprocess.run", side_effect=timeout):
+            status, body = self._post({"source": "owner/repo", "run": True})
+        self.assertEqual(status, 500)
+        self.assertEqual(body, {
+            "command": " ".join(argv), "executed": True,
+            "error": f"timed out after 120s: {timeout}",
+        })
+
+    def test_missing_runner_is_a_clean_error_without_execution_claim(self):
+        with mock.patch("skillsmgr.install.subprocess.run", side_effect=FileNotFoundError("missing")):
+            status, body = self._post({"source": "owner/repo", "run": True})
+        self.assertEqual(status, 400)
+        self.assertIn("runner not found", body["error"])
+        self.assertNotIn("executed", body)
 
     def test_route_behaviour_is_unchanged_and_matches_the_shared_renderer(self):
         for payload, expected_status, expected, kwargs in CASES:

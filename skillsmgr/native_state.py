@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import json
 import os
-import stat
 import sys
 import tomllib
 from pathlib import Path
 
+from .file_reads import read_regular_file
 from .paths import home_dir
 from .validator import MAX_COMBINED_DESCRIPTION
 
@@ -75,13 +75,7 @@ def _load(path: Path | None) -> tuple[str, dict | None]:
     if path is None:
         return 'unobserved', None
     try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0))
-        with os.fdopen(descriptor, 'rb') as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                return 'unavailable', None
-            data = stream.read(MAX_CONFIG_BYTES + 1)
-        if len(data) > MAX_CONFIG_BYTES:
-            return 'unavailable', None
+        data = read_regular_file(path, MAX_CONFIG_BYTES)
         value = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_object)
         if not isinstance(value, dict):
             return 'unavailable', None
@@ -466,13 +460,7 @@ def observe_claude_listing(*, home: Path | None = None,
 def _load_toml(path: Path) -> tuple[str, dict | None]:
     """Read one bounded TOML file; never raises (mirrors :func:`_load`)."""
     try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0))
-        with os.fdopen(descriptor, 'rb') as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                return 'unavailable', None
-            data = stream.read(MAX_CONFIG_BYTES + 1)
-        if len(data) > MAX_CONFIG_BYTES:
-            return 'unavailable', None
+        data = read_regular_file(path, MAX_CONFIG_BYTES)
         return 'ok', tomllib.loads(data.decode('utf-8'))
     except FileNotFoundError:
         return 'missing', None

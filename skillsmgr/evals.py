@@ -24,6 +24,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .atomic_io import atomic_write_text, mutation_lock
+from .file_reads import FileTooLarge, read_regular_file
 from .path_safety import contained_path
 from .validator import validate_skill_name
 from .clock import now_iso
@@ -245,10 +246,11 @@ def load_cases(skill_dir: Path) -> dict:
         return report
     report["present"] = True
     try:
-        size = path.stat().st_size
-        if size > MAX_EVALS_FILE_BYTES:
-            raise ValueError(f"evals.json exceeds {MAX_EVALS_FILE_BYTES} bytes")
-        document = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            raw = read_regular_file(path, MAX_EVALS_FILE_BYTES)
+        except FileTooLarge:
+            raise ValueError(f"evals.json exceeds {MAX_EVALS_FILE_BYTES} bytes") from None
+        document = json.loads(raw.decode("utf-8"))
     except (OSError, ValueError, UnicodeDecodeError) as exc:
         report["issues"].append({"level": "error", "message": f"evals.json is unreadable: {exc}"})
         return report

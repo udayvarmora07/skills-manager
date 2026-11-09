@@ -9,7 +9,6 @@ skills via :meth:`Store.resync` / :meth:`Store.db_rebuild`.
 
 from __future__ import annotations
 
-import copy
 import io
 import json
 import os
@@ -35,6 +34,7 @@ from .atomic_io import register_lock_root as _register_lock_root
 from . import archive as _archive
 from .path_safety import mkdir_private
 from .documents import has_document, read_skill_text_strict, reject_conflicting_documents, toggle_document
+from .read_flights import coalesced_read
 from .errors import (  # noqa: F401  (re-exported for compatibility)
     LockTimeoutError,
     SkillNotFound,
@@ -159,74 +159,6 @@ def _db_file_identity(db_path: Path) -> tuple[int, int] | None:
     except OSError:
         return None
     return stat_result.st_dev, stat_result.st_ino
-
-
-def _publish_read_snapshot(flight: dict, result, waiters: int) -> None:
-    try:
-        if waiters:
-            flight["result"] = copy.deepcopy(result)
-    except BaseException as exc:
-        flight["error"] = exc
-        raise
-    finally:
-        flight["event"].set()
-
-
-def _coalesced_read(flights: dict, flights_lock: threading.Lock, key, func):
-    """Share one identical read while it is in flight, never after it ends.
-
-    Filesystem-backed reads remain authoritative: this is deliberately an
-    in-flight fan-in only, not a completed-result cache. Each caller receives
-    independent dictionaries because scope enrichment and UI serialization
-    annotate the results after the read completes.
-
-    The copy handed to a *waiting* caller exists so two callers never share
-    objects.  The caller that ran the read keeps the object ``func()`` built:
-    that result is private to this flight, so copying it on the way out was a
-    full traversal of every row for nobody (docs/24 §D1).  When no caller
-    joined the flight -- the ordinary single-request case -- nothing is copied
-    at all.  When callers did join, one private snapshot is taken *before* the
-    owner can annotate its result, and each waiter copies from that snapshot,
-    so no two callers ever share a dictionary.
-
-    The waiter count is exact because joining and retiring a flight happen
-    under the same lock: once the owner pops the flight, nobody can join it.
-    At 2,000 rows the copy this removes was ~22% of ``scopes.list_all()``.
-    """
-    with flights_lock:
-        flight = flights.get(key)
-        if flight is None:
-            flight = {"event": threading.Event(), "waiters": 0}
-            flights[key] = flight
-            owner = True
-        else:
-            flight["waiters"] = flight.get("waiters", 0) + 1
-            owner = False
-    if owner:
-        try:
-            result = func()
-        except BaseException as exc:
-            # ``BaseException``, not ``Exception``: a KeyboardInterrupt inside
-            # the read used to skip this cleanup, leaving the flight registered
-            # with its event never set -- so the *next* caller for that key
-            # waited forever.  Because list/search/stats/doctor coalesce on
-            # fixed keys, one Ctrl-C permanently wedged that endpoint.
-            with flights_lock:
-                flight["error"] = exc
-                flights.pop(key, None)
-                flight["event"].set()
-            raise
-        with flights_lock:
-            flights.pop(key, None)
-            waiters = flight.get("waiters", 0)
-        # The flight is retired, so the count cannot grow; the copy runs
-        # outside the shared lock so it never stalls an unrelated flight.
-        _publish_read_snapshot(flight, result, waiters)
-        return result
-    flight["event"].wait()
-    if flight.get("error") is not None:
-        raise flight["error"]
-    return copy.deepcopy(flight["result"])
 
 
 def _trash_lock_dir(trash_dir: Path) -> Path:
@@ -1237,7 +1169,7 @@ class Store:
 
     def list(self) -> list[dict]:
         """Return installed skills (active and disabled) sorted by name."""
-        return _coalesced_read(
+        return coalesced_read(
             self._read_flights,
             self._read_flights_lock,
             ("list",),
@@ -1365,7 +1297,7 @@ class Store:
 
     def search(self, term: str) -> list[dict]:
         """Case-insensitive search over name, description and body."""
-        return _coalesced_read(
+        return coalesced_read(
             self._read_flights,
             self._read_flights_lock,
             ("search", term),
@@ -1848,7 +1780,7 @@ class Store:
                     raise StoreError(f"skill '{name}' is disabled; enable it first")
                 raise SkillNotFound(f"skill '{name}' has no SKILL.md")
             with mutation_lock(index_lock_path(self.skills_dir)):
-        
+
                 current = read_skill_text_strict(md_file, subject=f"skill '{name}'")
                 write_snapshot(self.data_dir, "global", name, current)
                 try:
@@ -1887,7 +1819,6 @@ class Store:
             if not candidates:
                 raise StoreError(f"no trashed copy of '{name}' found")
             source = candidates[-1]
-            # check-then-move body is unchanged in the helper below.
             return _with_skill_lock(skill_dir, self._restore_unlocked, name, skill_dir, source)
         finally:
             trash_lock.release()
@@ -2044,7 +1975,7 @@ class Store:
 
     def stats(self) -> dict:
         """Return counts, sizes and a category breakdown."""
-        return _coalesced_read(
+        return coalesced_read(
             self._read_flights,
             self._read_flights_lock,
             ("stats",),
@@ -2397,7 +2328,7 @@ class Store:
 
     def doctor(self) -> dict:
         """Audit consistency between the filesystem tree and the database."""
-        return _coalesced_read(
+        return coalesced_read(
             self._read_flights,
             self._read_flights_lock,
             ("doctor",),

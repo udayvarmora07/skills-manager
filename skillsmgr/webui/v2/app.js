@@ -16,7 +16,7 @@ if (!Domain || !Model) {
 
 const { api } = Domain;
 const { createApp, markRaw } = Vue;
-const { esc, plural, join, words, titleCase, shortPath, STATUS, BROKEN_WHY, changes, plainLine, renderDoc, stripFrontmatter } = Model;
+const { plural, join, words, titleCase, shortPath, BROKEN_WHY, changes, plainLine, renderDoc, stripFrontmatter, validName, toolIds, toolItems } = Model;
 
 /* ---------- Icons (constant, trusted markup) ---------- */
 const PATHS = {
@@ -50,11 +50,10 @@ function parseRoute() {
   const h = location.hash.replace(/^#\/?/, "");
   const [p, ...rest] = h.split("/");
   if (p === "skill" && rest.length) { try { return { page: "skill", name: decodeURIComponent(rest.join("/")) }; } catch (e) { return { page: "skills" }; } }
-  if (p === "tools") return { page: "tools", tool: ["install", "profiles", "quality", "workspaces", "templates", "settings", "source-update"].includes(rest[0]) ? rest[0] : "tools" };
+  if (p === "tools") return { page: "tools", tool: toolIds.includes(rest[0]) ? rest[0] : "tools" };
   return ["skills", "map", "inbox", "recovery"].includes(p) ? { page: p } : { page: "home" };
 }
 const TITLES = { home: "Home", skills: "Skills", map: "Sync map", inbox: "Inbox", recovery: "Recovery", tools: "Tools" };
-const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const THEMES = ["system", "light", "dark"];
 function savedPreference(key, choices, fallback) {try{const value=localStorage.getItem(key);return choices.includes(value)?value:fallback;}catch(e){return fallback;}}
 
@@ -93,7 +92,7 @@ const app = createApp({
     careCount() { return this.m ? this.m.skills.filter((s) => s.status.key === "warn" || s.status.key === "bad").length : 0; },
     catalogTags() { return [...new Set(Object.values(this.catalog.tags || {}).flat())].sort(); },
     visibleNames() { return this.visible.map(s => s.name); },
-    commandChoices() {const items=[{label:"New skill",action:"create"},{label:"Refresh files",action:"refresh"},...[['Skills','#/skills'],['Install','#/tools/install'],['Profiles','#/tools/profiles'],['Quality and validation','#/tools/quality'],['Workspaces','#/tools/workspaces'],['Templates','#/tools/templates'],['Settings and index maintenance','#/tools/settings'],['Recovery and history','#/recovery']].map(([label,path])=>({label,path}))];return items.filter(item=>item.label.toLowerCase().includes(this.commandQuery.toLowerCase()));},
+    commandChoices() {const items=[{label:"New skill",action:"create"},{label:"Refresh files",action:"refresh"},{label:"Skills",path:"#/skills"},...toolItems.filter((item)=>item.commandLabel).map((item)=>({label:item.commandLabel,path:"#/tools/"+item.id})),{label:"Recovery and history",path:"#/recovery"}];return items.filter(item=>item.label.toLowerCase().includes(this.commandQuery.toLowerCase()));},
     visible() {
       if (!this.m) return [];
       const q = this.query.trim().toLowerCase();
@@ -256,7 +255,7 @@ const app = createApp({
       if (!f) return {};
       const e = {};
       const n = f.name.trim();
-      if (n && (!NAME_RE.test(n) || n.length > 64)) e.name = "Use lowercase letters, numbers and single hyphens, up to 64 characters.";
+      if (n && !validName(n)) e.name = "Use lowercase letters, numbers and single hyphens, up to 64 characters.";
       else if (n && this.m && (this.m.byName.get(n) || { copies: [] }).copies.some((c) => c.scope === f.scope)) e.name = "A skill with this name already exists there.";
       if (f.desc.length > 1024) e.desc = "Keep the description under 1024 characters.";
       return e;

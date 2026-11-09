@@ -4,6 +4,29 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Integrate codebase untangling into main (2026-11-09)
+
+- [x] Confirm explicit main-push authorization and use only Terra subagents.
+- [x] Fetch `origin/main` and verify the refactor is based on its `f323f16` tip.
+- [x] Preserve the dirty primary checkout; inventory all task files and restored APIs.
+- [/] Re-run current-tree gates, commit the complete task and fast-forward `main`.
+- [ ] Push normally to `origin/main` and verify the remote head.
+
+## Codebase untangling continuation (2026-11-09)
+
+- [x] Recover the named Claude session, optional scope, checkpoint and decision log.
+- [x] Preserve the dirty primary checkout and the pending frontend changes.
+- [x] Complete shared workflows, public compatibility and frontend tool inventory.
+- [x] Consolidate bounded file acquisition with caller-specific parsing/link policy.
+- [x] Remove restating comments and duplicate risk tests; restore public API behavior tests.
+- [x] Repeat Luna/Terra review; preserve all explicitly exported baseline APIs.
+- [x] Final ladder: 1,765 tests each on Python 3.11–3.14 (two optional skips),
+  both smokes, static/design/docs/security gates, pinned artifact builds and
+  isolated install probes, classic 38 scenarios / 342 assertions, v2 37
+  scenarios and the six-viewport harness. All pass; no original budget raised.
+
+Decision log: @docs/37-codebase-untangling-2026-11-09.md.
+
 ## Remaining eligible work, second continuation (2026-11-08)
 
 - [x] docs/29 H2, explain-only: `doctor --hygiene --scope all` gains a read-only

@@ -11,14 +11,24 @@ skills-manager/
   skillsmgr/
     __init__.py      # __version__ = "1.0.2"
     __main__.py      # entry: python3 -m skillsmgr -> cli.main()
-    cli.py           # stable adapter: main/build_parser + handler/private-helper aliases
-    cli_parser.py    # argparse construction (27 top-level + 3 aliases; 7 nested)
+    cli.py           # stable adapter: main/build_parser + public handler exports
+    cli_parser.py    # argparse construction; command inventory in docs/03
     cli_handlers.py  # command behavior + name/data validation
     cli_output.py    # JSON/errors/table rendering
     store.py         # Store: FS + SQLite index (re-exports the errors below)
     errors.py        # leaf exception hierarchy; no package imports
     scopes.py        # agent-scope model + per-agent filesystem ops
     loader.py        # shared SKILL.md loader + dir scanner (Store + scopes)
+    documents.py     # document names, reads, conflicts and toggles
+    install.py       # ecosystem execution and reviewed registry installation
+    risk.py          # advisory risk evidence
+    doctor.py        # shared report composition
+    batch.py         # reviewed exact-instance batch operations
+    context.py       # active Store binding per context
+    clock.py         # UTC record and artifact timestamps
+    read_flights.py  # concurrent read sharing without a completed-result cache
+    file_reads.py    # bounded regular-file descriptor reads
+    insights.py      # documented advisory compatibility API
     tokens.py        # token/context estimation
     archive.py       # archive preflight, extraction, staged commit policy
     atomic_io.py     # atomic text writes, mutation locks, tree hashes

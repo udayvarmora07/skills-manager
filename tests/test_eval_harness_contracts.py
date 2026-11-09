@@ -644,6 +644,22 @@ class EvalCliTests(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_ERROR)
         self.assertIn("not valid JSON", err)
 
+    def test_explicit_runs_file_requires_a_runs_list(self):
+        self._skill_with_evals()
+        runs = Path(self._tmp.name) / "runs.json"
+        workspace = Path(self._tmp.name) / "workspace"
+        for document in ({}, {"runs": None}, {"runs": "output"}):
+            with self.subTest(document=document):
+                runs.write_text(json.dumps(document), encoding="utf-8")
+                code, out, err = self.invoke([
+                    "validate", "demo", "--evals-run", str(runs), "--workspace", str(workspace),
+                ])
+                self.assertEqual(code, cli.EXIT_ERROR)
+                self.assertEqual(out, "")
+                self.assertIn("runs must be a list", err)
+                self.assertNotIn("Traceback", err)
+                self.assertFalse(workspace.exists())
+
     def test_validate_evals_run_requires_a_single_target(self):
         self._skill_with_evals()
         self._skill_with_evals("demo-two")

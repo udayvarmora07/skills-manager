@@ -1,8 +1,10 @@
 # Modules — Skills Manager
 
-**Version 0.10.0**
+**Version 0.11.0**
 
-**AI manifest**: Module-by-module inventory of `skillsmgr/`. Facts verified against source 2026-10-06 (CLI 28+10+3=41 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; `loader.py` holds a bounded process-local derived-record reuse keyed on the sha256 of the document bytes, with a thrash-cliff guard and an `observed_at` re-stamp; launcher executable discovery rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
+**AI manifest**: Module-by-module inventory of `skillsmgr/`. The 2026-11-09
+module boundaries are recorded in @docs/37-codebase-untangling-2026-11-09.md.
+ Facts verified against source 2026-10-06 (CLI 28+10+3=41 via `check_docs._command_inventory` + live parser; safe local source-update review/apply/snapshot orchestration is filesystem-owned; `loader.py` holds a bounded process-local derived-record reuse keyed on the sha256 of the document bytes, with a thrash-cliff guard and an `observed_at` re-stamp; launcher executable discovery rejects unsafe PATH matches; environment data roots are validated; validator references are URL-aware; full-import rollback diagnostics, narrow undefined-name CI checks, reviewed Bandit suppressions, deterministic Markdown discovery, PEP 639 artifact metadata, and package-data/workflow security gates are pinned). Keep this doc updated when module internals change.
 
 ## `__init__.py`
 
@@ -14,11 +16,11 @@ Entry point for `python3 -m skillsmgr`; delegates to `cli.main()`.
 
 ## `cli.py`, `cli_parser.py`, `cli_handlers.py`
 
-The stable `cli.py` adapter exposes `main()`, `build_parser()`, command handler names, exit constants, and historical private helper aliases. `cli_parser.py` owns argparse construction (`prog="skills-mgr"`): 28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names (see @docs/03-cli-surface.md). `cli_handlers.py` owns command behavior and validates names/data before filesystem work (it also rejects a `--metadata` key containing a control character with a clean exit 1, and both edit paths fail closed on an unparseable document); `cli_output.py` owns JSON/errors/table rendering plus `sanitize_text()`/`truncate()`/`render_table()`, which strip C0/C1/DEL, Unicode line separators, format characters, and lone surrogates from untrusted display fields (`--json` and `view --raw` are deliberately exempt). Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. Public parser/handler adapters preserve existing imports and contract tests.
+The stable `cli.py` adapter exposes `main()`, `build_parser()`, the public `COMMANDS` table, command handler names, and exit constants. `cli_parser.py` owns argparse construction (`prog="skills-mgr"`): 28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names (see @docs/03-cli-surface.md). `cli_handlers.py` owns command behavior and validates names/data before filesystem work (it also rejects a `--metadata` key containing a control character with a clean exit 1, and both edit paths fail closed on an unparseable document); `cli_output.py` owns JSON/errors/table rendering plus `sanitize_text()`/`truncate()`/`render_table()`, which strip C0/C1/DEL, Unicode line separators, format characters, and lone surrogates from untrusted display fields (`--json` and `view --raw` are deliberately exempt). Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. Public parser/handler adapters preserve existing imports and contract tests.
 
 ## `webapp.py`
 
-Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static files from `webui/`), `WebAppServer` (ThreadingHTTPServer, 127.0.0.1), `run()` entry (trusted optional browser open, Ctrl+C handling). Internal policy modules keep request security (`web_security.py`), JSON serialization/body parsing (`web_serialization.py`), and multipart folder upload staging (`web_upload.py`) behind compatibility adapters in `webapp.py`. Scope-aware endpoints (`?scope=` on skills/search, `/api/scopes`, `/api/sync`, `/api/install`). Full endpoint table: @docs/08-web-ui.md.
+Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static files from `webui/`), `WebAppServer` (ThreadingHTTPServer, 127.0.0.1), `run()` entry (trusted optional browser open, Ctrl+C handling). Internal policy modules keep request security (`web_security.py`), JSON serialization/body parsing (`web_serialization.py`), and multipart folder upload staging (`web_upload.py`) in their owning modules. Scope-aware endpoints (`?scope=` on skills/search, `/api/scopes`, `/api/sync`, `/api/install`). Full endpoint table: @docs/08-web-ui.md.
 
 ## `webui/` (frontend)
 
@@ -26,7 +28,9 @@ Stdlib web backend for the web UI: `WebAppHandler` (routes under `/api/`, static
 below remains at `/classic/`. V2's `app.js` owns the shell and ordinary skill
 flows, `model.js` derived state/document rendering, `library-tools.js` exact-copy
 selection and reviewed batches, and `tool-center.js` the remaining secondary
-workflows. `tools.css` extends the selected v2 tokens. Stored-template reads and
+workflows. The tool-page groups and IDs are defined in `model.js`; the tool
+index, hash router and command palette derive their lists from it.
+`tools.css` extends the selected v2 tokens. Stored-template reads and
 PATCH explicit optional/body clears live in `webapp.py`; omitted fields are
 preserved. See @docs/08-web-ui.md for the current route and workflow map.
 
@@ -44,7 +48,7 @@ keeps working and both paths name the same class (R15).
 
 ## `store.py`
 
-`Store` class (FS + SQLite index); the exception classes it uses are re-exported from `errors.py`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Live skill directories are always recorded `status='active'` (stale `'trashed'` rows are reactivated via `_upsert_entry`/`resync`, including a post-sync resync when sync commits into the global scope). Text mutations use atomic sibling-temp writes, fsync, replacement, and the same-process per-skill lock shared by `create`/`edit`/`remove`/`disable`/`enable`/`restore` (`_with_skill_lock`); every mutation also takes the library-wide index lock at `<data>/skills/.skillsmgr-index-lock` (`_index_lock_path`) so a whole-tree scan cannot interleave, and `restore`/`purge_trash` additionally serialize on `<data>/trash/.trash-lock`; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar or ZIP members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, fail malformed streams as clean `StoreError`, preserve the original destination when commit staging fails, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. ZIP extraction uses explicit contained paths and rejects symlink-bit entries because ZIP has no equivalent safe extraction filter, and the compression-ratio budget is enforced per member as well as per archive. Per-skill commits are staged and failures are reported in `skipped`; a failed staging copy never removes the user's existing skill directory. A `--full` import validates every trash/template/catalog payload before any mutation, then installs them as one all-or-nothing transaction (`archive.restore_full_payload`) and reconciles the restored trash names into the index; if a later payload fails and its old destination cannot be restored, the diagnostic names the surviving dotted backup while the original `StoreError` remains the public failure. `purge_trash` wraps filesystem failures as `StoreError`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `_load_skill()`, `_upsert_entry()`, `_scan_dir()`.
+`Store` class (FS + SQLite index); the exception classes it uses are re-exported from `errors.py`. Public API and schema: @docs/04-store-api.md. **Return-type traps**: `export()`/`backup()` return a `Path`; `db_rebuild()` returns `{"added", "updated", "removed"}`. Filesystem paths derived from names go through the shared canonical-name and resolved-root guards. Live skill directories are always recorded `status='active'` (stale `'trashed'` rows are reactivated via `_upsert_entry`/`resync`, including a post-sync resync when sync commits into the global scope). Text mutations use atomic sibling-temp writes, fsync, replacement, and the same-process per-skill lock shared by `create`/`edit`/`remove`/`disable`/`enable`/`restore` (`_with_skill_lock`); every mutation also takes the library-wide index lock at `<data>/skills/.skillsmgr-index-lock` (`index_lock_path`) so a whole-tree scan cannot interleave, and `restore`/`purge_trash` additionally serialize on `<data>/trash/.trash-lock`; `doctor()` reports transaction artifacts, temporary files, stale snapshots, and FS/index drift. Archive imports preflight tar or ZIP members into a private temporary directory, enforce compressed/expanded/member/path/nesting/ratio budgets, reject duplicate/path/special members, validate the strict versioned manifest and extracted frontmatter names, fail malformed streams as clean `StoreError`, preserve the original destination when commit staging fails, verify optional content hashes, and use `tarfile.data_filter` when available with a guarded fallback otherwise. ZIP extraction uses explicit contained paths and rejects symlink-bit entries because ZIP has no equivalent safe extraction filter, and the compression-ratio budget is enforced per member as well as per archive. Per-skill commits are staged and failures are reported in `skipped`; a failed staging copy never removes the user's existing skill directory. A `--full` import validates every trash/template/catalog payload before any mutation, then installs them as one all-or-nothing transaction (`archive.restore_full_payload`) and reconciles the restored trash names into the index; if a later payload fails and its old destination cannot be restored, the diagnostic names the surviving dotted backup while the original `StoreError` remains the public failure. `purge_trash` wraps filesystem failures as `StoreError`. Internals: `_connect()` (sqlite3.Row, foreign_keys=ON), `_init_db()`, `loader.load_skill()`, `_upsert_entry()`, `_scan_dir()`.
 
 ## `catalog.py`
 
@@ -78,6 +82,37 @@ Scope list rows additionally expose derived `physical_root` and
 resolved document can be grouped once without becoming a new source of truth.
 
 Scope model + operations for per-agent skill dirs. `Scope` dataclass (id, label, base, kind, writable, recursive, supported, consumer). `known_scopes()` (global + claude-code, codex, cursor, opencode, gemini, commandcode, agents + project-local). `list_scopes()` exposes root availability and discovery metadata; `list_all()` deduplicates resolved physical roots for aggregate views while keeping *distinct* instances apart, so two same-name skills inside one recursive scope are both listed and both carry the `duplicated`/`divergent` states; direct ids remain addressable. Scope records expose observed instance states (`active`, `disabled`, `invalid`, `duplicated`, `divergent`, `unmanaged`, and `unaddressable` for a name that fails `NAME_RE`, which is paired with `addressable: false` on the row); precedence-based `shadowed`/effective resolution remains approval-gated. `find_duplicates()` (same-name cross-scope groups with scopes/descriptions-differ/records; read-only over `list_all()`), `get_skill()`, `get_raw()`, `create_skill()`, `edit_skill()`, `remove_skill()` (trash at `<scope-base>/../trash`), `toggle_skill()`, `sync_skill()` (skips duplicate physical target roots), and `search_all()`. `search_all()` builds global ranking records through `Store.list()` and attaches each row's body with a **single** `SELECT name, body` over the existing `Store._index_rows` read seam; callers such as CLI may pass their requested Store, while omitted stores retain the injectable adapter behavior. **[SPEC]** The body *source* is deliberately still the index, exactly as `Store.search()` has always used it, so the CLI and the web route keep agreeing on what a body match means. The previous per-row `Store.get()` was **waste, not authority**: `Store.get()` returns `body` from the index and spends its document read filling `Store._OBSERVED_KEYS`, which this caller discarded entirely — so it re-read and re-hashed every document in the library to derive metadata nobody looked at. The reuse cache could not help, because proving the bytes unchanged *is* the file read. One `_index_rows` call rather than a new public `Store` method, which is locked-constraint 5; `scopes` already reaches a private `Store` method (`_check_store_layout`), so this crosses an existing line rather than drawing a new one. It converts bounded wildcard `ValueError`s to the scope layer's `StoreError` contract. Agent-scope writes go straight to the agent dir (no DB). Global scope delegates to the injected `Store`; that injection is a `ContextVar` (per-thread, rebound per request by the web server), so two in-process servers on different data dirs cannot cross over. `known_scopes()` and `scan_scope("global")` share one identity for the global root: the injected Store's own tree when one is injected, otherwise the environment-derived data dir.
+
+## `documents.py`, `clock.py`, `read_flights.py`, `file_reads.py`
+
+`documents.py` owns enabled/disabled document names, strict and replacement
+UTF-8 reads, conflict detection and the locked enable/disable rename. Its
+callers own the surrounding Store/index or agent-scope transaction.
+`clock.py` owns UTC record and filename timestamp formats. `read_flights.py`
+shares only simultaneous reads, publishes errors/interrupts to waiters and
+keeps nested results independent; completed reads are never cached.
+`file_reads.py` acquires a regular-file descriptor and reads no more than the
+caller's byte limit plus one detection byte. Native settings, evals and
+lockfiles retain their separate parsers, limits, error shapes and link policies.
+
+## `doctor.py`, `batch.py`
+
+`doctor_report()` composes global/index, agent filesystem and optional hygiene
+reports for both frontends. Agent doctor uses the scope scanner's managed-peer
+link policy and reports root scan failures as degraded. Recursive discovery
+remains best-effort: an inaccessible descendant is not proof of a complete
+scan, and a grouping directory without a document is not reported as a skill.
+`batch.py` owns exact-target preview/execute, plan bindings, tree evidence and
+per-item application; HTTP handles request/response adaptation.
+
+## `insights.py`
+
+The documented advisory API remains available: consumer views, two/three-way
+skill diffs, ownership/provenance evidence, update/quarantine plans, registry
+previews, provider-neutral eval plans/scores and bundle policy. Shared risk,
+registry and install implementations remain in their owning modules; the
+compatibility facade preserves strict legacy input rejection and `ValueError`
+contracts. It does not import the CLI or HTTP adapter.
 
 ## `loader.py`
 
@@ -210,8 +245,9 @@ from @docs/34-agent-skill-loading-research-2026-11-07.md: `claude-code`,
 and `zed`, each with its source URL. `BEHAVIOURAL_KEYS` is the Claude Code set
 that the hygiene finding cares about. `documents(consumer, key)` answers the
 one question the finding asks (a dotted entry such as
-`metadata.opencode/autoinvoke` documents its top-level key), and
-`documents_anywhere(key)` names whether any recorded consumer documents it.
+`metadata.opencode/autoinvoke` documents its top-level key), and `documents_anywhere(key)` checks across the recorded consumers.
+`known_consumers()`, `label()`, `source()` and `documented_keys()` expose the
+recorded evidence.
 Nothing here reads the filesystem, writes, caches, or makes a network request,
 and no `Store`/REST/CLI surface is added.
 
@@ -414,14 +450,16 @@ neither imports the other. It holds the ecosystem runner allowlist
 runner (`install_value()`/`install_source()`: the shared character class, at
 most 256 characters, no leading `-`, no absolute, traversal or drive-prefixed
 shape), the single argv renderer (`install_argv()`/`install_command_line()`),
-`run_install()` (120 s timeout as `StoreError` status 504, the last 8,000
-characters of each stream), the offline `registry_bridge_plan()` with its
+`run_install()` (120 s timeout as `InstallTimeoutError`, a `StoreError`,
+and the last 8,000 characters of each stream), the offline `registry_bridge_plan()` with its
 never-verified trust gate, and the two-step registry install:
 `registry_fetch()` enforces fetch-then-commit, trust only on commit, and the
 global-only target; `prepare_registry_review()` stages, validates and
 risk-scans a snapshot and writes the private review; `commit_registry_review()`
 re-validates under `registry.registry_review_lock()`, calls `Store.add`, and
-writes provenance into the installed copy or purges it.
+writes provenance into the installed copy or purges it. The HTTP adapter
+preserves its timeout response (HTTP 500 with command and execution evidence);
+the CLI keeps its 4,000-character JSON stream tails and 8,000-character text tails.
 
 ## `risk.py`
 
@@ -559,7 +597,8 @@ already return; no new CLI/Store surfaces, no schema change.
 
 ## `tokens.py`
 
-Token/context estimation. `WINDOWS` dict (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M), `DEFAULT_WINDOW = "claude"`. Uses tiktoken when installed, else chars/4 heuristic. `estimate(text)`, `aggregate(records)`.
+Token/context estimation. `window_name()` validates a requested context, and
+`aggregate(records, window)` owns totals and context percentages. `WINDOWS` dict (claude 1M, claude-haiku 200k, gpt-5.6 1.05M, gpt-5 400k, gpt-4o 128k, gemini 1M, gemini-2m 2M), `DEFAULT_WINDOW = "claude"`. Uses tiktoken when installed, else chars/4 heuristic. `estimate(text)`, `aggregate(records)`.
 
 ## `paths.py`
 

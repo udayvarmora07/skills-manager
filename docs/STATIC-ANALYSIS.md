@@ -17,7 +17,7 @@ prove that the application is secure.
 
 **[SPEC]** The mandatory CI gate uses Ruff 0.16.8 through the full-SHA-pinned
 `astral-sh/ruff-action` v4.1.0. Its only selected rules are `F821`, `F822`, and
-`F823`, with `py310` as the target. The source set is the first-party Python
+`F823`, with `py311` as the target. The source set is the first-party Python
 surface listed in `.github/workflows/ci.yml`; the action runs once on Ubuntu,
 outside the Python-version matrix. Ruff is a developer/CI tool, never a
 runtime or build dependency, and CI does not auto-fix or format files.

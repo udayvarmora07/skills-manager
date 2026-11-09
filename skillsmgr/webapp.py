@@ -88,6 +88,25 @@ def _install_preview_payload(store: Store, data: dict, source: str, cmd_str: str
     return payload
 
 
+def _install_command(data: dict) -> tuple[str, str, list[str]]:
+    """Validate HTTP option shapes before shared installer value guards."""
+    source = install.install_source(data.get("source"))
+    raw_scope = data.get("scope", "global")
+    raw_runner = data.get("runner", "npx")
+    if not isinstance(raw_scope, str):
+        raise StoreError("scope must be a string")
+    if not isinstance(raw_runner, str):
+        raise StoreError("runner must be a string")
+    scope = raw_scope.strip() or "global"
+    runner = install.install_runner(raw_runner)
+    cmd_parts = install.install_argv(
+        source, runner, scope,
+        _option_list(data.get("agents")), _option_list(data.get("skills")),
+        bool(data.get("copy")), bool(data.get("list_only")),
+    )
+    return source, runner, cmd_parts
+
+
 def _registry_operation_kind(data: dict) -> str | None:
     """Validate and identify a registry operation in an install payload."""
     for flag in ("browse", "curated", "fetch"):
@@ -1322,27 +1341,19 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if result is not None:
             self._send_json(result)
             return True
-        source = install.install_source(data.get("source"))
-        raw_scope = data.get("scope", "global")
-        raw_runner = data.get("runner", "npx")
-        if not isinstance(raw_scope, str):
-            raise StoreError("scope must be a string")
-        if not isinstance(raw_runner, str):
-            raise StoreError("runner must be a string")
-        scope = raw_scope.strip() or "global"
-        runner = install.install_runner(raw_runner)
-        cmd_parts = install.install_argv(
-            source, runner, scope,
-            _option_list(data.get("agents")), _option_list(data.get("skills")),
-            bool(data.get("copy")), bool(data.get("list_only")),
-        )
+        source, runner, cmd_parts = _install_command(data)
         cmd_str = " ".join(cmd_parts)
         if not data.get("run"):
             self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
             return True
+        try:
+            result = install.run_install(cmd_parts)
+        except install.InstallTimeoutError as exc:
+            self._send_json({"command": cmd_str, "error": str(exc), "executed": True}, 500)
+            return True
         self._send_json({
             "command": cmd_str, "runner": runner, "source": source, "executed": True,
-            **install.run_install(cmd_parts),
+            **result,
         })
         return True
 

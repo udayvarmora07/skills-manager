@@ -499,9 +499,11 @@ def run() -> int:
         # observations exercise the same path as a real installation.
         from skillsmgr import scopes
 
-        scopes.set_global_store(store)
-        scopes.create_skill("agents", "browser-probe", "A divergent agent copy of the browser probe", body="# Browser probe\n\nDivergent copy.\n")
-        scope = next((item for item in scopes.known_scopes() if item.id == "agents"), None)
+        from skillsmgr.context import bound_store
+
+        with bound_store(store):
+            scopes.create_skill("agents", "browser-probe", "A divergent agent copy of the browser probe", body="# Browser probe\n\nDivergent copy.\n")
+            scope = next((item for item in scopes.known_scopes() if item.id == "agents"), None)
         if scope:
             malformed = scope.base / "malformed-observed"
             malformed.mkdir(parents=True, exist_ok=True)
