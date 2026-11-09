@@ -433,7 +433,7 @@ stated beside the setting and in every result.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/ai/settings` | provider, model, endpoint, `key_source` (`env:NAME`, `settings` or `none`), a four-character `key_hint`, caps, today's usage and the provider list. Never the key |
-| POST | `/api/ai/settings` | `{provider, model, base_url?, api_key?, clear_key?, max_run_tokens?, max_day_tokens?}`; `provider: null` turns AI off and deletes the stored key. Changing provider forgets the key. Plain `http` only to loopback |
+| POST | `/api/ai/settings` | `{provider, model, base_url?, api_key?, clear_key?, max_run_tokens?, max_day_tokens?}`; `provider: null` turns AI off and deletes the stored key. Changing the provider or the endpoint forgets the stored key. Plain `http` only to loopback |
 | POST | `/api/ai/test-connection` | one tiny JSON call; `{ok, run}` |
 | POST | `/api/ai/trigger-test` | `{scope, prompts[] \| generate_for[], per_skill?, near_misses?, repeats?, estimate?}`. `estimate: true` sends nothing and returns `egress` plus a token estimate |
 | POST | `/api/ai/improve-description` | `{scope, name, candidates?, repeats?, prompts?, estimate?}`; read-only proposals with held-out verification. Applying one uses `PATCH /api/skills/<name>` |

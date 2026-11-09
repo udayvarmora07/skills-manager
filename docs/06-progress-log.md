@@ -60,6 +60,22 @@ library). 1 more test; browser-checked.
 lets the model explain only those (`POST /api/ai/porting-notes`, v2 Porting
 notes). 2 more tests; browser-checked.
 
+**[NOTE] Hostile self-review.** Found and fixed: changing only the endpoint
+kept the stored key, so whoever could reach the loopback API could point the
+next call, and the key, at another host. A stored key now follows neither a
+provider nor an endpoint change (red test added). Checked without change: the
+key never reaches a response, the ledger, run files or exports; caps refuse
+before sending; responses are bounded; listing, pairs and prompts are capped
+(0 skills is a clean error, more than 600 is refused); candidate and eval input
+reads are contained and do not follow links; model output is never applied
+without an explicit, snapshot-taking edit. Known limit: an abandoned browser
+request keeps spending until its run ends, within the caps.
+
+**[NOTE]** Final ladder on the committed tree: 1,801 tests on each of Python
+3.11–3.14 (2 optional skips), both smokes, docs, complexity (every AI function
+≤ 15; no pre-existing entry raised), design tokens, compilation and frontend
+syntax.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any

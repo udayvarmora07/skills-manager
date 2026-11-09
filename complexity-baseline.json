@@ -7,28 +7,28 @@
     },
     "skillsmgr/ai.py::AiRun.__init__": {
       "complexity": 1,
-      "end_lineno": 515,
-      "lineno": 505
+      "end_lineno": 525,
+      "lineno": 515
     },
     "skillsmgr/ai.py::AiRun.ask_json": {
       "complexity": 2,
-      "end_lineno": 520,
-      "lineno": 517
+      "end_lineno": 530,
+      "lineno": 527
     },
     "skillsmgr/ai.py::AiRun.ask_text": {
       "complexity": 10,
-      "end_lineno": 560,
-      "lineno": 522
+      "end_lineno": 570,
+      "lineno": 532
     },
     "skillsmgr/ai.py::AiRun.label": {
       "complexity": 1,
-      "end_lineno": 573,
-      "lineno": 562
+      "end_lineno": 583,
+      "lineno": 572
     },
     "skillsmgr/ai.py::_NoRedirect.redirect_request": {
       "complexity": 1,
-      "end_lineno": 401,
-      "lineno": 399
+      "end_lineno": 411,
+      "lineno": 409
     },
     "skillsmgr/ai.py::_ai_dir": {
       "complexity": 1,
@@ -37,18 +37,18 @@
     },
     "skillsmgr/ai.py::_call": {
       "complexity": 2,
-      "end_lineno": 495,
-      "lineno": 493
+      "end_lineno": 505,
+      "lineno": 503
     },
     "skillsmgr/ai.py::_call_anthropic": {
       "complexity": 7,
-      "end_lineno": 469,
-      "lineno": 454
+      "end_lineno": 479,
+      "lineno": 464
     },
     "skillsmgr/ai.py::_call_openai": {
       "complexity": 11,
-      "end_lineno": 490,
-      "lineno": 472
+      "end_lineno": 500,
+      "lineno": 482
     },
     "skillsmgr/ai.py::_cap": {
       "complexity": 6,
@@ -57,13 +57,18 @@
     },
     "skillsmgr/ai.py::_error_detail": {
       "complexity": 5,
-      "end_lineno": 451,
-      "lineno": 439
+      "end_lineno": 461,
+      "lineno": 449
     },
     "skillsmgr/ai.py::_is_loopback": {
       "complexity": 3,
       "end_lineno": 179,
       "lineno": 173
+    },
+    "skillsmgr/ai.py::_kept_key": {
+      "complexity": 6,
+      "end_lineno": 260,
+      "lineno": 251
     },
     "skillsmgr/ai.py::_key_source": {
       "complexity": 5,
@@ -71,14 +76,14 @@
       "lineno": 191
     },
     "skillsmgr/ai.py::_merged_settings": {
-      "complexity": 14,
-      "end_lineno": 273,
-      "lineno": 251
+      "complexity": 11,
+      "end_lineno": 283,
+      "lineno": 263
     },
     "skillsmgr/ai.py::_post": {
       "complexity": 9,
-      "end_lineno": 436,
-      "lineno": 407
+      "end_lineno": 446,
+      "lineno": 417
     },
     "skillsmgr/ai.py::_provider_list": {
       "complexity": 2,
@@ -92,8 +97,8 @@
     },
     "skillsmgr/ai.py::_record_usage": {
       "complexity": 2,
-      "end_lineno": 359,
-      "lineno": 354
+      "end_lineno": 369,
+      "lineno": 364
     },
     "skillsmgr/ai.py::_settings_path": {
       "complexity": 1,
@@ -102,13 +107,13 @@
     },
     "skillsmgr/ai.py::_today": {
       "complexity": 1,
-      "end_lineno": 327,
-      "lineno": 326
+      "end_lineno": 337,
+      "lineno": 336
     },
     "skillsmgr/ai.py::_usage_path": {
       "complexity": 1,
-      "end_lineno": 323,
-      "lineno": 322
+      "end_lineno": 333,
+      "lineno": 332
     },
     "skillsmgr/ai.py::_valid_base_url": {
       "complexity": 11,
@@ -132,8 +137,8 @@
     },
     "skillsmgr/ai.py::extract_json": {
       "complexity": 5,
-      "end_lineno": 392,
-      "lineno": 378
+      "end_lineno": 402,
+      "lineno": 388
     },
     "skillsmgr/ai.py::public_settings": {
       "complexity": 15,
@@ -142,28 +147,28 @@
     },
     "skillsmgr/ai.py::resolve_config": {
       "complexity": 12,
-      "end_lineno": 316,
-      "lineno": 294
+      "end_lineno": 326,
+      "lineno": 304
     },
     "skillsmgr/ai.py::save_settings": {
       "complexity": 5,
-      "end_lineno": 291,
-      "lineno": 276
+      "end_lineno": 301,
+      "lineno": 286
     },
     "skillsmgr/ai.py::test_connection": {
       "complexity": 3,
-      "end_lineno": 582,
-      "lineno": 576
+      "end_lineno": 592,
+      "lineno": 586
     },
     "skillsmgr/ai.py::untrusted_block": {
       "complexity": 1,
-      "end_lineno": 368,
-      "lineno": 365
+      "end_lineno": 378,
+      "lineno": 375
     },
     "skillsmgr/ai.py::usage_summary": {
       "complexity": 10,
-      "end_lineno": 351,
-      "lineno": 330
+      "end_lineno": 361,
+      "lineno": 340
     },
     "skillsmgr/ai_ask.py::_library": {
       "complexity": 9,

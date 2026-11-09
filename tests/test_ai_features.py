@@ -217,6 +217,15 @@ class AiFeatureTests(unittest.TestCase):
         ai.save_settings(self.store.data_dir, {"clear_key": True})
         self.assertEqual(ai.public_settings(self.store.data_dir)["key_source"], "none")
 
+    def test_changing_the_endpoint_forgets_the_stored_key(self):
+        self._configure()
+        public = ai.save_settings(self.store.data_dir, {"base_url": "https://elsewhere.invalid/v1"})
+        self.assertEqual(public["key_source"], "none")
+        self.assertNotIn(SECRET, (Path(self.store.data_dir) / "ai/settings.json").read_text())
+        self._configure()
+        public = ai.save_settings(self.store.data_dir, {"model": "other"})   # same endpoint keeps it
+        self.assertEqual(public["key_source"], "settings")
+
     def test_disabling_forgets_everything(self):
         self._configure()
         public = ai.save_settings(self.store.data_dir, {"provider": None})

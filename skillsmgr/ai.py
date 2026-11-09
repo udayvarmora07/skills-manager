@@ -248,6 +248,18 @@ def _validated_key(value) -> str:
     return value.strip()
 
 
+def _kept_key(stored: dict, payload: dict, endpoint: str, fresh: bool, spec: dict) -> str | None:
+    """The key to store: a new one, or the old one only if provider and endpoint stay.
+
+    A stored key follows neither a provider change nor an endpoint change, so
+    redirecting the endpoint cannot quietly send the old key somewhere new.
+    """
+    if payload.get("api_key") not in (None, ""):
+        return _validated_key(payload["api_key"])
+    moved = endpoint != (stored.get("base_url") or spec["base_url"])
+    return None if fresh or moved or payload.get("clear_key") else stored.get("api_key")
+
+
 def _merged_settings(stored: dict, payload: dict) -> dict:
     """Apply one settings payload on top of the stored settings."""
     provider = payload.get("provider", stored.get("provider"))
@@ -263,9 +275,7 @@ def _merged_settings(stored: dict, payload: dict) -> dict:
         if not isinstance(base, str) or not base.strip():
             raise AiError("this provider needs a base URL", "ai-settings")
         result["base_url"] = _valid_base_url(base, local_only=bool(spec.get("local")))
-    key = None if fresh or payload.get("clear_key") else stored.get("api_key")
-    if payload.get("api_key") not in (None, ""):
-        key = _validated_key(payload["api_key"])
+    key = _kept_key(stored, payload, result.get("base_url", spec["base_url"]), fresh, spec)
     if key:
         result["api_key"] = key
     for field, default in (("max_run_tokens", DEFAULT_RUN_TOKENS), ("max_day_tokens", DEFAULT_DAY_TOKENS)):
