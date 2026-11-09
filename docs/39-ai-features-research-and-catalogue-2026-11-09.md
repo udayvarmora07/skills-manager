@@ -48,7 +48,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | **Shipped** (includes A6's demote-only opinions) |
 | A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
 | A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | **Shipped** |
-| A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | Planned |
+| A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | **Shipped** |
 | A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | Planned |
 | A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | Planned |
 | A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | Planned, gated |
@@ -105,6 +105,10 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[SPEC]** Any trigger-test result can be saved as the scope's regression prompts (`<data>/ai/prompt-sets/<scope>.json`; duplicates merged; at most 20 per skill and 500 per scope). A trigger test with `saved: true` re-runs them (skipping prompts whose skill is no longer listed) and compares every skill's hit rate with the most recent earlier saved-prompt run for that scope, listing each change and flagging regressions. The comparison spans whatever changed in between, edits or a different model; the run labels say which model answered each.
 
-## 11. Next
+## 11. A8 eval runner
 
-A8 eval runner with and without the skill, then A9 ask your library.
+**[SPEC]** `ai_evals.run_evals` takes a library skill's `evals/evals.json` (at most 20 cases per run; input files are read with containment and bounded at 8,000 characters each). Every case runs twice: with the whole `SKILL.md` as system instructions, and with only a neutral agent instruction. Outputs (at most 1,500 output tokens, possibly cut off) are passed to the existing `evals.record_runs`, which grades them with the case's deterministic assertions and writes the next `iteration-N` atomically. No model grades anything, so cases without assertions are reported as ungraded. `not-needed` means every graded case passed both with and without the skill: the skill may add nothing for this model. It is a prompt, not a deletion.
+
+## 12. Next
+
+A9 ask your library, A10 porting notes, then A11 verified drafting.

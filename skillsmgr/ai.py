@@ -512,6 +512,16 @@ class AiRun:
 
     def ask_json(self, system: str, user: str, *, max_output: int = 2_000):
         """Send one request and return its parsed JSON (``None`` when estimating)."""
+        text = self.ask_text(system, user, max_output=max_output, json_output=True)
+        return None if text is None else extract_json(text)
+
+    def ask_text(self, system: str, user: str, *, max_output: int = 2_000,
+                 json_output: bool = False) -> str | None:
+        """Send one request and return its text (``None`` when estimating).
+
+        Plain-text answers (eval outputs) may be cut off at ``max_output``;
+        ``self.last_truncated`` says so.  A cut-off JSON answer is an error.
+        """
         max_output = max(64, min(int(max_output), MAX_OUTPUT_TOKENS))
         estimate = count_tokens(system)[0] + count_tokens(user)[0] + max_output
         if self.estimated_input + estimate > self.config["max_run_tokens"]:
@@ -527,7 +537,8 @@ class AiRun:
         if self.estimate_only:
             return None
         self.calls += 1
-        text, usage = _call(self.config, system + "\n\n" + UNTRUSTED_RULE, user, max_output)
+        config = self.config if json_output else {**self.config, "json_mode": False}
+        text, usage = _call(config, system + "\n\n" + UNTRUSTED_RULE, user, max_output)
         used_in = usage.get("input_tokens") if isinstance(usage.get("input_tokens"), int) else estimate
         used_out = usage.get("output_tokens") if isinstance(usage.get("output_tokens"), int) else 0
         self.input_tokens += used_in
@@ -538,10 +549,11 @@ class AiRun:
             "model": self.config["model"], "input_tokens": used_in, "output_tokens": used_out,
             "input_sha256": hashlib.sha256((system + user).encode("utf-8")).hexdigest(),
         })
-        if usage.get("truncated"):
+        self.last_truncated = bool(usage.get("truncated"))
+        if self.last_truncated and json_output:
             raise AiError("the model's answer was cut off; try fewer items per run",
                           "ai-bad-output", 502)
-        return extract_json(text)
+        return text
 
     def label(self) -> dict:
         """Provenance attached to every result: who answered, what it cost."""

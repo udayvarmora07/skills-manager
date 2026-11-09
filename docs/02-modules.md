@@ -554,7 +554,10 @@ pairs in both orders and keeps only conflicts quoted verbatim from the files.
 `ai_budget.py` (A4) shortens the largest descriptions when a listing exceeds
 its budget and marks each shorter version safe only if it still triggers.
 `ai_review.py` (A5) briefs a pending update or registry review; every claim
-must quote its file, and risk opinions never change a finding. Both are read-only towards skills; no Store method,
+must quote its file, and risk opinions never change a finding. `ai_evals.py`
+(A8) produces with/without-skill outputs for `evals.record_runs`, which grades
+them with the case assertions; no model grading. `AiRun.ask_text` serves
+plain-text answers. Both are read-only towards skills; no Store method,
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 

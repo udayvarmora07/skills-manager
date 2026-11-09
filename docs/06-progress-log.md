@@ -47,6 +47,11 @@ more tests; the panel was rendered against a real update review.
 with `saved: true`; each skill's hit rate is compared with the previous saved
 run and regressions are flagged. 2 more tests; browser-checked.
 
+**[SPEC]** A8 followed: `ai_evals.py` runs a library skill's eval cases with
+and without it and records them through the existing harness, graded only by
+the case assertions; a skill that passes without itself is flagged
+`not-needed`. 3 more tests; browser-checked.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any

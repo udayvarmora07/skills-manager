@@ -16,7 +16,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from skillsmgr import ai, ai_budget, ai_overlap, ai_review, ai_skills, context, source_update
+from skillsmgr import ai, ai_budget, ai_evals, ai_overlap, ai_review, ai_skills, context, source_update
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
 
@@ -47,7 +47,8 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
             system, user = body["system"], body["messages"][0]["content"]
         else:
             system, user = body["messages"][0]["content"], body["messages"][1]["content"]
-        text = json.dumps(self._answer(system, user))
+        answer = self._answer(system, user)
+        text = answer["__text__"] if isinstance(answer, dict) and "__text__" in answer else json.dumps(answer)
         if self.path.endswith("/v1/messages"):
             payload = {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn",
                        "usage": {"input_tokens": 100, "output_tokens": 20}}
@@ -95,6 +96,9 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
                                   {"a_quote": "an invented instruction", "b_quote": "another one", "why": "fake"}],
                     "recommendation": "narrow-descriptions",
                     "a_boundary": f"Not for {b}.", "b_boundary": f"Not for {a}.", "merged_description": ""}
+        if system.startswith("You are an AI coding agent working for a developer"):
+            # The "skill" teaches the magic word; without it the model does not know it.
+            return {"__text__": "The answer is PINEAPPLE." if "magic word" in system else "I do not know."}
         if "You brief a developer" in system:
             return {"summary": "Adds a setup script.",
                     "claims": [{"text": "adds a download step", "file": "scripts/run.sh",
@@ -470,6 +474,45 @@ class AiFeatureTests(unittest.TestCase):
         self._configure()
         with self.assertRaises(ai.AiError):
             ai_skills.trigger_test(self.store.data_dir, {"scope": "claude-code", "saved": True})
+
+    # -- eval runner ------------------------------------------------------
+
+    def _eval_skill(self, both_pass=False):
+        self.store.create("magic", "Use magic when asked for the magic word.",
+                          body="When asked, the magic word is PINEAPPLE.\n")
+        cases = {"skill_name": "magic", "evals": [
+            {"id": 1, "prompt": "What is the magic word?", "expected_output": "PINEAPPLE",
+             # Both answers end with "." -- a case the model passes without the skill.
+             "assertions": [{"type": "contains", "value": "." if both_pass else "PINEAPPLE"}]}]}
+        directory = Path(self.store.data_dir) / "skills/magic/evals"
+        directory.mkdir(parents=True)
+        (directory / "evals.json").write_text(json.dumps(cases))
+
+    def test_eval_runner_records_with_and_without_skill(self):
+        self._configure()
+        self._eval_skill()
+        result = ai_evals.run_evals(self.store, {"name": "magic"})
+        self.assertEqual(result["verdict"], "helps")
+        variants = result["benchmark"]["variants"]
+        self.assertEqual((variants["with_skill"]["pass_rate"], variants["without_skill"]["pass_rate"]), (1.0, 0.0))
+        self.assertEqual(result["iteration"], 1)
+        workspace = Path(self.store.data_dir) / "evals/magic-workspace/iteration-1"
+        self.assertTrue((workspace / "benchmark.json").is_file())
+        again = ai_evals.run_evals(self.store, {"name": "magic"})
+        self.assertEqual(again["iteration"], 2)
+
+    def test_eval_runner_flags_a_skill_the_model_no_longer_needs(self):
+        self._configure()
+        self._eval_skill(both_pass=True)
+        self.assertEqual(ai_evals.run_evals(self.store, {"name": "magic"})["verdict"], "not-needed")
+
+    def test_eval_runner_needs_cases(self):
+        self._configure()
+        self.store.create("plain", "Use plain for nothing.", body="x\n")
+        with self.assertRaises(ai.AiError):
+            ai_evals.run_evals(self.store, {"name": "plain"})
+        with self.assertRaises(Exception):
+            ai_evals.run_evals(self.store, {"name": "../plain"})
 
     # -- HTTP -------------------------------------------------------------
 

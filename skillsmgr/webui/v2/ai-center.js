@@ -17,6 +17,7 @@
         busy: false, error: "", note: "", connection: null,
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
+        evalName: "", evalMax: 10, evalResult: null, evalEstimate: null,
         savedCount: 0, savedNote: "",
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
@@ -65,6 +66,11 @@
         const ok = await this.guard(() => api("/api/skills/" + encodeURIComponent(p.name) + "?scope=" + encodeURIComponent(this.budget.scope), { method: "PATCH", body: JSON.stringify({ description: p.proposed }) }));
         if (ok) { this.appliedNames.push(p.name); this.note = "Saved " + p.name + ". The previous version is in Recovery → history."; this.$emit("changed"); }
       },
+      librarySkills() { return [...new Set(this.records.filter((r) => r.scope === "global").map((r) => r.name))].sort(); },
+      evalBody(estimate) { return { name: this.evalName, max_cases: Number(this.evalMax), estimate }; },
+      async estimateEvals() { this.evalResult = null; this.evalEstimate = await this.guard(() => post("/api/ai/evals", this.evalBody(true))); },
+      async runEvals() { const r = await this.guard(() => post("/api/ai/evals", this.evalBody(false))); if (r) { this.evalResult = r; this.evalEstimate = null; this.load(); } },
+      evalVerdict(v) { return { helps: ["ok", "The skill helps"], "not-needed": ["warn", "Passes without the skill: it may no longer be needed"], "no-gain": ["warn", "No difference with the skill"], hurts: ["bad", "Worse with the skill"], ungraded: ["off", "No assertions to grade"] }[v] || ["off", v]; },
       addPair() { if (this.pairA && this.pairB && this.pairA !== this.pairB && this.pairs.length < 12) { this.pairs.push([this.pairA, this.pairB]); this.pairA = this.pairB = ""; } },
       overlapBody(estimate) { return { scope: this.scope, max_pairs: Number(this.overlapLimit), pairs: this.pairs, estimate }; },
       async estimateOverlap() { this.overlap = null; this.overlapEstimate = await this.guard(() => post("/api/ai/overlap-judge", this.overlapBody(true))); },
@@ -177,7 +183,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -242,6 +248,36 @@
           <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy" @click="saveTests()">Save these prompts as regression tests</button></div>
           <p v-if="savedNote" class="tp-fine" role="status">{{ savedNote }}</p>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-evals'">
+        <h1 class="h1" id="h1" tabindex="-1">Does it help?</h1>
+        <p class="lede">Runs a skill's own <code>evals/evals.json</code> cases through your model twice, with and without the skill, and grades both with the cases' own assertions. Results are saved in the skill's eval workspace.</p>
+        <section class="card tp-panel" aria-labelledby="ai-ev-h">
+          <h2 id="ai-ev-h">Choose a skill</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-evn"><b>Skill</b><small>Skills in your library. Add cases in <code>evals/evals.json</code> inside the skill's folder first.</small></label><select id="ai-evn" class="field" v-model="evalName"><option value="">Choose…</option><option v-for="n in librarySkills()" :key="n" :value="n">{{ n }}</option></select></div>
+            <div class="tp-set-row"><label for="ai-evm"><b>Cases</b><small>At most this many, in file order.</small></label><select id="ai-evm" class="field" v-model.number="evalMax"><option v-for="n in [1,3,5,10,15,20]" :key="n" :value="n">{{ n }}</option></select></div>
+          </div>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !evalName" @click="estimateEvals()">Check what will be sent</button></div>
+          <div v-if="evalEstimate" class="ai-confirm" role="region" aria-label="Before sending">
+            <p v-for="(line,i) in evalEstimate.egress" :key="i" class="tp-fine">{{ line }}</p>
+            <p class="tp-fine">At most about {{ fmt(evalEstimate.run.estimated_input_tokens) }} tokens to {{ evalEstimate.run.model }}.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy" @click="runEvals()">Send and run</button><button class="btn btn-line" :disabled="busy" @click="evalEstimate=null">Cancel</button></div>
+          </div>
+        </section>
+        <section v-if="evalResult" class="card tp-panel" aria-labelledby="ai-evr-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-evr-h">{{ evalResult.name }} · iteration {{ evalResult.iteration }}</h2><p>{{ evalResult.cases }} cases · {{ evalResult.run.model }} · {{ fmt(evalResult.run.input_tokens) }} input tokens</p></div>
+            <span :class="['pill', evalVerdict(evalResult.verdict)[0]]">{{ evalVerdict(evalResult.verdict)[1] }}</span></header>
+          <div class="ai-stats">
+            <div><b class="num">{{ pct((evalResult.benchmark.variants.with_skill||{}).pass_rate) }}</b><small>cases passed with the skill</small></div>
+            <div><b class="num">{{ pct((evalResult.benchmark.variants.without_skill||{}).pass_rate) }}</b><small>without it</small></div>
+          </div>
+          <table class="ai-table"><thead><tr><th>Case</th><th>With skill</th><th>Without</th></tr></thead>
+            <tbody><tr v-for="c in [...new Set(evalResult.results.map(r => r.case))]" :key="c"><td class="tp-mono">{{ c }}</td>
+              <td v-for="v in ['with_skill','without_skill']" :key="v">{{ (r => !r ? '–' : !r.graded ? 'Not graded' : r.passed + ' / ' + r.total + ' assertions')(evalResult.results.find(r => r.case===c && r.variant===v)) }}</td></tr></tbody></table>
+          <p class="tp-fine">Graded only by the assertions in evals.json; ungraded cases: {{ evalResult.benchmark.ungraded_cases }}. {{ evalResult.run.advisory }}</p>
         </section>
       </template>
 
