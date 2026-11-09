@@ -60,6 +60,7 @@ skills-manager/
     ai_skills.py     # AI trigger test + verified description rewrite
     ai_overlap.py    # AI overlap judge over bounded candidate pairs
     ai_budget.py     # AI listing-budget fitter, verified by re-testing
+    ai_review.py     # AI briefing for update and registry reviews
     lockfiles.py     # read-only skills-CLI lockfile evidence (project/global)
     key_support.py   # documented per-consumer frontmatter keys (pure table)
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue

@@ -276,3 +276,8 @@
 .ai-cand { display: grid; gap: 8px; padding: 16px 0; border-top: 1px solid var(--line); }
 .ai-cand h3 { display: flex; gap: 12px; align-items: center; font-size: 15px; }
 .ai-conflict { display: grid; gap: 4px; padding: 12px; border-left: 3px solid var(--line); background: var(--sunken); border-radius: 4px; }
+.ai-brief { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.ai-brief h3 { font-size: 15px; }
+.ai-brief h4 { font-size: 14px; margin-top: 8px; }
+.ai-brief-body { display: grid; gap: 6px; }
+.ai-brief q { overflow-wrap: anywhere; }

@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import ai, ai_budget, ai_overlap, ai_skills, batch, doctor, effective, evals, install, scopes
+from . import ai, ai_budget, ai_overlap, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -1558,6 +1558,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             "improve-description": lambda body: ai_skills.improve_description(data_dir, body),
             "overlap-judge": lambda body: ai_overlap.overlap_judge(data_dir, body),
             "fit-budget": lambda body: ai_budget.fit_budget(data_dir, body),
+            "review-briefing": lambda body: ai_review.review_briefing(data_dir, body),
         }
         handler = handlers.get(parts[2])
         if handler is None:

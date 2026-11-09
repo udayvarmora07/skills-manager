@@ -550,7 +550,9 @@ held-out-verified description rewrite (`improve_description`), and saves runs
 under `<data>/ai/runs/`. `ai_overlap.py` (A3) judges bounded candidate
 pairs in both orders and keeps only conflicts quoted verbatim from the files.
 `ai_budget.py` (A4) shortens the largest descriptions when a listing exceeds
-its budget and marks each shorter version safe only if it still triggers. Both are read-only towards skills; no Store method,
+its budget and marks each shorter version safe only if it still triggers.
+`ai_review.py` (A5) briefs a pending update or registry review; every claim
+must quote its file, and risk opinions never change a finding. Both are read-only towards skills; no Store method,
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 

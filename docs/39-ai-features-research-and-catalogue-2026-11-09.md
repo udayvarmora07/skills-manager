@@ -45,7 +45,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A2 | **Verified description rewrite**: candidates from failures, re-tested; recommended only if better overall and not worse on held-out prompts | §2.3, skill-creator split, GEPA | **Shipped** |
 | A3 | Collision / overlap judge: candidate pairs from the near-duplicate heuristic, a description-word prefilter and user picks; judged in both orders; verbatim-checked conflicts; boundary sentences and merge idea | #35319, #27721, #10238; Cisco overlap check | **Shipped** |
 | A4 | Listing-budget fitter: shorten the largest descriptions to fit the agent's budget, each verified by A1 | #56710, #19679, #19090; existing `claude_listing` estimate | **Shipped** |
-| A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | Next |
+| A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | **Shipped** (includes A6's demote-only opinions) |
 | A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
 | A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | Planned |
 | A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | Planned |
@@ -97,6 +97,10 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[SPEC]** `ai_budget.fit_budget` takes Claude Code's budget from the existing `claude_listing` estimate (settings-aware) or a caller-supplied `budget_chars` for other agents. Within budget it returns without any model call. Otherwise it picks the largest descriptions (at most 10) until shortening each to about 45% (never below 120 characters) could cover the overflow, asks for shorter versions, generates three prompts per chosen skill and routes them once with the current descriptions and once with all shorter versions together. A shorter version is `safe` only when its skill wins at least as many prompts as before. `fits` says whether the safe savings cover the overflow; when they do not, the page points to turning skills off or name-only.
 
-## 9. Next
+## 9. A5 review briefing
 
-A5 review briefing for registry fetch and update review.
+**[SPEC]** `ai_review.review_briefing` reads a pending review without changing it: for an update, each changed file's bounded unified diff plus the full text of added files from the staged candidate; for a registry fetch, the snapshot's files. At most 25 files and 40,000 characters are sent with the advisory risk findings. Claims, capabilities (network, shell, credentials, file-write, persistence) and description mismatches are kept only when their quote, whitespace-normalised and with diff markers removed, occurs in the file they name. The summary is shown but labelled unchecked. Each risk finding may receive an opinion (`likely-real`, `likely-false-positive`, `unclear`), shown beside the original, which keeps its severity. The v2 review panels embed the briefing as an opt-in *Explain with AI* step with the usual estimate-then-send.
+
+## 10. Next
+
+A7 regression pack (saved prompt sets re-run after edits and model changes), then A8 eval runner.

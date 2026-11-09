@@ -339,3 +339,53 @@
     </div>`,
   };
 })();
+
+/* "Explain with AI" inside an install or update review (docs/39 A5). Every
+ * claim shown quotes the file it names; risk opinions never change findings. */
+(function () {
+  const api = window.SkillManagerDomain.api;
+  const post = (url, body) => api(url, { method: "POST", body: JSON.stringify(body || {}) });
+  window.SkillsV2AiBriefing = {
+    props: { kind: String, reviewId: String },
+    data() { return { configured: null, busy: false, error: "", estimate: null, brief: null }; },
+    watch: { reviewId() { this.estimate = null; this.brief = null; this.error = ""; } },
+    async mounted() { try { this.configured = !!(await api("/api/ai/settings")).configured; } catch (e) { this.configured = false; } },
+    methods: {
+      body(estimate) { return { kind: this.kind, review_id: this.reviewId, estimate }; },
+      async run(estimate) {
+        this.busy = true; this.error = "";
+        try { const r = await post("/api/ai/review-briefing", this.body(estimate)); if (estimate) { this.estimate = r; this.brief = null; } else { this.brief = r; this.estimate = null; } }
+        catch (e) { this.error = (e && e.message) || String(e); } finally { this.busy = false; }
+      },
+      matchLabel(m) { return { yes: "Description matches what it does", partly: "Description is partly accurate", no: "Description does not match what it does", unclear: "Could not tell" }[m] || m; },
+      matchTone(m) { return { yes: "ok", partly: "warn", no: "bad" }[m] || "off"; },
+      opinionLabel(o) { return { "likely-real": "Model thinks this is real", "likely-false-positive": "Model thinks this is a false alarm", unclear: "Model is unsure" }[o] || o; },
+    },
+    template: `
+    <section v-if="reviewId" class="ai-brief" aria-label="AI briefing">
+      <div class="tp-panel-h"><h3>Explain with AI <small class="tp-count">your own key · advisory</small></h3>
+        <a v-if="configured===false" class="btn btn-line btn-sm" href="#/tools/ai-settings">Set up AI</a>
+        <button v-else-if="!estimate && !brief" class="btn btn-line btn-sm" :disabled="busy || configured===null" @click="run(true)">Explain this change</button></div>
+      <p v-if="error" class="v2-tool-error" role="alert">{{ error }}</p>
+      <p v-if="busy" class="v2-tool-status" role="status"><span class="v2-dot" aria-hidden="true"></span>Working…</p>
+      <div v-if="estimate" class="ai-confirm">
+        <p v-for="(line,i) in estimate.egress" :key="i" class="tp-fine">{{ line }}</p>
+        <p class="tp-fine">At most about {{ estimate.run.estimated_input_tokens.toLocaleString() }} tokens to {{ estimate.run.model }}.</p>
+        <div class="tp-acts"><button class="btn btn-ink btn-sm" :disabled="busy" @click="run(false)">Send and explain</button><button class="btn btn-line btn-sm" :disabled="busy" @click="estimate=null">Cancel</button></div>
+      </div>
+      <div v-if="brief" aria-live="polite" class="ai-brief-body">
+        <p>{{ brief.summary }}</p>
+        <p><span :class="['pill', matchTone(brief.description_matches)]">{{ matchLabel(brief.description_matches) }}</span></p>
+        <template v-if="brief.capabilities.length"><h4>What it can do</h4>
+          <p v-for="(c,i) in brief.capabilities" :key="'c'+i" class="tp-fine"><b>{{ c.kind }}</b>: {{ c.text }} <span class="tp-mono">{{ c.file }}</span> <q class="tp-mono">{{ c.quote }}</q></p></template>
+        <template v-if="brief.claims.length"><h4>Changes</h4>
+          <p v-for="(c,i) in brief.claims" :key="'k'+i" class="tp-fine">{{ c.text }} <span class="tp-mono">{{ c.file }}</span> <q class="tp-mono">{{ c.quote }}</q></p></template>
+        <template v-if="brief.mismatches.length"><h4>Not in the description</h4>
+          <p v-for="(c,i) in brief.mismatches" :key="'m'+i" class="tp-fine">{{ c.text }} <span class="tp-mono">{{ c.file }}</span> <q class="tp-mono">{{ c.quote }}</q></p></template>
+        <template v-if="brief.finding_opinions.length"><h4>Second opinion on risk findings</h4>
+          <p v-for="o in brief.finding_opinions" :key="'o'+o.index" class="tp-fine">Finding {{ o.index + 1 }} ({{ o.finding_severity }} {{ o.finding_kind }}): {{ opinionLabel(o.opinion) }}. {{ o.why }}</p></template>
+        <p class="tp-fine"><span v-if="brief.dropped_unquoted">{{ brief.dropped_unquoted }} claim(s) dropped because their quote is not in the files. </span>{{ brief.notes[0] }} {{ brief.run.model }}.</p>
+      </div>
+    </section>`,
+  };
+})();

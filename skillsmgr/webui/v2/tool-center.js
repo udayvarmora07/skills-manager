@@ -353,6 +353,7 @@
               <dt>Review ID</dt><dd><code>{{review.review_id}}</code></dd>
             </dl>
 ${scanPanel('(review.inspection||{}).external_scan')}
+            <ai-briefing kind="registry" :review-id="review.review_id"></ai-briefing>
             <details class="tp-more"><summary>Validation and advisory risk evidence</summary><p class="tp-fine">Risk findings are heuristics, not a safety verdict.</p><pre>{{pretty(review.inspection||{})}}</pre></details>
             <div class="tp-confirm">
               <label class="tp-check"><input type="checkbox" v-model="trust"> I explicitly trust this reviewed artifact</label>
@@ -740,6 +741,7 @@ ${scanPanel('(review.inspection||{}).external_scan')}
               <h3>Changes <span class="tp-count">{{((sourceReview.comparison||{}).changed_files||[]).length}} files</span></h3>
               <p v-if="!((sourceReview.comparison||{}).changed_files||[]).length" class="tp-empty">No file changes — nothing to apply.</p>
               <details v-for="change in ((sourceReview.comparison||{}).changed_files||[])" :key="change.path" class="tp-more"><summary><span :class="['tp-chg', change.status]">{{human(change.status)}}</span> <span class="tp-mono">{{change.path}}</span><span v-if="change.diff_truncated" class="tp-count"> · diff truncated</span></summary><p class="tp-fine">{{change.explanation}}</p><pre v-if="change.diff">{{change.diff}}</pre></details>
+              <ai-briefing v-if="((sourceReview.comparison||{}).changed_files||[]).length" kind="update" :review-id="sourceReview.review_id"></ai-briefing>
               <template v-if="((sourceReview.validation||{}).errors||[]).length || ((sourceReview.validation||{}).warnings||[]).length"><h3>Validation</h3>
               <p v-for="(issue,i) in ((sourceReview.validation||{}).errors||[])" :key="'e'+i" class="tp-issue bad">{{issue.message||issue}}</p>
               <p v-for="(issue,i) in ((sourceReview.validation||{}).warnings||[])" :key="'w'+i" class="tp-issue warn">Warning: {{issue.message||issue}}</p></template>

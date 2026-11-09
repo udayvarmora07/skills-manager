@@ -38,6 +38,11 @@ listing is over budget (Claude Code's measured, others supplied) and marks a
 shorter version safe only if its skill still wins as many prompts
 (`POST /api/ai/fit-budget`, v2 Fit the listing budget). 3 more tests.
 
+**[SPEC]** A5 followed: `ai_review.py` briefs a pending update or registry
+review; claims must quote their file and risk opinions never change a finding
+(`POST /api/ai/review-briefing`, *Explain with AI* in both review panels). 2
+more tests; the panel was rendered against a real update review.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any
