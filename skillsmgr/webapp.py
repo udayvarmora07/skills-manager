@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import ai, ai_ask, ai_budget, ai_concise, ai_draft, ai_evals, ai_overlap, ai_port, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
+from . import ai, ai_ask, ai_budget, ai_concise, ai_draft, ai_evals, ai_overlap, ai_port, ai_profiles, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -1569,6 +1569,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         handlers = {
             "settings": lambda body: ai.save_settings(data_dir, body),
             "test-connection": lambda body: ai.test_connection(data_dir),
+            "suggest-profile": lambda body: ai_profiles.suggest_profile(
+                data_dir, body, allowed_roots=getattr(self.server, "diagnostics_roots", None) or [data_dir]),
             "concise": lambda body: ai_concise.concise_skill(data_dir, body),
             "draft-skill": lambda body: ai_draft.draft_skill(data_dir, body),
             "trigger-test": lambda body: ai_skills.trigger_test(data_dir, body),

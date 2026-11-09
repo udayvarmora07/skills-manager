@@ -602,6 +602,21 @@ Estimate mode
 sends nothing and creates no review. Computed primary and reference counts
 are reported with their counting method; semantic equivalence is not claimed.
 
+## `ai_profiles.py`
+
+**[SPEC] Profile suggestions (A12).** `suggest_profile` first uses
+`adapters.project_observation` with server-owned managed roots. Outside or
+unavailable projects return redacted errors before project enumeration or
+provider calls. Descriptor-anchored scanning collects only extension counts,
+known manifest names and top-level directory names, with depth/item limits
+and a truncation flag; project files are never opened. The model sees these
+signals and bounded skill metadata, with path-like description tokens
+redacted. Readable disabled skills are eligible. Invented skill names are
+dropped and names are deduplicated. The suggestion writes no catalog entry;
+the v2 user confirms a save or overwrite through the existing catalog API.
+No native agent settings are changed. Safe scanning requires the same POSIX
+descriptor support as conciseness capture.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official

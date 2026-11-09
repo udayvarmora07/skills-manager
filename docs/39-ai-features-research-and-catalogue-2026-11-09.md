@@ -52,7 +52,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | **Shipped** |
 | A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | **Shipped** |
 | A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | **Shipped** |
-| A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | Idea |
+| A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | **Shipped** |
 | A13 | Conciseness / splitter advisor (move bulk to `references/`) | claude-code #74473 (210k tokens) | **Shipped** |
 | A14 | CI mode: fixed-seed trigger test with machine-readable output | Sanity on X; skill-linter SARIF | Idea; needs CLI approval |
 | — | Transcript mining with a cloud model | Weak demand; very high privacy cost | **Not recommended**; local-model-only if ever |
@@ -183,8 +183,33 @@ swaps. Commit hashes cover file names and bytes, not mode or empty-directory
 changes made after review. The advisor rechecks those attributes through
 staging; the existing commit contract remains unchanged.
 
-## 16. Not yet built
+## 16. A12 profile suggestions
 
-- **A12** profile suggester.
+**[SPEC]** `ai_profiles.suggest_profile` uses the existing project observation
+and the server's managed roots. Caller payloads cannot widen the boundary;
+direct calls default to the data directory, including an empty roots list.
+Outside or missing projects return redacted errors before project enumeration
+or a model call. Path resolution itself can inspect path-component metadata.
+Accepted projects are walked through no-follow directory descriptors, with
+depth 3, 10,000 total entries and 1,000 entries per directory as bounds.
+Build/cache directories are skipped; truncation is flagged. Safe scanning currently
+requires POSIX descriptor support; other platforms fail cleanly.
+
+Only extension counts, known manifest names and top-level directory names are
+collected. File contents, the project path and project basename are not sent.
+The model also receives at most 600 filesystem-derived skill names and
+descriptions, including readable disabled copies; path-like description
+tokens are redacted. Invented names are dropped, duplicates merged and the
+profile name/description checked against the existing catalog format.
+
+Estimate mode sends nothing. Generation saves a run but no profile metadata.
+V2 lets the user review the signals, edit the proposed name/description and
+deselect skills. Saving fetches the current catalog and asks for confirmation,
+explicitly warning when the final name already exists, then uses the existing
+profile POST. It saves only metadata for the selected scope; native toggles
+and per-project agent settings remain a separate maintainer decision.
+
+## 17. Not yet built
+
 - **A14 CI mode**: needs a CLI surface, which needs maintainer approval (locked constraint 5).
 - **Fidelity**: measure the trigger simulation against a real agent's choices before treating its numbers as more than estimates.

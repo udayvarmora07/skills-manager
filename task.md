@@ -22,7 +22,7 @@
 - [x] A10 porting notes (deterministic facts; model explains only those).
 - [x] A11 verified drafting: validation and measured routing, unsaved New skill form.
 - [x] A13 conciseness advisor: computed counts and whole-tree source-update review.
-- [ ] A12 profile suggester.
+- [x] A12 metadata-only profile suggestions with managed-root confinement and confirmed catalog save.
   Handoff with prompts and acceptance criteria: @docs/40-codex-handoff-2026-11-09.md.
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
 - [ ] Measure trigger-test fidelity against a real agent's choices.

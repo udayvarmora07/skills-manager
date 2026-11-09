@@ -126,6 +126,10 @@ test; browser check.
 
 ### 3.4 A12 profile suggester
 
+**[NOTE] Completed 2026-11-09 on `codex/remaining-tasks`.** Managed-root,
+metadata-only suggestions and confirmed catalog saves are implemented.
+Evidence and POSIX scanning limit: @docs/06-progress-log.md.
+
 ```text
 Implement docs/39 A12 in skillsmgr/ai_profiles.py, POST /api/ai/suggest-profile
 {project, scope, estimate?}. Use the existing workspace observation

@@ -24,6 +24,8 @@
         pastRuns: [], pastRun: null, historyError: "", historyBusy: false, historyRequest: 0,
         draftScope: "", draftName: "", draftBrief: "", draftEstimate: null, draftEstimateKey: "", draftResult: null,
         conciseScope: "", conciseName: "", conciseTargetKey: "", conciseEstimate: null, conciseEstimateKey: "", conciseResult: null, conciseRequest: 0, conciseReviewOwned: true, conciseOpening: false,
+        profileProject: "", profileScope: "", profileEstimate: null, profileEstimateKey: "", profileResult: null, profileRequest: 0,
+        profileName: "", profileDescription: "", profileSkills: [], profileSaving: false,
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
@@ -75,9 +77,20 @@
       conciseTarget() { return this.conciseRecords.find((x) => x.key === this.conciseTargetKey) || null; },
       conciseEstimateCurrent() { return !!this.conciseEstimate && this.conciseEstimateKey === this.conciseInputKey(); },
       canOpenConciseReview() { return !!(!this.conciseOpening && this.conciseResult && this.conciseResult.status === "review-required" && this.conciseResult.review && this.conciseResult.review.review_id && this.conciseTarget); },
+      profileScopes() { return this.scopes.filter((s) => s.writable && s.availability !== "read-only").map((s) => ({ id: s.id, label: s.id === "global" ? "Your library" : s.label || s.id })); },
+      profileEstimateCurrent() { return !!this.profileEstimate && this.profileEstimateKey === this.profileInputKey(); },
+      profileNameValid() { return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(this.profileName.trim()); },
+      profileProposalValid() {
+        const p = this.profileResult && this.profileResult.profile;
+        const allExisting = new Set(this.records.filter((r) => r.scope === this.profileScope).map((r) => r.name));
+        return !!(this.profileResult && this.profileResult.status === "suggested" && p && this.profileNameValid
+          && this.profileDescription.length <= 500 && Array.isArray(this.profileSkills) && this.profileSkills.length > 0
+          && this.profileSkills.every((name) => typeof name === "string" && allExisting.has(name)));
+      },
+      profileDroppedCount() { const value = this.profileResult && this.profileResult.dropped_names; return Array.isArray(value) ? value.length : Number(value) || 0; },
     },
     watch: {
-      page: { immediate: true, handler(next, previous) { if (previous === "ai-concise" && next !== "ai-concise") this.clearConciseProposal(); this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
+      page: { immediate: true, handler(next, previous) { if (previous === "ai-concise" && next !== "ai-concise") this.clearConciseProposal(); if (previous === "ai-profile" && next !== "ai-profile") this.clearProfileSuggestion(); this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
       scope() { this.ported = null; this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       draftScope() { this.clearDraftProposal(); },
       draftName() { this.clearDraftProposal(); },
@@ -86,6 +99,9 @@
       conciseName() { this.conciseTargetKey = ""; this.clearConciseProposal(); },
       conciseTargetKey() { this.clearConciseProposal(); },
       records() { if (this.page === "ai-concise" && this.conciseTargetKey && !this.conciseTarget) this.clearConciseProposal(); },
+      profileProject() { this.clearProfileSuggestion(); },
+      profileScope() { this.clearProfileSuggestion(); },
+      profileScopes: { immediate: true, handler(list) { if (!list.some((s) => s.id === this.profileScope)) this.profileScope = (list[0] || {}).id || ""; } },
       conciseScopes: { immediate: true, handler(list) { if (!list.some((s) => s.id === this.conciseScope)) this.conciseScope = (list[0] || {}).id || ""; } },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
       draftScopes: { immediate: true, handler(list) { if (!list.some((s) => s.id === this.draftScope)) this.draftScope = (list.find((s) => s.id === "global") || list[0] || {}).id || ""; } },
@@ -156,6 +172,67 @@
         this.conciseOpening = true;
         this.conciseReviewOwned = false;
         this.$emit("open-source-review", { target: this.conciseTarget.record, reviewId: this.conciseResult.review.review_id });
+      },
+      profileInputKey() { return JSON.stringify([this.profileProject.trim(), this.profileScope]); },
+      clearProfileSuggestion() {
+        this.profileRequest++;
+        this.profileEstimate = null; this.profileEstimateKey = ""; this.profileResult = null;
+        this.profileName = ""; this.profileDescription = ""; this.profileSkills = [];
+      },
+      profileBody(estimate) { return { project: this.profileProject.trim(), scope: this.profileScope, estimate }; },
+      async estimateProfile() {
+        if (!this.profileProject.trim() || !this.profileScope) return;
+        this.clearProfileSuggestion(); const request = ++this.profileRequest; const key = this.profileInputKey();
+        this.busy = true; this.error = ""; this.note = "";
+        let result = null;
+        try { result = await post("/api/ai/suggest-profile", this.profileBody(true)); }
+        catch (e) { if (request === this.profileRequest && key === this.profileInputKey() && this.page === "ai-profile") this.error = (e && e.message) || String(e); }
+        finally { this.busy = false; }
+        if (request !== this.profileRequest || key !== this.profileInputKey() || this.page !== "ai-profile") return;
+        if (result && result.status === "estimate") { this.profileEstimate = result; this.profileEstimateKey = key; }
+        else if (result && result.status === "empty") this.profileResult = result;
+      },
+      async runProfileSuggestion() {
+        if (!this.profileEstimateCurrent || !this.profileProject.trim() || !this.profileScope) return;
+        const request = ++this.profileRequest; const key = this.profileInputKey();
+        this.busy = true; this.error = ""; this.note = "";
+        let result = null;
+        try { result = await post("/api/ai/suggest-profile", this.profileBody(false)); }
+        catch (e) { if (request === this.profileRequest && key === this.profileInputKey() && this.page === "ai-profile") this.error = (e && e.message) || String(e); }
+        finally { this.busy = false; }
+        if (request !== this.profileRequest || key !== this.profileInputKey() || this.page !== "ai-profile") return;
+        if (!result || !["suggested", "empty"].includes(result.status)) return;
+        this.profileResult = result; this.profileEstimate = null; this.profileEstimateKey = "";
+        if (result.status === "suggested" && result.profile) {
+          const verified = [...new Set((Array.isArray(result.profile.skills) ? result.profile.skills : []).filter((name) => typeof name === "string" && this.records.some((r) => r.scope === this.profileScope && r.name === name)))];
+          this.profileName = typeof result.profile.name === "string" ? result.profile.name : "";
+          this.profileDescription = typeof result.profile.description === "string" ? result.profile.description : "";
+          this.profileSkills = verified;
+        }
+        this.loadRuns();
+      },
+      toggleProfileSuggestionSkill(name, checked) {
+        if (!this.profileSkills.includes(name) && checked) this.profileSkills = [...this.profileSkills, name];
+        else if (!checked) this.profileSkills = this.profileSkills.filter((item) => item !== name);
+      },
+      async saveSuggestedProfile() {
+        if (!this.profileProposalValid || this.profileSaving) return;
+        const request = this.profileRequest; const key = this.profileInputKey(); const draftKey = JSON.stringify([this.profileName, this.profileDescription, this.profileSkills]); this.profileSaving = true; this.error = "";
+        const unchanged = () => draftKey === JSON.stringify([this.profileName, this.profileDescription, this.profileSkills]);
+        try {
+          const catalog = await api("/api/catalog");
+          if (request !== this.profileRequest || key !== this.profileInputKey() || this.page !== "ai-profile" || !unchanged() || !this.profileProposalValid) return;
+          const name = this.profileName.trim(); const exists = Object.prototype.hasOwnProperty.call((catalog && catalog.profiles) || {}, name);
+          const action = exists ? "Replace the saved profile named \"" + name + "\" with this suggestion?" : "Save the profile \"" + name + "\"?";
+          if (!confirm(action)) return;
+          if (request !== this.profileRequest || key !== this.profileInputKey() || this.page !== "ai-profile" || !unchanged() || !this.profileProposalValid) return;
+          const saved = await post("/api/catalog/profiles", { name, description: this.profileDescription.trim(), skills: [...this.profileSkills], targets: [this.profileScope] });
+          if (request === this.profileRequest && key === this.profileInputKey() && this.page === "ai-profile") {
+            this.note = (exists ? "Updated" : "Saved") + " profile \"" + name + "\". The suggestion did not apply any settings or change skill files.";
+            this.$emit("changed", saved);
+          }
+        } catch (e) { if (request === this.profileRequest) this.error = (e && e.message) || String(e); }
+        finally { this.profileSaving = false; }
       },
       draftBody(estimate) { return { scope: this.draftScope, brief: this.draftBrief.trim(), name: this.draftName.trim() || undefined, estimate }; },
       async estimateDraft() {
@@ -338,7 +415,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-port':'Porting notes','ai-ask':'Ask your library','ai-draft':'Draft a skill','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-port':'Porting notes','ai-ask':'Ask your library','ai-draft':'Draft a skill','ai-profile':'Suggest a profile','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -547,6 +624,48 @@
           <ul class="tp-rows"><li v-for="m in asked.matches" :key="m.name" class="v2-tool-row">
             <span class="tp-row-main"><a class="tp-link tp-mono" :href="skillHref(m.name)">{{ m.name }}</a><small>{{ m.why }}</small><small>{{ m.scopes.join(', ') }}</small></span></li></ul>
           <p v-if="asked.dropped_unknown" class="tp-fine">{{ asked.dropped_unknown }} suggestion(s) were dropped because no such skill exists.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-profile'">
+        <h1 class="h1" id="h1" tabindex="-1">Suggest a profile</h1>
+        <p class="lede">Use repository structure to suggest a named set of existing skills. You can edit it before saving; this does not apply settings or change any skills.</p>
+        <section class="card tp-panel" aria-labelledby="ai-profile-setup-h">
+          <h2 id="ai-profile-setup-h">Choose project and scope</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-profile-project"><b>Project folder</b><small>Must be inside a managed project root. Only file extensions, known manifest names, and top-level directory names are summarized; project file contents and absolute paths are not sent to the model.</small></label><input id="ai-profile-project" class="field tp-mono" v-model.trim="profileProject" placeholder="/path/to/project" autocomplete="off" spellcheck="false" :disabled="busy||profileSaving"></div>
+            <div class="tp-set-row"><label for="ai-profile-scope"><b>Skill scope</b><small>The proposed profile will target only this writable scope. Empty scopes are included.</small></label><select id="ai-profile-scope" class="field" v-model="profileScope" :disabled="busy||profileSaving"><option value="">Choose…</option><option v-for="s in profileScopes" :key="s.id" :value="s.id">{{s.label}}</option></select></div>
+          </div>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy||profileSaving||!profileProject.trim()||!profileScope" @click="estimateProfile()">Check what will be sent</button></div>
+          <div v-if="profileEstimateCurrent" class="ai-confirm" role="region" aria-label="Before sending the profile request">
+            <p v-for="(line,i) in profileEstimate.egress||[]" :key="i" class="tp-fine">{{line}}</p>
+            <p class="tp-fine">Project path is used locally for a contained metadata scan. The model receives project signal names and counts plus skill names and descriptions from the selected scope, not project file contents or absolute paths.</p>
+            <p class="tp-fine">About {{fmt(profileEstimate.run&&profileEstimate.run.estimated_input_tokens)}} input tokens to {{profileEstimate.run&&profileEstimate.run.model}}. No profile has been suggested yet.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy||!profileEstimateCurrent" @click="runProfileSuggestion()">Send and suggest profile</button><button class="btn btn-line" :disabled="busy" @click="clearProfileSuggestion()">Cancel</button></div>
+          </div>
+        </section>
+        <section v-if="profileResult" class="card tp-panel" aria-live="polite" aria-labelledby="ai-profile-result-h">
+          <header class="tp-panel-h"><div><h2 id="ai-profile-result-h">Profile suggestion</h2><p>{{profileScope}}<span v-if="profileResult.run"> · {{profileResult.run.model}}</span></p></div><span :class="['pill',profileResult.status==='suggested'?'ok':profileResult.status==='empty'?'off':'warn']">{{profileResult.status==='suggested'?'Suggested':profileResult.status==='empty'?'No skills found':'Estimate'}}</span></header>
+          <section v-if="profileResult.signals" aria-label="Project metadata signals">
+            <h3>Project signals</h3><p class="tp-fine">{{fmt(profileResult.signals.entries_scanned)}} entries scanned<span v-if="profileResult.signals.truncated"> · scan was truncated</span></p>
+            <p class="tp-fine"><b>File extensions:</b> <template v-if="(profileResult.signals.extensions||[]).length"><span v-for="(entry,i) in profileResult.signals.extensions" :key="i">{{entry.extension||'(no extension)'}} ({{fmt(entry.count)}}){{i+1<(profileResult.signals.extensions||[]).length?', ':''}}</span></template><span v-else>none found</span></p>
+            <p class="tp-fine"><b>Manifest names:</b> {{(profileResult.signals.manifests||[]).join(', ')||'none found'}}</p>
+            <p class="tp-fine"><b>Top-level folders:</b> {{(profileResult.signals.top_level_dirs||[]).join(', ')||'none found'}}</p>
+          </section>
+          <p v-if="profileResult.status==='empty'" class="tp-empty">No existing skills were available in this scope, so the model was not asked to invent a profile.</p>
+          <template v-if="profileResult.status==='suggested'&&profileResult.profile">
+            <p class="tp-fine">{{profileDroppedCount}} unknown skill name(s) were dropped. Only existing skill names are included below.</p>
+            <label class="tp-field" for="ai-profile-name">Profile name <input id="ai-profile-name" class="field" v-model.trim="profileName" maxlength="64" autocomplete="off" :disabled="profileSaving"></label>
+            <label class="tp-field" for="ai-profile-description">Description <textarea id="ai-profile-description" class="field ai-text" v-model="profileDescription" maxlength="500" rows="3" :disabled="profileSaving"></textarea><small>{{profileDescription.length}} / 500 characters</small></label>
+            <fieldset class="tp-pick"><legend>Verified existing skills <span class="tp-count">{{profileSkills.length}} selected</span></legend>
+              <div class="tp-pick-list"><label v-for="name in (profileResult.profile.skills||[])" :key="name" class="tp-check"><input type="checkbox" :checked="profileSkills.includes(name)" :disabled="profileSaving" @change="toggleProfileSuggestionSkill(name,$event.target.checked)"><span class="tp-mono">{{name}}</span><small v-if="records.filter(r=>r.scope===profileScope&&r.name===name).every(r=>r.disabled)"> · disabled copy</small></label><p v-if="!(profileResult.profile.skills||[]).length" class="tp-empty">No verified existing skills were suggested.</p></div>
+            </fieldset>
+            <p v-if="!profileNameValid" class="tp-issue bad">Use 1–64 letters, digits, periods, underscores or hyphens; the first character must be a letter or digit.</p>
+            <p v-if="profileDescription.length>500" class="tp-issue bad">Description is too long.</p>
+            <p v-if="!profileSkills.length" class="tp-issue warn">Select at least one verified skill before saving.</p>
+            <p v-if="profileResult.run&&profileResult.run.advisory" class="tp-fine">{{profileResult.run.advisory}}</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy||profileSaving||!profileProposalValid" @click="saveSuggestedProfile()">Save profile…</button><span class="tp-fine">Saving asks for confirmation. Existing profiles with the same name require a separate overwrite confirmation.</span></div>
+          </template>
         </section>
       </template>
 

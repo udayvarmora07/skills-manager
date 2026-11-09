@@ -8,6 +8,36 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Handoff 3.4: contained metadata-only profile suggestions
+
+**[SPEC]** A12 adds `ai_profiles.py` and `POST /api/ai/suggest-profile`.
+Existing project observation and server-owned managed roots precede bounded
+descriptor-based enumeration. Outside paths are redacted/refused; accepted
+projects contribute extension counts, known manifest names and top-level
+directory names, never file contents or project paths. Readable disabled
+skills can be selected; path-like description tokens are redacted, invented
+names dropped and duplicates merged. Estimate mode sends nothing.
+
+**[SPEC]** V2 shows signals/truncation and an editable named profile. Saving
+fetches current catalog metadata and requires confirmation, warning explicitly
+about an existing name, before using the existing catalog POST. Suggestions
+never save or apply a profile automatically. No native settings, CLI commands,
+Store methods, runtime dependencies or SQLite schema changed. Safe scanning
+requires POSIX descriptor support; unsupported platforms receive clean errors.
+
+**[NOTE]** Fourteen red-first tests cover root confinement over HTTP, outside
+rejection before enumeration/provider calls, symlink escapes/swaps, 0/1/10,000
+entries, per-directory bounds, root defaults, filesystem-only discovery,
+disabled skills, 600/601 skills, no content/path leakage, malformed model
+output and estimates. Browser fixture checks verified redacted outside-root
+errors, no-send estimates, metadata-only provider input, dropped invented
+names, confirmation dismissal preserving the old profile, explicit overwrite,
+and the disabled skill staying disabled. The 390px flow had no overflow or
+unexpected console errors; the intentional outside-root probe produced its
+expected HTTP 403 console entry. Self-review fixed a computed-property call
+and scoped inventory checks to the selected scope. Complexity: 1,162 functions
+across 41 files; no baseline increased. No real provider was called.
+
 ## 2026-11-09 — Handoff 3.3: conciseness proposals through whole-tree review
 
 **[SPEC]** A13 adds `ai_concise.py` and `POST /api/ai/concise`. Section token
