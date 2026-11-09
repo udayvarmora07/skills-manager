@@ -18,6 +18,7 @@
 - [x] A9 ask your library (names and descriptions only; real skills only).
 - [x] A10 porting notes (deterministic facts; model explains only those).
 - [ ] A11 verified drafting; A12 profile suggester; A13 conciseness advisor.
+  Handoff with prompts and acceptance criteria: @docs/40-codex-handoff-2026-11-09.md.
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
 - [ ] Measure trigger-test fidelity against a real agent's choices.
 
@@ -275,8 +276,8 @@ The maintainer chose both phases, hook first.
   in the `scopes` ContextVar, so a later in-process `cli.main` resolved `global`
   through a stale Store. `cli.main` now binds its own Store per command and
   restores the prior binding. `tests/test_cli_store_binding.py`.
-- [ ] AI features (BYOK, deferred 2026-11-07 — D-AI-4 blocks any web route; see docs/35): proposal in @docs/33-ai-features-design-2026-11-06.md;
-  answer D-AI-1…D-AI-7 before any implementation.
+- [x] AI features (BYOK): D-AI-1…D-AI-7 answered and A0–A10 shipped on
+  2026-11-09; see the top section and @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 - [x] Phase B: stdlib rewrites of SC2/SC3/PE3/AR/RA2/SC8/P9/TR/AST checks in
   `insights.risk_scan()` — nine checks, `tests/test_risk_scan_phase_b.py`,
   2026-11-07.
