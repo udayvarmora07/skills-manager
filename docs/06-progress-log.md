@@ -8,6 +8,14 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Pre-push fidelity cleanup test race
+
+**[NOTE]** The fresh Python 3.11 suite exposed a check-then-read race in the
+fake-descendant cleanup test: Linux reaped the child between `exists()` and
+reading `/proc/<pid>/status`. A controlled probe reproduced the failure. The
+test now reads once and accepts `FileNotFoundError` as completed cleanup;
+an entry that still exists must report a zombie. Production cleanup is unchanged.
+
 ## 2026-11-09 — Handoff 3.6: chore dispositions and decision handoff
 
 **[NOTE]** Read-only GitHub/source review found Dependabot #16/#18 already

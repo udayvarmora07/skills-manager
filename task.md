@@ -28,6 +28,8 @@
 - [ ] Measure trigger-test fidelity against a real agent's choices.
 - [x] Prepare developer fidelity harness with dry-run default, explicit
   maintainer execution and fake-executable tests; real measurement stays pending.
+- [x] Fix the fidelity cleanup test's process-status read race found by pre-push
+  verification; a reaped child is successful cleanup, while a live child fails.
 - [x] Handoff 3.6 read-only chores: confirm obsolete Dependabot closure and
   accepted pin/CI evidence; review milestone-5 research and inventory preserved
   backup/stash archives. Dispositions and first section 4 proposal: @docs/40-codex-handoff-2026-11-09.md.

@@ -180,8 +180,11 @@ print(json.dumps({'type':'result','subtype':'success','is_error':False}))
         self.assertEqual(report['cases'][0]['reason'], 'timeout')
         pid = int(pidfile.read_text())
         status = Path('/proc') / str(pid) / 'status'
-        if status.exists():
-            self.assertIn('State:\tZ', status.read_text())
+        try:
+            child_status = status.read_text()
+        except FileNotFoundError:
+            return  # Reaping may remove the entry before the status read.
+        self.assertIn('State:\tZ', child_status)
 
     @unittest.skipUnless(os.name == 'posix', 'process groups require POSIX')
     def test_fake_timeout_and_output_flood_are_inconclusive(self):
