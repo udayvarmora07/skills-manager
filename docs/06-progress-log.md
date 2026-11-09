@@ -56,6 +56,10 @@ the case assertions; a skill that passes without itself is flagged
 descriptions only and drops invented skills (`POST /api/ai/ask`, v2 Ask your
 library). 1 more test; browser-checked.
 
+**[SPEC]** A10 followed: `ai_port.py` finds portability facts without AI and
+lets the model explain only those (`POST /api/ai/porting-notes`, v2 Porting
+notes). 2 more tests; browser-checked.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any

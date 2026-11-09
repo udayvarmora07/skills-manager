@@ -50,7 +50,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | **Shipped** |
 | A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | **Shipped** |
 | A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | **Shipped** |
-| A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | Planned |
+| A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | **Shipped** |
 | A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | Planned, gated |
 | A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | Idea |
 | A13 | Conciseness / splitter advisor (move bulk to `references/`) | claude-code #74473 (210k tokens) | Idea |
@@ -113,6 +113,13 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[SPEC]** `ai_ask.ask_library` sends the question with skill names, the scopes holding them and the first 300 description characters, never bodies. Above 300 skills it narrows by word overlap with the question first. Suggested names that are not real skills are dropped and counted, so every link in the answer opens a skill that exists.
 
-## 13. Next
+## 13. A10 porting notes
 
-A10 porting notes (facts from `key_support`, model writes prose only), then A11 verified drafting.
+**[SPEC]** `ai_port.porting_notes` lists, without AI, every frontmatter key (other than `name` and `description`) the target consumer's documentation does not list, and fixed-pattern references to one agent's conventions (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `$ARGUMENTS`, `${CLAUDE_*}`, `~/.claude` and `~/.codex` paths, `mcp__` tool names, Claude Code tool names, subagents) with the line they occur on. Only when facts exist is the model asked to explain them; each note must name a listed fact or it is dropped. "Not documented" means the target's own page does not list the key, not that the key is rejected.
+
+## 14. Not yet built
+
+- **A11 verified drafting**: draft a `SKILL.md` from a brief, then require the A1 trigger test and validation before it can be saved (§2.4 says unverified drafts do not help).
+- **A12–A13** profile suggester and conciseness/splitter advisor.
+- **A14 CI mode**: needs a CLI surface, which needs maintainer approval (locked constraint 5).
+- **Fidelity**: measure the trigger simulation against a real agent's choices before treating its numbers as more than estimates.

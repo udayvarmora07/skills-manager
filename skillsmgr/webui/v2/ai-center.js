@@ -17,6 +17,7 @@
         busy: false, error: "", note: "", connection: null,
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
+        portName: "", portTarget: "codex", ported: null,
         question: "", askScope: "all", asked: null,
         evalName: "", evalMax: 10, evalResult: null, evalEstimate: null,
         savedCount: 0, savedNote: "",
@@ -50,7 +51,7 @@
     },
     watch: {
       page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
-      scope() { this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
+      scope() { this.ported = null; this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
     },
     methods: {
@@ -67,6 +68,7 @@
         const ok = await this.guard(() => api("/api/skills/" + encodeURIComponent(p.name) + "?scope=" + encodeURIComponent(this.budget.scope), { method: "PATCH", body: JSON.stringify({ description: p.proposed }) }));
         if (ok) { this.appliedNames.push(p.name); this.note = "Saved " + p.name + ". The previous version is in Recovery → history."; this.$emit("changed"); }
       },
+      async port(estimate) { const r = await this.guard(() => post("/api/ai/porting-notes", { scope: this.scope, name: this.portName, target: this.portTarget, estimate })); if (r) { this.ported = r; if (!estimate) this.load(); } },
       async ask() { const r = await this.guard(() => post("/api/ai/ask", { question: this.question, scope: this.askScope })); if (r) { this.asked = r; this.load(); } },
       skillHref(name) { return "#/skill/" + encodeURIComponent(name); },
       librarySkills() { return [...new Set(this.records.filter((r) => r.scope === "global").map((r) => r.name))].sort(); },
@@ -186,7 +188,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-ask':'Ask your library','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-port':'Porting notes','ai-ask':'Ask your library','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -251,6 +253,32 @@
           <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy" @click="saveTests()">Save these prompts as regression tests</button></div>
           <p v-if="savedNote" class="tp-fine" role="status">{{ savedNote }}</p>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-port'">
+        <h1 class="h1" id="h1" tabindex="-1">Porting notes</h1>
+        <p class="lede">Before copying a skill to another agent: which of its settings that agent does not document, and which parts of its text assume a particular agent. The facts are found without AI; your model only explains them.</p>
+        <section class="card tp-panel" aria-labelledby="ai-po-h">
+          <h2 id="ai-po-h">Choose a skill and a target</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-scope5"><b>From</b></label><select id="ai-scope5" class="field" v-model="scope"><option v-for="s in agentScopes" :key="s.id" :value="s.id">{{ s.label }} ({{ s.count }})</option></select></div>
+            <div class="tp-set-row"><label for="ai-pon"><b>Skill</b></label><select id="ai-pon" class="field" v-model="portName"><option value="">Choose…</option><option v-for="n in scopeSkills" :key="n" :value="n">{{ n }}</option></select></div>
+            <div class="tp-set-row"><label for="ai-pot"><b>Target agent</b><small>Agents whose documented frontmatter keys are recorded.</small></label><select id="ai-pot" class="field" v-model="portTarget"><option v-for="c in (settings && settings.consumers) || []" :key="c.id" :value="c.id">{{ c.label }}</option></select></div>
+          </div>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !portName" @click="port(true)">Find the facts</button></div>
+        </section>
+        <section v-if="ported" class="card tp-panel" aria-labelledby="ai-por-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-por-h">{{ ported.name }} → {{ ported.target_label }}</h2><p v-if="ported.source">Key list from <span class="tp-mono">{{ ported.source }}</span></p></div>
+            <span :class="['pill', ported.portable ? 'ok' : 'warn']">{{ ported.portable ? 'Nothing agent-specific found' : ported.facts.length + ' thing(s) to check' }}</span></header>
+          <ul v-if="ported.facts.length" class="tp-rows"><li v-for="f in ported.facts" :key="f.id" class="v2-tool-row"><span class="tp-row-main"><strong>{{ f.kind==='frontmatter' ? 'Setting' : 'Text' }}: {{ f.detail }}</strong><small v-if="f.line" class="tp-mono">{{ f.line }}</small>
+            <small v-for="n in (ported.notes||[]).filter(n => n.fact===f.id)" :key="n.fact + n.suggestion">{{ n.explanation }} <b>Suggestion:</b> {{ n.suggestion }}</small></span></li></ul>
+          <template v-if="!ported.portable && !ported.notes">
+            <p v-for="(line,i) in (ported.egress||[])" :key="i" class="tp-fine">{{ line }} About {{ fmt(ported.run.estimated_input_tokens) }} tokens to {{ ported.run.model }}.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy" @click="port(false)">Send and explain</button></div>
+          </template>
+          <p v-if="ported.summary" class="tp-fine">{{ ported.summary }}</p>
+          <p v-if="ported.dropped_notes" class="tp-fine">{{ ported.dropped_notes }} note(s) about things not in the facts were dropped.</p>
         </section>
       </template>
 

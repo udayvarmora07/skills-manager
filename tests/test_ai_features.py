@@ -16,7 +16,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from skillsmgr import ai, ai_ask, ai_budget, ai_evals, ai_overlap, ai_review, ai_skills, context, source_update
+from skillsmgr import ai, ai_ask, ai_budget, ai_evals, ai_overlap, ai_port, ai_review, ai_skills, context, source_update
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
 
@@ -103,6 +103,11 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
             return {"answer": "Use sql-tuning.", "skills": [
                 {"name": "sql-tuning", "why": "slow queries"}, {"name": "made-up-skill", "why": "x"},
                 {"name": "sql-tuning", "why": "duplicate"}]}
+        if "move an AI coding-agent skill to another agent" in system:
+            facts = re.findall(r"^- ((?:key|ref):[^:]+?): ", user, re.M)
+            return {"summary": "Two things change.", "notes":
+                    [{"fact": f, "explanation": "explained", "suggestion": "adapt"} for f in facts]
+                    + [{"fact": "key:invented", "explanation": "x", "suggestion": "y"}]}
         if "You brief a developer" in system:
             return {"summary": "Adds a setup script.",
                     "claims": [{"text": "adds a download step", "file": "scripts/run.sh",
@@ -530,6 +535,30 @@ class AiFeatureTests(unittest.TestCase):
         self.assertNotIn("Body of sql-tuning", sent)
         with self.assertRaises(ai.AiError):
             ai_ask.ask_library(self.store.data_dir, {"question": "  "})
+
+    # -- porting notes ----------------------------------------------------
+
+    def test_porting_notes_explain_only_deterministic_facts(self):
+        self._configure()
+        doc = self.home / ".claude/skills/git-release/SKILL.md"
+        doc.write_text("---\nname: git-release\ndescription: Use for releases.\nallowed-tools: Bash\n---\n"
+                       "Read CLAUDE.md first, then use $ARGUMENTS.\n")
+        result = ai_port.porting_notes(self.store.data_dir, {"scope": "claude-code", "name": "git-release",
+                                                             "target": "codex"})
+        ids = [f["id"] for f in result["facts"]]
+        self.assertEqual(ids, ["key:allowed-tools", "ref:CLAUDE.md", "ref:$ARGUMENTS"])
+        self.assertEqual([n["fact"] for n in result["notes"]], ids)
+        self.assertEqual(result["dropped_notes"], 1)
+
+    def test_portable_skill_makes_no_call(self):
+        self._configure()
+        result = ai_port.porting_notes(self.store.data_dir, {"scope": "claude-code", "name": "sql-tuning",
+                                                             "target": "codex"})
+        self.assertTrue(result["portable"])
+        self.assertEqual(FakeProvider.calls, [])
+        with self.assertRaises(ai.AiError):
+            ai_port.porting_notes(self.store.data_dir, {"scope": "claude-code", "name": "sql-tuning",
+                                                        "target": "nowhere"})
 
     # -- HTTP -------------------------------------------------------------
 

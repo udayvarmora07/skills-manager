@@ -558,7 +558,9 @@ must quote its file, and risk opinions never change a finding. `ai_evals.py`
 (A8) produces with/without-skill outputs for `evals.record_runs`, which grades
 them with the case assertions; no model grading. `AiRun.ask_text` serves
 plain-text answers. `ai_ask.py` (A9) answers "which skill fits" from names and
-descriptions only and keeps only skills that exist. Both are read-only towards skills; no Store method,
+descriptions only and keeps only skills that exist. `ai_port.py` (A10) finds
+portability facts without AI (undocumented keys via `key_support`, agent-specific
+references) and lets the model explain only those facts. Both are read-only towards skills; no Store method,
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 

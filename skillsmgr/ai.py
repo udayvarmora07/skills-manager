@@ -36,6 +36,7 @@ from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlparse
 
+from . import key_support
 from .atomic_io import atomic_write_text, mutation_lock
 from .errors import StoreError
 from .path_safety import mkdir_private
@@ -199,6 +200,14 @@ def _key_source(provider: str, stored: dict) -> tuple[str | None, str]:
     return None, "none"
 
 
+def _provider_list() -> list[dict]:
+    return [{"id": pid, "label": spec["label"], "needs_key": spec["key"],
+             "local": bool(spec.get("local")), "env": list(spec.get("env", ())),
+             "default_base_url": spec["base_url"],
+             "suggested_models": list(spec.get("suggested_models", ()))}
+            for pid, spec in PROVIDERS.items()]
+
+
 def public_settings(data_dir: Path) -> dict:
     """Settings as the UI may see them: never the key, only where it comes from."""
     stored = _read_settings(data_dir)
@@ -215,16 +224,11 @@ def public_settings(data_dir: Path) -> dict:
         "key_hint": hint,
         "max_run_tokens": stored.get("max_run_tokens") or DEFAULT_RUN_TOKENS,
         "max_day_tokens": stored.get("max_day_tokens") or DEFAULT_DAY_TOKENS,
-        "providers": [
-            {"id": pid, "label": spec["label"], "needs_key": spec["key"],
-             "local": bool(spec.get("local")), "env": list(spec.get("env", ())),
-             "default_base_url": spec["base_url"],
-             "suggested_models": list(spec.get("suggested_models", ()))}
-            for pid, spec in PROVIDERS.items()
-        ],
+        "providers": _provider_list(),
         "storage": "Keys typed here are stored in plain text in a file only your user "
                    "account can read; an environment variable always takes precedence.",
         "usage": usage_summary(data_dir),
+        "consumers": [{"id": c, "label": key_support.label(c)} for c in key_support.known_consumers()],
     }
 
 
