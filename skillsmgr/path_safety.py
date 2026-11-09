@@ -258,3 +258,13 @@ def contained_entry_under(resolved_root: Path, *parts: str | Path) -> Path:
     return candidate
 
 
+
+
+def unique_child(directory: Path, stem: str, suffix: str = "") -> Path:
+    """An unused contained ``stem + suffix`` path in *directory* (``-N`` on collision)."""
+    target = contained_path(directory, f"{stem}{suffix}")
+    counter = 1
+    while target.exists():
+        target = contained_path(directory, f"{stem}-{counter}{suffix}")
+        counter += 1
+    return target

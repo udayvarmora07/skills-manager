@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import batch, doctor, evals, install, scopes
+from . import batch, doctor, effective, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -185,8 +185,6 @@ def _validated_doctor_query(qs: dict) -> tuple[str, bool, str]:
 def _doctor_explain(report: dict, qs: dict, consumer: str, diagnostics_roots) -> None:
     if not consumer:
         return
-    from . import effective
-
     report["explain"] = effective.explain(
         consumer,
         (qs.get("project", [""])[0] or "").strip() or None,

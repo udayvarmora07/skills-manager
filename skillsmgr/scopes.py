@@ -45,7 +45,7 @@ from .search import MAX_SEARCH_LENGTH, rank_results
 from .store import list_snapshots, read_snapshot, write_snapshot, write_snapshot_bytes
 from .tokens import aggregate, estimate
 from .validator import MAX_COMPATIBILITY, MAX_DESCRIPTION, validate_skill_name
-from .clock import iso
+from .clock import STAMP_FORMAT, iso, stamp
 
 _SCOPE_READ_FLIGHTS: dict = {}
 _SCOPE_READ_FLIGHTS_LOCK = threading.Lock()
@@ -925,14 +925,7 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
     # Soft delete: move to sibling trash dir.
     trash = _scope_trash_dir(scope)
     trash.mkdir(parents=True, exist_ok=True)
-    from datetime import datetime, timezone
-
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%SZ")
-    target = path_safety.contained_path(trash, f"{scope_id}__{name}-{ts}")
-    counter = 1
-    while target.exists():
-        target = path_safety.contained_path(trash, f"{scope_id}__{name}-{ts}-{counter}")
-        counter += 1
+    target = path_safety.unique_child(trash, f"{scope_id}__{name}-{stamp()}")
     shutil.move(str(skill_dir), str(target))
     return {"name": name, "action": "trashed", "scope": scope_id, "trash_path": str(target)}
 
@@ -942,7 +935,6 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
 # ---------------------------------------------------------------------------
 
 MAX_SCOPE_TRASH_ROWS = 500
-_TRASH_TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M-%SZ"
 # ``remove_skill`` writes ``<scope>__<name>-<timestamp>`` and appends ``-<n>``
 # on a collision.  The name is greedy so a canonical name containing hyphens
 # still parses; the fixed-width timestamp anchors the match at the end.
@@ -1032,7 +1024,7 @@ def _parse_scope_trash_entry(scope_id: str, entry: Path) -> dict | None:
 
     try:
         trashed = datetime.strptime(
-            match.group("stamp"), _TRASH_TIMESTAMP_FORMAT
+            match.group("stamp"), STAMP_FORMAT
         ).replace(tzinfo=timezone.utc)
         modified = iso(entry.stat().st_mtime)
     except (ValueError, OSError):

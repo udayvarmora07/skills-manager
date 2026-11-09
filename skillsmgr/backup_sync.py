@@ -34,6 +34,8 @@ from .review_artifacts import (
 from .source_lock import local_manifest, review_local_update, commit_local_update
 from .validator import validate_skill_name
 from .clock import iso
+from .atomic_io import is_sha256_hex
+from .launcher_security import trusted_executable
 
 
 MAX_MANIFEST_SKILLS = 2048
@@ -42,7 +44,6 @@ MAX_NAME = 64
 SYNC_REVIEW_DIRNAME = "sync-reviews"
 MAX_SYNC_REVIEW_BYTES = 16 * 1024 * 1024
 MAX_SYNC_REVIEW_AGE = 24 * 60 * 60
-_HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 _GIT_REVISION = re.compile(r"^[0-9a-fA-F]{40,64}$")
 _REMOTE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _REFSPEC = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:+*^~-]{0,255}$")
@@ -99,7 +100,7 @@ def _digest(value: object, label: str) -> str:
         return hashlib.sha256(value).hexdigest()
     if isinstance(value, str):
         value = value.strip()
-        if len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value):
+        if is_sha256_hex(value):
             return value.lower()
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
     raise BackupSyncError(f"{label} must be text, bytes, or a SHA-256 digest")
@@ -300,8 +301,6 @@ def _target_path(target: dict) -> Path:
 
 
 def _trusted_git() -> str:
-    from .launcher_security import trusted_executable
-
     path = trusted_executable("git", which=shutil.which)
     if not path:
         raise BackupSyncError("a trusted Git executable is required for remote sync")
@@ -423,7 +422,7 @@ def _validate_review(value: object) -> dict:
     if expiry is None or expiry <= time.time():
         raise BackupSyncError("sync review has expired; prepare it again")
     for field in ("candidate_hash", "remote_manifest_hash"):
-        if not isinstance(value.get(field), str) or not _HEX64.fullmatch(value[field]):
+        if not is_sha256_hex(value[field]):
             raise BackupSyncError(f"sync review {field} is invalid")
     _target_path(value.get("target"))
     _source_label(value.get("remote_source"))
@@ -517,7 +516,7 @@ def prepare_sync_review(data_dir: str | Path, base: dict, local: dict, remote: d
                         target: dict, candidate_hash: str, strategy: str = "review",
                         git: dict | None = None) -> dict:
     """Create a private review artifact for one explicit sync candidate."""
-    if not isinstance(candidate_hash, str) or not _HEX64.fullmatch(candidate_hash):
+    if not is_sha256_hex(candidate_hash):
         raise BackupSyncError("candidate_hash must be a SHA-256 hex string")
     target_path = _target_path(target)
     normalized_base = _normalize_manifest(base, "base")

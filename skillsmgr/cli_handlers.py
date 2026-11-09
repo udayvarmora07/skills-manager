@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import path_safety
 from . import colors
-from . import doctor, install
+from . import doctor, effective, evals, install, paths, scopes, source_update
 from .documents import document_path, document_text
 from . import search as search_mod
 from . import templates as templates_mod
@@ -33,6 +33,9 @@ from .cli_output import (
 )
 from .store import Store, StoreError
 from .validator import validate_skill, validate_skill_name
+from .external_scan import scan_options
+from .store import list_snapshots
+from .tokens import aggregate, estimate, format_tokens, window_name
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -252,13 +255,9 @@ def cmd_init(args, store: Store) -> int:
 def cmd_list(args, store: Store) -> int:
     scope = scope_from_args(args)
     if scope == "all":
-        from .scopes import list_all as _list_all
-
-        rows = _list_all()
+        rows = scopes.list_all()
     elif scope != "global":
-        from .scopes import scan_scope as _scan_scope
-
-        rows = _scan_scope(scope)
+        rows = scopes.scan_scope(scope)
     else:
         rows = store.list()
     # Add scope label for all view.
@@ -325,12 +324,10 @@ def cmd_view(args, store: Store) -> int:
         raise StoreError("cannot combine --raw and --json")
     scope = scope_from_args(args)
     if scope != "global":
-        from .scopes import get_raw as _get_raw, get_skill as _get_skill
-
         if args.raw:
-            print(_get_raw(scope, args.name), end="")
+            print(scopes.get_raw(scope, args.name), end="")
             return EXIT_OK
-        record = _get_skill(scope, args.name)
+        record = scopes.get_skill(scope, args.name)
         if args.json:
             _print_json(record)
             return EXIT_OK
@@ -443,11 +440,9 @@ def cmd_validate(args, store: Store) -> int:
         root = Path(args.path).expanduser()
         targets.append((root.name, root))
     elif args.all:
-        from . import paths as _paths
-
-        for name in sorted(p.name for p in _paths.skills_dir().iterdir() if p.is_dir()):
+        for name in sorted(p.name for p in paths.skills_dir().iterdir() if p.is_dir()):
             try:
-                root = path_safety.safe_skill_path(_paths.skills_dir(), name)
+                root = path_safety.safe_skill_path(paths.skills_dir(), name)
             except ValueError:
                 root = None
             targets.append((name, root))
@@ -523,27 +518,23 @@ def _load_eval_runs(path_text: str) -> dict:
 
 def _eval_workspace(name: str, root: Path, store: Store, args) -> Path:
     """Resolve the eval workspace: explicit override, store default, or beside."""
-    from . import evals as evals_mod
-
     override = getattr(args, "workspace", None)
     if override:
         workspace = Path(override).expanduser()
     elif getattr(args, "path", None):
-        workspace = evals_mod.workspace_for_dir(root, store.data_dir, name)
+        workspace = evals.workspace_for_dir(root, store.data_dir, name)
     else:
-        workspace = evals_mod.workspace_for(store.data_dir, name)
-    return evals_mod.ensure_workspace_outside(workspace, store.data_dir)
+        workspace = evals.workspace_for(store.data_dir, name)
+    return evals.ensure_workspace_outside(workspace, store.data_dir)
 
 
 def _eval_report(name: str, root: Path, store: Store, args, runs_document) -> dict:
     """Build the advisory eval report for one validated skill directory."""
-    from . import evals as evals_mod
-
     workspace = _eval_workspace(name, root, store, args)
     if runs_document is None:
-        report = evals_mod.eval_report(root, workspace, name)
+        report = evals.eval_report(root, workspace, name)
     else:
-        report = evals_mod.eval_report(
+        report = evals.eval_report(
             root, workspace, name, runs=runs_document["runs"], iteration=runs_document["iteration"]
         )
     report["workspace_override"] = bool(getattr(args, "workspace", None))
@@ -608,16 +599,14 @@ def cmd_search(args, store: Store) -> int:
     if args.limit is not None and args.limit < 1:
         raise StoreError("--limit must be a positive integer")
     scope = scope_from_args(args)
-    from .scopes import get_skill as _get_skill, search_all as _search_all
-
-    matches = _search_all(args.term, scope_id=scope, store=store)
+    matches = scopes.search_all(args.term, scope_id=scope, store=store)
     # search_all returns the historical scope-facing rows. Rehydrate each
     # match through the public detail seam so the CLI scorer sees bodies, but
     # retain the original match row for output compatibility.
     pool = []
     output_by_id = {}
     for match in matches:
-        full = search_full_record(match, scope, store, _get_skill)
+        full = search_full_record(match, scope, store, scopes.get_skill)
         full.update({key: value for key, value in match.items() if key != "body"})
         pool.append(full)
         output_by_id[id(full)] = search_output_row(match, scope)
@@ -684,9 +673,7 @@ def cmd_restore(args, store: Store) -> int:
     snapshot = getattr(args, "snapshot", None)
     if snapshot:
         scope = scope_from_args(args)
-        from .scopes import restore_snapshot as _restore_snapshot
-
-        result = _restore_snapshot(scope, args.name, snapshot)
+        result = scopes.restore_snapshot(scope, args.name, snapshot)
         if args.json:
             _print_json(result)
         else:
@@ -912,8 +899,6 @@ def _print_explain(report: dict) -> None:
 
 def _cmd_doctor_explain(args, consumer: str) -> int:
     """``doctor --explain CONSUMER [--project DIR] [--skill NAME]`` (issue #12)."""
-    from . import effective
-
     project = getattr(args, "project", None) or None
     if project is None and consumer.strip().lower() in effective.CONSUMERS:
         project = "."
@@ -940,20 +925,16 @@ def cmd_stats(args, store: Store) -> int:
     scope = getattr(args, "scope", None)
     if scope and scope not in ("global", None, ""):
         if scope == "all":
-            from .scopes import list_scopes as _list_scopes
-
-            scopes = _list_scopes()
+            summary = scopes.list_scopes()
             if args.json:
-                _print_json({"scopes": scopes, "all_total": sum(s["count"] for s in scopes)})
+                _print_json({"scopes": summary, "all_total": sum(s["count"] for s in summary)})
                 return EXIT_OK
             print(colors.COLORS.bold("scopes:"))
-            for s in scopes:
+            for s in summary:
                 print(f"  {s['label']} ({s['id']}): {s['count']} skills")
-            print(f"{colors.COLORS.bold('all total:')} {sum(s['count'] for s in scopes)}")
+            print(f"{colors.COLORS.bold('all total:')} {sum(s['count'] for s in summary)}")
             return EXIT_OK
-        from .scopes import scan_scope as _scan_scope
-
-        rows = _scan_scope(scope)
+        rows = scopes.scan_scope(scope)
         if args.json:
             _print_json({"scope": scope, "count": len(rows), "skills": rows})
             return EXIT_OK
@@ -1039,9 +1020,7 @@ def cmd_history(args, store: Store) -> int:
     rows = store.history(name=args.name, limit=args.limit)
     snapshots = []
     if args.name:
-        from .store import list_snapshots as _list_snapshots
-
-        snapshots = _list_snapshots(store.data_dir, "global", args.name)
+        snapshots = list_snapshots(store.data_dir, "global", args.name)
     if args.json:
         _print_json({"history": rows, "snapshots": snapshots} if args.name else rows)
         return EXIT_OK
@@ -1080,9 +1059,7 @@ def cmd_db_resync(args, store: Store) -> int:
 
 
 def cmd_sync(args, store: Store) -> int:
-    from .scopes import sync_skill as _sync_skill
-
-    result = _sync_skill(args.name, args.from_scope, args.to_scopes, force=args.force)
+    result = scopes.sync_skill(args.name, args.from_scope, args.to_scopes, force=args.force)
     if args.json:
         _print_json(result)
         return EXIT_OK
@@ -1096,22 +1073,20 @@ def cmd_sync(args, store: Store) -> int:
 
 
 def cmd_scopes(args, store: Store) -> int:
-    from .scopes import list_scopes as _list_scopes
-
-    scopes = _list_scopes()
+    summary = scopes.list_scopes()
     if args.json:
-        _print_json(_scope_json_rows(scopes, getattr(args, "no_tokens", False)))
+        _print_json(_scope_json_rows(summary, getattr(args, "no_tokens", False)))
         return EXIT_OK
-    if not scopes:
+    if not summary:
         print("no scopes found")
         return EXIT_OK
     show_tokens = not getattr(args, "no_tokens", False)
     if show_tokens:
         header = ["ID", "LABEL", "COUNT", "TOKENS", "PATH"]
-        table = [[s["id"], s["label"], str(s["count"]), str(s.get("tokens", 0)), s["path"]] for s in scopes]
+        table = [[s["id"], s["label"], str(s["count"]), str(s.get("tokens", 0)), s["path"]] for s in summary]
     else:
         header = ["ID", "LABEL", "COUNT", "PATH"]
-        table = [[s["id"], s["label"], str(s["count"]), s["path"]] for s in scopes]
+        table = [[s["id"], s["label"], str(s["count"]), s["path"]] for s in summary]
     print(_render_table([header] + table))
     return EXIT_OK
 
@@ -1133,47 +1108,41 @@ def _token_input_text(text: str) -> str:
 
 
 def cmd_tokens(args, store: Store) -> int:
-    from .tokens import aggregate, estimate as _est, format_tokens as _fmt, window_name
-
     window = window_name(getattr(args, "window", None))
     scope = scope_from_args(args)
     if args.text:
         raw = _token_input_text(args.text)
-        est = _est(raw, window=window)
+        est = estimate(raw, window=window)
         if args.json:
             _print_json(est)
             return EXIT_OK
         print(f"tokens: {est['tokens']} ({est['method']})  window {window} {est['window_tokens']}  {est['pct_window']}%")
         return EXIT_OK
     if args.name:
-        from .scopes import get_skill as _get_skill, list_all as _list_all
-
         if scope not in ("all", "global"):
-            rec = _get_skill(scope, args.name)
+            rec = scopes.get_skill(scope, args.name)
         else:
-            rec = next((r for r in _list_all() if r["name"] == args.name), None)
+            rec = next((r for r in scopes.list_all() if r["name"] == args.name), None)
             if rec is None:
                 raise StoreError(f"skill '{args.name}' not found")
-            rec = _get_skill(rec.get("scope", "global"), args.name)
+            rec = scopes.get_skill(rec.get("scope", "global"), args.name)
         raw = document_text(Path(rec["path"])) if rec.get("path") else ""
         raw = raw or rec.get("body") or ""
-        est = _est(raw, window=window)
+        est = estimate(raw, window=window)
         est["name"] = args.name
         est["scope"] = rec.get("scope", scope)
         if args.json:
             _print_json(est)
             return EXIT_OK
         print(f"{args.name} [{est['scope']}]  tokens: {est['tokens']} ({est['method']})  {est['pct_window']}% of {window} ({est['window_tokens']})")
-        print(f"  chars: {est['chars']}  lines: {est['lines']}  frontmatter ~{max(0, est['tokens'] - _est(rec.get('body','') or '', window=window)['tokens'])} tok  body ~{_est(rec.get('body','') or '', window=window)['tokens']} tok")
+        print(f"  chars: {est['chars']}  lines: {est['lines']}  frontmatter ~{max(0, est['tokens'] - estimate(rec.get('body','') or '', window=window)['tokens'])} tok  body ~{estimate(rec.get('body','') or '', window=window)['tokens']} tok")
         return EXIT_OK
-    from .scopes import list_all, scan_scope
-
-    agg = aggregate(list_all() if scope in ("all", None, "") else scan_scope(scope), window)
+    agg = aggregate(scopes.list_all() if scope in ("all", None, "") else scopes.scan_scope(scope), window)
     wtok, pct = agg["window_tokens"], agg["pct_window"]
     if args.json:
         _print_json(agg)
         return EXIT_OK
-    print(f"scope: {scope}  window: {window} ({wtok})  total {agg['total_tokens']} tok ({_fmt(agg['total_tokens'])})  {pct}%")
+    print(f"scope: {scope}  window: {window} ({wtok})  total {agg['total_tokens']} tok ({format_tokens(agg['total_tokens'])})  {pct}%")
     print(f"  count: {agg['count']}  avg: {agg['avg_tokens']}  max: {agg['max_tokens']}")
     if agg.get("largest"):
         print("  largest:")
@@ -1369,8 +1338,6 @@ def _update_preview_text(result: dict) -> None:
 
 def _external_scan_flag(args) -> dict | None:
     """Map --external-scan / --external-scan-llm onto scan options."""
-    from .external_scan import scan_options
-
     if getattr(args, "external_scan_llm", False):
         return scan_options("llm")
     return scan_options(bool(getattr(args, "external_scan", False)))
@@ -1399,8 +1366,6 @@ def _external_scan_text(evidence: dict | None, indent: str = "") -> None:
 
 def cmd_update(args, store: Store) -> int:
     """Run the approved local source-update review/apply/snapshot surface."""
-    from . import source_update
-
     scope = scope_from_args(args)
     if scope == "all":
         raise StoreError("update mutations cannot use --scope all; choose one exact scope")

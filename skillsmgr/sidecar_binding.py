@@ -169,3 +169,15 @@ def binding_state(skill_dir: str | Path, sidecar_name: str, sidecar_bytes: bytes
 
 
 __all__ = ["BINDING_DIRNAME", "binding_state", "record_binding"]
+
+
+def bind_or_remove(root: Path, sidecar_name: str, destination: Path, encoded: bytes, error: type) -> None:
+    """Bind a just-written sidecar to this install, or remove it and raise ``error``."""
+    try:
+        record_binding(root, sidecar_name, encoded)
+    except Exception as exc:
+        try:
+            destination.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise error(f"could not bind {sidecar_name} to this install: {exc}") from exc

@@ -28,6 +28,7 @@ from .registry import (
 )
 from .risk import risk_file_listing, risk_scan
 from .validator import validate_skill, validate_skill_name
+from .external_scan import skillspector_evidence
 
 __all__ = [
     "INSTALL_TIMEOUT",
@@ -324,8 +325,6 @@ def _normalized_snapshot(snapshot: dict, name: str) -> tuple[dict, str | None]:
 def _scan_externally(staged: Path, options: dict | None) -> dict | None:
     if options is None:
         return None
-    from .external_scan import skillspector_evidence
-
     return skillspector_evidence(staged, llm=options["llm"])
 
 

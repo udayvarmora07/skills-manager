@@ -32,7 +32,9 @@ import os
 from pathlib import Path
 
 from . import paths
+from . import scopes
 from .loader import scan_dir
+from .errors import StoreError
 
 #: Bounds: a diagnostic must never walk an unbounded tree. ``MAX_ROOTS`` caps
 #: the nested-root search results, ``MAX_INSTANCES`` the instances read overall,
@@ -485,8 +487,6 @@ def known_consumers() -> tuple[str, ...]:
 
 def _facade_root(scope_id: str) -> Path | None:
     """Return one facade root by scope id, or ``None`` when it is unknown."""
-    from . import scopes
-
     for scope in scopes.known_scopes():
         if scope.id == scope_id:
             return scope.base
@@ -1007,8 +1007,6 @@ def _project_paths(project: str | Path) -> tuple[Path, Path]:
         candidate = Path(str(project)).expanduser()
         return candidate, candidate.resolve()
     except (RuntimeError, OSError, ValueError):
-        from .errors import StoreError
-
         raise StoreError("invalid project path") from None
 
 

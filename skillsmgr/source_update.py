@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import scopes
 from .context import bound_store
-from .sidecar_binding import PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME
+from .sidecar_binding import MANAGER_SIDECARS
 from .atomic_io import atomic_write_text, mutation_lock
 from . import frontmatter
 from .path_safety import mkdir_private
@@ -45,6 +45,7 @@ from .source_lock import (
 from .store import Store, StoreError, index_lock_path
 from .validator import validate_skill_name
 from .clock import iso
+from .external_scan import skillspector_evidence
 
 
 _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -341,7 +342,7 @@ def _manifest(source: Path) -> dict:
 
 def _strip_sidecars(root: Path) -> None:
     for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
-        if path.name not in {PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}:
+        if path.name not in MANAGER_SIDECARS:
             continue
         try:
             if path.is_dir() and not path.is_symlink():
@@ -418,8 +419,6 @@ def _with_external_evidence(source_review: dict, staged: Path, options: dict | N
     """Return the review with advisory external-scanner evidence when opted in."""
     if options is None:
         return source_review
-    from .external_scan import skillspector_evidence
-
     source_review = copy.deepcopy(source_review)
     source_review["external_scan"] = skillspector_evidence(staged, llm=options["llm"])
     return source_review

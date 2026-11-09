@@ -39,6 +39,7 @@ from .review_artifacts import (
     write_private_bytes,
 )
 from .clock import iso
+from .atomic_io import is_sha256_hex
 
 
 REGISTRY_BASE_URL = "https://skills.sh"
@@ -81,7 +82,6 @@ MAX_CACHE_TTL = 3600
 DEFAULT_CACHE_TTL = 300
 MAX_REVIEW_BYTES = 16 * 1024 * 1024
 MAX_REVIEW_AGE = 24 * 60 * 60
-_HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 _ALLOWED_HOSTS = frozenset({"skills.sh", "www.skills.sh"})
 _CACHE_STATES = frozenset({"miss", "fresh", "stale", "refreshed"})
 
@@ -285,7 +285,7 @@ def validate_snapshot(payload: object, *, verify_upstream_hash: bool = True) -> 
     if not any(item["path"] == "SKILL.md" for item in files):
         raise RegistryError("registry snapshot does not contain a root SKILL.md")
     supplied = payload.get("hash")
-    if supplied is not None and (not isinstance(supplied, str) or not _HEX64.fullmatch(supplied)):
+    if supplied is not None and (not is_sha256_hex(supplied)):
         raise RegistryError("registry snapshot hash must be a SHA-256 hex string")
     computed = snapshot_hash(files)
     registry_hash = registry_snapshot_hash(files)
@@ -609,7 +609,6 @@ def registry_reference(spec: str) -> dict:
     raise ValueError(f"unsupported registry reference: {raw!r}")
 
 
-
 def _validate_detail(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise RegistryError("registry detail response has an invalid shape")
@@ -926,7 +925,7 @@ class RegistryClient:
         reference = _reference(spec)
         if not reference.get("slug"):
             raise RegistryError("registry fetch requires a skill id, not only a repository")
-        if expected_hash is not None and (not isinstance(expected_hash, str) or not _HEX64.fullmatch(expected_hash)):
+        if expected_hash is not None and (not is_sha256_hex(expected_hash)):
             raise RegistryError("expected_hash must be a SHA-256 hex string")
         source = str(reference["source"])
         slug = str(reference["slug"])
@@ -1084,11 +1083,11 @@ def _validate_provenance(value: object) -> dict:
             raise RegistryError("registry provenance page URL is invalid")
     for field in ("remote_hash",):
         if value.get(field) is not None and (
-            not isinstance(value[field], str) or not _HEX64.fullmatch(value[field])
+            not is_sha256_hex(value[field])
         ):
             raise RegistryError(f"registry provenance field {field!r} is invalid")
     if value.get("registry_hash") is not None and (
-        not isinstance(value["registry_hash"], str) or not _HEX64.fullmatch(value["registry_hash"])
+        not is_sha256_hex(value["registry_hash"])
     ):
         raise RegistryError("registry provenance registry hash is invalid")
     if value.get("normalization") is not None and (
@@ -1108,7 +1107,7 @@ def _validate_provenance(value: object) -> dict:
         and value.get("normalization") is None
     ):
         raise RegistryError("registry provenance hashes disagree")
-    if not isinstance(value.get("local_snapshot_hash"), str) or not _HEX64.fullmatch(value["local_snapshot_hash"]):
+    if not is_sha256_hex(value["local_snapshot_hash"]):
         raise RegistryError("registry provenance local hash is invalid")
     if not isinstance(value.get("hash_verified", False), bool):
         raise RegistryError("registry provenance hash_verified is invalid")
@@ -1136,7 +1135,7 @@ def _validate_provenance(value: object) -> dict:
         if entry["path"] in seen:
             raise RegistryError("registry provenance file manifest has duplicate paths")
         seen.add(entry["path"])
-        if not isinstance(entry.get("sha256"), str) or not _HEX64.fullmatch(entry["sha256"]):
+        if not is_sha256_hex(entry["sha256"]):
             raise RegistryError("registry provenance file hash is invalid")
         if not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0:
             raise RegistryError("registry provenance file size is invalid")
@@ -1215,20 +1214,6 @@ def _provenance_bytes(value: dict) -> bytes:
     return (text + "\n").encode("utf-8")
 
 
-def _bind_provenance(root: Path, destination: Path, encoded: bytes) -> None:
-    """Bind the sidecar to this install, or remove it if that cannot be done."""
-    try:
-        sidecar_binding.record_binding(root, PROVENANCE_FILENAME, encoded)
-    except Exception as exc:
-        try:
-            destination.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise RegistryError(
-            f"could not bind registry provenance to this install: {exc}"
-        ) from exc
-
-
 def write_provenance(skill_dir: str | Path, provenance: dict) -> Path:
     """Atomically write a validated credential-free registry sidecar."""
     root = Path(skill_dir).expanduser()
@@ -1250,7 +1235,7 @@ def write_provenance(skill_dir: str | Path, provenance: dict) -> Path:
     except (OSError, TypeError, ValueError) as exc:
         Path(temporary).unlink(missing_ok=True)
         raise RegistryError(f"could not write registry provenance: {exc}") from exc
-    _bind_provenance(root, destination, encoded)
+    sidecar_binding.bind_or_remove(root, PROVENANCE_FILENAME, destination, encoded, RegistryError)
     return destination
 
 

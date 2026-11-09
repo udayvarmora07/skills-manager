@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import effective
+from .errors import StoreError
 
 VERIFIED_ON = "2026-09-09"
 _RELOAD = {
@@ -78,8 +79,6 @@ def project_observation(project: str | Path | None, allowed_roots: list[Path] | 
         candidate = Path(str(project)).expanduser()
         resolved = candidate.resolve()
     except (RuntimeError, ValueError):
-        from .errors import StoreError
-
         raise StoreError("invalid project path") from None
     except OSError:
         return {"status": "inaccessible", "path": "<redacted>", "skills_roots": []}

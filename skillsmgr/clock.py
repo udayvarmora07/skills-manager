@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+#: The filename-safe form used in trash names, snapshot ids and backups.
+STAMP_FORMAT = "%Y-%m-%d_%H-%M-%SZ"
 
 
 def iso(moment: datetime | float | None = None) -> str:
@@ -19,3 +21,8 @@ def iso(moment: datetime | float | None = None) -> str:
 def now_iso() -> str:
     """The current UTC time in :data:`ISO_FORMAT`."""
     return iso()
+
+
+def stamp() -> str:
+    """The current UTC time in the filename-safe :data:`STAMP_FORMAT`."""
+    return datetime.now(timezone.utc).strftime(STAMP_FORMAT)

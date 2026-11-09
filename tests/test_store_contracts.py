@@ -266,7 +266,7 @@ class TestStoreLifecycle(StoreContractCase):
         # FIX-15 (promoted from OBS-3): purging two timestamped copies of one
         # skill reported ["demo", "demo"]; the name must appear once.
         with mock.patch(
-            "skillsmgr.store._trash_timestamp", return_value="2026-09-08_19-13-21Z"
+            "skillsmgr.store.stamp", return_value="2026-09-08_19-13-21Z"
         ):
             self.store.create("demo", "First", body="v1")
             self.store.remove("demo")
@@ -506,7 +506,7 @@ class TestStoreSnapshotsAndArchives(StoreContractCase):
         # back to a `-<n>` suffix. Those entries must stay recognizable as
         # canonical trash: listed, restorable (newest first), and purgeable.
         with mock.patch(
-            "skillsmgr.store._trash_timestamp", return_value="2026-09-08_19-13-21Z"
+            "skillsmgr.store.stamp", return_value="2026-09-08_19-13-21Z"
         ):
             self.store.create("demo", "First", body="v1")
             self.store.remove("demo")

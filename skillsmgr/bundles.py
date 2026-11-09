@@ -13,13 +13,14 @@ import hmac
 import json
 from collections.abc import Iterable
 
+from .atomic_io import is_sha256_hex
+
 
 MAX_MANIFEST_BYTES = 1_000_000
 MAX_FILES = 4096
 MAX_PATH_LENGTH = 256
 MAX_KEY_BYTES = 4096
 MAX_KEY_ID = 16
-_HEX = frozenset("0123456789abcdefABCDEF")
 
 
 class BundleError(ValueError):
@@ -35,7 +36,7 @@ def _key_bytes(key: object) -> bytes:
 
 
 def _digest(value: object, label: str) -> str:
-    if not isinstance(value, str) or len(value) != 64 or any(char not in _HEX for char in value):
+    if not is_sha256_hex(value):
         raise BundleError(f"{label} must be a SHA-256 hex digest")
     return value.lower()
 

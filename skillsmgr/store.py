@@ -47,7 +47,10 @@ from .validator import (
     MAX_DESCRIPTION,
     validate_skill_name,
 )
-from .clock import iso, now_iso
+from .clock import iso, now_iso, stamp
+from .catalog import catalog_path, load_catalog
+from .loader import document_reuse_worthwhile, husk_record, load_skill, name_is_addressable, scan_dir
+from .search import rank_results
 
 SCHEMA_VERSION = "1"
 
@@ -294,12 +297,7 @@ def _sync_parent_directory(path: Path) -> None:
 def _unique_dest(directory: Path, stem: str, suffix: str) -> Path:
     """Return an unused ``stem + suffix`` path inside *directory*."""
     directory.mkdir(parents=True, exist_ok=True)
-    target = path_safety.contained_path(directory, f"{stem}{suffix}")
-    counter = 1
-    while target.exists():
-        target = path_safety.contained_path(directory, f"{stem}-{counter}{suffix}")
-        counter += 1
-    return target
+    return path_safety.unique_child(directory, stem, suffix)
 
 
 def _explicit_export_destination(dest: str | Path) -> Path:
@@ -427,10 +425,6 @@ def _driver_errors(action: str):
         raise StoreError(f"skill index {action} failed: {exc}") from exc
 
 
-def _trash_timestamp() -> str:
-    return now_iso().replace(":", "-").replace("T", "_")
-
-
 def _check_snapshot_target(scope: str, name: str) -> None:
     if not _SCOPE_ID_RE.fullmatch(scope) or scope in (".", ".."):
         raise StoreError(f"invalid scope {scope!r}")
@@ -451,13 +445,8 @@ def write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes) 
     snap_dir = path_safety.contained_path(Path(data_dir) / "snapshots", scope, name)
     snap_dir.mkdir(parents=True, exist_ok=True)
     with mutation_lock(snap_dir):
-        base = _trash_timestamp()
-        snap_id = base
-        counter = 1
-        while (snap_dir / f"{snap_id}.md").exists():
-            snap_id = f"{base}-{counter}"
-            counter += 1
-        snapshot_path = snap_dir / f"{snap_id}.md"
+        snapshot_path = path_safety.unique_child(snap_dir, stamp(), ".md")
+        snap_id = snapshot_path.stem
         atomic_write_text(snapshot_path, content.decode("latin-1"), encoding="latin-1")
         files = sorted(snap_dir.glob("*.md"), key=lambda p: p.name)
         while len(files) > SNAPSHOT_KEEP:
@@ -675,8 +664,6 @@ def _validate_full_payload(kind: str, source: Path) -> bool:
         if not source.is_dir():
             return False
         try:
-            from .catalog import load_catalog
-
             load_catalog(source.parent)
         except (OSError, ValueError):
             return False
@@ -1002,9 +989,7 @@ class Store:
         )
 
     def _load_skill(self, skill_dir: Path) -> dict:
-        from .loader import load_skill as _shared_load
-
-        return _shared_load(skill_dir)
+        return load_skill(skill_dir)
 
     @staticmethod
     def _commit_history(conn: sqlite3.Connection, name: str, action: str) -> int | None:
@@ -1109,15 +1094,13 @@ class Store:
         )
 
     def _scan_dir(self, root: Path) -> list[dict]:
-        from .loader import scan_dir as _shared_scan
-
         # STORE-13: document-less directories are drift the store must see, but
         # the store's own staging markers are transaction artifacts, not skill
         # husks -- they are reported by doctor() under their own heading.  The
         # husks are collected here rather than inside loader.scan_dir because
         # the store's own index-lock marker name is not a valid skill name, so
         # the generic name guard would classify it as something else.
-        entries = _without_transaction_artifacts(_shared_scan(root))
+        entries = _without_transaction_artifacts(scan_dir(root))
         entries.extend(self._husk_entries(root))
         return sorted(
             entries, key=lambda item: (item["name"].lower(), item.get("path", ""))
@@ -1131,8 +1114,6 @@ class Store:
         pass the canonical-name guard), so it is reported here instead: doctor()
         then sees the husk an interrupted remove/purge left behind.
         """
-        from .loader import _husk_record
-
         husks: list[dict] = []
         try:
             children = sorted(path for path in root.iterdir() if path.is_dir())
@@ -1146,7 +1127,7 @@ class Store:
                     continue
             except OSError:
                 continue
-            husk = _husk_record(child)
+            husk = husk_record(child)
             husk["path"] = str(child)
             husks.append(husk)
         return husks
@@ -1282,8 +1263,6 @@ class Store:
         # 4,300 global skills: 0% reuse on a warm pass and +10.8% over running
         # with reuse switched off.  So the batch decides once, here, rather than
         # paying the bookkeeping for nothing (docs/24 §D1).
-        from .loader import document_reuse_worthwhile
-
         reuse = document_reuse_worthwhile(len(result))
         for record in result:
             self._observe_index_row(record, resolved_root, reuse=reuse)
@@ -1340,8 +1319,6 @@ class Store:
         index residue, not an addressable skill: it is marked and left alone
         instead of aborting every aggregate.
         """
-        from .loader import load_skill, name_is_addressable
-
         record.setdefault("addressable", name_is_addressable(record["name"]))
         if not record["addressable"]:
             self._mark_unaddressable_row(record)
@@ -1397,8 +1374,6 @@ class Store:
 
     def _search_uncached(self, term: str) -> list[dict]:
         """Case-insensitive search over name, description and body."""
-        from .search import rank_results
-
         on_disk = self._skill_names_on_disk()
         rows = self._index_rows(
             "SELECT name, description, category, license, version, disabled, "
@@ -1792,15 +1767,7 @@ class Store:
                 result = {"name": name, "action": "purged"}
             else:
                 self.trash_dir.mkdir(parents=True, exist_ok=True)
-                target = path_safety.contained_path(
-                    self.trash_dir, f"{name}-{_trash_timestamp()}"
-                )
-                counter = 1
-                while target.exists():
-                    target = path_safety.contained_path(
-                        self.trash_dir, f"{name}-{_trash_timestamp()}-{counter}"
-                    )
-                    counter += 1
+                target = path_safety.unique_child(self.trash_dir, f"{name}-{stamp()}")
                 shutil.move(str(skill_dir), str(target))
                 conn.execute(
                     "UPDATE skills SET status = 'trashed', updated_at = ? "
@@ -2157,7 +2124,7 @@ class Store:
         stem = "full-export" if full else "export"
         if dest is None:
             self.backups_dir.mkdir(parents=True, exist_ok=True)
-            dest = _unique_dest(self.backups_dir, f"{stem}-{_trash_timestamp()}", ".tar.gz")
+            dest = _unique_dest(self.backups_dir, f"{stem}-{stamp()}", ".tar.gz")
         else:
             # A caller-supplied destination is not in `backups/`, so this must
             # not create `backups/` either: the web route stages a download in a
@@ -2188,8 +2155,6 @@ class Store:
         template_names: list[str] = []
         catalog_payload = b""
         if full:
-            from .catalog import load_catalog
-
             catalog_payload = (json.dumps(load_catalog(self.data_dir), indent=2, sort_keys=True) + "\n").encode("utf-8")
         handle, temp_name = tempfile.mkstemp(
             prefix=f".{dest.name}.", suffix=".skillsmgr-export", dir=dest.parent
@@ -2358,8 +2323,6 @@ class Store:
             skipped_full: list[str] = []
             restored_catalog = False
             if full:
-                from .catalog import catalog_path
-
                 catalog_existed = catalog_path(self.data_dir).is_file()
                 restored_trash, restored_templates, skipped_full = _archive.restore_full_payload(
                     full_entries, replace=force

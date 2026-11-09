@@ -374,6 +374,11 @@ def atomic_write_text(
         raise
 
 
+def is_sha256_hex(value: object) -> bool:
+    """True for a 64-character hexadecimal string (either case)."""
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value)
+
+
 def tree_content_hash(root: Path) -> str:
     """Hash relative file names and bytes for a directory tree.
 

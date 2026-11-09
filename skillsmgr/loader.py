@@ -510,7 +510,7 @@ def load_skill(
                 # STORE-13: a directory with no document at all is drift the
                 # store has to see; other consumers keep the historical
                 # ``SkillNotFound`` contract.
-                husk = _husk_record(skill_dir)
+                husk = husk_record(skill_dir)
                 husk["path"] = str(skill_dir)
                 return husk
             raise SkillNotFound(
@@ -604,7 +604,7 @@ def load_skill(
     return _apply_registry_provenance(record, _registry_provenance_fields(skill_dir))
 
 
-def _husk_record(skill_dir: Path) -> dict:
+def husk_record(skill_dir: Path) -> dict:
     """Build the drift row for a directory that holds no skill document.
 
     STORE-13: a directory whose document was destroyed (the husk an interrupted

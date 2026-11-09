@@ -11,19 +11,19 @@ import difflib
 import hashlib
 import json
 import os
-import re
 import shutil
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
 from . import sidecar_binding
-from .sidecar_binding import PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME
+from .sidecar_binding import MANAGER_SIDECARS, PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME
 from .atomic_io import atomic_write_text, mutation_lock
 from .diagnostics import diagnose as _diagnose
 from .risk import risk_file_listing, risk_scan
 from .validator import validate_text
 from .clock import now_iso
+from .atomic_io import is_sha256_hex
 
 
 MAX_SOURCE_FILES = 256
@@ -35,7 +35,6 @@ MAX_TOTAL_DIFF_LINES = 1000
 MAX_SOURCE_LOCK_BYTES = 32 * 1024
 _SOURCE_KINDS = frozenset({"local", "git", "archive", "registry"})
 _SOURCE_STATES = frozenset({"local-only", "known-verified", "known-unverified"})
-_HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 class SourceLockError(ValueError):
@@ -66,7 +65,7 @@ def source_identity(kind: str, value: str, *, revision: str | None = None,
         identity["revision"] = _source_text(revision, "revision")
     if digest is not None:
         digest = _source_text(digest, "digest")
-        if len(digest) != 64 or any(char not in "0123456789abcdefABCDEF" for char in digest):
+        if not is_sha256_hex(digest):
             raise SourceLockError("digest must be a SHA-256 hex string")
         identity["digest"] = digest.lower()
     return identity
@@ -96,7 +95,7 @@ def local_manifest(root: str | Path) -> dict:
         files = []
         total = 0
         for path in sorted(root.rglob("*")):
-            if path.name in {PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}:
+            if path.name in MANAGER_SIDECARS:
                 continue
             if path.is_symlink():
                 raise SourceLockError(f"source contains a symlink: {_relative_file(root, path)}")
@@ -179,7 +178,7 @@ def _validate_lock(value: object) -> dict:
     source = _lock_source(value.get("source"))
     target = _lock_target(value.get("target"))
     content_hash = value.get("content_hash")
-    if not isinstance(content_hash, str) or len(content_hash) != 64 or not _HEX64.fullmatch(content_hash):
+    if not is_sha256_hex(content_hash):
         raise SourceLockError("source-lock content_hash must be a SHA-256 hex string")
     checked_at = value.get("checked_at")
     if not isinstance(checked_at, str) or not checked_at.strip() or len(checked_at) > 64:
@@ -248,20 +247,6 @@ def read_source_lock(skill_dir: str | Path) -> dict | None:
     return _read_source_lock_bytes(Path(skill_dir).expanduser())[0]
 
 
-def _bind_source_lock(root: Path, destination: Path, encoded: bytes) -> None:
-    """Bind the sidecar to this install, or remove it if that cannot be done."""
-    try:
-        sidecar_binding.record_binding(root, SOURCE_LOCK_FILENAME, encoded)
-    except Exception as exc:
-        try:
-            destination.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise SourceLockError(
-            f"could not bind source-lock sidecar to this install: {exc}"
-        ) from exc
-
-
 def write_source_lock(skill_dir: str | Path, lock: dict) -> Path:
     """Atomically persist a validated source-lock sidecar beside a skill."""
     root = Path(skill_dir).expanduser()
@@ -280,7 +265,7 @@ def write_source_lock(skill_dir: str | Path, lock: dict) -> Path:
             os.chmod(destination, 0o600)
         except OSError as exc:
             raise SourceLockError(f"could not write source-lock sidecar: {exc}") from exc
-        _bind_source_lock(root, destination, encoded.encode("utf-8"))
+        sidecar_binding.bind_or_remove(root, SOURCE_LOCK_FILENAME, destination, encoded.encode("utf-8"), SourceLockError)
     return destination
 
 
