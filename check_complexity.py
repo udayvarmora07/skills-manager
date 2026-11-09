@@ -56,6 +56,8 @@ TARGET_FILES = (
     "skillsmgr/batch.py",
     "skillsmgr/atomic_io.py",
     "skillsmgr/risk.py",
+    "skillsmgr/ai.py",
+    "skillsmgr/ai_skills.py",
     "skillsmgr/read_flights.py",
     "skillsmgr/file_reads.py",
     "skillsmgr/insights.py",

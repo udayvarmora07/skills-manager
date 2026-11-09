@@ -4,6 +4,8 @@
 
 **AI manifest**: Proposal, not shipped work. It covers which LLM features belong in skills-manager, the rules they must follow, a bring-your-own-key (BYOK) architecture, costs, threats, and the decisions the maintainer must make first. Written 2026-11-06 after the maintainer asked for BYOK LLM support and for deeper thinking about AI features. The only shipped AI path today is the SkillSpector hook's optional LLM stage (`external_scan.py`). Model facts come from the bundled Claude API reference (cached 2026-10-06) and must be rechecked before implementation. Nothing here is approved until the decisions in §8 are answered.
 
+**[NOTE] 2026-11-09:** research, a ranked catalogue and the answers to §8 are in @docs/39-ai-features-research-and-catalogue-2026-11-09.md; A0–A2 are shipped there.
+
 ## 1. The question to answer first
 
 **[NOTE]** Many tools now wrap an LLM around their existing surface. The real question is narrower: what can a model tell this user, about their own skills, that no deterministic check here can? Research already done in this repo gives the answer:

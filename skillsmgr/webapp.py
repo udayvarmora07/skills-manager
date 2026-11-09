@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import batch, doctor, effective, evals, install, scopes
+from . import ai, ai_skills, batch, doctor, effective, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -1180,6 +1180,25 @@ class WebAppHandler(BaseHTTPRequestHandler):
         return True
 
 
+    def _route_tail_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
+        """The last GET guards: token estimates, then the AI routes."""
+        return self._route_tokens_get(parts, qs) or self._route_ai_get(parts)
+
+    def _route_ai_get(self, parts: list[str]) -> bool:
+        """Serve the read-only AI routes: settings (never the key) and saved runs."""
+        if parts[:2] != ["api", "ai"]:
+            return False
+        data_dir = self.store.data_dir
+        if parts == ["api", "ai", "settings"]:
+            self._send_json(ai.public_settings(data_dir))
+        elif parts == ["api", "ai", "runs"]:
+            self._send_json({"runs": ai_skills.list_runs(data_dir)})
+        elif len(parts) == 4 and parts[2] == "runs":
+            self._send_json(ai_skills.read_run(data_dir, parts[3]))
+        else:
+            return False
+        return True
+
     def _route_get(self):
         """Dispatch ``GET`` to one route guard, in order.
 
@@ -1213,7 +1232,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return
         if self._route_stats_get(parts, qs):
             return
-        if self._route_tokens_get(parts, qs):
+        if self._route_tail_get(parts, qs):
             return
         self._send_error(404, "unknown endpoint", code="unknown_endpoint")
     # -- POST routes ------------------------------------------------------
@@ -1518,6 +1537,32 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _route_tail_post(self, parts: list[str]) -> bool:
+        """The last POST guards: index maintenance, then the AI routes."""
+        return self._route_index_post(parts) or self._route_ai_post(parts)
+
+    def _route_ai_post(self, parts: list[str]) -> bool:
+        """Serve the AI routes that save settings or call the user's model.
+
+        The loopback binding is the only boundary for these routes, exactly as
+        for every other route: any process on this machine that can reach the
+        port can spend the configured key up to its token caps (docs/39 §4).
+        """
+        if parts[:2] != ["api", "ai"] or len(parts) != 3:
+            return False
+        data_dir = self.store.data_dir
+        handlers = {
+            "settings": lambda body: ai.save_settings(data_dir, body),
+            "test-connection": lambda body: ai.test_connection(data_dir),
+            "trigger-test": lambda body: ai_skills.trigger_test(data_dir, body),
+            "improve-description": lambda body: ai_skills.improve_description(data_dir, body),
+        }
+        handler = handlers.get(parts[2])
+        if handler is None:
+            return False
+        self._send_json(handler(self._body_json()))
+        return True
+
     def _route_post(self):
         """Dispatch ``POST`` to one route guard, in order.
 
@@ -1549,7 +1594,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return
         if self._route_validate_post(parts):
             return
-        if self._route_index_post(parts):
+        if self._route_tail_post(parts):
             return
         self._send_error(404, "unknown endpoint", code="unknown_endpoint")
     # -- PATCH routes -----------------------------------------------------

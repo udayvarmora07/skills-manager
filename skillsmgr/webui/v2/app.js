@@ -944,5 +944,6 @@ app.component("logo", {
 
 app.component("library-tools", window.SkillsV2LibraryTools);
 app.component("tool-center", window.SkillsV2ToolCenter);
+app.component("ai-center", window.SkillsV2AiCenter);
 
 app.mount("#app");

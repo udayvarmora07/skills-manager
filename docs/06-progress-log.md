@@ -8,6 +8,31 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — AI assist: bring your own key, trigger test, verified rewrite
+
+**[NOTE]** The maintainer asked for internet-wide research into BYOK AI features,
+then for the best ones to be built in order. Five research passes (communities
+via OpenCLI/Exa, competitors, GitHub issues by reactions, BYOK practice,
+literature) agree that the pain is skills not being *selected*, and that
+unverified AI rewrites or drafts do not help. Catalogue, sources and the
+decisions taken for docs/33 §8: @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
+
+**[SPEC]** Shipped A0–A2. `ai.py` is a stdlib client for Anthropic and
+OpenAI-compatible endpoints (including Ollama/LM Studio) with an env-first key,
+a 0600 settings file, per-run/per-day token caps checked before sending,
+refused redirects and a content-free usage ledger. `ai_skills.py` runs the
+trigger test over an agent's real listing and proposes description rewrites
+that are recommended only when they win without losing on held-out prompts.
+REST: `/api/ai/*`; v2: Tools → AI assist. No CLI command, Store method, SQLite
+state or dependency was added. New router guards were extracted so existing
+complexity entries did not rise; `ai.py`/`ai_skills.py` joined the ratchet with
+every function ≤ 15.
+
+**[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
+both smokes; docs and complexity gates; a browser run of every page against the
+fake model, including applying a proposal (snapshot written). Not verified: any
+real provider call, and trigger-test fidelity against a real agent's routing.
+
 ## 2026-11-09 — Audited cleanup of already-merged work
 
 **[NOTE]** The maintainer requested in-depth review and removal only after

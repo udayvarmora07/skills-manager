@@ -426,6 +426,22 @@ stated beside the setting and in every result.
 | POST | `/api/trash/<name>` | Restore in the requested scope; optional JSON `trash_path` selects an agent copy; `?snapshot=ID&scope=SCOPE` rolls back a snapshot |
 | POST | `/api/trash/purge` | Purge global trash; agent-scope purge is refused |
 
+### AI assist (bring your own key)
+
+**[SPEC]** Off until a provider and model are saved. See @docs/39-ai-features-research-and-catalogue-2026-11-09.md for rules and decisions. The key is never returned by any route; the loopback binding is the only boundary, so any local process can spend it up to the configured token caps.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/ai/settings` | provider, model, endpoint, `key_source` (`env:NAME`, `settings` or `none`), a four-character `key_hint`, caps, today's usage and the provider list. Never the key |
+| POST | `/api/ai/settings` | `{provider, model, base_url?, api_key?, clear_key?, max_run_tokens?, max_day_tokens?}`; `provider: null` turns AI off and deletes the stored key. Changing provider forgets the key. Plain `http` only to loopback |
+| POST | `/api/ai/test-connection` | one tiny JSON call; `{ok, run}` |
+| POST | `/api/ai/trigger-test` | `{scope, prompts[] \| generate_for[], per_skill?, near_misses?, repeats?, estimate?}`. `estimate: true` sends nothing and returns `egress` plus a token estimate |
+| POST | `/api/ai/improve-description` | `{scope, name, candidates?, repeats?, prompts?, estimate?}`; read-only proposals with held-out verification. Applying one uses `PATCH /api/skills/<name>` |
+| GET | `/api/ai/runs` | newest saved runs (files under `<data>/ai/runs/`) |
+| GET | `/api/ai/runs/<run_id>` | one saved run |
+
+AI errors use the standard error shape with codes `ai-not-configured` (409), `ai-budget` (409), `ai-input` (400), `ai-settings` (400), `ai-provider` / `ai-bad-output` / `ai-refused` (502) and `ai-not-found` (404).
+
 ### Templates
 
 | Method | Path | Notes |
@@ -538,6 +554,7 @@ Styles are in `webui/v2/tools.css` and use only declared v2 tokens.
 | Install | Registry inventory, browse/search/curated/fetch, stale-cache choice, reviewed artifact and explicit trust; package-runner preview/copy/run; local folder filename/text review and explicit destination approval |
 | Profiles | Metadata CRUD, observed/missing/divergent membership, enable-only exact-target plan; absent members are not installed and contents are not reconciled |
 | Templates | List/read/create/preview/use stored templates, built-in fallback, create with structured metadata |
+| AI assist | AI settings (provider, model, key, caps, connection test, what leaves the computer), Trigger test (generated or written prompts, estimate-then-send, per-skill verdicts), Improve a description (held-out-verified proposals applied through the ordinary edit) |
 | Quality | Hygiene search/severity/evidence, the “What Claude Code sees” listing-budget card (verdict, partial confidence, meter, name-only candidates with a display-only settings snippet, over-cap and excluded counts), exact-instance links, manual name/scope validation, Doctor and token statistics with unavailable/degraded states |
 | Workspaces | Project containment observations and consumer adapter explanations; effective loading remains unresolved |
 | Settings | Shared theme, text-size and regional-format preferences, the optional SkillSpector scan preference (off / static / static + your LLM key), OS preference observations, explicit index rebuild/resync |

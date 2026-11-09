@@ -1,5 +1,340 @@
 {
   "functions": {
+    "skillsmgr/ai.py::AiError.__init__": {
+      "complexity": 1,
+      "end_lineno": 111,
+      "lineno": 108
+    },
+    "skillsmgr/ai.py::AiRun.__init__": {
+      "complexity": 1,
+      "end_lineno": 511,
+      "lineno": 501
+    },
+    "skillsmgr/ai.py::AiRun.ask_json": {
+      "complexity": 8,
+      "end_lineno": 544,
+      "lineno": 513
+    },
+    "skillsmgr/ai.py::AiRun.label": {
+      "complexity": 1,
+      "end_lineno": 557,
+      "lineno": 546
+    },
+    "skillsmgr/ai.py::_NoRedirect.redirect_request": {
+      "complexity": 1,
+      "end_lineno": 397,
+      "lineno": 395
+    },
+    "skillsmgr/ai.py::_ai_dir": {
+      "complexity": 1,
+      "end_lineno": 118,
+      "lineno": 117
+    },
+    "skillsmgr/ai.py::_call": {
+      "complexity": 2,
+      "end_lineno": 491,
+      "lineno": 489
+    },
+    "skillsmgr/ai.py::_call_anthropic": {
+      "complexity": 7,
+      "end_lineno": 465,
+      "lineno": 450
+    },
+    "skillsmgr/ai.py::_call_openai": {
+      "complexity": 11,
+      "end_lineno": 486,
+      "lineno": 468
+    },
+    "skillsmgr/ai.py::_cap": {
+      "complexity": 6,
+      "end_lineno": 187,
+      "lineno": 181
+    },
+    "skillsmgr/ai.py::_error_detail": {
+      "complexity": 5,
+      "end_lineno": 447,
+      "lineno": 435
+    },
+    "skillsmgr/ai.py::_is_loopback": {
+      "complexity": 3,
+      "end_lineno": 178,
+      "lineno": 172
+    },
+    "skillsmgr/ai.py::_key_source": {
+      "complexity": 5,
+      "end_lineno": 199,
+      "lineno": 190
+    },
+    "skillsmgr/ai.py::_merged_settings": {
+      "complexity": 14,
+      "end_lineno": 269,
+      "lineno": 247
+    },
+    "skillsmgr/ai.py::_post": {
+      "complexity": 9,
+      "end_lineno": 432,
+      "lineno": 403
+    },
+    "skillsmgr/ai.py::_read_settings": {
+      "complexity": 6,
+      "end_lineno": 138,
+      "lineno": 125
+    },
+    "skillsmgr/ai.py::_record_usage": {
+      "complexity": 2,
+      "end_lineno": 355,
+      "lineno": 350
+    },
+    "skillsmgr/ai.py::_settings_path": {
+      "complexity": 1,
+      "end_lineno": 122,
+      "lineno": 121
+    },
+    "skillsmgr/ai.py::_today": {
+      "complexity": 1,
+      "end_lineno": 323,
+      "lineno": 322
+    },
+    "skillsmgr/ai.py::_usage_path": {
+      "complexity": 1,
+      "end_lineno": 319,
+      "lineno": 318
+    },
+    "skillsmgr/ai.py::_valid_base_url": {
+      "complexity": 11,
+      "end_lineno": 169,
+      "lineno": 155
+    },
+    "skillsmgr/ai.py::_validated_key": {
+      "complexity": 6,
+      "end_lineno": 244,
+      "lineno": 240
+    },
+    "skillsmgr/ai.py::_validated_model": {
+      "complexity": 5,
+      "end_lineno": 237,
+      "lineno": 231
+    },
+    "skillsmgr/ai.py::_write_settings": {
+      "complexity": 3,
+      "end_lineno": 152,
+      "lineno": 141
+    },
+    "skillsmgr/ai.py::extract_json": {
+      "complexity": 5,
+      "end_lineno": 388,
+      "lineno": 374
+    },
+    "skillsmgr/ai.py::public_settings": {
+      "complexity": 15,
+      "end_lineno": 228,
+      "lineno": 202
+    },
+    "skillsmgr/ai.py::resolve_config": {
+      "complexity": 12,
+      "end_lineno": 312,
+      "lineno": 290
+    },
+    "skillsmgr/ai.py::save_settings": {
+      "complexity": 5,
+      "end_lineno": 287,
+      "lineno": 272
+    },
+    "skillsmgr/ai.py::test_connection": {
+      "complexity": 3,
+      "end_lineno": 566,
+      "lineno": 560
+    },
+    "skillsmgr/ai.py::untrusted_block": {
+      "complexity": 1,
+      "end_lineno": 364,
+      "lineno": 361
+    },
+    "skillsmgr/ai.py::usage_summary": {
+      "complexity": 10,
+      "end_lineno": 347,
+      "lineno": 326
+    },
+    "skillsmgr/ai_skills.py::_accumulate": {
+      "complexity": 8,
+      "end_lineno": 296,
+      "lineno": 278
+    },
+    "skillsmgr/ai_skills.py::_candidate_descriptions": {
+      "complexity": 4,
+      "end_lineno": 476,
+      "lineno": 469
+    },
+    "skillsmgr/ai_skills.py::_clean_text": {
+      "complexity": 3,
+      "end_lineno": 119,
+      "lineno": 113
+    },
+    "skillsmgr/ai_skills.py::_egress": {
+      "complexity": 2,
+      "end_lineno": 343,
+      "lineno": 338
+    },
+    "skillsmgr/ai_skills.py::_generation_request": {
+      "complexity": 6,
+      "end_lineno": 178,
+      "lineno": 163
+    },
+    "skillsmgr/ai_skills.py::_hidden": {
+      "complexity": 9,
+      "end_lineno": 59,
+      "lineno": 50
+    },
+    "skillsmgr/ai_skills.py::_improve_inputs": {
+      "complexity": 7,
+      "end_lineno": 491,
+      "lineno": 479
+    },
+    "skillsmgr/ai_skills.py::_improves": {
+      "complexity": 9,
+      "end_lineno": 500,
+      "lineno": 494
+    },
+    "skillsmgr/ai_skills.py::_items": {
+      "complexity": 4,
+      "end_lineno": 184,
+      "lineno": 181
+    },
+    "skillsmgr/ai_skills.py::_listing_text": {
+      "complexity": 5,
+      "end_lineno": 67,
+      "lineno": 62
+    },
+    "skillsmgr/ai_skills.py::_mark": {
+      "complexity": 2,
+      "end_lineno": 422,
+      "lineno": 418
+    },
+    "skillsmgr/ai_skills.py::_parse_candidates": {
+      "complexity": 7,
+      "end_lineno": 466,
+      "lineno": 456
+    },
+    "skillsmgr/ai_skills.py::_parse_generated": {
+      "complexity": 8,
+      "end_lineno": 198,
+      "lineno": 187
+    },
+    "skillsmgr/ai_skills.py::_ranked": {
+      "complexity": 4,
+      "end_lineno": 516,
+      "lineno": 503
+    },
+    "skillsmgr/ai_skills.py::_render_listing": {
+      "complexity": 2,
+      "end_lineno": 107,
+      "lineno": 100
+    },
+    "skillsmgr/ai_skills.py::_repeats": {
+      "complexity": 5,
+      "end_lineno": 151,
+      "lineno": 146
+    },
+    "skillsmgr/ai_skills.py::_rewrite_request": {
+      "complexity": 14,
+      "end_lineno": 453,
+      "lineno": 432
+    },
+    "skillsmgr/ai_skills.py::_route": {
+      "complexity": 14,
+      "end_lineno": 254,
+      "lineno": 229
+    },
+    "skillsmgr/ai_skills.py::_runs_dir": {
+      "complexity": 1,
+      "end_lineno": 557,
+      "lineno": 556
+    },
+    "skillsmgr/ai_skills.py::_save_run": {
+      "complexity": 3,
+      "end_lineno": 571,
+      "lineno": 560
+    },
+    "skillsmgr/ai_skills.py::_score": {
+      "complexity": 7,
+      "end_lineno": 415,
+      "lineno": 404
+    },
+    "skillsmgr/ai_skills.py::_score.rate": {
+      "complexity": 4,
+      "end_lineno": 410,
+      "lineno": 408
+    },
+    "skillsmgr/ai_skills.py::_skill_rows": {
+      "complexity": 4,
+      "end_lineno": 313,
+      "lineno": 305
+    },
+    "skillsmgr/ai_skills.py::_split": {
+      "complexity": 4,
+      "end_lineno": 401,
+      "lineno": 394
+    },
+    "skillsmgr/ai_skills.py::_strip_marks": {
+      "complexity": 2,
+      "end_lineno": 429,
+      "lineno": 425
+    },
+    "skillsmgr/ai_skills.py::_summarize": {
+      "complexity": 8,
+      "end_lineno": 335,
+      "lineno": 316
+    },
+    "skillsmgr/ai_skills.py::_tally": {
+      "complexity": 7,
+      "end_lineno": 275,
+      "lineno": 257
+    },
+    "skillsmgr/ai_skills.py::_verdict": {
+      "complexity": 4,
+      "end_lineno": 302,
+      "lineno": 299
+    },
+    "skillsmgr/ai_skills.py::build_listing": {
+      "complexity": 13,
+      "end_lineno": 97,
+      "lineno": 70
+    },
+    "skillsmgr/ai_skills.py::generate_prompts": {
+      "complexity": 8,
+      "end_lineno": 216,
+      "lineno": 201
+    },
+    "skillsmgr/ai_skills.py::improve_description": {
+      "complexity": 10,
+      "end_lineno": 550,
+      "lineno": 519
+    },
+    "skillsmgr/ai_skills.py::improve_description.evaluate": {
+      "complexity": 3,
+      "end_lineno": 536,
+      "lineno": 534
+    },
+    "skillsmgr/ai_skills.py::list_runs": {
+      "complexity": 6,
+      "end_lineno": 589,
+      "lineno": 574
+    },
+    "skillsmgr/ai_skills.py::normalize_prompts": {
+      "complexity": 11,
+      "end_lineno": 143,
+      "lineno": 122
+    },
+    "skillsmgr/ai_skills.py::read_run": {
+      "complexity": 5,
+      "end_lineno": 601,
+      "lineno": 592
+    },
+    "skillsmgr/ai_skills.py::trigger_test": {
+      "complexity": 13,
+      "end_lineno": 380,
+      "lineno": 346
+    },
     "skillsmgr/archive.py::_BoundedReader.__init__": {
       "complexity": 1,
       "end_lineno": 193,
@@ -4347,8 +4682,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._delete_route": {
       "complexity": 5,
-      "end_lineno": 1584,
-      "lineno": 1576
+      "end_lineno": 1629,
+      "lineno": 1621
     },
     "skillsmgr/webapp.py::WebAppHandler._handle_exception": {
       "complexity": 4,
@@ -4362,8 +4697,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._multipart_fields": {
       "complexity": 4,
-      "end_lineno": 1265,
-      "lineno": 1257
+      "end_lineno": 1284,
+      "lineno": 1276
     },
     "skillsmgr/webapp.py::WebAppHandler._parts": {
       "complexity": 2,
@@ -4392,18 +4727,28 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._restore_trash_post": {
       "complexity": 5,
-      "end_lineno": 1437,
-      "lineno": 1418
+      "end_lineno": 1456,
+      "lineno": 1437
+    },
+    "skillsmgr/webapp.py::WebAppHandler._route_ai_get": {
+      "complexity": 6,
+      "end_lineno": 1200,
+      "lineno": 1187
+    },
+    "skillsmgr/webapp.py::WebAppHandler._route_ai_post": {
+      "complexity": 4,
+      "end_lineno": 1564,
+      "lineno": 1544
     },
     "skillsmgr/webapp.py::WebAppHandler._route_batch_post": {
       "complexity": 3,
-      "end_lineno": 1229,
-      "lineno": 1222
+      "end_lineno": 1248,
+      "lineno": 1241
     },
     "skillsmgr/webapp.py::WebAppHandler._route_catalog_post": {
       "complexity": 6,
-      "end_lineno": 1247,
-      "lineno": 1231
+      "end_lineno": 1266,
+      "lineno": 1250
     },
     "skillsmgr/webapp.py::WebAppHandler._route_collection_get": {
       "complexity": 6,
@@ -4412,13 +4757,13 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_delete": {
       "complexity": 2,
-      "end_lineno": 1590,
-      "lineno": 1586
+      "end_lineno": 1635,
+      "lineno": 1631
     },
     "skillsmgr/webapp.py::WebAppHandler._route_get": {
       "complexity": 13,
-      "end_lineno": 1218,
-      "lineno": 1183
+      "end_lineno": 1237,
+      "lineno": 1202
     },
     "skillsmgr/webapp.py::WebAppHandler._route_history_get": {
       "complexity": 4,
@@ -4427,13 +4772,13 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_index_post": {
       "complexity": 3,
-      "end_lineno": 1519,
-      "lineno": 1507
+      "end_lineno": 1538,
+      "lineno": 1526
     },
     "skillsmgr/webapp.py::WebAppHandler._route_install_post": {
       "complexity": 5,
-      "end_lineno": 1358,
-      "lineno": 1329
+      "end_lineno": 1377,
+      "lineno": 1348
     },
     "skillsmgr/webapp.py::WebAppHandler._route_library_get": {
       "complexity": 7,
@@ -4442,18 +4787,18 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_new_post": {
       "complexity": 3,
-      "end_lineno": 1254,
-      "lineno": 1249
+      "end_lineno": 1273,
+      "lineno": 1268
     },
     "skillsmgr/webapp.py::WebAppHandler._route_patch": {
       "complexity": 3,
-      "end_lineno": 1566,
-      "lineno": 1557
+      "end_lineno": 1611,
+      "lineno": 1602
     },
     "skillsmgr/webapp.py::WebAppHandler._route_post": {
       "complexity": 11,
-      "end_lineno": 1554,
-      "lineno": 1521
+      "end_lineno": 1599,
+      "lineno": 1566
     },
     "skillsmgr/webapp.py::WebAppHandler._route_profile_preview_get": {
       "complexity": 5,
@@ -4462,8 +4807,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_put": {
       "complexity": 8,
-      "end_lineno": 1627,
-      "lineno": 1594
+      "end_lineno": 1672,
+      "lineno": 1639
     },
     "skillsmgr/webapp.py::WebAppHandler._route_search_get": {
       "complexity": 2,
@@ -4482,13 +4827,13 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_skill_toggle_post": {
       "complexity": 5,
-      "end_lineno": 1399,
-      "lineno": 1383
+      "end_lineno": 1418,
+      "lineno": 1402
     },
     "skillsmgr/webapp.py::WebAppHandler._route_skill_write_post": {
       "complexity": 6,
-      "end_lineno": 1381,
-      "lineno": 1361
+      "end_lineno": 1400,
+      "lineno": 1380
     },
     "skillsmgr/webapp.py::WebAppHandler._route_skills_get": {
       "complexity": 12,
@@ -4497,8 +4842,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_source_update_delete": {
       "complexity": 3,
-      "end_lineno": 1574,
-      "lineno": 1570
+      "end_lineno": 1619,
+      "lineno": 1615
     },
     "skillsmgr/webapp.py::WebAppHandler._route_source_update_get": {
       "complexity": 6,
@@ -4507,8 +4852,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_source_update_post": {
       "complexity": 12,
-      "end_lineno": 1305,
-      "lineno": 1267
+      "end_lineno": 1324,
+      "lineno": 1286
     },
     "skillsmgr/webapp.py::WebAppHandler._route_stats_get": {
       "complexity": 7,
@@ -4517,8 +4862,18 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_sync_post": {
       "complexity": 7,
-      "end_lineno": 1327,
-      "lineno": 1307
+      "end_lineno": 1346,
+      "lineno": 1326
+    },
+    "skillsmgr/webapp.py::WebAppHandler._route_tail_get": {
+      "complexity": 2,
+      "end_lineno": 1185,
+      "lineno": 1183
+    },
+    "skillsmgr/webapp.py::WebAppHandler._route_tail_post": {
+      "complexity": 2,
+      "end_lineno": 1542,
+      "lineno": 1540
     },
     "skillsmgr/webapp.py::WebAppHandler._route_templates_get": {
       "complexity": 7,
@@ -4527,8 +4882,8 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_templates_post": {
       "complexity": 9,
-      "end_lineno": 1462,
-      "lineno": 1439
+      "end_lineno": 1481,
+      "lineno": 1458
     },
     "skillsmgr/webapp.py::WebAppHandler._route_tokens_get": {
       "complexity": 8,
@@ -4537,13 +4892,13 @@
     },
     "skillsmgr/webapp.py::WebAppHandler._route_trash_post": {
       "complexity": 5,
-      "end_lineno": 1416,
-      "lineno": 1401
+      "end_lineno": 1435,
+      "lineno": 1420
     },
     "skillsmgr/webapp.py::WebAppHandler._route_validate_post": {
       "complexity": 9,
-      "end_lineno": 1505,
-      "lineno": 1464
+      "end_lineno": 1524,
+      "lineno": 1483
     },
     "skillsmgr/webapp.py::WebAppHandler._send": {
       "complexity": 1,
@@ -4662,28 +5017,28 @@
     },
     "skillsmgr/webapp.py::WebAppServer.__init__": {
       "complexity": 8,
-      "end_lineno": 1714,
-      "lineno": 1681
+      "end_lineno": 1759,
+      "lineno": 1726
     },
     "skillsmgr/webapp.py::WebAppServer.serve_forever": {
       "complexity": 1,
-      "end_lineno": 1721,
-      "lineno": 1720
+      "end_lineno": 1766,
+      "lineno": 1765
     },
     "skillsmgr/webapp.py::WebAppServer.shutdown": {
       "complexity": 1,
-      "end_lineno": 1725,
-      "lineno": 1723
+      "end_lineno": 1770,
+      "lineno": 1768
     },
     "skillsmgr/webapp.py::WebAppServer.url": {
       "complexity": 1,
-      "end_lineno": 1718,
-      "lineno": 1717
+      "end_lineno": 1763,
+      "lineno": 1762
     },
     "skillsmgr/webapp.py::_StoreBoundHTTPServer.process_request_thread": {
       "complexity": 2,
-      "end_lineno": 1661,
-      "lineno": 1658
+      "end_lineno": 1706,
+      "lineno": 1703
     },
     "skillsmgr/webapp.py::_apply_token_estimate": {
       "complexity": 1,
@@ -4692,8 +5047,8 @@
     },
     "skillsmgr/webapp.py::_bind_server": {
       "complexity": 3,
-      "end_lineno": 1677,
-      "lineno": 1664
+      "end_lineno": 1722,
+      "lineno": 1709
     },
     "skillsmgr/webapp.py::_body_param": {
       "complexity": 4,
@@ -4702,8 +5057,8 @@
     },
     "skillsmgr/webapp.py::_diagnostics_roots": {
       "complexity": 4,
-      "end_lineno": 1641,
-      "lineno": 1630
+      "end_lineno": 1686,
+      "lineno": 1675
     },
     "skillsmgr/webapp.py::_doctor_explain": {
       "complexity": 6,
@@ -4772,8 +5127,8 @@
     },
     "skillsmgr/webapp.py::_launch_browser": {
       "complexity": 3,
-      "end_lineno": 1745,
-      "lineno": 1732
+      "end_lineno": 1790,
+      "lineno": 1777
     },
     "skillsmgr/webapp.py::_list_page": {
       "complexity": 4,
@@ -4782,8 +5137,8 @@
     },
     "skillsmgr/webapp.py::_open_browser": {
       "complexity": 1,
-      "end_lineno": 1729,
-      "lineno": 1728
+      "end_lineno": 1774,
+      "lineno": 1773
     },
     "skillsmgr/webapp.py::_option_list": {
       "complexity": 3,
@@ -4862,8 +5217,8 @@
     },
     "skillsmgr/webapp.py::run": {
       "complexity": 4,
-      "end_lineno": 1768,
-      "lineno": 1748
+      "end_lineno": 1813,
+      "lineno": 1793
     }
   },
   "targets": [
@@ -4894,6 +5249,8 @@
     "skillsmgr/batch.py",
     "skillsmgr/atomic_io.py",
     "skillsmgr/risk.py",
+    "skillsmgr/ai.py",
+    "skillsmgr/ai_skills.py",
     "skillsmgr/read_flights.py",
     "skillsmgr/file_reads.py",
     "skillsmgr/insights.py"

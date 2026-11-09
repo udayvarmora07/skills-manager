@@ -309,6 +309,10 @@
         </div>
       </template>
 
+      <template v-else-if="page.startsWith('ai-')">
+        <ai-center :page="page" :records="records" :scopes="scopes" :target="target" @changed="$emit('changed')"></ai-center>
+      </template>
+
       <template v-else-if="page==='install'">
         <h1 class="h1" id="h1" tabindex="-1">Install</h1>
         <p class="lede">Bring a skill in from the skills.sh registry, a package command, or a folder on this computer. Nothing is written until you approve a review.</p>

@@ -534,6 +534,23 @@ explanation. An `apm.lock.yaml` is reported as an unavailable signal and is
 never parsed. `hygiene_report()` folds the section under `lockfiles`; no Store
 method, SQLite state, cache, network request, or write is added.
 
+## `ai.py`, `ai_skills.py`
+
+**[SPEC] Bring-your-own-key AI (2026-11-09).** `ai.py` is a stdlib-only client
+for Anthropic Messages and OpenAI-compatible chat completions (OpenAI,
+OpenRouter, Gemini's compatibility endpoint, Ollama, LM Studio, custom).
+Settings live in `<data>/ai/settings.json` (0600 in a 0700 directory); the
+provider's environment variable takes precedence over a stored key, and
+`public_settings()` never returns the key. `AiRun` preflights every call
+against per-run and per-day input-token caps, refuses redirects, bounds
+responses at 2 MiB, appends counts and an input hash to `<data>/ai/usage.jsonl`,
+and parses JSON answers with `extract_json()`. `ai_skills.py` builds an agent's
+listing (`build_listing`), runs the trigger test (`trigger_test`) and the
+held-out-verified description rewrite (`improve_description`), and saves runs
+under `<data>/ai/runs/`. Both are read-only towards skills; no Store method,
+CLI command or SQLite state is added. Rules and decisions:
+@docs/39-ai-features-research-and-catalogue-2026-11-09.md.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official

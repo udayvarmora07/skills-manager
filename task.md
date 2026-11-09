@@ -4,6 +4,18 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## AI assist, bring your own key (2026-11-09)
+
+- [x] Research communities, competitors, GitHub demand, BYOK practice and literature
+  (@docs/39-ai-features-research-and-catalogue-2026-11-09.md).
+- [x] A0 BYOK foundation: stdlib client, env-first key, 0600 settings, caps, ledger.
+- [x] A1 trigger test and A2 held-out-verified description rewrite, REST + v2 pages.
+- [ ] A3 overlap judge on near-duplicate candidates.
+- [ ] A4 listing-budget fitter verified by A1.
+- [ ] A5 review briefing for registry fetch and update review.
+- [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
+- [ ] Measure trigger-test fidelity against a real agent's choices.
+
 ## Audited merged-work cleanup (2026-11-09)
 
 - [x] Inventory every local/remote branch and worktree against fetched main.

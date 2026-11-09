@@ -56,6 +56,8 @@ skills-manager/
     bundles.py       # offline HMAC manifest evidence; no archive integration
     registry.py      # bounded skills.sh API, cache, snapshots, provenance
     external_scan.py # optional advisory SkillSpector hook (external program)
+    ai.py            # BYOK model client: settings, caps, usage ledger (stdlib)
+    ai_skills.py     # AI trigger test + verified description rewrite
     lockfiles.py     # read-only skills-CLI lockfile evidence (project/global)
     key_support.py   # documented per-consumer frontmatter keys (pure table)
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
@@ -84,6 +86,7 @@ skills-manager/
 
 - Skill: `<data>/skills/<name>/SKILL.md`. Disabled: `<data>/skills/<name>/SKILL.md.disabled`.
 - SQLite at `<data>/skills-manager/skills-manager.db` is an index only — rebuilt by `db rebuild`/`db resync`; `SCHEMA_VERSION = "1"`. Never hand-edit the DB; never trust SQLite over the filesystem.
+- AI assist (optional, docs/39): `<data>/ai/settings.json` (0600; may hold a user-typed key), `<data>/ai/usage.jsonl` (counts and hashes only) and `<data>/ai/runs/*.json`. Never exported, never SQLite.
 - Trash: `<data>/trash/` (removed skills move here). Backups: `<data>/backups/` (timestamped tarballs). Templates: `<data>/templates/*.md`.
 - Registry cache: `<data>/registry-cache/` (private, auth-scope-isolated JSON
   optimization; never a trust store). Fetched registry skills carry a
