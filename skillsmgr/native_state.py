@@ -9,7 +9,11 @@ import json
 import os
 import stat
 import sys
+import tomllib
 from pathlib import Path
+
+from .paths import home_dir
+from .validator import MAX_COMBINED_DESCRIPTION
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_RULES = 10_000
@@ -24,7 +28,7 @@ _OPENCODE_VALUES = frozenset(('allow', 'ask', 'deny'))
 #: ``docs/34-agent-skill-loading-research-2026-11-07.md`` ("Claude Code skill
 #: listing budget").  They are defaults, not observations: a settings file that
 #: declares one wins, and the evidence always says which source was used.
-DEFAULT_LISTING_MAX_DESC_CHARS = 1_536
+DEFAULT_LISTING_MAX_DESC_CHARS = MAX_COMBINED_DESCRIPTION
 DEFAULT_LISTING_BUDGET_FRACTION = 0.01
 #: A declared cap above this is not a plausible listing cap, so it is reported
 #: as unusable evidence instead of applied.
@@ -306,7 +310,7 @@ def observe_native_states(consumer: str, names: list[str], *, home: Path | None 
     """Observe a batch from one request-local snapshot of each settings file."""
     if not names:
         return {}
-    home = Path.home() if home is None else Path(home)
+    home = home_dir() if home is None else Path(home)
     project = Path(project) if project is not None else None
     if consumer == 'gemini':
         prepared = _prepare_gemini_batch(home, project)
@@ -438,7 +442,7 @@ def observe_claude_listing(*, home: Path | None = None,
     settings file exists but could not be parsed, which is exactly the case
     where a hidden ``skillOverrides`` declaration could exist.
     """
-    home = Path.home() if home is None else Path(home)
+    home = home_dir() if home is None else Path(home)
     project = Path(project) if project is not None else None
     files = [('user', home / '.claude/settings.json'),
              ('project', project / '.claude/settings.json' if project else None),
@@ -461,10 +465,6 @@ def observe_claude_listing(*, home: Path | None = None,
 
 def _load_toml(path: Path) -> tuple[str, dict | None]:
     """Read one bounded TOML file; never raises (mirrors :func:`_load`)."""
-    try:
-        import tomllib
-    except ImportError:  # pragma: no cover - the supported floor is 3.11
-        return 'unavailable', None
     try:
         descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0))
         with os.fdopen(descriptor, 'rb') as stream:
@@ -570,7 +570,7 @@ def observe_codex_states(entries: list[tuple[str, Path | None]], *,
     """
     if not entries:
         return []
-    prepared = _prepare_codex(Path.home() if home is None else Path(home))
+    prepared = _prepare_codex(home_dir() if home is None else Path(home))
     return [_codex_observation(name, document, prepared) for name, document in entries]
 
 

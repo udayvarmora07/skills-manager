@@ -11,7 +11,6 @@ import hashlib
 import os
 import threading
 from collections import OrderedDict
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .frontmatter import FrontmatterError, parse_frontmatter
@@ -27,6 +26,7 @@ from .errors import SkillNotFound, StoreError
 from .tokens import estimate as _estimate_tokens
 from .registry import read_provenance
 from .validator import validate_skill_name
+from .clock import now_iso
 
 
 def _coerce_str(value) -> str:
@@ -328,19 +328,9 @@ _MUTABLE_RECORD_KEYS = (
 _COPY_MAX_DEPTH = 12
 _COPY_SCALARS = (str, bytes, int, float, bool, type(None))
 
-#: The format ``observations.document_observations`` stamps ``observed_at``
-#: with.  Reused here rather than re-derived so the two producers of the field
-#: cannot drift; pinned against the original by
-#: ``test_the_loader_stamp_format_is_the_observation_format``.
-_OBSERVED_AT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 _document_cache: "OrderedDict[tuple, dict]" = OrderedDict()
 _document_cache_lock = threading.Lock()
-
-
-def _observed_at() -> str:
-    """The read-time observation stamp, in the observation format."""
-    return datetime.now(timezone.utc).strftime(_OBSERVED_AT_FORMAT)
 
 
 def _copy_value(value, depth: int = 0):
@@ -436,7 +426,7 @@ def _document_cache_lookup(key: tuple) -> dict | None:
     if record is None:
         return None
     out = isolated_record(record)
-    out["observed_at"] = _observed_at()
+    out["observed_at"] = now_iso()
     return out
 
 

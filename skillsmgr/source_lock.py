@@ -14,7 +14,6 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -24,6 +23,7 @@ from .atomic_io import atomic_write_text, mutation_lock
 from .diagnostics import diagnose as _diagnose
 from .risk import risk_file_listing, risk_scan
 from .validator import validate_text
+from .clock import now_iso
 
 
 MAX_SOURCE_FILES = 256
@@ -133,10 +133,6 @@ def local_manifest(root: str | Path) -> dict:
     return {"root": str(root), "files": files, "public_files": public, "sha256": digest.hexdigest()}
 
 
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _json_bytes(value: object) -> bytes:
     try:
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -214,7 +210,7 @@ def source_lock_record(source: dict, content_hash: str, target: dict, *,
         "version": 1,
         "source": source,
         "content_hash": content_hash,
-        "checked_at": _iso_now(),
+        "checked_at": now_iso(),
         "state": state,
         "target": target,
     }
@@ -617,7 +613,7 @@ def _snapshot_tree(source: Path, snapshot_root: Path) -> Path:
         os.chmod(snapshot_root, 0o700)
         if snapshot_root.resolve() == source_resolved or source_resolved.is_relative_to(snapshot_root.resolve()):
             raise SourceLockError("snapshot root cannot contain the managed skill")
-        snapshot_id = f"{_iso_now().replace(':', '').replace('-', '')}-{hashlib.sha256(str(source_resolved).encode()).hexdigest()[:12]}"
+        snapshot_id = f"{now_iso().replace(':', '').replace('-', '')}-{hashlib.sha256(str(source_resolved).encode()).hexdigest()[:12]}"
         destination = snapshot_root / snapshot_id
         temporary = Path(tempfile.mkdtemp(prefix=f".{snapshot_id}-", dir=snapshot_root))
         try:

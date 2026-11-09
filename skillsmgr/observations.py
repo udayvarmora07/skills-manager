@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
 from pathlib import Path
+from .clock import now_iso
 
 
 PORTABLE_FRONTMATTER_KEYS = frozenset(
@@ -41,7 +41,7 @@ def document_observations(
         "frontmatter_extensions": extensions,
         "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "metadata_hash": hashlib.sha256(_canonical_json(frontmatter)).hexdigest(),
-        "observed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "observed_at": now_iso(),
         "provenance": {
             "path": str(Path(skill_dir)),
             "scope": scope,

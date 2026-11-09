@@ -44,7 +44,7 @@ from unittest import mock
 from skillsmgr import context
 import skillsmgr.path_safety as path_safety_module
 import skillsmgr.paths as paths_module
-from skillsmgr import documents, loader, observations, scopes
+from skillsmgr import clock, documents, loader, observations, scopes
 from skillsmgr.store import Store
 
 _DOCUMENT_NAMES = {"SKILL.md", "SKILL.md.disabled"}
@@ -1146,11 +1146,9 @@ class ObservedAtRefreshTests(ScopeReadCase):
     def _frozen_clock(self, moment: str = "2026-10-05T18:00:00"):
         """Yield a callable that moves ``datetime.now`` to a named instant.
 
-        Pinned in ``observations`` (where the miss path stamps) and in
-        ``loader`` (where a hit re-stamps) *only where those names exist*, so
-        this asserts behaviour rather than the presence of an import: against a
-        tree that reuses but never refreshes, the second read still returns the
-        first read's stamp and the assertion fails.
+        Pinned in ``clock``, the one source of the stamp: against a tree that
+        reuses but never refreshes, the second read still returns the first
+        read's stamp and the assertion fails.
 
         The clock only moves when a test moves it.  It cannot be driven by
         call count, because one request stamps once *per document*.
@@ -1162,12 +1160,7 @@ class ObservedAtRefreshTests(ScopeReadCase):
             def now(cls, tz=None):
                 return datetime.datetime.fromisoformat(holder[0]).replace(tzinfo=tz)
 
-        targets = [mock.patch.object(observations, "datetime", Frozen)]
-        if hasattr(loader, "datetime"):
-            targets.append(mock.patch.object(loader, "datetime", Frozen))
-        with contextlib.ExitStack() as stack:
-            for target in targets:
-                stack.enter_context(target)
+        with mock.patch.object(clock, "datetime", Frozen):
             yield lambda value: holder.__setitem__(0, value)
 
     def test_a_reused_record_is_re_stamped_with_the_time_of_the_read(self):
@@ -1258,21 +1251,6 @@ class ObservedAtRefreshTests(ScopeReadCase):
             self.assertEqual(first[field], second[field], field)
         self.assertNotEqual(first["observed_at"], second["observed_at"])
 
-    def test_the_loader_stamp_format_is_the_observation_format(self):
-        """Two producers of one field must not drift apart.
-
-        ``observations.document_observations`` stamps the field on the miss
-        path and the loader re-stamps it on the hit path.  Both carry the same
-        format literal, so this pins them to each other: a change to either
-        alone fails here rather than producing two shapes of timestamp.
-        """
-        skill = self._skill(self.base / "skills" / "one", "one")
-        with self._frozen_clock("2026-10-05T18:08:28"):
-            derived = observations.document_observations(skill, "text", {})
-        with self._frozen_clock("2026-10-05T18:08:28"):
-            re_stamped = loader._observed_at()
-        self.assertEqual(derived["observed_at"], re_stamped)
-        self.assertEqual("2026-10-05T18:08:28Z", re_stamped)
 
     def test_the_global_store_path_reports_a_current_observation(self):
         """``observed_at`` is in ``Store._OBSERVED_KEYS``, so the defect was global."""

@@ -21,12 +21,12 @@ import signal
 import tempfile
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .atomic_io import atomic_write_text, mutation_lock
 from .path_safety import contained_path
 from .validator import validate_skill_name
+from .clock import now_iso
 
 EVALS_DIRNAME = "evals"
 EVALS_FILENAME = "evals.json"
@@ -559,10 +559,6 @@ def _restore_backup_if_needed(backup_iteration: Path | None, final_iteration: Pa
     return False
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def record_runs(workspace: Path, iteration: int, cases: list[dict], runs: object) -> dict:
     """Write one complete iteration, replacing any previous contents atomically.
 
@@ -609,7 +605,7 @@ def record_runs(workspace: Path, iteration: int, cases: list[dict], runs: object
                 written.append(str(final_target / GRADING_FILENAME))
                 _write_json(target / TIMING_FILENAME, {
                     "duration_ms": run["duration_ms"], "tokens": run["tokens"],
-                    "recorded_at": _now_iso(),
+                    "recorded_at": now_iso(),
                 })
                 written.append(str(final_target / TIMING_FILENAME))
             benchmark_path = iteration_dir(stage_root, iteration) / BENCHMARK_FILENAME

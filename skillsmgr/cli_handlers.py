@@ -21,12 +21,15 @@ from . import doctor, install
 from .documents import document_path, document_text
 from . import search as search_mod
 from . import templates as templates_mod
+#: CLI-3: untrusted skill fields (description, category, notes) come from
+#: imported archives and from directories other tools wrote, so every printed
+#: field passes through ``sanitize_text`` (as ``_display``).
 from .cli_output import (
-    err as _output_err,
-    print_json as _output_print_json,
-    render_table as _output_render_table,
-    sanitize_text as _output_sanitize_text,
-    truncate as _output_truncate,
+    err as _err,
+    print_json as _print_json,
+    render_table as _render_table,
+    sanitize_text as _display,
+    truncate as _truncate,
 )
 from .store import Store, StoreError
 from .validator import validate_skill, validate_skill_name
@@ -36,15 +39,6 @@ EXIT_ERROR = 1
 EXIT_USAGE = 2
 EXIT_INTERRUPT = 130
 
-
-_print_json = _output_print_json
-_err = _output_err
-_truncate = _output_truncate
-_render_table = _output_render_table
-#: CLI-3: untrusted skill fields (description, category, notes) come from
-#: imported archives and from directories other tools wrote.  They are printed
-#: through this seam so an ESC payload can never spoof or re-align output.
-_display = _output_sanitize_text
 
 
 #: A metadata key is emitted as a bare frontmatter mapping key, so it may not
@@ -1330,7 +1324,7 @@ def cmd_gui(args, store: Store) -> int:
     try:
         from . import webapp
     except (ImportError, ValueError, RuntimeError) as exc:
-        _output_err(str(exc))
+        _err(str(exc))
         return EXIT_ERROR
     return webapp.run(
         store,

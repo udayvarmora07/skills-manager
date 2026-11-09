@@ -117,7 +117,8 @@ def _enforce_skill_budget(files: int, size: int) -> None:
         raise LockfileTooLarge(f"skill folder exceeds {MAX_HASH_BYTES} bytes")
 
 
-def _bounded(value: object, limit: int = MAX_STRING) -> str:
+def bounded_text(value: object, limit: int = MAX_STRING) -> str:
+    """Untrusted text as a bounded, NUL-free string for a JSON report."""
     text = value if isinstance(value, str) else str(value)
     text = text.replace("\x00", "\ufffd")
     return text if len(text) <= limit else text[: max(0, limit - 1)] + "\u2026"
@@ -148,7 +149,7 @@ def _parse_source(text: str):
     except ValueError:
         return None, _WITHHELD_SOURCE
     if not parsed.scheme or not parsed.netloc:
-        return None, (_WITHHELD_SOURCE if "@" in text else _bounded(text))
+        return None, (_WITHHELD_SOURCE if "@" in text else bounded_text(text))
     return parsed, None
 
 
@@ -164,7 +165,7 @@ def safe_source_url(value: object) -> str:
     netloc = f"[{host}]" if ":" in host else host
     if parsed.port:
         netloc = f"{netloc}:{parsed.port}"
-    return _bounded(urlunparse((parsed.scheme, netloc, parsed.path, "", "", "")))
+    return bounded_text(urlunparse((parsed.scheme, netloc, parsed.path, "", "", "")))
 
 
 def _directory_files(root: Path):
@@ -294,10 +295,10 @@ def skill_folder_tree_sha(directory: str | Path, *, as_enabled: bool = False) ->
 
 def _invalid(path: Path, kind: str, reason: str) -> dict:
     return {
-        "path": _bounded(str(path)),
+        "path": bounded_text(str(path)),
         "kind": kind,
         "state": "invalid",
-        "reason": _bounded(reason),
+        "reason": bounded_text(reason),
         "version": None,
         "entries": [],
         "omitted": 0,
@@ -314,19 +315,19 @@ def _lock_kind(version: object, kind: str | None) -> str | None:
 
 
 def _normalized_entry(name: str, value: dict) -> dict:
-    entry = {"name": _bounded(name, 128)}
+    entry = {"name": bounded_text(name, 128)}
     for key in _ENTRY_FIELDS:
         if key in value:
-            entry[key] = _bounded(value[key])
+            entry[key] = bounded_text(value[key])
     for key in ("computedHash", "skillFolderHash"):
         if key in value:
-            entry[key] = _bounded(value[key], 128)
+            entry[key] = bounded_text(value[key], 128)
     return entry
 
 
 def _missing_lock(target: Path, kind: str) -> dict:
     return {
-        "path": _bounded(str(target)),
+        "path": bounded_text(str(target)),
         "kind": kind,
         "state": "missing",
         "reason": "lockfile is not present",
@@ -382,7 +383,7 @@ def read_lock(path: str | Path, *, kind: str | None = None) -> dict:
         entries.append(_normalized_entry(str(name), value))
     omitted = max(0, len(entries) - MAX_LOCK_ENTRIES)
     return {
-        "path": _bounded(str(target)),
+        "path": bounded_text(str(target)),
         "kind": resolved_kind,
         "state": "ok",
         "reason": "",
@@ -400,7 +401,7 @@ def _source_label(entry: dict) -> dict:
         label = safe_source_url(entry.get("source", ""))
     return {
         "label": label,
-        "source_type": _bounded(entry.get("sourceType", ""), 64),
+        "source_type": bounded_text(entry.get("sourceType", ""), 64),
     }
 
 
@@ -452,14 +453,14 @@ def _hash_outcome(directory: Path, entry: dict, mode: str) -> tuple[str, str]:
 def _unverifiable_reason(exc: BaseException) -> str:
     if isinstance(exc, RecursionError):
         return "the skill folder nests too deeply to hash"
-    return _bounded(str(exc))
+    return bounded_text(str(exc))
 
 
 def _entry_evidence(entry: dict, installed_root: Path, mode: str) -> dict:
     directory = installed_root / sanitize_name(entry.get("name", ""))
     row = {
-        "name": _bounded(entry.get("name", ""), 128),
-        "installed_path": _bounded(str(directory)),
+        "name": bounded_text(entry.get("name", ""), 128),
+        "installed_path": bounded_text(str(directory)),
         "present": directory.is_dir(),
         "disabled": (directory / "SKILL.md.disabled").is_file(),
         "hash_status": "missing",
@@ -503,7 +504,7 @@ def _counts(rows: list[dict]) -> dict:
 
 def _evaluated_lock(lock: dict, installed_root: Path, mode: str) -> dict:
     result = dict(lock)
-    result["installed_root"] = _bounded(str(installed_root))
+    result["installed_root"] = bounded_text(str(installed_root))
     if lock.get("state") != "ok":
         result["entries"] = []
         result["counts"] = _counts([])
@@ -522,7 +523,7 @@ def _unavailable_lock(kind: str, reason: str) -> dict:
         "path": "",
         "kind": kind,
         "state": "unavailable",
-        "reason": _bounded(reason),
+        "reason": bounded_text(reason),
         "version": None,
         "entries": [],
         "omitted": 0,
@@ -569,7 +570,7 @@ def unavailable_evidence(reason: str) -> dict:
         "undeclared": {"names": [], "total": 0, "truncated": False},
         "summary": _counts([]),
         "unavailable_signals": [
-            {"signal": "lockfiles", "explanation": _bounded(reason)}
+            {"signal": "lockfiles", "explanation": bounded_text(reason)}
         ],
         "limits": {
             "max_lock_bytes": MAX_LOCK_BYTES,
@@ -628,7 +629,7 @@ def _lockfile_evidence(home, project_root, xdg_state_home) -> dict:
             signals.append({
                 "signal": "apm-lock",
                 "explanation": "YAML parsing is not available in the standard library",
-                "path": _bounded(str(apm)),
+                "path": bounded_text(str(apm)),
             })
     return {
         "policy": "read-only evidence; a hash mismatch is not a tampering verdict",

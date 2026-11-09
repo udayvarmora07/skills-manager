@@ -35,8 +35,6 @@ class Colors:
     def bold(self, text: str) -> str:
         return self.paint(1, text)
 
-    def dim(self, text: str) -> str:
-        return self.paint(2, text)
 
     def red(self, text: str) -> str:
         return self.paint(31, text)
@@ -46,12 +44,6 @@ class Colors:
 
     def yellow(self, text: str) -> str:
         return self.paint(33, text)
-
-    def cyan(self, text: str) -> str:
-        return self.paint(36, text)
-
-    def gray(self, text: str) -> str:
-        return self.paint(90, text)
 
 
 COLORS = Colors()

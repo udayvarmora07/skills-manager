@@ -44,6 +44,7 @@ from .source_lock import (
 )
 from .store import Store, StoreError, index_lock_path
 from .validator import validate_skill_name
+from .clock import iso
 
 
 _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -79,10 +80,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _iso(value: datetime) -> str:
-    return value.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _data_path(data_dir: str | Path) -> Path:
     return Path(data_dir).expanduser().resolve()
 
@@ -116,12 +113,8 @@ def _review_dir(data_dir: Path, review_id: str) -> Path:
     directory = root / _valid_review_id(review_id)
     if directory.exists() and directory.is_symlink():
         raise SourceUpdateError("review-not-found", "update review is unavailable")
-    try:
-        if not directory.resolve().is_relative_to(root.resolve()):
-            raise SourceUpdateError("review-not-found", "update review is unavailable")
-    except AttributeError:  # pragma: no cover - Python 3.10 fallback
-        if not str(directory.resolve()).startswith(str(root.resolve()) + os.sep):
-            raise SourceUpdateError("review-not-found", "update review is unavailable")
+    if not directory.resolve().is_relative_to(root.resolve()):
+        raise SourceUpdateError("review-not-found", "update review is unavailable")
     return directory
 
 
@@ -176,7 +169,7 @@ def _expired(record: dict) -> bool:
 
 def _mark_expired(directory: Path, record: dict) -> None:
     record["status"] = "expired"
-    record["expired_at"] = _iso(_now())
+    record["expired_at"] = iso(_now())
     try:
         _write_record(directory, record)
         candidate = directory / "candidate"
@@ -489,9 +482,9 @@ def _prepare_from_source(
             "version": 1,
             "review_id": review_id,
             "status": "pending",
-            "created_at": _iso(created),
+            "created_at": iso(created),
             "expires_epoch": created.timestamp() + _REVIEW_TTL,
-            "review_expires_at": _iso(datetime.fromtimestamp(created.timestamp() + _REVIEW_TTL, timezone.utc)),
+            "review_expires_at": iso(datetime.fromtimestamp(created.timestamp() + _REVIEW_TTL, timezone.utc)),
             "target": target,
             "source": source_record,
             "candidate": candidate_summary,
@@ -585,7 +578,7 @@ def _snapshot_entries(data_dir: Path, target: dict) -> list[dict]:
         if folder.is_symlink() or not folder.is_dir() or not is_valid_review_id(folder.name):
             continue
         try:
-            created_at = _iso(datetime.fromtimestamp(folder.stat().st_mtime, timezone.utc))
+            created_at = iso(datetime.fromtimestamp(folder.stat().st_mtime, timezone.utc))
         except OSError:
             entries.append({
                 "snapshot_id": folder.name,
@@ -706,7 +699,7 @@ def cancel_update_review(data_dir: str | Path, review_id: str) -> dict:
             raise SourceUpdateError("review-expired", "update review has expired")
         require_status(record, "pending", _not_pending, "update review is no longer pending")
         record["status"] = "cancelled"
-        record["cancelled_at"] = _iso(_now())
+        record["cancelled_at"] = iso(_now())
         _write_record(directory, record)
         candidate = directory / "candidate"
         if candidate.exists() and not candidate.is_symlink():
@@ -839,7 +832,7 @@ def commit_update_review(
             # already-replaced target and report the wrong conflict.
             warning = None
             record["status"] = "committed"
-            record["committed_at"] = _iso(_now())
+            record["committed_at"] = iso(_now())
             record["snapshot_id"] = review_id
             try:
                 _write_record(directory, record)

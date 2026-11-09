@@ -17,6 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import key_support, loader, lockfiles, native_state, paths, source_lock, validator
+from .lockfiles import MAX_STRING, bounded_text as _bounded
 from .tokens import DEFAULT_WINDOW, WINDOWS, count_tokens, estimate, window_name
 
 
@@ -25,10 +26,8 @@ MAX_NEAR_RESULTS = 500
 MAX_FINDINGS = 2_000
 MAX_GROUP_INSTANCES = 100
 MAX_FEATURE_POSTING = 64
-MAX_DESCRIPTION_CHARS = 1_024
 MAX_HEADING_CHARS = 16_384
 MAX_SHARED_FEATURES = 20
-MAX_STRING = 512
 MAX_LISTING_CANDIDATES = 25
 MAX_LISTING_OVER_CAP = 50
 #: docs/29 H2: at most this many agents-only names are listed in the bridge
@@ -86,12 +85,6 @@ _SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2, "unavailable": 3}
 
 class HygieneError(ValueError):
     """Raised when a hygiene report cannot be formed from its input."""
-
-
-def _bounded(value: object, limit: int = MAX_STRING) -> str:
-    text = value if isinstance(value, str) else str(value)
-    text = text.replace("\x00", "�")
-    return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
 
 
 def _json_default(value: object) -> str:
@@ -559,7 +552,7 @@ def _features(record: dict) -> dict[str, set[str]]:
     name = name.replace("_", " ").replace(".", " ").replace("-", " ")
     joined = "".join(name.split())
     trigrams = {joined[index:index + 3] for index in range(max(0, len(joined) - 2))}
-    description = str(record.get("description", ""))[:MAX_DESCRIPTION_CHARS]
+    description = str(record.get("description", ""))[:validator.MAX_DESCRIPTION]
     body = str(record.get("body", ""))[:MAX_HEADING_CHARS]
     headings = " ".join(_HEADING_RE.findall(body))
     return {
@@ -1710,7 +1703,7 @@ def _hygiene_report(
             "max_findings": MAX_FINDINGS,
             "max_group_instances": MAX_GROUP_INSTANCES,
             "max_feature_posting": MAX_FEATURE_POSTING,
-            "max_description_characters": MAX_DESCRIPTION_CHARS,
+            "max_description_characters": validator.MAX_DESCRIPTION,
             "max_heading_characters": MAX_HEADING_CHARS,
             "max_shared_features": MAX_SHARED_FEATURES,
             "max_string": MAX_STRING,

@@ -24,7 +24,6 @@ import zipfile
 import zlib
 import gzip
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import paths
@@ -48,6 +47,7 @@ from .validator import (
     MAX_DESCRIPTION,
     validate_skill_name,
 )
+from .clock import iso, now_iso
 
 SCHEMA_VERSION = "1"
 
@@ -425,11 +425,6 @@ def _driver_errors(action: str):
         yield
     except sqlite3.Error as exc:
         raise StoreError(f"skill index {action} failed: {exc}") from exc
-
-
-def now_iso() -> str:
-    """Return the current UTC time in ``YYYY-MM-DDTHH:MM:SSZ`` form."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _trash_timestamp() -> str:
@@ -2016,9 +2011,7 @@ class Store:
                     "name": name,
                     "trash_path": str(path),
                     "size_bytes": size,
-                    "modified": datetime.fromtimestamp(
-                        path.stat().st_mtime, tz=timezone.utc
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "modified": iso(path.stat().st_mtime),
                 }
             )
         return sorted(result, key=lambda r: r["name"])

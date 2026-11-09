@@ -15,7 +15,6 @@ import re
 import shutil
 import subprocess  # nosec B404 - each subprocess call below uses trusted Git and bounded argv.
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -34,6 +33,7 @@ from .review_artifacts import (
 )
 from .source_lock import local_manifest, review_local_update, commit_local_update
 from .validator import validate_skill_name
+from .clock import iso
 
 
 MAX_MANIFEST_SKILLS = 2048
@@ -248,12 +248,6 @@ def interrupted_sync(completed: list[str], pending: list[str], snapshot: str | N
     }
 
 
-def _iso(timestamp: float | None = None) -> str:
-    return datetime.fromtimestamp(timestamp or time.time(), timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-
-
 def _json_bytes(value: object) -> bytes:
     try:
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -406,7 +400,7 @@ def _review_public(record: dict) -> dict:
         "review_id": record["review_id"],
         "status": record["status"],
         "created_at": record["created_at"],
-        "expires_at": _iso(float(record["expires_epoch"])),
+        "expires_at": iso(float(record["expires_epoch"])),
         "target": record["target"],
         "remote_source": record["remote_source"],
         "candidate_hash": record["candidate_hash"],
@@ -504,7 +498,7 @@ def _mark_review_committed(data_dir: str | Path, review_id: str) -> dict:
     path = _review_path(data_dir, review_id)
     value = read_sync_review(data_dir, review_id)
     value["status"] = "committed"
-    value["committed_at"] = _iso()
+    value["committed_at"] = iso()
     encoded = encode_review(
         value,
         separators=(",", ":"),
@@ -545,7 +539,7 @@ def prepare_sync_review(data_dir: str | Path, base: dict, local: dict, remote: d
             + str(now).encode("ascii")
         ).hexdigest()[:32],
         "status": "pending",
-        "created_at": _iso(now),
+        "created_at": iso(now),
         "expires_epoch": now + MAX_SYNC_REVIEW_AGE,
         "target": {"physical_path": str(target_path), "contained": True},
         "remote_source": remote_source,

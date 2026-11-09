@@ -45,6 +45,7 @@ from .search import MAX_SEARCH_LENGTH, rank_results
 from .store import list_snapshots, read_snapshot, write_snapshot, write_snapshot_bytes
 from .tokens import aggregate, estimate
 from .validator import MAX_COMPATIBILITY, MAX_DESCRIPTION, validate_skill_name
+from .clock import iso
 
 _SCOPE_READ_FLIGHTS: dict = {}
 _SCOPE_READ_FLIGHTS_LOCK = threading.Lock()
@@ -1033,16 +1034,14 @@ def _parse_scope_trash_entry(scope_id: str, entry: Path) -> dict | None:
         trashed = datetime.strptime(
             match.group("stamp"), _TRASH_TIMESTAMP_FORMAT
         ).replace(tzinfo=timezone.utc)
-        modified = datetime.fromtimestamp(
-            entry.stat().st_mtime, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        modified = iso(entry.stat().st_mtime)
     except (ValueError, OSError):
         return None
     return {
         "name": name,
         "scope": scope_id,
         "trash_path": str(entry),
-        "trashed_at": trashed.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "trashed_at": iso(trashed),
         "modified": modified,
         "size_bytes": _scope_trash_size(entry),
         "_copy": int(match.group("copy") or 0),

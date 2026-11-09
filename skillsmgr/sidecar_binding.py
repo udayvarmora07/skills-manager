@@ -13,13 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import atomic_io
 from .context import active_store
 from . import paths
 from .path_safety import mkdir_private
+from .clock import now_iso
 
 
 PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
@@ -84,11 +84,6 @@ def _ensure_binding_dir(root: Path) -> Path:
     return directory
 
 
-def _iso_now() -> str:
-    """Return the current UTC time in the manager's timestamp format."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def record_binding(skill_dir: str | Path, sidecar_name: str, sidecar_bytes: bytes) -> Path:
     """Record that this tool wrote *sidecar_bytes* into *skill_dir*.
 
@@ -109,7 +104,7 @@ def record_binding(skill_dir: str | Path, sidecar_name: str, sidecar_bytes: byte
         "path": str(resolved),
         "sidecar": sidecar_name,
         "sha256": hashlib.sha256(bytes(sidecar_bytes)).hexdigest(),
-        "recorded_at": _iso_now(),
+        "recorded_at": now_iso(),
     }
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n"
     if os.path.lexists(destination) and os.path.islink(destination):

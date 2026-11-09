@@ -163,17 +163,11 @@ def documents(consumer: str, key: str) -> bool:
     return False
 
 
-def documents_anywhere(key: str) -> bool:
-    """True when any recorded consumer documents *key*."""
-    return any(documents(consumer, key) for consumer in DOCUMENTED_KEYS)
-
-
 __all__ = [
     "BEHAVIOURAL_KEYS",
     "DOCUMENTED_KEYS",
     "documented_keys",
     "documents",
-    "documents_anywhere",
     "known_consumers",
     "label",
     "source",

@@ -15,7 +15,6 @@ import re
 import shutil
 import tempfile
 import time
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
@@ -39,6 +38,7 @@ from .review_artifacts import (
     review_expiry,
     write_private_bytes,
 )
+from .clock import iso
 
 
 REGISTRY_BASE_URL = "https://skills.sh"
@@ -95,9 +95,7 @@ def _now() -> float:
 
 
 def _iso(timestamp: float | None = None) -> str:
-    return datetime.fromtimestamp(timestamp or _now(), timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    return iso(timestamp or _now())
 
 
 def _registry_url(url: str) -> str:
