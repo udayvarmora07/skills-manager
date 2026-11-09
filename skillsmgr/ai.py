@@ -25,10 +25,14 @@ Rules every caller inherits (docs/39):
 from __future__ import annotations
 
 import hashlib
+import contextvars
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
 import json
 import os
 import re
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -337,24 +341,78 @@ def _today() -> str:
     return time.strftime("%Y-%m-%d", time.gmtime())
 
 
+def _ledger_row(line: str) -> dict | None:
+    try:
+        row = json.loads(line)
+        return row if isinstance(row, dict) else None
+    except ValueError:
+        return None
+
+
+def _old_usage_row(row: dict | None, cutoff: str) -> bool:
+    if row is None or not isinstance(row.get("at"), str):
+        return False
+    stamp = row["at"][:10]
+    try:
+        return date.fromisoformat(stamp).isoformat() == stamp and stamp < cutoff
+    except ValueError:
+        return False
+
+
+def _compact_usage(path: Path, cutoff: str) -> None:
+    """Stream an oversized ledger to an atomic replacement under its lock."""
+    fd, temporary = tempfile.mkstemp(prefix=".usage-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as out, path.open("rb") as src:
+            for line in src:
+                row = _ledger_row(line.decode("utf-8", errors="replace"))
+                if not _old_usage_row(row, cutoff):
+                    out.write(line)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _usage_counts(path: Path, today: str, cutoff: str) -> tuple[int, int, int, bool]:
+    calls = input_tokens = output_tokens = 0
+    has_old = False
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            row = _ledger_row(line)
+            has_old = has_old or _old_usage_row(row, cutoff)
+            if row is None or str(row.get("at", ""))[:10] != today:
+                continue
+            try:
+                incoming = max(0, int(row.get("input_tokens") or 0))
+                outgoing = max(0, int(row.get("output_tokens") or 0))
+            except (ValueError, TypeError, OverflowError):
+                continue
+            calls += 1
+            input_tokens += incoming
+            output_tokens += outgoing
+    return calls, input_tokens, output_tokens, has_old
+
+
+def _prune_usage(path: Path, cutoff: str) -> None:
+    try:
+        with mutation_lock(path):
+            if path.stat().st_size > 1024 * 1024:
+                _compact_usage(path, cutoff)
+    except OSError:
+        pass  # The existing ledger remains usable if compaction fails.
+
+
 def usage_summary(data_dir: Path) -> dict:
     """Today's recorded calls and tokens (UTC day), from the ledger."""
     today = _today()
+    cutoff = (date.fromisoformat(today) - timedelta(days=90)).isoformat()
+    path = _usage_path(data_dir)
     calls = input_tokens = output_tokens = 0
     try:
-        with _usage_path(data_dir).open(encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(row, dict) or str(row.get("at", ""))[:10] != today:
-                    continue
-                calls += 1
-                input_tokens += int(row.get("input_tokens") or 0)
-                output_tokens += int(row.get("output_tokens") or 0)
-    except FileNotFoundError:
-        pass
+        calls, input_tokens, output_tokens, has_old = _usage_counts(path, today, cutoff)
+        if has_old and path.stat().st_size > 1024 * 1024:
+            _prune_usage(path, cutoff)
     except OSError:
         pass
     return {"day": today, "calls": calls, "input_tokens": input_tokens,
@@ -364,9 +422,37 @@ def usage_summary(data_dir: Path) -> dict:
 def _record_usage(data_dir: Path, row: dict) -> None:
     mkdir_private(_ai_dir(data_dir))
     path = _usage_path(data_dir)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    with os.fdopen(fd, "a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, sort_keys=True) + "\n")
+    with mutation_lock(path):
+        _append_usage(path, row)
+
+
+def _append_usage(path: Path, row: dict) -> None:
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a+b") as handle:
+        if handle.seek(0, os.SEEK_END):
+            handle.seek(-1, os.SEEK_END)
+            if handle.read(1) != b"\n":
+                handle.write(b"\n")
+        handle.write((json.dumps(row, sort_keys=True) + "\n").encode("utf-8"))
+
+
+_disconnect_check = contextvars.ContextVar("ai_disconnect_check", default=None)
+_run_context = contextvars.ContextVar("ai_run_context", default={})
+
+
+@contextmanager
+def client_disconnect_check(check, metadata=None):
+    token = _disconnect_check.set(check)
+    context_token = _run_context.set(metadata or {})
+    try:
+        yield
+    finally:
+        _disconnect_check.reset(token)
+        _run_context.reset(context_token)
+
+
+class ClientDisconnected(Exception):
+    """The requesting HTTP client closed its connection."""
 
 
 # -- output helpers ---------------------------------------------------------
@@ -524,6 +610,14 @@ class AiRun:
         self.started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self._day_used = usage_summary(self.data_dir)["input_tokens"]
 
+    def _check_disconnected(self) -> None:
+        check = _disconnect_check.get()
+        if not self.estimate_only and check is not None and check():
+            from .ai_skills import _save_run
+            _save_run(self.data_dir, {**_run_context.get(), "kind": self.feature,
+                                      "status": "disconnected", "run": self.label()})
+            raise ClientDisconnected()
+
     def ask_json(self, system: str, user: str, *, max_output: int = 2_000):
         """Send one request and return its parsed JSON (``None`` when estimating)."""
         text = self.ask_text(system, user, max_output=max_output, json_output=True)
@@ -536,6 +630,7 @@ class AiRun:
         Plain-text answers (eval outputs) may be cut off at ``max_output``;
         ``self.last_truncated`` says so.  A cut-off JSON answer is an error.
         """
+        self._check_disconnected()
         max_output = max(64, min(int(max_output), MAX_OUTPUT_TOKENS))
         estimate = count_tokens(system)[0] + count_tokens(user)[0] + max_output
         if self.estimated_input + estimate > self.config["max_run_tokens"]:

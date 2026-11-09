@@ -8,6 +8,36 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Handoff 3.1: AI retention, disconnects and run history
+
+**[SPEC]** Work is isolated in `~/skills-manager-codex` on
+`codex/remaining-tasks`, based on fetched `origin/main` (`03b9ad6`). The dirty
+primary checkout and redesign worktree were left untouched. Usage-ledger
+compaction removes dated rows older than 90 UTC days when the ledger exceeds
+1 MiB; compaction and append share a mutation lock. HTTP AI calls stop between
+provider requests when the client closes, saving a partial run with usage.
+An in-flight provider request is allowed to finish.
+
+**[SPEC]** Every v2 AI page now lists the latest 20 saved runs and opens details
+as text. Trigger tests expose saved regression prompts with per-prompt removal.
+Replacement preserves 500 entries and checks the previous list under a lock,
+returning 409 for stale edits. Disconnected runs do not become regression
+baselines. No CLI command, Store method, runtime dependency or schema changed.
+
+**[NOTE]** Red-first regressions cover retention at 0, 1 and 100,000 rows,
+corrupt tails, concurrent appends, inclusive UTC cutoff, stale prompt edits and
+disconnects through a counting HTTP provider. Full suites: 1,807 tests on each
+of Python 3.11–3.14, two optional skips each. Both smoke scripts, docs,
+complexity (1,116 functions), design tokens and every shipped JavaScript syntax
+check passed. Chromium checks against isolated fake-provider data covered
+estimate/run/history, literal HTML-like text, duplicate-text prompts with
+different expected skills, last-prompt removal, and a 390px viewport with no
+overflow or console warnings/errors. Hostile review also fixed a bad Host
+header in the cancellation fixture and registered fixture-local lock roots.
+Partial runs intentionally store progress/cost metadata, not intermediate
+model answers. No real-provider fidelity or human visual/accessibility
+sign-off was performed.
+
 ## 2026-11-09 — AI assist: bring your own key, trigger test, verified rewrite
 
 **[NOTE]** The maintainer asked for internet-wide research into BYOK AI features,

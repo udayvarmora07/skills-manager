@@ -26,7 +26,7 @@ from pathlib import Path
 
 from . import scopes
 from .ai import AiError, AiRun, untrusted_block
-from .atomic_io import atomic_write_text
+from .atomic_io import atomic_write_text, mutation_lock
 from .path_safety import mkdir_private
 from .validator import validate_skill_name
 
@@ -419,20 +419,12 @@ def read_prompt_set(data_dir: Path, scope_id: str) -> dict:
     return {"scope": scope_id, "prompts": [{"text": p["text"], "expected": p.get("expected")} for p in prompts]}
 
 
-def save_prompt_set(data_dir: Path, payload: dict) -> dict:
-    """Merge prompts into a scope's regression set (``replace: true`` overwrites it)."""
-    payload = payload if isinstance(payload, dict) else {}
-    scope_id = payload.get("scope")
-    path = _prompt_set_path(data_dir, scope_id)
-    incoming = payload.get("prompts")
-    if not isinstance(incoming, list):
-        raise AiError("prompts must be a list", "ai-input")
-    current = [] if payload.get("replace") else read_prompt_set(data_dir, scope_id)["prompts"]
+def _merge_prompts(current: list, incoming: list, limit: int) -> list:
     seen = {(p["text"], p["expected"]) for p in current}
     per_skill: dict = {}
     for p in current:
         per_skill[p["expected"]] = per_skill.get(p["expected"], 0) + 1
-    for item in incoming[:MAX_PROMPTS]:
+    for item in incoming[:limit]:
         if not isinstance(item, dict):
             continue
         text = _clean_text(item.get("text"), "a prompt")
@@ -444,10 +436,31 @@ def save_prompt_set(data_dir: Path, payload: dict) -> dict:
         seen.add((text, expected))
         per_skill[expected] = per_skill.get(expected, 0) + 1
         current.append({"text": text, "expected": expected})
-    current = current[:MAX_SAVED]
-    mkdir_private(path.parent)
-    atomic_write_text(path, json.dumps({"scope": scope_id, "prompts": current}, indent=1))
+    return current[:MAX_SAVED]
+
+
+def save_prompt_set(data_dir: Path, payload: dict) -> dict:
+    """Merge prompts or replace a scope's regression set with an optional precondition."""
+    payload = payload if isinstance(payload, dict) else {}
+    scope_id = payload.get("scope")
+    path = _prompt_set_path(data_dir, scope_id)
+    incoming = payload.get("prompts")
+    if not isinstance(incoming, list):
+        raise AiError("prompts must be a list", "ai-input")
+    with mutation_lock(path):
+        current = read_prompt_set(data_dir, scope_id)["prompts"]
+        if "expected_prompts" in payload and payload["expected_prompts"] != current:
+            raise AiError("the saved prompts changed; reload and try again", "ai-conflict", 409)
+        replacing = bool(payload.get("replace"))
+        current = _merge_prompts([] if replacing else current, incoming,
+                                 MAX_SAVED if replacing else MAX_PROMPTS)
+        mkdir_private(path.parent)
+        atomic_write_text(path, json.dumps({"scope": scope_id, "prompts": current}, indent=1))
     return {"scope": scope_id, "prompts": current}
+
+
+def _is_saved_run(result: dict) -> bool:
+    return result.get("status") != "disconnected" and result.get("prompt_source") == "saved"
 
 
 def _compare_with_previous(data_dir: Path, result: dict) -> tuple[str | None, list[dict]]:
@@ -456,7 +469,7 @@ def _compare_with_previous(data_dir: Path, result: dict) -> tuple[str | None, li
         if row.get("kind") != "trigger-test" or row.get("scope") != result["scope"]:
             continue
         previous = read_run(data_dir, row["run_id"])
-        if previous.get("prompt_source") != "saved":
+        if not _is_saved_run(previous):
             continue
         before = {s["name"]: s["hit_rate"] for s in previous.get("skills", [])}
         changes = []
@@ -660,21 +673,37 @@ def _save_run(data_dir: Path, result: dict) -> str:
     return run_id
 
 
-def list_runs(data_dir: Path, limit: int = 20) -> list[dict]:
-    directory = _runs_dir(data_dir)
-    out = []
+def _run_mtime(path: Path) -> float:
     try:
-        files = sorted(directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return path.stat().st_mtime
+    except OSError:
+        return 0
+
+
+def _run_summary(path: Path) -> dict | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("run", {}), dict):
+        return None
+    return {"run_id": path.stem, "kind": data.get("kind"), "scope": data.get("scope"),
+            "name": data.get("name"), "started": (data.get("run") or {}).get("started"),
+            "model": (data.get("run") or {}).get("model"), "status": data.get("status")}
+
+
+def list_runs(data_dir: Path, limit: int = 20) -> list[dict]:
+    try:
+        files = sorted(_runs_dir(data_dir).glob("*.json"), key=_run_mtime, reverse=True)
     except OSError:
         return []
-    for path in files[:limit]:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        out.append({"run_id": path.stem, "kind": data.get("kind"), "scope": data.get("scope"),
-                    "name": data.get("name"), "started": (data.get("run") or {}).get("started"),
-                    "model": (data.get("run") or {}).get("model")})
+    out = []
+    for path in files:
+        summary = _run_summary(path)
+        if summary is not None:
+            out.append(summary)
+        if len(out) >= limit:
+            break
     return out
 
 

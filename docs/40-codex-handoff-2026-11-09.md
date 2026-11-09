@@ -63,6 +63,10 @@ Ordered by value. Each task is independent unless it says otherwise.
 
 ### 3.1 AI hardening follow-ups (do first, small)
 
+**[NOTE] Completed 2026-11-09 on `codex/remaining-tasks`.** Retention,
+disconnect cancellation/partial history, text-only past runs and per-prompt
+removal are implemented. Evidence: @docs/06-progress-log.md.
+
 ```text
 Harden the shipped AI features in skillsmgr/ai*.py and skillsmgr/webui/v2/ai-center.js:
 1. <data>/ai/usage.jsonl grows forever and usage_summary() reads all of it on every

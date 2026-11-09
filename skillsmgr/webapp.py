@@ -10,6 +10,8 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import select
+import socket
 import shutil
 import subprocess  # nosec B404 - only the allowlisted installer and trusted opener use it.
 import sys
@@ -53,6 +55,17 @@ _STATIC_TYPES = {
     ".woff2": "font/woff2",
     ".woff": "font/woff",
 }
+
+def _client_disconnected(connection) -> bool:
+    """Probe without consuming request data or blocking the handler."""
+    try:
+        readable, _, _ = select.select([connection], [], [], 0)
+        return bool(readable) and connection.recv(1, socket.MSG_PEEK) == b""
+    except BlockingIOError:
+        return False
+    except OSError:
+        return True
+
 
 _SKILL_FIELDS = ("description", "license", "category", "compatibility", "version", "allowed_tools", "body")
 
@@ -1569,7 +1582,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
         handler = handlers.get(parts[2])
         if handler is None:
             return False
-        self._send_json(handler(self._body_json()))
+        return self._run_ai_handler(handler)
+
+    def _run_ai_handler(self, handler) -> bool:
+        body = self._body_json()
+        try:
+            with ai.client_disconnect_check(lambda: _client_disconnected(self.connection),
+                                            {k: body[k][:128] for k in ("scope", "name")
+                                             if isinstance(body.get(k), str)}):
+                result = handler(body)
+        except ai.ClientDisconnected:
+            return True
+        self._send_json(result)
         return True
 
     def _route_post(self):

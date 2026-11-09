@@ -6,6 +6,9 @@
 
 ## AI assist, bring your own key (2026-11-09)
 
+- [x] Handoff 3.1: compact old usage rows, stop between calls on client closure,
+  record partial runs, show Past runs as text, and view/remove saved regression
+  prompts with stale-edit protection and full 500-prompt replacement.
 - [x] Research communities, competitors, GitHub demand, BYOK practice and literature
   (@docs/39-ai-features-research-and-catalogue-2026-11-09.md).
 - [x] A0 BYOK foundation: stdlib client, env-first key, 0600 settings, caps, ledger.

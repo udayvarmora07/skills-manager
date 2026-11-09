@@ -265,6 +265,7 @@
 .ai-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; max-height: 280px; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 .ai-checks label { display: flex; align-items: center; gap: 8px; min-height: 32px; overflow-wrap: anywhere; }
 .ai-text { width: 100%; font-family: inherit; resize: vertical; }
+.ai-run-text { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--sunken); border: 1px solid var(--line); border-radius: 8px; }
 .ai-confirm { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); }
 .ai-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
 .ai-stats div { display: grid; gap: 2px; }

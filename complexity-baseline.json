@@ -166,7 +166,7 @@
       "lineno": 375
     },
     "skillsmgr/ai.py::usage_summary": {
-      "complexity": 10,
+      "complexity": 4,
       "end_lineno": 361,
       "lineno": 340
     },
@@ -596,7 +596,7 @@
       "lineno": 623
     },
     "skillsmgr/ai_skills.py::list_runs": {
-      "complexity": 6,
+      "complexity": 5,
       "end_lineno": 678,
       "lineno": 663
     },
@@ -616,7 +616,7 @@
       "lineno": 681
     },
     "skillsmgr/ai_skills.py::save_prompt_set": {
-      "complexity": 12,
+      "complexity": 8,
       "end_lineno": 450,
       "lineno": 422
     },

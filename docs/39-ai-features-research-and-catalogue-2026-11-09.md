@@ -82,6 +82,14 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 - **Applying** a candidate uses the existing `PATCH /api/skills/<name>?scope=` route, so the edit takes a snapshot and is undoable from Recovery.
 - **Untrusted input.** Skill text and prompts are wrapped in `<untrusted>` blocks with a standing instruction to treat them as data; the model has no tools; output must be JSON and is validated against real names.
 - **Files.** Finished runs are saved as `<data>/ai/runs/<kind>-<UTC>-<hex>.json` (newest 50). Calls are logged to `<data>/ai/usage.jsonl` with counts and an input hash only.
+- **Retention and disconnects (handoff 3.1).** When the usage ledger exceeds
+  1 MiB and contains dated rows older than 90 UTC days, those rows are removed
+  by atomic replacement coordinated with appends. Malformed rows do not break
+  today's counts. HTTP runs check for a closed client between calls and save
+  a partial run with `status: disconnected` and completed-call usage. An
+  already-running provider request finishes; no next call is started after
+  closure is detected. Past runs on every AI page lists the latest 20 saved
+  runs and opens their full contents as text.
 
 **[?]** The trigger test is a *simulation by the configured model*, not the agent's real router; results are labelled as estimates. Fidelity against a real agent's choices has not been measured.
 
@@ -104,6 +112,11 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 ## 10. A7 regression pack
 
 **[SPEC]** Any trigger-test result can be saved as the scope's regression prompts (`<data>/ai/prompt-sets/<scope>.json`; duplicates merged; at most 20 per skill and 500 per scope). A trigger test with `saved: true` re-runs them (skipping prompts whose skill is no longer listed) and compares every skill's hit rate with the most recent earlier saved-prompt run for that scope, listing each change and flagging regressions. The comparison spans whatever changed in between, edits or a different model; the run labels say which model answered each.
+
+The trigger page also lists saved prompts and removes one exact text/expected
+pair at a time after confirmation. Replacement preserves up to 500 entries;
+an `expected_prompts` precondition rejects stale tabs with HTTP 409. Partial
+disconnected runs are excluded from regression baselines.
 
 ## 11. A8 eval runner
 

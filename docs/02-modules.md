@@ -544,12 +544,20 @@ provider's environment variable takes precedence over a stored key, and
 `public_settings()` never returns the key. `AiRun` preflights every call
 against per-run and per-day input-token caps, refuses redirects, bounds
 responses at 2 MiB, appends counts and an input hash to `<data>/ai/usage.jsonl`,
-and parses JSON answers with `extract_json()`. `ai_skills.py` builds an agent's
+and parses JSON answers with `extract_json()`. Oversized usage ledgers are
+atomically compacted to remove dated rows older than 90 days; append and
+compaction share a cross-process lock. `AiRun` checks the requesting client's
+connection between calls; disconnects save a partial run with completed-call
+usage before stopping. The HTTP handler supplies that request-local check.
+`ai_skills.py` builds an agent's
 listing (`build_listing`), runs the trigger test (`trigger_test`) and the
 held-out-verified description rewrite (`improve_description`), and saves runs
 under `<data>/ai/runs/`. Saved regression prompts (A7) live in
 `<data>/ai/prompt-sets/`; a saved-prompt run is compared per skill with the
-previous one (`save_prompt_set`, `read_prompt_set`). `ai_overlap.py` (A3) judges bounded candidate
+previous one (`save_prompt_set`, `read_prompt_set`). Prompt replacement supports
+an `expected_prompts` precondition to reject stale edits, and preserves up to
+500 prompts. The v2 AI pages show saved runs as text and let users view and
+remove individual regression prompts. `ai_overlap.py` (A3) judges bounded candidate
 pairs in both orders and keeps only conflicts quoted verbatim from the files.
 `ai_budget.py` (A4) shortens the largest descriptions when a listing exceeds
 its budget and marks each shorter version safe only if it still triggers.

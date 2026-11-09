@@ -20,7 +20,8 @@
         portName: "", portTarget: "codex", ported: null,
         question: "", askScope: "all", asked: null,
         evalName: "", evalMax: 10, evalResult: null, evalEstimate: null,
-        savedCount: 0, savedNote: "",
+        savedCount: 0, savedPrompts: [], savedNote: "", savedError: "", savedBusy: false, savedRequest: 0,
+        pastRuns: [], pastRun: null, historyError: "", historyBusy: false, historyRequest: 0,
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
@@ -100,6 +101,7 @@
         if (!s) return;
         this.settings = s;
         this.form = { provider: s.provider || "", model: s.model || "", base_url: s.base_url || "", api_key: "", max_run_tokens: s.max_run_tokens, max_day_tokens: s.max_day_tokens };
+        this.loadRuns();
       },
       pickProvider() {
         const p = this.provider; if (!p) return;
@@ -116,11 +118,55 @@
       async clearKey() { const s = await this.guard(() => post("/api/ai/settings", { clear_key: true })); if (s) { this.settings = s; this.note = "Stored key removed."; } },
       async turnOff() { const s = await this.guard(() => post("/api/ai/settings", { provider: null })); if (s) { this.settings = s; this.load(); this.note = "AI features are off and the stored key is deleted."; } },
       async testConnection() { const r = await this.guard(() => post("/api/ai/test-connection", {})); if (r) { this.connection = r; this.load(); } },
-      async loadSaved() { this.savedCount = 0; if (!this.scope) return; try { this.savedCount = (await api("/api/ai/prompt-sets/" + encodeURIComponent(this.scope))).prompts.length; } catch (e) { this.savedCount = 0; } },
+      async loadRuns() {
+        const request = ++this.historyRequest;
+        this.historyBusy = true; this.historyError = ""; this.pastRun = null;
+        try { const r = await api("/api/ai/runs"); if (request === this.historyRequest) this.pastRuns = r.runs; }
+        catch (e) { if (request === this.historyRequest) this.historyError = e.message || String(e); }
+        finally { if (request === this.historyRequest) this.historyBusy = false; }
+      },
+      async openRun(id) {
+        const request = ++this.historyRequest;
+        this.historyBusy = true; this.historyError = ""; this.pastRun = null;
+        try { const r = await api("/api/ai/runs/" + encodeURIComponent(id)); if (request === this.historyRequest) this.pastRun = r; }
+        catch (e) { if (request === this.historyRequest) this.historyError = e.message || String(e); }
+        finally { if (request === this.historyRequest) this.historyBusy = false; }
+      },
+      runText(run) { return JSON.stringify(run, null, 2); },
+      async loadSaved() {
+        const request = ++this.savedRequest; const scope = this.scope;
+        this.savedPrompts = []; this.savedCount = 0; this.savedNote = ""; this.savedError = "";
+        this.savedBusy = false;
+        if (!scope) return;
+        this.savedBusy = true;
+        try { const r = await api("/api/ai/prompt-sets/" + encodeURIComponent(scope)); if (request === this.savedRequest) { this.savedPrompts = r.prompts; this.savedCount = r.prompts.length; } }
+        catch (e) { if (request === this.savedRequest) this.savedError = e.message || String(e); }
+        finally { if (request === this.savedRequest) this.savedBusy = false; }
+      },
+      async removePrompt(prompt) {
+        if (this.savedBusy || !confirm("Remove this saved regression prompt?")) return;
+        const scope = this.scope; const previous = this.savedPrompts;
+        const request = ++this.savedRequest;
+        let failure = "";
+        this.savedBusy = true; this.savedError = ""; this.savedNote = "";
+        const prompts = previous.filter((p) => p.text !== prompt.text || p.expected !== prompt.expected);
+        try {
+          const r = await post("/api/ai/prompt-sets", { scope, prompts, replace: true, expected_prompts: previous });
+          if (request === this.savedRequest) { this.savedPrompts = r.prompts; this.savedCount = r.prompts.length; this.estimate = null; this.savedNote = "Prompt removed."; }
+        } catch (e) {
+          failure = e.message || String(e);
+        } finally {
+          if (request === this.savedRequest && failure) { await this.loadSaved(); if (scope === this.scope) this.savedError = failure; }
+          else if (request === this.savedRequest) this.savedBusy = false;
+          else if (scope === this.scope) await this.loadSaved();
+        }
+      },
       async saveTests() {
+        if (this.savedBusy) return;
+        ++this.savedRequest;
         const prompts = this.result.prompts.map((p) => ({ text: p.text, expected: p.expected }));
         const r = await this.guard(() => post("/api/ai/prompt-sets", { scope: this.result.scope, prompts }));
-        if (r) { this.savedCount = r.prompts.length; this.savedNote = "Saved. " + r.prompts.length + " regression prompts for this agent; re-run them after edits or a model change."; }
+        if (r && r.scope === this.scope) { this.savedPrompts = r.prompts; this.savedCount = r.prompts.length; this.savedNote = "Saved. " + r.prompts.length + " regression prompts for this agent; re-run them after edits or a model change."; }
       },
       triggerBody(estimate) {
         const body = { scope: this.scope, repeats: Number(this.repeats), estimate };
@@ -222,6 +268,18 @@
             <label for="ai-prompts" class="tp-fine">One request per line. End a line with <code>=&gt; skill-name</code> for the skill it should load, or <code>=&gt; none</code>.</label>
             <textarea id="ai-prompts" class="field ai-text" v-model="promptText" rows="8" placeholder="fill in this tax form PDF => pdf-forms"></textarea>
           </template>
+          <details class="tp-more">
+            <summary>Saved regression prompts ({{ savedCount }})</summary>
+            <p v-if="!savedPrompts.length && !savedBusy" class="tp-empty">No saved prompts for this agent.</p>
+            <ul class="tp-rows"><li v-for="(p,i) in savedPrompts" :key="JSON.stringify([p.text,p.expected])" class="v2-tool-row">
+              <span class="tp-row-main"><strong>{{ p.text }}</strong><small>Should load: {{ p.expected || 'none' }}</small></span>
+              <button class="btn btn-line btn-sm" :disabled="busy || savedBusy" :aria-label="'Remove saved prompt ' + (i+1)" @click="removePrompt(p)">Remove</button>
+            </li></ul>
+            <button class="btn btn-line btn-sm" :disabled="busy || savedBusy" @click="loadSaved()">Refresh saved prompts</button>
+          </details>
+          <p v-if="savedBusy" class="tp-fine" role="status">Loading saved prompts…</p>
+          <p v-if="savedError" class="v2-tool-error" role="alert">{{ savedError }}</p>
+          <p v-if="savedNote" class="tp-fine" role="status">{{ savedNote }}</p>
           <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !scope || (mode==='generate' ? !chosen.length : mode==='saved' ? !savedCount : !parsedPrompts.length)" @click="estimateTrigger()">Check what will be sent</button></div>
           <div v-if="estimate" class="ai-confirm" role="region" aria-label="Before sending">
             <p v-for="(line,i) in estimate.egress" :key="i" class="tp-fine">{{ line }}</p>
@@ -250,8 +308,7 @@
           <details class="tp-more"><summary>Every prompt and what was chosen</summary>
             <table class="ai-table"><thead><tr><th>Prompt</th><th>Should load</th><th>Chosen</th></tr></thead>
               <tbody><tr v-for="p in result.prompts" :key="p.id"><td>{{ p.text }}</td><td class="tp-mono">{{ p.expected || 'none' }}</td><td class="tp-mono">{{ choiceList(p.choices) }}</td></tr></tbody></table></details>
-          <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy" @click="saveTests()">Save these prompts as regression tests</button></div>
-          <p v-if="savedNote" class="tp-fine" role="status">{{ savedNote }}</p>
+          <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy || savedBusy" @click="saveTests()">Save these prompts as regression tests</button></div>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
         </section>
       </template>
@@ -442,6 +499,21 @@
           <p class="tp-fine">{{ improve.run.advisory }} {{ fmt(improve.run.input_tokens) }} input tokens used.</p>
         </section>
       </template>
+
+      <section class="card tp-panel" aria-labelledby="ai-history-h">
+        <header class="tp-panel-h"><h2 id="ai-history-h">Past runs</h2>
+          <button class="btn btn-line btn-sm" :disabled="historyBusy" @click="loadRuns()">Refresh past runs</button></header>
+        <p class="tp-fine">Latest 20 saved runs across AI tools.</p>
+        <p v-if="historyError" class="v2-tool-error" role="alert">{{ historyError }}</p>
+        <p v-if="historyBusy" class="tp-fine" role="status">Loading past runs…</p>
+        <p v-else-if="!pastRuns.length" class="tp-empty">No saved runs yet.</p>
+        <ul class="tp-rows"><li v-for="r in pastRuns" :key="r.run_id" class="v2-tool-row">
+          <span class="tp-row-main"><strong>{{ r.kind }}<span v-if="r.status==='disconnected'"> · Partial run</span></strong><small>{{ r.started }} · {{ r.model }}<span v-if="r.scope"> · {{ r.scope }}</span><span v-if="r.name"> · {{ r.name }}</span></small></span>
+          <button class="btn btn-line btn-sm" :disabled="historyBusy" :aria-label="'View run ' + r.run_id" @click="openRun(r.run_id)">View</button>
+        </li></ul>
+        <div v-if="pastRun" aria-live="polite"><h3>Saved run details</h3><p class="tp-fine">Saved model output, shown as text. Results are estimates.</p>
+          <pre class="ai-run-text tp-mono" tabindex="0" aria-label="Saved run details">{{ runText(pastRun) }}</pre></div>
+      </section>
     </div>`,
   };
 })();
