@@ -61,7 +61,7 @@ const app = createApp({
   data() {
     return {
       route: parseRoute(), m: null, loading: true, loadError: "", history: [], busy: false,
-      records: [], scopes: [], catalog: {tags:{}, profiles:{}}, catalogError: "", tagFilter: "", libraryView: savedPreference("skillsmgr-v2-library-view",["shelf","instances"],"shelf"), toolTarget: null, readCopyPath: "", readCopyScope: "", readCopyName: "",
+      records: [], scopes: [], catalog: {tags:{}, profiles:{}}, catalogError: "", tagFilter: "", libraryView: savedPreference("skillsmgr-v2-library-view",["shelf","instances"],"shelf"), toolTarget: null, sourceReviewHandoff: null, readCopyPath: "", readCopyScope: "", readCopyName: "",
       historyError: "", skillHistoryError: "", trashError: "", trashLoading: false, importFull: false, importResult: null, createTemplates: [], commandQuery: "",
       query: "", filter: "all", agentFilter: "all", extra: {}, sortBy: "name",
       front: null, skipped: [], dismissed: [], done: 0, srcChoice: "",
@@ -280,6 +280,8 @@ const app = createApp({
     preferencesChanged() {this.theme=savedPreference("skillsmgr-theme",THEMES,"system");this.formatLocale=savedPreference("skillsmgr-locale",["system","en-US","en-GB","en-IN"],"system");document.documentElement.dataset.textSize=savedPreference("skillsmgr-text-size",["standard","large"],"standard");this.applyTheme(); },
     skillTags(name) {return (this.catalog.tags || {})[name] || [];},
     openSource(record) { this.toolTarget=markRaw(record);location.hash="#/tools/source-update"; },
+    openConciseReview(handoff) { if(!handoff||!handoff.target||!handoff.reviewId)return;this.toolTarget=markRaw(handoff.target);this.sourceReviewHandoff={...handoff,target:this.toolTarget};location.hash="#/tools/source-update"; },
+    sourceReviewConsumed(reviewId) { if(this.sourceReviewHandoff&&this.sourceReviewHandoff.reviewId===reviewId)this.sourceReviewHandoff=null; },
     inspectRecord(record) { this.query=record.name;this.filter="all";this.tagFilter="";this.agentFilter=record.scope||"all";this.libraryView="instances";location.hash="#/skills"; },
     openRecord(record) {this.toolTarget=markRaw(record);this.readCopyPath=record.physical_path||record.path||"";this.readCopyScope=record.scope||"";this.readCopyName=record.name||"";location.hash="#/skill/"+encodeURIComponent(record.name);},
     openCommands() {this.commandQuery="";this.openDialog({title:"Find a tool or action",commands:true,cancel:"Close"}); },

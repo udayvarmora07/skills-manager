@@ -53,7 +53,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | **Shipped** |
 | A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | **Shipped** |
 | A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | Idea |
-| A13 | Conciseness / splitter advisor (move bulk to `references/`) | claude-code #74473 (210k tokens) | Idea |
+| A13 | Conciseness / splitter advisor (move bulk to `references/`) | claude-code #74473 (210k tokens) | **Shipped** |
 | A14 | CI mode: fixed-seed trigger test with machine-readable output | Sanity on X; skill-linter SARIF | Idea; needs CLI approval |
 | — | Transcript mining with a cloud model | Weak demand; very high privacy cost | **Not recommended**; local-model-only if ever |
 | — | Auto-applying any model output | Every pass | **Never** |
@@ -153,8 +153,38 @@ Use this draft fills the existing New skill form, unsaved, and is disabled for
 validation errors or an unmeasured result. The user reviews that form and
 explicitly creates the skill through the existing scope-aware write path.
 
-## 15. Not yet built
+## 15. A13 conciseness and splitter advisor
 
-- **A12–A13** profile suggester and conciseness/splitter advisor.
+**[SPEC]** `ai_concise` counts tokens per section before contacting a model,
+ignoring Markdown headings inside fenced code. The selected primary document
+is untrusted input. The proposal contains a shorter body linking to new
+`references/*.md` files; the existing frontmatter and companion files are
+preserved. Reference paths, duplicates, collisions, links and size limits are
+validated. Counts before and after are computed with `tokens.count_tokens`,
+including the new references separately and identifying the counting method.
+These counts measure the primary document and added references, not a claim
+of lower total library usage or equivalent behavior.
+
+The captured tree is bounded and tied to the installed source content hash across
+generation. Concurrent content changes refuse the proposal. A private
+candidate goes through `source_update.prepare_local_update`; the v2 page
+hands the resulting review to the existing Update from folder review UI.
+Only its explicit approval/commit path applies the full tree and keeps a
+snapshot. Pending UI reviews are cancelled on input or in-app route changes
+unless ownership has transferred to the source-update page. Estimate mode
+sends no request and creates no candidate or review. No installed skill is
+changed by generation.
+
+**[NOTE]** Safe capture currently requires POSIX directory-descriptor and
+no-follow support; unsupported platforms return a clean error. The existing
+source-update helper still reads its live manifest through filesystem paths;
+this change does not certify that helper against hostile concurrent path
+swaps. Commit hashes cover file names and bytes, not mode or empty-directory
+changes made after review. The advisor rechecks those attributes through
+staging; the existing commit contract remains unchanged.
+
+## 16. Not yet built
+
+- **A12** profile suggester.
 - **A14 CI mode**: needs a CLI surface, which needs maintainer approval (locked constraint 5).
 - **Fidelity**: measure the trigger simulation against a real agent's choices before treating its numbers as more than estimates.

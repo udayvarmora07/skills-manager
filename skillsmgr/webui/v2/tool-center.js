@@ -24,8 +24,8 @@
   const { toolGroups: TOOL_GROUPS } = window.SkillsV2Model;
 
   window.SkillsV2ToolCenter = {
-    props: {page:String, records:{type:Array,default:()=>[]}, scopes:{type:Array,default:()=>[]}, target:Object},
-    emits:['changed','inspect','preference','use-draft'],
+    props: {page:String, records:{type:Array,default:()=>[]}, scopes:{type:Array,default:()=>[]}, target:Object, sourceReviewHandoff:Object},
+    emits:['changed','inspect','preference','use-draft','open-source-review','source-review-consumed'],
     data() { return {
       busy:false,error:'',result:null,sequence:0,readTokens:{},loading:{},qualityEnvelope:null, tab:'registry', source:'',op:'browse',view:'all-time',stale:false, pageNo:0,review:null,trust:false,
       runnerPreview:'',runner:'npx',runnerScope:'global',agents:'',filter:'',copy:false,listOnly:false,files:[],reviewedFiles:[],folderReviewed:false,folderTrust:false,folderDocuments:[],
@@ -66,6 +66,7 @@
     watch:{page:{immediate:true,handler(p,previous){this.sequence++;this.loading={};if(previous==='source-update'&&p!=='source-update')this.retireSource();this.error='';
       this.result=null;
       this.report=null;
+       if(p==='source-update'&&this.sourceReviewHandoff)this.$nextTick(()=>this.loadSourceHandoff(this.sourceReviewHandoff));
        if(p==='profiles') this.loadCatalog();
        if(p==='templates') this.loadTemplates();
        if(p==='quality') this.loadQuality();
@@ -108,6 +109,14 @@
       this.sourceTarget=null;
       this.trust=false;
       if(r&&r.review_state==='pending')api('/api/source-updates/reviews/'+enc(r.review_id),{method:'DELETE'}).catch(e=>{this.error='Could not cancel previous review: '+e.message})},
+      async loadSourceHandoff(handoff){const generation=this.sequence;const id=handoff&&handoff.reviewId;const target=handoff&&handoff.target;if(!id||!target)return;this.$emit('source-review-consumed',id);
+        try{const review=await api('/api/source-updates/reviews/'+enc(id));
+          if(!this.alive||this.page!=='source-update'||generation!==this.sequence||this.target!==target){if(review.review_state==='pending')await api('/api/source-updates/reviews/'+enc(id),{method:'DELETE'});return;}
+          const expectedPath=target.physical_path||target.path;const path=review.target&&review.target.physical_path;
+          if(review.review_id!==id||!expectedPath||path!==expectedPath||target.name!==review.target.name||target.scope!==review.target.scope){if(review.review_state==='pending')await api('/api/source-updates/reviews/'+enc(id),{method:'DELETE'});this.error='The prepared review does not match the selected skill copy.';return;}
+          this.chosen='';this.sourceTarget={name:target.name,scope:target.scope,path};this.sourceReview=review;this.sourceSuccess=null;this.trust=false;
+        }catch(e){try{await api('/api/source-updates/reviews/'+enc(id),{method:'DELETE'});}catch(_e){}if(generation===this.sequence)this.error='Could not open the prepared source-update review: '+(e.message||String(e));}
+      },
       async task(fn){if(this.busy)return;
        this.busy=true;
       this.error='';
@@ -310,7 +319,7 @@
       </template>
 
       <template v-else-if="page.startsWith('ai-')">
-        <ai-center :page="page" :records="records" :scopes="scopes" :target="target" @changed="$emit('changed')" @use-draft="$emit('use-draft',$event)"></ai-center>
+        <ai-center :page="page" :records="records" :scopes="scopes" :target="target" @changed="$emit('changed')" @use-draft="$emit('use-draft',$event)" @open-source-review="$emit('open-source-review',$event)"></ai-center>
       </template>
 
       <template v-else-if="page==='install'">

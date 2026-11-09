@@ -108,6 +108,10 @@ steals another skill's prompts); browser check; docs updated.
 
 ### 3.3 A13 conciseness and splitter advisor
 
+**[NOTE] Completed 2026-11-09 on `codex/remaining-tasks`.** Computed counts,
+reference proposals and exact source-update review/apply are implemented.
+Verification and inherited platform/review limits: @docs/06-progress-log.md.
+
 ```text
 Implement docs/39 A13 in skillsmgr/ai_concise.py, POST /api/ai/concise
 {scope, name, estimate?}. Claude Code issue #74473 shows a bundled skill injecting

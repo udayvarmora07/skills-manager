@@ -8,6 +8,41 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Handoff 3.3: conciseness proposals through whole-tree review
+
+**[SPEC]** A13 adds `ai_concise.py` and `POST /api/ai/concise`. Section token
+counts are deterministic; model output proposes a shorter primary document
+and reference files. Frontmatter and companions are preserved. Bounds,
+reference paths, links and collisions are checked; the captured tree content
+hash prevents a proposal from silently reverting content edits made during
+model latency. Shared JSON decoding also preserves Markdown fences inside
+model-returned strings, fixing corruption of code examples in AI drafts.
+
+**[SPEC]** The v2 advisor shows computed before/after counts and counting
+method, then transfers the exact target and pending review to the existing
+source-update UI. Explicit reviewed commit preserves the whole-tree snapshot
+and atomic update path. Generation writes no installed source; estimate mode
+sends nothing and stages no review. No CLI command, Store method, runtime
+dependency or schema changed.
+
+**[NOTE]** Fourteen red-first regressions cover the fake provider, a real
+source-update apply/snapshot, binary and mode preservation, disabled targets,
+bounded enumeration, path/link/collision/size rejection, source-change and
+cleanup failures, no-send HTTP estimate, computed counts and Markdown fence
+integrity. Chromium against isolated fixture data verified estimate with no
+usage/review, proposal without live changes, exact review handoff and explicit
+apply (reference created, binary preserved, snapshot present), and in-app
+abandonment cancellation. The 390px proposal/review flow had no observed
+overflow or console warnings/errors. Complexity: 1,149 functions across 40
+files; no baseline increased.
+
+**[NOTE]** Capture needs POSIX descriptor/no-follow support and fails cleanly
+where unavailable. Existing source-update live-manifest path reads and
+post-review mode/empty-directory changes remain outside its proven guarantees;
+the advisor rechecks captured bytes, modes and directories through staging,
+but does not certify the inherited helper against hostile path swaps. No real
+provider or human-only sign-off was used.
+
 ## 2026-11-09 — Handoff 3.2: verified skill drafting
 
 **[SPEC]** A11 adds `ai_draft.py` and `POST /api/ai/draft-skill`: draft from an

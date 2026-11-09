@@ -36,7 +36,7 @@
 
   <main id="main" ref="main" tabindex="-1" :inert="!!dialog">
     <!-- loading / failure -->
-    <tool-center v-if="route.page === 'tools'" :page="route.tool || 'tools'" :records="records" :scopes="scopes" :target="toolTarget" @changed="refresh()" @inspect="inspectRecord($event)" @preference="preferencesChanged()" @use-draft="useDraft($event)"></tool-center>
+    <tool-center v-if="route.page === 'tools'" :page="route.tool || 'tools'" :records="records" :scopes="scopes" :target="toolTarget" :source-review-handoff="sourceReviewHandoff" @changed="refresh()" @inspect="inspectRecord($event)" @preference="preferencesChanged()" @use-draft="useDraft($event)" @open-source-review="openConciseReview($event)" @source-review-consumed="sourceReviewConsumed($event)"></tool-center>
     <div class="page" v-else-if="loading && !m">
       <h1 class="h1" id="h1" tabindex="-1">Looking at your agents…</h1>
       <p class="lede">Reading the skill folders on this computer.</p>

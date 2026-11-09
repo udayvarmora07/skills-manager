@@ -475,7 +475,7 @@ def extract_json(text: str):
     """Parse the first JSON object or array in a model answer."""
     if not isinstance(text, str):
         raise AiError("the model returned no text", "ai-bad-output", 502)
-    cleaned = re.sub(r"```(?:json)?", "", text)
+    cleaned = text
     decoder = json.JSONDecoder()
     for index, char in enumerate(cleaned):
         if char in "{[":

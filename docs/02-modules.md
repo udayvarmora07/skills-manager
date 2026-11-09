@@ -586,6 +586,22 @@ mode sends nothing. Results live in the existing AI run history. The v2 tool
 fills the existing New skill form without saving; ordinary explicit creation
 remains the write path.
 
+## `ai_concise.py`
+
+**[SPEC] Conciseness advisor (A13).** Deterministic section counts use
+`tokens.count_tokens`; headings inside fenced code do not start sections.
+The model proposes a shorter primary document and new `references/*.md`
+files. Paths, sizes, links and collisions are checked before staging. A
+bounded captured tree preserves companions and binds the proposal to the
+observed source content hash across the model call. Changed content invalidates it.
+`source_update.prepare_local_update` creates the ordinary whole-tree review;
+the existing reviewed commit takes a snapshot and applies it atomically.
+Model output is never written directly to the installed skill. The shared
+JSON decoder preserves Markdown fences inside model-returned JSON strings.
+Estimate mode
+sends nothing and creates no review. Computed primary and reference counts
+are reported with their counting method; semantic equivalence is not claimed.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official

@@ -10,7 +10,7 @@
 
   window.SkillsV2AiCenter = {
     props: { page: String, records: { type: Array, default: () => [] }, scopes: { type: Array, default: () => [] }, target: Object },
-    emits: ["changed", "use-draft"],
+    emits: ["changed", "use-draft", "open-source-review"],
     data() {
       return {
         settings: null, form: { provider: "", model: "", base_url: "", api_key: "", max_run_tokens: 300000, max_day_tokens: 2000000 },
@@ -23,6 +23,7 @@
         savedCount: 0, savedPrompts: [], savedNote: "", savedError: "", savedBusy: false, savedRequest: 0,
         pastRuns: [], pastRun: null, historyError: "", historyBusy: false, historyRequest: 0,
         draftScope: "", draftName: "", draftBrief: "", draftEstimate: null, draftEstimateKey: "", draftResult: null,
+        conciseScope: "", conciseName: "", conciseTargetKey: "", conciseEstimate: null, conciseEstimateKey: "", conciseResult: null, conciseRequest: 0, conciseReviewOwned: true, conciseOpening: false,
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
@@ -61,13 +62,31 @@
           && this.draftResult.validation.valid === true && draft
           && ["name", "description", "body"].every((key) => typeof draft[key] === "string"));
       },
+      conciseScopes() { const ids = new Set(this.records.filter((r) => this.conciseWritable(r)).map((r) => r.scope)); return this.scopes.filter((s) => ids.has(s.id)).map((s) => ({ id: s.id, label: s.id === "global" ? "Your library" : s.label || s.id })); },
+      conciseNames() { return [...new Set(this.records.filter((r) => r.scope === this.conciseScope && this.conciseWritable(r)).map((r) => r.name))].sort(); },
+      conciseRecords() {
+        const seen = new Set(); const out = [];
+        for (const r of this.records) { if (r.scope !== this.conciseScope || r.name !== this.conciseName || !this.conciseWritable(r)) continue;
+          const path = r.physical_path || r.path; const key = JSON.stringify([r.scope, r.name, path]);
+          if (!seen.has(key)) { seen.add(key); out.push({ record: r, key, path }); }
+        }
+        return out;
+      },
+      conciseTarget() { return this.conciseRecords.find((x) => x.key === this.conciseTargetKey) || null; },
+      conciseEstimateCurrent() { return !!this.conciseEstimate && this.conciseEstimateKey === this.conciseInputKey(); },
+      canOpenConciseReview() { return !!(!this.conciseOpening && this.conciseResult && this.conciseResult.status === "review-required" && this.conciseResult.review && this.conciseResult.review.review_id && this.conciseTarget); },
     },
     watch: {
-      page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
+      page: { immediate: true, handler(next, previous) { if (previous === "ai-concise" && next !== "ai-concise") this.clearConciseProposal(); this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
       scope() { this.ported = null; this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       draftScope() { this.clearDraftProposal(); },
       draftName() { this.clearDraftProposal(); },
       draftBrief() { this.clearDraftProposal(); },
+      conciseScope() { this.conciseName = ""; this.conciseTargetKey = ""; this.clearConciseProposal(); },
+      conciseName() { this.conciseTargetKey = ""; this.clearConciseProposal(); },
+      conciseTargetKey() { this.clearConciseProposal(); },
+      records() { if (this.page === "ai-concise" && this.conciseTargetKey && !this.conciseTarget) this.clearConciseProposal(); },
+      conciseScopes: { immediate: true, handler(list) { if (!list.some((s) => s.id === this.conciseScope)) this.conciseScope = (list[0] || {}).id || ""; } },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
       draftScopes: { immediate: true, handler(list) { if (!list.some((s) => s.id === this.draftScope)) this.draftScope = (list.find((s) => s.id === "global") || list[0] || {}).id || ""; } },
     },
@@ -103,6 +122,41 @@
       choiceList(choices) { return Object.entries(choices || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => this.skillLabel(k) + (n > 1 ? " ×" + n : "")).join(", "); },
       draftInputKey() { return JSON.stringify([this.draftScope, this.draftName.trim(), this.draftBrief.trim()]); },
       clearDraftProposal() { this.draftEstimate = null; this.draftEstimateKey = ""; this.draftResult = null; },
+      conciseWritable(r) { return !!(r && r.addressable !== false && (r.physical_path || r.path) && this.scopes.some((s) => s.id === r.scope && s.writable)); },
+      conciseInputKey() { return JSON.stringify([this.conciseScope, this.conciseName, this.conciseTargetKey]); },
+      async cancelConciseReview(result) {
+        const review = result && result.review;
+        if (!review || !review.review_id || review.review_state !== "pending") return;
+        try { await api("/api/source-updates/reviews/" + encodeURIComponent(review.review_id), { method: "DELETE" }); }
+        catch (e) { this.error = "Could not cancel an unused review: " + ((e && e.message) || String(e)); }
+      },
+      clearConciseProposal() {
+        this.conciseRequest++;
+        const old = this.conciseResult;
+        if (old && this.conciseReviewOwned) this.cancelConciseReview(old);
+        this.conciseEstimate = null; this.conciseEstimateKey = ""; this.conciseResult = null; this.conciseReviewOwned = true;
+      },
+      conciseBody(estimate) { const t = this.conciseTarget; return { scope: this.conciseScope, name: this.conciseName, target_path: t && t.path, estimate }; },
+      async estimateConcise() {
+        if (!this.conciseTarget) return;
+        this.clearConciseProposal(); const req = ++this.conciseRequest; const key = this.conciseInputKey();
+        const r = await this.guard(() => post("/api/ai/concise", this.conciseBody(true)));
+        if (req !== this.conciseRequest || key !== this.conciseInputKey() || this.page !== "ai-concise" || !this.conciseTarget) return;
+        if (r && r.status === "estimate") { this.conciseEstimate = r; this.conciseEstimateKey = key; }
+      },
+      async runConcise() {
+        if (!this.conciseEstimateCurrent || !this.conciseTarget) return;
+        const req = ++this.conciseRequest; const key = this.conciseInputKey(); this.conciseResult = null;
+        const r = await this.guard(() => post("/api/ai/concise", this.conciseBody(false)));
+        if (req !== this.conciseRequest || key !== this.conciseInputKey() || this.page !== "ai-concise" || !this.conciseTarget) { if (r) await this.cancelConciseReview(r); return; }
+        if (r && ["review-required", "blocked", "no-change"].includes(r.status)) { this.conciseResult = r; this.conciseReviewOwned = true; this.conciseEstimate = null; this.conciseEstimateKey = ""; this.loadRuns(); }
+      },
+      openConciseReview() {
+        if (!this.canOpenConciseReview) return;
+        this.conciseOpening = true;
+        this.conciseReviewOwned = false;
+        this.$emit("open-source-review", { target: this.conciseTarget.record, reviewId: this.conciseResult.review.review_id });
+      },
       draftBody(estimate) { return { scope: this.draftScope, brief: this.draftBrief.trim(), name: this.draftName.trim() || undefined, estimate }; },
       async estimateDraft() {
         if (!this.draftBrief.trim() || !this.draftScope) return;
@@ -360,6 +414,40 @@
               <tbody><tr v-for="p in result.prompts" :key="p.id"><td>{{ p.text }}</td><td class="tp-mono">{{ p.expected || 'none' }}</td><td class="tp-mono">{{ choiceList(p.choices) }}</td></tr></tbody></table></details>
           <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy || savedBusy" @click="saveTests()">Save these prompts as regression tests</button></div>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-concise'">
+        <h1 class="h1" id="h1" tabindex="-1">Shorten a skill</h1>
+        <p class="lede">Ask for a shorter primary document. Any new reference files and the exact folder change go through the normal source-update review.</p>
+        <section class="card tp-panel" aria-labelledby="ai-concise-form-h">
+          <h2 id="ai-concise-form-h">Choose the exact skill copy</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-concise-scope"><b>Scope</b></label><select id="ai-concise-scope" class="field" v-model="conciseScope" :disabled="busy"><option value="">Choose…</option><option v-for="s in conciseScopes" :key="s.id" :value="s.id">{{s.label}}</option></select></div>
+            <div class="tp-set-row"><label for="ai-concise-name"><b>Skill</b></label><select id="ai-concise-name" class="field" v-model="conciseName" :disabled="busy||!conciseScope"><option value="">Choose…</option><option v-for="n in conciseNames" :key="n" :value="n">{{n}}</option></select></div>
+            <div class="tp-set-row"><label for="ai-concise-target"><b>Physical copy</b><small>Disabled copies are included. Choose a path when the same skill has multiple copies.</small></label><select id="ai-concise-target" class="field" v-model="conciseTargetKey" :disabled="busy||!conciseName"><option value="">Choose exact path…</option><option v-for="t in conciseRecords" :key="t.key" :value="t.key">{{t.path}}</option></select></div>
+          </div>
+          <p class="tp-fine">The selected skill document is sent to your configured model. The token comparison covers the primary document plus newly added references; it does not establish semantic equivalence.</p>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy||!conciseTarget" @click="estimateConcise()">Check what will be sent</button></div>
+          <div v-if="conciseEstimateCurrent" class="ai-confirm" role="region" aria-label="Before sending the concise request">
+            <p v-for="(line,i) in conciseEstimate.egress||[]" :key="i" class="tp-fine">{{line}}</p>
+            <p class="tp-fine">About {{fmt(conciseEstimate.run&&conciseEstimate.run.estimated_input_tokens)}} input tokens to {{conciseEstimate.run&&conciseEstimate.run.model}}. No proposal has been generated yet.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy||!conciseEstimateCurrent" @click="runConcise()">Send and prepare proposal</button><button class="btn btn-line" :disabled="busy" @click="clearConciseProposal()">Cancel</button></div>
+          </div>
+        </section>
+        <section v-if="conciseResult" class="card tp-panel" aria-live="polite" aria-labelledby="ai-concise-result-h">
+          <header class="tp-panel-h"><div><h2 id="ai-concise-result-h">Conciseness proposal</h2><p>{{conciseResult.name}} · {{conciseResult.scope}} · {{conciseResult.run&&conciseResult.run.model}}</p></div><span :class="['pill',conciseResult.status==='review-required'?'warn':conciseResult.status==='no-change'?'off':'bad']">{{conciseResult.status==='review-required'?'Review required':conciseResult.status==='no-change'?'No change':'Blocked'}}</span></header>
+          <div v-if="conciseResult.tokens" class="ai-stats"><div><b class="num">{{fmt(conciseResult.tokens.primary_before)}} → {{fmt(conciseResult.tokens.primary_after)}}</b><small>primary document tokens</small></div><div><b class="num">{{fmt(conciseResult.tokens.reference_added)}}</b><small>new reference tokens</small></div><div><b class="num">{{fmt(conciseResult.tokens.total_before)}} → {{fmt(conciseResult.tokens.total_after)}}</b><small>primary + new references</small></div></div>
+          <p v-if="conciseResult.tokens&&conciseResult.tokens.primary_saved!=null" class="tp-fine">Primary document change: {{conciseResult.tokens.primary_saved>0?conciseResult.tokens.primary_saved+' tokens saved':conciseResult.tokens.primary_saved<0?Math.abs(conciseResult.tokens.primary_saved)+' tokens added':'no token change'}}. Overall: {{conciseResult.tokens.total_saved>0?conciseResult.tokens.total_saved+' tokens saved':conciseResult.tokens.total_saved<0?Math.abs(conciseResult.tokens.total_saved)+' tokens added':'no token savings'}} across the primary document and new references.</p>
+          <p v-if="conciseResult.tokens&&conciseResult.tokens.total_saved<=0" class="tp-issue warn">This proposal does not reduce the combined token count.</p>
+          <p v-if="conciseResult.tokens" class="tp-fine">{{conciseResult.tokens.method}}</p>
+          <h3>Sections</h3><div v-if="(conciseResult.sections||[]).length" class="tp-rows"><div v-for="(s,i) in conciseResult.sections" :key="i" class="v2-tool-row"><span class="tp-row-main"><strong>{{s.heading}}</strong><small>Body line {{s.line}} · {{fmt(s.tokens)}} tokens</small></span></div></div><p v-else class="tp-empty">No section counts returned.</p>
+          <section v-if="conciseResult.proposal" aria-label="Proposed text"><h3>Proposed SKILL.md body</h3><pre class="ai-run-text tp-mono">{{conciseResult.proposal.body||''}}</pre>
+            <template v-if="(conciseResult.proposal.references||[]).length"><h3>New references</h3><details v-for="(ref,i) in conciseResult.proposal.references" :key="i" class="tp-more"><summary>{{ref.path}} · {{fmt(ref.tokens)}} tokens</summary><pre class="ai-run-text tp-mono">{{ref.text||''}}</pre></details></template>
+          </section>
+          <p v-if="conciseResult.status==='blocked'" class="tp-issue bad">The proposal is blocked by validation. Review the source and try again.</p><p v-else-if="conciseResult.status==='no-change'" class="tp-fine">The proposal produced no file changes.</p>
+          <p v-if="conciseResult.run&&conciseResult.run.advisory" class="tp-fine">{{conciseResult.run.advisory}}</p>
+          <div class="tp-acts"><button class="btn btn-ink" :disabled="busy||!canOpenConciseReview" @click="openConciseReview()">Open source-update review</button><span v-if="canOpenConciseReview" class="tp-fine">Nothing is applied here. Inspect the exact diff and approve it in Source update.</span></div>
         </section>
       </template>
 
