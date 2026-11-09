@@ -8,6 +8,30 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Audited cleanup of already-merged work
+
+**[NOTE]** The maintainer requested in-depth review and removal only after
+double-checking integration. Inventory and two Terra reviews distinguish exact
+main ancestry from superseded or patch-equivalent work. Dirty and active
+checkouts, main and unmerged histories are preserved. A verified all-ref bundle
+precedes deletion; complete checkout archives preserve ignored files and release
+artifacts. Details and final results: @docs/38-worktree-cleanup-2026-11-09.md.
+
+**[NOTE]** Removed 16 clean inactive worktrees, 2 missing temporary registrations,
+21 merged local branches and 5 merged remote heads. Remote deletions used exact
+expected-SHA guards and no open PRs existed. All retained/unmerged heads and main
+stayed unchanged; fetch also pruned 3 already-absent remote-tracking refs.
+Five worktrees and six local branches remain: dirty primary, unmerged redesign,
+active shell checkout, dirty design checkout, main, plus the backup branch.
+All 47 primary file fingerprints still match.
+
+**[NOTE]** Sixteen complete archives and their manifests were byte-verified.
+A reflog-inclusive bundle also preserves 19 reflog-only commits; an independent
+bare restore checked all 43 distinct branch/reflog tip objects. No force local
+deletion, reset, garbage collection or product-code change was used. Connectivity,
+docs checks and the 1,765-test suite pass (2 optional oracle skips). Recovery
+records remain private at `/home/uday-varmora/skillsmgr-cleanup-audit-d9orltgn`.
+
 ## 2026-11-09 — Main integration of the completed untangle pass
 
 **[NOTE]** The maintainer explicitly requested pushing the completed refactor

@@ -4,6 +4,19 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Audited merged-work cleanup (2026-11-09)
+
+- [x] Inventory every local/remote branch and worktree against fetched main.
+- [x] Independently review ancestry, ignored data, active use and residual work.
+- [x] Verify a recovery bundle containing all pre-cleanup Git refs.
+- [x] Byte-archive and recheck all 16 inactive merged worktrees before removal.
+- [x] Remove 21 merged local branches, 5 merged remote heads and 2 stale registrations.
+- [x] Verify all 47 primary file hashes, retained refs/main, repository connectivity,
+  docs gates and 1,765 tests (2 optional skips). Five worktrees and six local
+  branches remain intentionally.
+
+Evidence: @docs/38-worktree-cleanup-2026-11-09.md.
+
 ## Integrate codebase untangling into main (2026-11-09)
 
 - [x] Confirm explicit main-push authorization and use only Terra subagents.
