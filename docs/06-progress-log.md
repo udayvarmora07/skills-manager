@@ -33,6 +33,11 @@ orders, reports order-dependent verdicts as uncertain, and drops quoted
 conflicts that are not verbatim in the files (`POST /api/ai/overlap-judge`, v2
 Overlap check). 3 more tests; browser-checked against the fake model.
 
+**[SPEC]** A4 followed: `ai_budget.py` shortens the largest descriptions when a
+listing is over budget (Claude Code's measured, others supplied) and marks a
+shorter version safe only if its skill still wins as many prompts
+(`POST /api/ai/fit-budget`, v2 Fit the listing budget). 3 more tests.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any

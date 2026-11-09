@@ -59,6 +59,7 @@ TARGET_FILES = (
     "skillsmgr/ai.py",
     "skillsmgr/ai_skills.py",
     "skillsmgr/ai_overlap.py",
+    "skillsmgr/ai_budget.py",
     "skillsmgr/read_flights.py",
     "skillsmgr/file_reads.py",
     "skillsmgr/insights.py",

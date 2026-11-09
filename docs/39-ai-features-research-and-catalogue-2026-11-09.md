@@ -44,7 +44,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A1 | **Trigger test (library arena)**: the agent's own listing with every other skill as a distractor; never-fires / unreliable / lost-to / near-miss false triggers; repeated, order-shuffled | §2.1–2.2; gap no competitor fills | **Shipped** |
 | A2 | **Verified description rewrite**: candidates from failures, re-tested; recommended only if better overall and not worse on held-out prompts | §2.3, skill-creator split, GEPA | **Shipped** |
 | A3 | Collision / overlap judge: candidate pairs from the near-duplicate heuristic, a description-word prefilter and user picks; judged in both orders; verbatim-checked conflicts; boundary sentences and merge idea | #35319, #27721, #10238; Cisco overlap check | **Shipped** |
-| A4 | Listing-budget fitter: shorten the fewest descriptions to fit the agent's budget, each verified by A1 | #56710, #19679, #19090; existing `claude_listing` estimate | Next |
+| A4 | Listing-budget fitter: shorten the largest descriptions to fit the agent's budget, each verified by A1 | #56710, #19679, #19090; existing `claude_listing` estimate | **Shipped** |
 | A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | Next |
 | A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
 | A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | Planned |
@@ -93,6 +93,10 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[SPEC]** `ai_overlap.overlap_judge` gathers at most 12 candidate pairs without AI: the existing near-duplicate heuristic, a description-word Jaccard prefilter (≥ 0.18 after stop-words, which catches differently named skills doing the same job) and pairs the user names. Each pair goes to the model twice, A-then-B and B-then-A. If the relation differs between orders it is reported as `uncertain`; if the recommendation differs it becomes `review`. A conflict survives only when both quotes, whitespace-normalised, occur in the skill they are attributed to; others are dropped and counted. Boundary sentences link to Improve, which still has to prove a measured gain before recommending anything.
 
-## 8. Next
+## 8. A4 listing-budget fitter
 
-A4 budget fitter and A5 review briefing, each reusing the A0 seam and the A1 router.
+**[SPEC]** `ai_budget.fit_budget` takes Claude Code's budget from the existing `claude_listing` estimate (settings-aware) or a caller-supplied `budget_chars` for other agents. Within budget it returns without any model call. Otherwise it picks the largest descriptions (at most 10) until shortening each to about 45% (never below 120 characters) could cover the overflow, asks for shorter versions, generates three prompts per chosen skill and routes them once with the current descriptions and once with all shorter versions together. A shorter version is `safe` only when its skill wins at least as many prompts as before. `fits` says whether the safe savings cover the overflow; when they do not, the page points to turning skills off or name-only.
+
+## 9. Next
+
+A5 review briefing for registry fetch and update review.

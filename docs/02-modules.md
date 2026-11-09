@@ -548,7 +548,9 @@ and parses JSON answers with `extract_json()`. `ai_skills.py` builds an agent's
 listing (`build_listing`), runs the trigger test (`trigger_test`) and the
 held-out-verified description rewrite (`improve_description`), and saves runs
 under `<data>/ai/runs/`. `ai_overlap.py` (A3) judges bounded candidate
-pairs in both orders and keeps only conflicts quoted verbatim from the files. Both are read-only towards skills; no Store method,
+pairs in both orders and keeps only conflicts quoted verbatim from the files.
+`ai_budget.py` (A4) shortens the largest descriptions when a listing exceeds
+its budget and marks each shorter version safe only if it still triggers. Both are read-only towards skills; no Store method,
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 

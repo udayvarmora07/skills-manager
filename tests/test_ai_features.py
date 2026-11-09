@@ -16,7 +16,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from skillsmgr import ai, ai_overlap, ai_skills, context
+from skillsmgr import ai, ai_budget, ai_overlap, ai_skills, context
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
 
@@ -95,6 +95,10 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
                                   {"a_quote": "an invented instruction", "b_quote": "another one", "why": "fake"}],
                     "recommendation": "narrow-descriptions",
                     "a_boundary": f"Not for {b}.", "b_boundary": f"Not for {a}.", "merged_description": ""}
+        if "You shorten AI coding-agent skill descriptions" in system:
+            rows = re.findall(r"^- ([a-z0-9-]+) \(at most (\d+) characters\): (.*)$", user, re.M)
+            return {"shortened": [{"name": n, "description": d[:int(t)].rsplit(" ", 1)[0]}
+                                  for n, t, d in rows]}
         if "improve the description" in system:
             name = re.search(r"Skill name: ([a-z0-9-]+)", user).group(1)
             return {"candidates": [{"description": f"Use for {name.replace('-', ' ')} zebra quartz help requests.",
@@ -354,6 +358,41 @@ class AiFeatureTests(unittest.TestCase):
         self.assertEqual(result["pairs"][0]["skills"], ["git-release", "pdf-forms"])
         with self.assertRaises(ai.AiError):
             ai_overlap.overlap_judge(self.store.data_dir, {"scope": "claude-code", "pairs": ["x"]})
+
+    # -- budget fitter ----------------------------------------------------
+
+    def _long_skills(self):
+        filler = " ".join(["general purpose helper text"] * 20)
+        root = self.home / ".claude/skills"
+        self._skill(root, "early-words", "Use for early words zebra quartz requests. " + filler)
+        self._skill(root, "late-words", filler + " Handles late words zebra quartz requests.")
+
+    def test_fit_budget_marks_only_shortenings_that_keep_triggering(self):
+        self._configure()
+        self._long_skills()
+        result = ai_budget.fit_budget(self.store.data_dir, {
+            "scope": "claude-code", "budget_chars": 400, "max_skills": 2})
+        self.assertEqual(result["status"], "proposed")
+        by_name = {p["name"]: p for p in result["proposals"]}
+        self.assertTrue(by_name["early-words"]["safe"])
+        self.assertFalse(by_name["late-words"]["safe"])
+        self.assertLess(len(by_name["early-words"]["proposed"]), len(by_name["early-words"]["current"]))
+        self.assertEqual(result["safe_savings"], by_name["early-words"]["saves_chars"])
+
+    def test_fit_budget_within_measured_claude_budget_makes_no_call(self):
+        self._configure()
+        result = ai_budget.fit_budget(self.store.data_dir, {"scope": "claude-code"})
+        self.assertEqual(result["status"], "within-budget")
+        self.assertEqual(result["source"], "Claude Code settings estimate")
+        self.assertEqual(FakeProvider.calls, [])
+
+    def test_fit_budget_needs_a_budget_for_other_agents(self):
+        self._configure()
+        self._skill(self.home / ".codex/skills", "codex-one", "Use for codex things.")
+        with self.assertRaises(ai.AiError):
+            ai_budget.fit_budget(self.store.data_dir, {"scope": "codex"})
+        with self.assertRaises(ai.AiError):
+            ai_budget.fit_budget(self.store.data_dir, {"scope": "claude-code", "budget_chars": 5})
 
     # -- HTTP -------------------------------------------------------------
 

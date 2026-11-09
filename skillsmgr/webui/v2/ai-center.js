@@ -17,6 +17,7 @@
         busy: false, error: "", note: "", connection: null,
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
+        budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
       };
@@ -46,7 +47,7 @@
     },
     watch: {
       page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); } },
-      scope() { this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
+      scope() { this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
     },
     methods: {
@@ -55,6 +56,14 @@
       relationTone(r) { return { "same-purpose": "bad", overlapping: "warn", uncertain: "note", distinct: "ok" }[r] || "off"; },
       relationLabel(r) { return { "same-purpose": "Same purpose", overlapping: "Overlapping", uncertain: "Uncertain: depends on order", distinct: "Distinct", unknown: "No clear answer" }[r] || r; },
       actionLabel(a) { return { merge: "Merge them", "narrow-descriptions": "Sharpen both descriptions", "keep-both": "Keep both as they are", review: "Answers disagreed: review yourself" }[a] || a; },
+      budgetBody(estimate) { const b = { scope: this.scope, max_skills: Number(this.budgetMax), estimate }; if (String(this.budgetChars).trim()) b.budget_chars = Number(this.budgetChars); return b; },
+      async estimateBudget() { this.budget = null; this.appliedNames = []; this.budgetEstimate = await this.guard(() => post("/api/ai/fit-budget", this.budgetBody(true))); },
+      async runBudget() { const r = await this.guard(() => post("/api/ai/fit-budget", this.budgetBody(false))); if (r) { this.budget = r; this.budgetEstimate = null; this.load(); } },
+      async applyShort(p) {
+        if (!confirm("Replace the description of " + p.name + " in " + this.budget.scope + " with the shorter version? A snapshot of the current file is kept.")) return;
+        const ok = await this.guard(() => api("/api/skills/" + encodeURIComponent(p.name) + "?scope=" + encodeURIComponent(this.budget.scope), { method: "PATCH", body: JSON.stringify({ description: p.proposed }) }));
+        if (ok) { this.appliedNames.push(p.name); this.note = "Saved " + p.name + ". The previous version is in Recovery → history."; this.$emit("changed"); }
+      },
       addPair() { if (this.pairA && this.pairB && this.pairA !== this.pairB && this.pairs.length < 12) { this.pairs.push([this.pairA, this.pairB]); this.pairA = this.pairB = ""; } },
       overlapBody(estimate) { return { scope: this.scope, max_pairs: Number(this.overlapLimit), pairs: this.pairs, estimate }; },
       async estimateOverlap() { this.overlap = null; this.overlapEstimate = await this.guard(() => post("/api/ai/overlap-judge", this.overlapBody(true))); },
@@ -160,7 +169,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -217,6 +226,44 @@
             <table class="ai-table"><thead><tr><th>Prompt</th><th>Should load</th><th>Chosen</th></tr></thead>
               <tbody><tr v-for="p in result.prompts" :key="p.id"><td>{{ p.text }}</td><td class="tp-mono">{{ p.expected || 'none' }}</td><td class="tp-mono">{{ choiceList(p.choices) }}</td></tr></tbody></table></details>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-budget'">
+        <h1 class="h1" id="h1" tabindex="-1">Fit the listing budget</h1>
+        <p class="lede">Agents only show the model so many characters of skill descriptions; past that, descriptions are dropped and those skills stop firing. This shortens the largest descriptions, then re-tests them, and marks a shorter version safe only if its skill still wins as often.</p>
+        <section class="card tp-panel" aria-labelledby="ai-bu-h">
+          <h2 id="ai-bu-h">Set up</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-scope4"><b>Agent</b></label><select id="ai-scope4" class="field" v-model="scope"><option v-for="s in agentScopes" :key="s.id" :value="s.id">{{ s.label }} ({{ s.count }})</option></select></div>
+            <div class="tp-set-row"><label for="ai-bch"><b>Budget in characters</b><small>Leave blank for Claude Code to use its measured estimate. Other agents need a number (Codex uses 2% of its context).</small></label><input id="ai-bch" class="field num" type="number" min="100" v-model="budgetChars" placeholder="Measured"></div>
+            <div class="tp-set-row"><label for="ai-bmax"><b>Descriptions to shorten</b><small>Largest first.</small></label><select id="ai-bmax" class="field" v-model.number="budgetMax"><option v-for="n in 10" :key="n" :value="n">{{ n }}</option></select></div>
+          </div>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !scope" @click="estimateBudget()">Measure and check what will be sent</button></div>
+          <div v-if="budgetEstimate" class="ai-confirm" role="region" aria-label="Before sending">
+            <p class="tp-fine">Listing: {{ fmt(budgetEstimate.listing_chars) }} characters; budget: {{ fmt(budgetEstimate.budget_chars) }} ({{ budgetEstimate.source }}).</p>
+            <p v-if="budgetEstimate.status==='within-budget'" class="tp-fine">Already within budget. Nothing to do and nothing will be sent.</p>
+            <p v-else-if="budgetEstimate.status==='nothing-to-shorten'" class="tp-fine">{{ fmt(budgetEstimate.chars_to_free) }} characters over, but no description is long enough to shorten usefully. Consider turning some skills off or name-only instead.</p>
+            <template v-else>
+              <p class="tp-fine">{{ fmt(budgetEstimate.chars_to_free) }} characters over. Would shorten: <span class="tp-mono">{{ budgetEstimate.chosen.join(', ') }}</span>.</p>
+              <p v-for="(line,i) in budgetEstimate.egress" :key="i" class="tp-fine">{{ line }}</p>
+              <p class="tp-fine">At most about {{ fmt(budgetEstimate.run.estimated_input_tokens) }} tokens to {{ budgetEstimate.run.model }}.</p>
+              <div class="tp-acts"><button class="btn btn-ink" :disabled="busy" @click="runBudget()">Send, shorten and re-test</button><button class="btn btn-line" :disabled="busy" @click="budgetEstimate=null">Cancel</button></div>
+            </template>
+          </div>
+        </section>
+        <section v-if="budget && budget.proposals" class="card tp-panel" aria-labelledby="ai-bur-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-bur-h">Shorter descriptions</h2><p>Safe versions free {{ fmt(budget.safe_savings) }} of {{ fmt(budget.chars_to_free) }} characters needed.</p></div>
+            <span :class="['pill', budget.fits ? 'ok' : 'warn']">{{ budget.fits ? 'Would fit' : 'Still over' }}</span></header>
+          <div v-for="p in budget.proposals" :key="p.name" class="ai-cand">
+            <h3><span class="tp-mono">{{ p.name }}</span> <span :class="['pill', p.safe ? 'ok' : 'bad']">{{ p.safe ? 'Still triggers' : 'Triggers less' }}</span></h3>
+            <p>{{ p.proposed }}</p>
+            <p class="tp-fine">Saves {{ fmt(p.saves_chars) }} characters. Won {{ pct(p.recall_before) }} of its prompts before, {{ pct(p.recall_after) }} after.</p>
+            <details class="tp-more"><summary>Current description</summary><p>{{ p.current }}</p></details>
+            <div class="tp-acts"><button class="btn" :class="p.safe ? 'btn-ink' : 'btn-line'" :disabled="busy || appliedNames.includes(p.name)" @click="applyShort(p)">{{ appliedNames.includes(p.name) ? 'Saved' : 'Use shorter version' }}</button></div>
+          </div>
+          <p v-if="!budget.fits" class="tp-fine">Not enough to fit. Turning rarely used skills off, or name-only in Claude Code settings (see Quality → What Claude Code sees), frees more.</p>
+          <p class="tp-fine">{{ budget.run.advisory }}</p>
         </section>
       </template>
 

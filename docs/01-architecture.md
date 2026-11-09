@@ -59,6 +59,7 @@ skills-manager/
     ai.py            # BYOK model client: settings, caps, usage ledger (stdlib)
     ai_skills.py     # AI trigger test + verified description rewrite
     ai_overlap.py    # AI overlap judge over bounded candidate pairs
+    ai_budget.py     # AI listing-budget fitter, verified by re-testing
     lockfiles.py     # read-only skills-CLI lockfile evidence (project/global)
     key_support.py   # documented per-consumer frontmatter keys (pure table)
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
