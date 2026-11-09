@@ -84,10 +84,10 @@ class ScopeReadCase(unittest.TestCase):
         return directory
 
     def _flat_root(self, scope_id: str = "gemini") -> Path:
-        return scopes._scope_by_id(scope_id).base
+        return scopes.scope_by_id(scope_id).base
 
     def _recursive_root(self, scope_id: str = "agents") -> Path:
-        return scopes._scope_by_id(scope_id).base
+        return scopes.scope_by_id(scope_id).base
 
     def _seed_flat(self, count: int = 4, scope_id: str = "gemini") -> Path:
         root = self._flat_root(scope_id)
@@ -187,7 +187,7 @@ class ScanScopePathValueTests(ScopeReadCase):
 
     def test_a_flat_row_reports_the_contained_entry_under_the_resolved_root(self):
         self._seed_flat(3)
-        scope = scopes._scope_by_id("gemini")
+        scope = scopes.scope_by_id("gemini")
         resolved = scopes._resolved_scope_root(scope)
         for row in scopes.scan_scope("gemini"):
             self.assertEqual(str(resolved / row["name"]), row["path"])
@@ -212,7 +212,7 @@ class ScanScopePathValueTests(ScopeReadCase):
             self._document("linked"), encoding="utf-8"
         )
         (self.home / ".gemini").symlink_to(real, target_is_directory=True)
-        scope = scopes._scope_by_id("gemini")
+        scope = scopes.scope_by_id("gemini")
         rows = scopes.scan_scope("gemini")
         self.assertEqual(1, len(rows))
         resolved = scopes._resolved_scope_root(scope)
@@ -289,7 +289,7 @@ class ScanDirRecordShapeTests(ScopeReadCase):
         self._skill(real / "skills" / "one", "one")
         self._skill(real / "skills" / "apps" / "web" / "two", "two")
         (self.home / ".agents").symlink_to(real, target_is_directory=True)
-        root = scopes._scope_by_id("agents").base
+        root = scopes.scope_by_id("agents").base
         resolved = root.resolve()
         self.assertNotEqual(str(root), str(resolved))
         rows = loader.scan_dir(root, recursive=True)
@@ -735,7 +735,7 @@ class DocumentReuseAuthoritativenessTests(ScopeReadCase):
         (real / "skills").mkdir(parents=True)
         self._skill(real / "skills" / "one", "one")
         (self.home / ".gemini").symlink_to(real, target_is_directory=True)
-        scope = scopes._scope_by_id("gemini")
+        scope = scopes.scope_by_id("gemini")
         self.assertNotEqual(str(scope.base), str(scope.base.resolve()))
         through_scan = loader.load_skill(scope.base.resolve() / "one")
         through_record = loader.load_skill(scope.base / "one")
@@ -1314,7 +1314,7 @@ class ScanScopeAnnotationLoopTests(ScopeReadCase):
     def test_scope_availability_is_classified_once_not_once_per_row(self):
         """``_availability`` is a function of the scope, not of the row."""
         self._seed_flat(4)
-        scope = scopes._scope_by_id("gemini")
+        scope = scopes.scope_by_id("gemini")
         patcher, seen = self._counting(
             scopes, "_availability", lambda self, *a, **k: True
         )

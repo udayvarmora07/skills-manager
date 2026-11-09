@@ -7,12 +7,10 @@ software, never a public service.
 
 from __future__ import annotations
 
-import hashlib
 import ipaddress
 import os
 import re
 import shutil
-import stat
 import subprocess  # nosec B404 - only the allowlisted installer and trusted opener use it.
 import sys
 import tempfile
@@ -21,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import doctor, install, scopes
+from . import batch, doctor, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -32,7 +30,7 @@ from .launcher_security import trusted_executable
 from .web_security import RequestError, validate_request
 from .web_serialization import json_bytes, parse_json_object
 from .adapters import workspaces_payload
-from .catalog import delete_profile, enrich_rows, load_catalog, plan_hash, profile_preview, save_profile, update_tags
+from .catalog import delete_profile, enrich_rows, load_catalog, profile_preview, save_profile, update_tags
 from .external_scan import scan_options
 from .path_safety import contained_path
 from .source_update import cancel_update_review, commit_update_review, list_update_snapshots, prepare_local_update, prepare_snapshot_update, read_update_review
@@ -163,30 +161,16 @@ def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
     """
     if not (data.get("evals") or data.get("runs")):
         return payload
-    from . import evals as evals_mod
-
-    report = evals_mod.load_cases(skill_dir)
-    workspace = evals_mod.workspace_for(store.data_dir, name)
-    report["workspace"] = str(workspace)
-    if data.get("runs"):
-        blocking = [issue for issue in report["issues"] if issue["level"] == "error"]
-        if blocking:
-            raise StoreError(f"cannot record eval runs for '{name}': {blocking[0]['message']}")
-        if not report["cases"]:
-            raise StoreError(f"cannot record eval runs for '{name}': no eval cases found")
-        iteration = data.get("iteration", 1)
-        if isinstance(iteration, bool) or not isinstance(iteration, int) or iteration < 1:
-            raise StoreError("iteration must be a positive integer")
-        report["recording"] = evals_mod.record_runs(
-            workspace, iteration, report["cases"], data.get("runs")
-        )
-    payload["evals"] = report
+    workspace = evals.ensure_workspace_outside(evals.workspace_for(store.data_dir, name), store.data_dir)
+    payload["evals"] = evals.eval_report(
+        skill_dir, workspace, name, runs=data.get("runs") or None, iteration=data.get("iteration", 1)
+    )
     return payload
 
 
 def _doctor_query(qs: dict) -> tuple[str, bool, str]:
-    scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-    hygiene = (qs.get("hygiene", ["0"])[0] or "0").strip().lower() in {"1", "true", "yes"}
+    scope = _scope_param(qs)
+    hygiene = _flag(qs, "hygiene")
     consumer = (qs.get("explain", [""])[0] or "").strip()
     return scope, hygiene, consumer
 
@@ -330,183 +314,6 @@ def _enrich_rows_with_catalog(store: Store, rows: list[dict]) -> None:
     enrich_rows(rows, data_dir=store.data_dir)
 
 
-def _batch_target_inputs(item: object) -> tuple[str, str, str]:
-    if not isinstance(item, dict):
-        raise StoreError("each batch target must be an object")
-    name = item.get("name")
-    scope = item.get("scope")
-    if not isinstance(name, str) or not name.strip() or not isinstance(scope, str) or not scope.strip():
-        raise StoreError("each batch target needs a name and scope")
-    return name.strip(), scope.strip(), str(item.get("physical_path") or item.get("path") or "")
-
-
-def _batch_target_candidates(
-    name: str, scope: str, physical: str, records: list[dict]
-) -> list[dict]:
-    candidates = [row for row in records if row.get("name") == name and row.get("scope") == scope]
-    if physical:
-        candidates = [
-            row for row in candidates
-            if str(row.get("physical_path") or row.get("path") or "") == physical
-        ]
-    return candidates
-
-
-def _batch_file_digest(entry: Path, total: int) -> tuple[bytes, int]:
-    fd = os.open(entry, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-    with os.fdopen(fd, "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-            raise StoreError("batch skill tree contains a non-regular file")
-        size = 0
-        file_hash = hashlib.sha256()
-        while chunk := stream.read(65536):
-            size += len(chunk)
-            total += len(chunk)
-            if size > 4 * 1024 * 1024 or total > 16 * 1024 * 1024:
-                raise StoreError("batch skill tree exceeds the size limit")
-            file_hash.update(chunk)
-        return file_hash.digest(), total
-
-
-def _batch_tree_hash(path: object) -> str:
-    """Hash at most 256 entries, depth 16, 4 MiB per file and 16 MiB total."""
-    root = Path(str(path or ""))
-    digest = hashlib.sha256()
-    count = total = 0
-    try:
-        if root.is_symlink() or not root.is_dir():
-            raise StoreError("batch skill tree is unavailable or a symlink")
-        for base, dirs, files in os.walk(root, followlinks=False, onerror=lambda exc: (_ for _ in ()).throw(exc)):
-            dirs.sort()
-            files.sort()
-            for name in dirs + files:
-                entry = Path(base) / name
-                relative = entry.relative_to(root)
-                count += 1
-                if count > 256 or len(relative.parts) > 16:
-                    raise StoreError("batch skill tree exceeds the entry or depth limit")
-                info = entry.lstat()
-                if stat.S_ISLNK(info.st_mode):
-                    raise StoreError("batch skill tree contains a symlink")
-                encoded = str(relative).encode("utf-8")
-                digest.update(len(encoded).to_bytes(8, "big"))
-                digest.update(encoded)
-                if stat.S_ISDIR(info.st_mode):
-                    digest.update(b"D")
-                    continue
-                if not stat.S_ISREG(info.st_mode):
-                    raise StoreError("batch skill tree contains a non-regular file")
-                digest.update(b"F")
-                file_digest, total = _batch_file_digest(entry, total)
-                digest.update(file_digest)
-        return digest.hexdigest()
-    except (OSError, UnicodeError, ValueError) as exc:
-        raise StoreError(f"could not inspect batch skill tree: {exc}") from exc
-
-
-def _batch_rooted_path(value: object, scope, base: Path) -> Path:
-    path = Path(os.path.abspath(str(value or "")))
-    alias = Path(os.path.abspath(scope.base))
-    try:
-        return base / path.relative_to(alias)
-    except ValueError:
-        return path
-
-
-def _batch_tree_evidence(row: dict) -> str:
-    """Validate the named scope entry before reading any tree bytes."""
-
-    if row.get("read_only") or row.get("instance_state") in {"link_escape", "link_followed"}:
-        raise StoreError("batch skill is not a writable scope entry")
-    scope = scopes._scope_by_id(row.get("scope"))
-    if scope is None:
-        raise StoreError("batch skill scope is unavailable")
-    base = scope.base.resolve()
-    named = _batch_rooted_path(row.get("path"), scope, base)
-    try:
-        relative = named.relative_to(base)
-    except ValueError as exc:
-        raise StoreError("batch skill path is outside its scope") from exc
-    current = base
-    for part in relative.parts:
-        current = current / part
-        if current.is_symlink():
-            raise StoreError("batch skill path contains a symlink")
-    safe = scopes._safe_scope_skill_path(scope, row.get("name"))
-    observed = row.get("physical_path") or row.get("path")
-    if named != safe.resolve() or named != _batch_rooted_path(observed, scope, base):
-        raise StoreError("batch skill path does not match the named scope entry")
-    return _batch_tree_hash(named)
-
-
-def _batch_optional_tree(row: dict, include_tree: bool) -> str | None:
-    return _batch_tree_evidence(row) if include_tree else None
-
-
-def _batch_destination(row: dict) -> dict:
-    return {"scope": row.get("scope"), "physical_path": row.get("physical_path") or row.get("path"),
-            "content_hash": row.get("content_hash"), "disabled": bool(row.get("disabled")),
-            "tree_hash": _batch_tree_evidence(row)}
-
-
-def _resolve_batch_target(item: object, records: list[dict], seen: set[tuple[str, str, str]], *, include_tree: bool = True) -> dict:
-    name, scope, physical = _batch_target_inputs(item)
-    candidates = _batch_target_candidates(name, scope, physical, records)
-    if not candidates:
-        raise StoreError(f"batch target is no longer present: {scope}/{name}")
-    if len(candidates) > 1:
-        raise StoreError(f"batch target is ambiguous; include its physical_path: {scope}/{name}")
-    row = candidates[0]
-    path = str(row.get("physical_path") or row.get("path") or "")
-    key = (scope, name, path)
-    if key in seen:
-        raise StoreError(f"duplicate batch target: {scope}/{name}")
-    seen.add(key)
-    return {
-        "name": name,
-        "scope": scope,
-        "scope_label": row.get("scope_label", scope),
-        "path": row.get("path"),
-        "physical_path": row.get("physical_path") or row.get("path"),
-        "disabled": bool(row.get("disabled")),
-        "instance_state": row.get("instance_state", "unresolved"),
-        "content_hash": row.get("content_hash"),
-        "tree_hash": _batch_optional_tree(row, include_tree),
-    }
-
-
-def _sync_destinations(name: str, data: dict, records: list[dict]) -> list[dict]:
-    """The destination copies a sync would overwrite, as observed at preview."""
-    wanted = set(_scope_list(data))
-    return sorted(
-        (
-            _batch_destination(row)
-            for row in records
-            if row.get("name") == name and row.get("scope") in wanted
-        ),
-        key=lambda item: (str(item["scope"]), str(item["physical_path"])),
-    )
-
-
-def _with_sync_destinations(targets: list[dict], data: dict, records: list[dict]) -> list[dict]:
-    if data.get("operation") == "sync":
-        for target in targets:
-            target["destinations"] = _sync_destinations(target["name"], data, records)
-    return targets
-
-
-def _batch_targets(data: dict) -> list[dict]:
-    """Validate and resolve an exact physical target selection."""
-    raw = data.get("targets")
-    if not isinstance(raw, list) or not raw or len(raw) > 500:
-        raise StoreError("targets must be a non-empty list of at most 500 items")
-
-    records = scopes.list_all()
-    seen: set[tuple[str, str, str]] = set()
-    targets = [_resolve_batch_target(item, records, seen, include_tree=data.get("operation") in {"remove", "sync"}) for item in raw]
-    return _with_sync_destinations(targets, data, records)
-
-
 # Stable machine codes for the one error shape, so a client can branch on
 # ``code`` for every route (docs/24 §D3-7).
 def _error_payload(status: int, message: object, code: str | None = None) -> dict:
@@ -527,19 +334,9 @@ def _error_payload(status: int, message: object, code: str | None = None) -> dic
         "code",
         code
         or getattr(message, "code", None)
-        or _specific_error_code(status, message)
         or _STATUS_CODES.get(status, "error"),
     )
     return payload
-
-
-def _specific_error_code(status: int, message: object) -> str | None:
-    """A code for the two 404s a client may want to tell apart."""
-    if status != 404:
-        return None
-    if isinstance(message, SkillNotFound):
-        return "skill_not_found"
-    return None
 
 
 _STATUS_CODES = {
@@ -646,32 +443,14 @@ def _history_limit(qs: dict[str, list[str]]) -> int:
     return value
 
 
-def _scope_list(data: dict, name: str = "to_scopes") -> list[str]:
-    """Return a validated list of scope ids, or raise a clean 400.
-
-    ``/api/sync`` validated nothing: ``to_scopes: [123]`` answered 200 and
-    reflected the integer back as an "unknown scope", and ``to_scopes:
-    "global"`` answered 200 by iterating the string's *characters* -- six
-    "unknown scope" entries, one per letter of "global" (docs/24 §D3-8).
-    """
-    raw = data.get(name)
-    if raw is None:
-        return []
-    if not isinstance(raw, list):
-        raise StoreError(f"{name} must be a list of scope ids")
-    scopes: list[str] = []
-    for entry in raw:
-        if not isinstance(entry, str):
-            raise StoreError(f"{name} entries must be scope id strings, got {entry!r}")
-        trimmed = entry.strip()
-        if not trimmed:
-            raise StoreError(f"{name} entries must not be empty")
-        scopes.append(trimmed)
-    return scopes
+def _flag(qs: dict[str, list[str]], name: str) -> bool:
+    """A boolean query flag: ``1``, ``true`` or ``yes`` (case-insensitive)."""
+    return (qs.get(name, [""])[0] or "").strip().lower() in {"1", "true", "yes"}
 
 
-def _trash_scope(qs: dict[str, list[str]]) -> str:
-    return (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+def _scope_param(qs: dict[str, list[str]]) -> str:
+    """The requested scope id; absent or blank means ``global``."""
+    return (qs.get("scope", [""])[0] or "").strip() or "global"
 
 
 def _trash_rows(store, qs: dict[str, list[str]]) -> list[dict]:
@@ -681,7 +460,7 @@ def _trash_rows(store, qs: dict[str, list[str]]) -> list[dict]:
     other scope reads that agent's sibling trash folder read-only; nothing is
     created by a read.
     """
-    scope = _trash_scope(qs)
+    scope = _scope_param(qs)
     if scope == "global":
         return store.trash_list()
 
@@ -739,23 +518,6 @@ def _page_rows(rows: list, qs: dict[str, list[str]]) -> tuple[list, int]:
     if limit is None:
         return rows[offset:], total
     return rows[offset:offset + limit], total
-
-
-def _batch_plan(operation: str, targets: list[dict], data: dict) -> dict:
-    options = {
-        "force": bool(data.get("force")),
-        "to_scopes": sorted(set(_scope_list(data))),
-    }
-    return {
-        "operation": operation,
-        "targets": targets,
-        "target_count": len(targets),
-        "atomic": False,
-        "partial_failure": True,
-        "recovery": "remove creates per-item trash snapshots; other actions report each item",
-        "options": options,
-        "plan_id": plan_hash(operation, targets, options),
-    }
 
 
 def _validated_skill_fields(data: dict, *, keep_empty: bool = False) -> dict:
@@ -858,11 +620,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
         (docs/24 §D3-3).  The CLI keeps its documented behaviour: it passes no
         destination and still writes to `backups/`.
         """
-        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        scope = _scope_param(qs)
         if scope != "global":
             self._send_error(400, "export is only available for the global scope")
             return
-        full = qs.get("full", ["0"])[0] in ("1", "true", "yes")
+        full = _flag(qs, "full")
         staging = tempfile.mkdtemp(prefix="skillsmgr-webui-export-")
         try:
             archive = self.store.export(
@@ -1147,7 +909,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return True
         if parts == ["api", "source-updates", "snapshots"]:
             name = (qs.get("name", [""])[0] or "").strip()
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+            scope = _scope_param(qs)
             target_path = qs.get("target_path", [None])[0] or None
             snapshots = list_update_snapshots(self.store.data_dir, name, scope, target_path=target_path)
             self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
@@ -1258,7 +1020,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         if parts != ["api", "search"]:
             return False
-        scope = (qs.get("scope", [""])[0] or "global").strip() or "global"
+        scope = _scope_param(qs)
         rows = scopes.search_all(qs.get("q", [""])[0], scope_id=scope, store=self.store)
         _enrich_rows_with_catalog(self.store, rows)
         self._send_json(rows)
@@ -1273,9 +1035,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         if len(parts) != 4 or parts[:2] != ["api", "skills"] or parts[3] != "raw":
             return False
-        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        scope = _scope_param(qs)
         if scope != "global":
-
             raw = scopes.get_raw(scope, parts[2])
             self._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
             return True
@@ -1295,9 +1056,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         if len(parts) != 3 or parts[:2] != ["api", "skills"]:
             return False
-        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        scope = _scope_param(qs)
         if scope != "global":
-
             record = scopes.get_skill(scope, parts[2])
             _enrich_rows_with_catalog(self.store, [record])
             self._send_json(record)
@@ -1373,15 +1133,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return False
         name = qs.get("name", [None])[0]
         limit = _history_limit(qs)
-        if qs.get("snapshots", ["0"])[0] in ("1", "true", "yes") and name:
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            if scope == "global":
-                from .store import list_snapshots as _list_snapshots
-
-                snapshots = _list_snapshots(self.store.data_dir, "global", name)
-            else:
-
-                snapshots = scopes.list_snapshots_for(scope, name)
+        if _flag(qs, "snapshots") and name:
+            scope = _scope_param(qs)
+            snapshots = scopes.list_snapshots_for(scope, name)
             self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
             return True
         self._send_json(self.store.history(name=name, limit=limit))
@@ -1522,63 +1276,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
         self._send_error(404, "unknown endpoint", code="unknown_endpoint")
     # -- POST routes ------------------------------------------------------
 
-    def _execute_batch_post(self) -> bool:
-        data = self._body_json()
-        operation = data.get("operation")
-        if operation not in {"enable", "disable", "remove", "sync"}:
-            raise StoreError("batch operation must be enable, disable, remove, or sync")
-        targets = _batch_targets(data)
-        plan = _batch_plan(operation, targets, data)
-        if data.get("plan_id") != plan["plan_id"]:
-            raise StoreError("batch preview is stale; review the current targets again")
-        if operation == "sync" and not plan["options"]["to_scopes"]:
-            raise StoreError("sync batch plans require at least one target scope")
-        results: list[dict] = []
-
-        for target in targets:
-            item = {"name": target["name"], "scope": target["scope"], "status": "ok"}
-            try:
-                if operation in {"enable", "disable"}:
-                    desired = operation == "enable"
-                    if target["disabled"] == (not desired):
-                        item["result"] = "already-set"
-                    else:
-                        item.update(scopes.toggle_skill(target["scope"], target["name"], enable=desired))
-                elif operation == "remove":
-                    item.update(scopes.remove_skill(target["scope"], target["name"], purge=False))
-                else:
-                    item.update(scopes.sync_skill(
-                        target["name"], target["scope"], plan["options"]["to_scopes"],
-                        force=bool(plan["options"]["force"]),
-                    ))
-            except (StoreError, OSError, ValueError) as exc:
-                item["status"] = "failed"
-                item["error"] = str(exc)
-            results.append(item)
-        failures = [item for item in results if item["status"] == "failed"]
-        self._send_json({
-            "operation": operation,
-            "plan_id": plan["plan_id"],
-            "target_count": len(targets),
-            "results": results,
-            "ok": not failures,
-            "partial": bool(failures) and len(failures) < len(results),
-        })
-        return True
 
     def _route_batch_post(self, parts: list[str]) -> bool:
         if parts == ["api", "batch", "preview"]:
-            data = self._body_json()
-            operation = data.get("operation")
-            if operation not in {"enable", "disable", "remove", "sync"}:
-                raise StoreError("batch operation must be enable, disable, remove, or sync")
-            if operation == "sync" and not isinstance(data.get("to_scopes"), list):
-                raise StoreError("sync batch plans require a to_scopes list")
-            targets = _batch_targets(data)
-            self._send_json(_batch_plan(operation, targets, data))
+            self._send_json(batch.preview(self._body_json()))
             return True
         if parts == ["api", "batch", "execute"]:
-            return self._execute_batch_post()
+            self._send_json(batch.execute(self._body_json()))
+            return True
         return False
 
     def _route_catalog_post(self, parts: list[str]) -> bool:
@@ -1674,7 +1379,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if not isinstance(raw_from_scope, str):
             raise StoreError("from_scope must be a string")
         from_scope = raw_from_scope.strip() or "global"
-        to_scopes = _scope_list(data)
+        to_scopes = batch.requested_scopes(data)
         force = bool(data.get("force"))
         if not name:
             raise StoreError("name is required for sync")
@@ -1732,7 +1437,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         if parts != ["api", "skills"]:
             return False
-        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        scope = _scope_param(qs)
         data = self._body_json()
         name = data.pop("name", None)
         description = data.pop("description", None)
@@ -1741,11 +1446,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if not isinstance(description, str) or not description.strip():
             raise StoreError("description must be a non-empty string")
         fields = _validated_skill_fields(data)
-        if scope != "global":
-
-            self._send_json(scopes.create_skill(scope, name, description, **fields), 201)
-            return True
-        self._send_json(self.store.create(name, description, **fields), 201)
+        self._send_json(scopes.create_skill(scope, name, description, **fields), 201)
         return True
 
     def _route_skill_toggle_post(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
@@ -1757,9 +1458,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if len(parts) != 4 or parts[:2] != ["api", "skills"] or parts[3] not in ("disable", "enable"):
             return False
         name = parts[2]
-        scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+        scope = _scope_param(qs)
         if scope != "global":
-
             self._send_json(scopes.toggle_skill(scope, name, enable=(parts[3] == "enable")))
             return True
         action = getattr(self.store, parts[3])
@@ -1793,16 +1493,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
         ``trash_path`` (or that skill's newest trashed copy).
         """
         snapshot = qs.get("snapshot", [None])[0]
-        scope = _trash_scope(qs)
+        scope = _scope_param(qs)
         if snapshot:
-            if scope == "global":
-                self._send_json(self.store.restore(name, snapshot=snapshot))
-            else:
-
-                self._send_json(scopes.restore_snapshot(scope, name, snapshot))
+            self._send_json(scopes.restore_snapshot(scope, name, snapshot))
             return
         if scope != "global":
-
             trash_path = self._body_json().get("trash_path")
             if trash_path is not None and not isinstance(trash_path, str):
                 raise StoreError("trash_path must be a string")
@@ -1932,14 +1627,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
         parts = self._parts()
         qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
+            scope = _scope_param(qs)
             data = self._body_json()
             fields = _validated_skill_fields(data, keep_empty=True)
-            if scope != "global":
-
-                self._send_json(scopes.edit_skill(scope, parts[2], **fields))
-                return
-            self._send_json(self.store.edit(parts[2], **fields))
+            self._send_json(scopes.edit_skill(scope, parts[2], **fields))
         else:
             self._send_error(404, "unknown endpoint", code="unknown_endpoint")
 
@@ -1953,13 +1644,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def _delete_route(self, parts: list[str], qs: dict[str, list[str]]) -> None:
         if len(parts) == 3 and parts[:2] == ["api", "skills"]:
-            purge = qs.get("purge", ["0"])[0] in ("1", "true", "yes")
-            scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
-            if scope != "global":
-
-                self._send_json(scopes.remove_skill(scope, parts[2], purge=purge))
-                return
-            self._send_json(self.store.remove(parts[2], purge=purge))
+            purge = _flag(qs, "purge")
+            scope = _scope_param(qs)
+            self._send_json(scopes.remove_skill(scope, parts[2], purge=purge))
         elif len(parts) == 4 and parts[:3] == ["api", "catalog", "profiles"]:
             self._send_json(delete_profile(self.store.data_dir, parts[3]))
         else:
@@ -1992,24 +1679,16 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not filename.endswith((".tar.gz", ".tgz", ".tar", ".zip")):
                 self._send_error(400, "unsupported archive type (use .tar.gz/.tgz/.tar/.zip)")
                 return
-            force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
-            full = qs.get("full", ["0"])[0] in ("1", "true", "yes")
-            try:
-                raw = self._read_body()
-            except StoreError as exc:
-                self._send_error(413 if "too large" in str(exc) else 400, str(exc))
-                return
+            force = _flag(qs, "force")
+            full = _flag(qs, "full")
+            raw = self._read_body()
             if not raw:
                 self._send_error(400, "empty archive body")
                 return
             target = Path(tempfile.mkdtemp(prefix="skillsmgr-webui-")) / filename
             try:
                 target.write_bytes(raw)
-                try:
-                    result = self.store.import_(target, force=force, full=full)
-                except StoreError as exc:
-                    self._send_error(400, str(exc))
-                    return
+                result = self.store.import_(target, force=force, full=full)
             finally:
                 shutil.rmtree(target.parent, ignore_errors=True)
             self._send_json(result)

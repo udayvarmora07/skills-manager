@@ -6,7 +6,7 @@ own severity order:
 * ``STORE-11`` — the mutation lock is process-local, so two real processes on one
   data dir produced a raw ``FileNotFoundError`` out of the toggle rename and
   stranded ``.skillsmgr-tmp`` artifacts that no repair path could clear.
-* ``SCOPE-5`` — ``_safe_scope_skill_path`` mixed a resolved record path with an
+* ``SCOPE-5`` — ``safe_scope_skill_path`` mixed a resolved record path with an
   unresolved root, making nested skills unreachable when an ancestor of the scope
   root is a symlink.  This one is **pinned, not red-first**: see the class
   docstring, the code was already correct here and the test records the proof.

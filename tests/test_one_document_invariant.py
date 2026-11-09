@@ -111,7 +111,7 @@ class InvariantHomeTestCase(unittest.TestCase):
 
     def _mixed_scope(self, scope_id: str, name: str) -> Path:
         scopes.create_skill(scope_id, name, "probe document")
-        d = Path(scopes._scope_by_id(scope_id).base) / name
+        d = Path(scopes.scope_by_id(scope_id).base) / name
         (d / DISABLED).write_text(_doc(name), encoding="utf-8")
         return d
 
@@ -293,7 +293,7 @@ class TestBothTogglesAgreeOnEveryReachableState(InvariantHomeTestCase):
         """
         if in_scope:
             scopes.create_skill("agents", name, "probe document")
-            d = Path(scopes._scope_by_id("agents").base) / name
+            d = Path(scopes.scope_by_id("agents").base) / name
         else:
             d = self._global_dir(name)
         # create_skill always writes SKILL.md, so start from a known-empty
@@ -363,7 +363,7 @@ class TestSyncCannotCreateTheStateEveryOtherPathRefuses(InvariantHomeTestCase):
     """
 
     def _mixed_source_in_agents(self, name: str) -> Path:
-        src = Path(scopes._scope_by_id("agents").base) / name
+        src = Path(scopes.scope_by_id("agents").base) / name
         src.mkdir(parents=True, exist_ok=True)
         (src / ACTIVE).write_text(_doc(name), encoding="utf-8")
         (src / DISABLED).write_text(_doc(name), encoding="utf-8")
@@ -381,7 +381,7 @@ class TestSyncCannotCreateTheStateEveryOtherPathRefuses(InvariantHomeTestCase):
             scopes.sync_skill("mixedsrc2", "agents", ["claude-code"], force=True)
         except StoreError:
             pass
-        dest = Path(scopes._scope_by_id("claude-code").base) / "mixedsrc2"
+        dest = Path(scopes.scope_by_id("claude-code").base) / "mixedsrc2"
         self.assertFalse(
             dest.is_dir() and (dest / ACTIVE).is_file() and (dest / DISABLED).is_file(),
             "sync landed a mixed-document directory in the target scope",
@@ -392,7 +392,7 @@ class TestSyncCannotCreateTheStateEveryOtherPathRefuses(InvariantHomeTestCase):
         scopes.create_skill("agents", "clean", "probe document")
         out = scopes.sync_skill("clean", "agents", ["claude-code"], force=True)
         self.assertIn("claude-code", out["synced"])
-        dest = Path(scopes._scope_by_id("claude-code").base) / "clean"
+        dest = Path(scopes.scope_by_id("claude-code").base) / "clean"
         self.assertTrue((dest / ACTIVE).is_file())
         self.assertFalse((dest / DISABLED).exists())
 

@@ -534,39 +534,25 @@ def _eval_workspace(name: str, root: Path, store: Store, args) -> Path:
     override = getattr(args, "workspace", None)
     if override:
         workspace = Path(override).expanduser()
-        if evals_mod._workspace_is_managed(workspace, store.data_dir):
-            raise StoreError("eval workspace must not be inside the managed skills tree")
-        return workspace
-    if getattr(args, "path", None):
+    elif getattr(args, "path", None):
         workspace = evals_mod.workspace_for_dir(root, store.data_dir, name)
     else:
         workspace = evals_mod.workspace_for(store.data_dir, name)
-    if evals_mod._workspace_is_managed(workspace, store.data_dir):
-        raise StoreError("eval workspace must not be inside the managed skills tree")
-    return workspace
+    return evals_mod.ensure_workspace_outside(workspace, store.data_dir)
 
 
 def _eval_report(name: str, root: Path, store: Store, args, runs_document) -> dict:
     """Build the advisory eval report for one validated skill directory."""
     from . import evals as evals_mod
 
-    report = evals_mod.load_cases(root)
-    report["workspace"] = str(_eval_workspace(name, root, store, args))
-    report["workspace_override"] = bool(getattr(args, "workspace", None))
+    workspace = _eval_workspace(name, root, store, args)
     if runs_document is None:
-        return report
-    blocking = [issue for issue in report["issues"] if issue["level"] == "error"]
-    if blocking:
-        raise StoreError(
-            f"cannot record eval runs for '{name}': {blocking[0]['message']}"
+        report = evals_mod.eval_report(root, workspace, name)
+    else:
+        report = evals_mod.eval_report(
+            root, workspace, name, runs=runs_document["runs"], iteration=runs_document["iteration"]
         )
-    if not report["cases"]:
-        raise StoreError(f"cannot record eval runs for '{name}': no eval cases found")
-    workspace = Path(report["workspace"])
-    report["recording"] = evals_mod.record_runs(
-        workspace, runs_document["iteration"], report["cases"],
-        runs_document["runs"],
-    )
+    report["workspace_override"] = bool(getattr(args, "workspace", None))
     return report
 
 

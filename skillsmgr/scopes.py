@@ -70,7 +70,7 @@ def _global_skills_dir() -> Path:
     return store.skills_dir if store is not None else paths.skills_dir()
 
 
-def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
+def safe_scope_skill_path(scope: "Scope", name: str) -> Path:
     """Return a validated skill path contained by an agent scope root.
 
     Uses ``contained_entry`` rather than ``contained_path`` so the *named*
@@ -200,10 +200,10 @@ def _scope_read_dir(scope: "Scope", name: str) -> tuple[Path, dict | None]:
 
     Returns ``(directory, link)`` where ``link`` is the peer-link description
     for a followed link and ``None`` for an ordinary skill.  Writers must not
-    use this: :func:`_safe_scope_skill_path` still refuses out-of-root links.
+    use this: :func:`safe_scope_skill_path` still refuses out-of-root links.
     """
     try:
-        skill_dir = _safe_scope_skill_path(scope, name)
+        skill_dir = safe_scope_skill_path(scope, name)
     except StoreError:
         link = _peer_link_info(scope, name)
         if link is None:
@@ -335,7 +335,7 @@ def known_scopes() -> list[Scope]:
     return scopes
 
 
-def _scope_by_id(scope_id: str) -> Scope | None:
+def scope_by_id(scope_id: str) -> Scope | None:
     for s in known_scopes():
         if s.id == scope_id:
             return s
@@ -517,7 +517,7 @@ def scan_scope(scope_id: str) -> list[dict]:
         for r in rows:
             _enrich_global_row(r, store, physical_root)
         return _annotate_instance_states(rows)
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     # SEC-10/§D1: a flat record used to carry no path, so the loop below
@@ -670,7 +670,7 @@ def get_skill(scope_id: str, name: str) -> dict:
         except Exception as exc:
             _diagnose("global scope detail enrichment failed", exc)
         return rec
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     skill_dir, link = _scope_read_dir(scope, name)
@@ -711,7 +711,7 @@ def get_raw(scope_id: str, name: str) -> str:
             else path_safety.safe_skill_path(paths.skills_dir(), name)
         )
     else:
-        scope = _scope_by_id(scope_id)
+        scope = scope_by_id(scope_id)
         if scope is None:
             raise StoreError(f"unknown scope {scope_id!r}")
         p, _link = _scope_read_dir(scope, name)
@@ -759,7 +759,7 @@ def create_skill(
             allowed_tools=allowed_tools,
             body=body,
         )
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     # Reuse Store.create logic but write to scope base.
@@ -841,10 +841,10 @@ def edit_skill(
             allowed_tools=allowed_tools,
             body=body,
         )
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = _safe_scope_skill_path(scope, name)
+    skill_dir = safe_scope_skill_path(scope, name)
     with _scope_mutation_lock(skill_dir):
         _check_mutation_documents(skill_dir)
         if not skill_dir.is_dir():
@@ -912,10 +912,10 @@ def edit_skill(
 def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
     if scope_id == "global":
         return _global_store().remove(name, purge=purge)
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = _safe_scope_skill_path(scope, name)
+    skill_dir = safe_scope_skill_path(scope, name)
     if not skill_dir.is_dir():
         raise SkillNotFound(f"skill '{name}' is not installed in scope '{scope_id}'")
     if purge:
@@ -959,7 +959,7 @@ def _agent_scope(scope_id: str) -> Scope:
     """
     if scope_id == "global":
         raise StoreError("the global library trash is not an agent trash folder")
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     return scope
@@ -1152,7 +1152,7 @@ def restore_trashed(scope_id: str, name: str, trash_path: str | None = None) -> 
     scope = _agent_scope(scope_id)
     candidates = [row for row in scope_trash_list(scope_id) if row["name"] == name]
     entry = _select_trash_entry(candidates, trash_path, scope_id, name)
-    skill_dir = _safe_scope_skill_path(scope, name)
+    skill_dir = safe_scope_skill_path(scope, name)
     with _scope_mutation_lock(skill_dir):
         _check_mutation_documents(skill_dir)
         if skill_dir.exists() or skill_dir.is_symlink():
@@ -1184,10 +1184,10 @@ def toggle_skill(scope_id: str, name: str, *, enable: bool) -> dict:
     if scope_id == "global":
         store = _global_store()
         return store.enable(name) if enable else store.disable(name)
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    skill_dir = _safe_scope_skill_path(scope, name)
+    skill_dir = safe_scope_skill_path(scope, name)
     # STORE-11: the checks and the rename are one step under the same lock key
     # the sibling scope writers use.
     with _scope_mutation_lock(skill_dir):
@@ -1269,7 +1269,7 @@ def sync_skill(
         if sid == from_scope:
             skipped.append({"scope": sid, "reason": "same as source"})
             continue
-        scope = _scope_by_id(sid)
+        scope = scope_by_id(sid)
         if scope is None:
             skipped.append({"scope": sid, "reason": "unknown scope"})
             continue
@@ -1283,7 +1283,7 @@ def sync_skill(
             # availability is what the filesystem actually allows (SCOPE-8).
             skipped.append({"scope": sid, "reason": "read-only root (cannot be written)"})
             continue
-        dest = _safe_scope_skill_path(scope, name)
+        dest = safe_scope_skill_path(scope, name)
         if dest.resolve() == src_dir.resolve():
             skipped.append({"scope": sid, "reason": "same physical skill as source"})
             continue
@@ -1344,7 +1344,7 @@ def sync_skill(
 def list_snapshots_for(scope_id: str, name: str) -> list[str]:
     if scope_id == "global":
         return list_snapshots(_global_store().data_dir, "global", name)
-    if _scope_by_id(scope_id) is None:
+    if scope_by_id(scope_id) is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     return list_snapshots(_global_store().data_dir, scope_id, name)
 
@@ -1352,11 +1352,11 @@ def list_snapshots_for(scope_id: str, name: str) -> list[str]:
 def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
     if scope_id == "global":
         return _global_store().restore(name, snapshot=snapshot)
-    scope = _scope_by_id(scope_id)
+    scope = scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     content = read_snapshot(_global_store().data_dir, scope_id, name, snapshot)
-    skill_dir = _safe_scope_skill_path(scope, name)
+    skill_dir = safe_scope_skill_path(scope, name)
     md = skill_dir / "SKILL.md"
     with _scope_mutation_lock(skill_dir):
         _check_mutation_documents(skill_dir)

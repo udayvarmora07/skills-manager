@@ -53,6 +53,7 @@ TARGET_FILES = (
     "skillsmgr/install.py",
     "skillsmgr/documents.py",
     "skillsmgr/doctor.py",
+    "skillsmgr/batch.py",
     "skillsmgr/atomic_io.py",
     "skillsmgr/risk.py",
 )

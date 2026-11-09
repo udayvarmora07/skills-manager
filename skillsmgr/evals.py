@@ -88,7 +88,7 @@ def workspace_for(data_dir: Path, name: str) -> Path:
     ``doctor`` orphan detection, and export never see eval run data.
     """
     workspace = Path(data_dir) / EVALS_DIRNAME / f"{validate_skill_name(name)}{WORKSPACE_SUFFIX}"
-    return _ensure_workspace_outside(workspace, data_dir)
+    return ensure_workspace_outside(workspace, data_dir)
 
 
 def workspace_beside(skill_dir: Path) -> Path:
@@ -123,7 +123,7 @@ def workspace_for_dir(skill_dir: Path, data_dir: Path, name: str) -> Path:
     skill_dir = Path(skill_dir)
     if _is_within(skill_dir, Path(data_dir) / "skills"):
         return workspace_for(data_dir, name)
-    return _ensure_workspace_outside(workspace_beside(skill_dir), data_dir)
+    return ensure_workspace_outside(workspace_beside(skill_dir), data_dir)
 
 
 def _workspace_is_managed(workspace: Path, data_dir: Path) -> bool:
@@ -131,7 +131,7 @@ def _workspace_is_managed(workspace: Path, data_dir: Path) -> bool:
     return _is_within(Path(workspace), Path(data_dir) / "skills")
 
 
-def _ensure_workspace_outside(workspace: Path, data_dir: Path) -> Path:
+def ensure_workspace_outside(workspace: Path, data_dir: Path) -> Path:
     """Reject a workspace alias that could place eval output in managed skills."""
     if _workspace_is_managed(workspace, data_dir):
         raise ValueError("eval workspace must not be inside the managed skills tree")
@@ -648,3 +648,21 @@ def record_runs(workspace: Path, iteration: int, cases: list[dict], runs: object
         "runs": scored["runs"],
         "policy": EVAL_POLICY,
     }
+
+
+def eval_report(skill_dir: Path, workspace: Path, name: str, *, runs=None, iteration: int = 1) -> dict:
+    """The advisory eval report for one skill, recording ``runs`` when given.
+
+    Recording writes only inside ``workspace``; without ``runs`` this reads.
+    """
+    report = load_cases(skill_dir)
+    report["workspace"] = str(workspace)
+    if runs is None:
+        return report
+    blocking = [issue for issue in report["issues"] if issue["level"] == "error"]
+    if blocking:
+        raise ValueError(f"cannot record eval runs for '{name}': {blocking[0]['message']}")
+    if not report["cases"]:
+        raise ValueError(f"cannot record eval runs for '{name}': no eval cases found")
+    report["recording"] = record_runs(workspace, iteration, report["cases"], runs)
+    return report

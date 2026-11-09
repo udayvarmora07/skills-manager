@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 from skillsmgr import context
-from skillsmgr import scopes, webapp
+from skillsmgr import batch, scopes, webapp
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
 
@@ -173,9 +173,9 @@ class BatchPlanBindingTests(unittest.TestCase):
         (self.agents / "linked").symlink_to(outside, target_is_directory=True)
         row = {"name": "linked", "scope": "agents", "path": str(self.agents / "linked"),
                "physical_path": str(outside), "instance_state": "link_escape"}
-        with mock.patch.object(webapp, "_batch_tree_hash") as hashed:
+        with mock.patch.object(batch, "_batch_tree_hash") as hashed:
             with self.assertRaises(webapp.StoreError):
-                webapp._resolve_batch_target(row, [row], set())
+                batch.resolve_target(row, [row], set())
             hashed.assert_not_called()
 
     def test_linked_destination_never_hashes_outside_tree(self):
@@ -185,9 +185,9 @@ class BatchPlanBindingTests(unittest.TestCase):
         (self.agents / "demo").symlink_to(outside, target_is_directory=True)
         row = {"name": "demo", "scope": "agents", "path": str(self.agents / "demo"),
                "physical_path": str(outside), "read_only": True}
-        with mock.patch.object(webapp, "_batch_tree_hash") as hashed:
+        with mock.patch.object(batch, "_batch_tree_hash") as hashed:
             with self.assertRaises(webapp.StoreError):
-                webapp._sync_destinations("demo", {"to_scopes": ["agents"]}, [row])
+                batch._sync_destinations("demo", {"to_scopes": ["agents"]}, [row])
             hashed.assert_not_called()
 
     def test_malformed_skill_can_be_trashed(self):
