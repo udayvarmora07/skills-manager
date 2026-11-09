@@ -365,3 +365,20 @@ checked. The staged tree includes
 all restored compatibility files and shared read modules. The normal main push
 and its remote receipt are recorded after integration; GitHub CI remains a
 separate check.
+
+### Verified main push receipt
+
+**[NOTE]** `origin/main` was fast-forwarded from `f323f16` to
+`e4e100b5af94ea3f786a485c25c01ca7a221a5cc`. The normal push returned success,
+and `git ls-remote origin refs/heads/main` returned that same full SHA. The
+committed tree matches the staged verified tree; local `main` is clean in this
+task worktree. All 47 file fingerprints recorded for the independent primary
+checkout still match, and its branch remains `feat/v2-feature-parity`.
+
+**[NOTE]** Clean committed-tree wheel/sdist builds and package-data inspection
+passed; SHA-256 records and fresh unit/smoke/static logs are at
+`/home/uday-varmora/skillsmgr-main-integration-21iqvlon`. The main tree also
+passed Store and HTTP smoke checks after the fast-forward. This receipt is a
+documentation follow-up to the pushed code commit. GitHub CI status is checked
+and reported separately; no release tag or package publication is part of the
+request.

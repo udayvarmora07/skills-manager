@@ -9,8 +9,8 @@
 - [x] Confirm explicit main-push authorization and use only Terra subagents.
 - [x] Fetch `origin/main` and verify the refactor is based on its `f323f16` tip.
 - [x] Preserve the dirty primary checkout; inventory all task files and restored APIs.
-- [/] Re-run current-tree gates, commit the complete task and fast-forward `main`.
-- [ ] Push normally to `origin/main` and verify the remote head.
+- [x] Re-run current-tree gates, commit the complete task and fast-forward `main`.
+- [x] Push normally to `origin/main`; verify remote `e4e100b` matches the tested tree.
 
 ## Codebase untangling continuation (2026-11-09)
 

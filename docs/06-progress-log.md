@@ -22,6 +22,15 @@ compilation/syntax, docs/design/complexity and pinned Ruff/Bandit checks.
 Integration and the normal push are recorded in the integration section of
 @docs/37-codebase-untangling-2026-11-09.md.
 
+**[NOTE]** The complete refactor landed as `e4e100b` on `origin/main` through
+an ordinary fast-forward push from `f323f16` (eight prior refactor commits plus
+the completion commit). `git ls-remote` verified the exact remote SHA. Clean-tree
+wheel/sdist builds and package inspection pass; integrated-main Store/HTTP
+smokes also pass. All 47 recorded primary-checkout file fingerprints remain
+unchanged. The primary stays on `feat/v2-feature-parity`; the recovered task
+worktree now holds clean `main`. No release tag or package publication occurred.
+GitHub CI is observed separately from this local verification record.
+
 ## 2026-11-09 — Codebase untangling, Codex continuation
 
 **[NOTE]** Recovered Claude’s “Codebase untangling” session, its Comments/Tests
