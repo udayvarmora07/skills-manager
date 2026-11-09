@@ -255,7 +255,9 @@ or different policies require separate entry points.
   regression was disabled to make the pass succeed.
 - `backup_sync` and `bundles` are shipped, ADR-backed APIs even without a current
   CLI/HTTP workflow. They and documented insight functions remain available.
-  Removing such APIs needs an explicit compatibility decision.
+  On 2026-11-09 the maintainer decided to keep `insights`, `backup_sync` and
+  `bundles` as compatibility APIs; a later pass should not re-propose removing
+  them without a new decision.
 - Agent doctor detects an unreadable root and shares managed-peer link policy.
   Recursive discovery remains best-effort; it does not certify inaccessible
   descendants, and document-less grouping folders are not inferred to be skills.
