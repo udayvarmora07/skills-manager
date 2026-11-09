@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import ai, ai_budget, ai_evals, ai_overlap, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
+from . import ai, ai_ask, ai_budget, ai_evals, ai_overlap, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -1563,6 +1563,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             "review-briefing": lambda body: ai_review.review_briefing(data_dir, body),
             "prompt-sets": lambda body: ai_skills.save_prompt_set(data_dir, body),
             "evals": lambda body: ai_evals.run_evals(self.store, body),
+            "ask": lambda body: ai_ask.ask_library(data_dir, body),
         }
         handler = handlers.get(parts[2])
         if handler is None:

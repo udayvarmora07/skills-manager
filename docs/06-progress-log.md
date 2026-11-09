@@ -52,6 +52,10 @@ and without it and records them through the existing harness, graded only by
 the case assertions; a skill that passes without itself is flagged
 `not-needed`. 3 more tests; browser-checked.
 
+**[SPEC]** A9 followed: `ai_ask.py` answers "which skill fits" from names and
+descriptions only and drops invented skills (`POST /api/ai/ask`, v2 Ask your
+library). 1 more test; browser-checked.
+
 **[NOTE]** Verified: 19 new tests against a fake provider; v2 contract tests;
 both smokes; docs and complexity gates; a browser run of every page against the
 fake model, including applying a proposal (snapshot written). Not verified: any

@@ -17,6 +17,7 @@
         busy: false, error: "", note: "", connection: null,
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
+        question: "", askScope: "all", asked: null,
         evalName: "", evalMax: 10, evalResult: null, evalEstimate: null,
         savedCount: 0, savedNote: "",
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
@@ -66,6 +67,8 @@
         const ok = await this.guard(() => api("/api/skills/" + encodeURIComponent(p.name) + "?scope=" + encodeURIComponent(this.budget.scope), { method: "PATCH", body: JSON.stringify({ description: p.proposed }) }));
         if (ok) { this.appliedNames.push(p.name); this.note = "Saved " + p.name + ". The previous version is in Recovery → history."; this.$emit("changed"); }
       },
+      async ask() { const r = await this.guard(() => post("/api/ai/ask", { question: this.question, scope: this.askScope })); if (r) { this.asked = r; this.load(); } },
+      skillHref(name) { return "#/skill/" + encodeURIComponent(name); },
       librarySkills() { return [...new Set(this.records.filter((r) => r.scope === "global").map((r) => r.name))].sort(); },
       evalBody(estimate) { return { name: this.evalName, max_cases: Number(this.evalMax), estimate }; },
       async estimateEvals() { this.evalResult = null; this.evalEstimate = await this.guard(() => post("/api/ai/evals", this.evalBody(true))); },
@@ -183,7 +186,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-ask':'Ask your library','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -248,6 +251,29 @@
           <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy" @click="saveTests()">Save these prompts as regression tests</button></div>
           <p v-if="savedNote" class="tp-fine" role="status">{{ savedNote }}</p>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-ask'">
+        <h1 class="h1" id="h1" tabindex="-1">Ask your library</h1>
+        <p class="lede">Describe a task in your own words and get the skills that fit it. Every suggested skill is checked against your real library.</p>
+        <section class="card tp-panel" aria-labelledby="ai-ask-h">
+          <h2 id="ai-ask-h" class="sr-only">Question</h2>
+          <form class="tp-stack" @submit.prevent="ask()">
+            <label for="ai-q" class="tp-fine">Question</label>
+            <input id="ai-q" class="field" v-model="question" maxlength="500" placeholder="Which skill helps me write release notes?" autocomplete="off">
+            <div class="tp-set"><div class="tp-set-row"><label for="ai-asks"><b>Search</b></label><select id="ai-asks" class="field" v-model="askScope"><option value="all">All agents</option><option v-for="s in agentScopes" :key="s.id" :value="s.id">{{ s.label }}</option></select></div></div>
+            <p class="tp-fine">Sends your question with skill names and the first 300 characters of each description; never skill bodies. At most 300 skills, narrowed by matching words first.</p>
+            <div class="tp-acts"><button class="btn btn-ink" type="submit" :disabled="busy || !question.trim()">Ask</button></div>
+          </form>
+        </section>
+        <section v-if="asked" class="card tp-panel" aria-labelledby="ai-ans-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-ans-h">Answer</h2><p>Searched {{ asked.searched }} skills, sent {{ asked.sent }} · {{ asked.run.model }}</p></div></header>
+          <p>{{ asked.answer }}</p>
+          <p v-if="!asked.matches.length" class="tp-empty">No skill in your library fits.</p>
+          <ul class="tp-rows"><li v-for="m in asked.matches" :key="m.name" class="v2-tool-row">
+            <span class="tp-row-main"><a class="tp-link tp-mono" :href="skillHref(m.name)">{{ m.name }}</a><small>{{ m.why }}</small><small>{{ m.scopes.join(', ') }}</small></span></li></ul>
+          <p v-if="asked.dropped_unknown" class="tp-fine">{{ asked.dropped_unknown }} suggestion(s) were dropped because no such skill exists.</p>
         </section>
       </template>
 

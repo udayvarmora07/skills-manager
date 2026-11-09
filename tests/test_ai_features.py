@@ -16,7 +16,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from skillsmgr import ai, ai_budget, ai_evals, ai_overlap, ai_review, ai_skills, context, source_update
+from skillsmgr import ai, ai_ask, ai_budget, ai_evals, ai_overlap, ai_review, ai_skills, context, source_update
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
 
@@ -99,6 +99,10 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
         if system.startswith("You are an AI coding agent working for a developer"):
             # The "skill" teaches the magic word; without it the model does not know it.
             return {"__text__": "The answer is PINEAPPLE." if "magic word" in system else "I do not know."}
+        if "find skills in their own AI coding-agent skill library" in system:
+            return {"answer": "Use sql-tuning.", "skills": [
+                {"name": "sql-tuning", "why": "slow queries"}, {"name": "made-up-skill", "why": "x"},
+                {"name": "sql-tuning", "why": "duplicate"}]}
         if "You brief a developer" in system:
             return {"summary": "Adds a setup script.",
                     "claims": [{"text": "adds a download step", "file": "scripts/run.sh",
@@ -513,6 +517,19 @@ class AiFeatureTests(unittest.TestCase):
             ai_evals.run_evals(self.store, {"name": "plain"})
         with self.assertRaises(Exception):
             ai_evals.run_evals(self.store, {"name": "../plain"})
+
+    # -- ask your library -------------------------------------------------
+
+    def test_ask_library_cites_only_real_skills_and_sends_no_bodies(self):
+        self._configure()
+        result = ai_ask.ask_library(self.store.data_dir, {"question": "my queries are slow", "scope": "all"})
+        self.assertEqual([m["name"] for m in result["matches"]], ["sql-tuning"])
+        self.assertEqual(result["matches"][0]["scopes"], ["claude-code"])
+        self.assertEqual(result["dropped_unknown"], 1)     # the duplicate is not "unknown"
+        sent = json.dumps(FakeProvider.calls[-1]["body"])
+        self.assertNotIn("Body of sql-tuning", sent)
+        with self.assertRaises(ai.AiError):
+            ai_ask.ask_library(self.store.data_dir, {"question": "  "})
 
     # -- HTTP -------------------------------------------------------------
 

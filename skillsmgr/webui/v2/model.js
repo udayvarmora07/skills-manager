@@ -361,6 +361,7 @@
       { id: "settings", name: "Settings", text: "Theme, text size, number format and index maintenance.", commandLabel: "Settings and index maintenance" },
     ] },
     { key: "ai", label: "AI assist (your own key)", items: [
+      { id: "ai-ask", name: "Ask your library", text: "Ask which of your skills fits a task, in plain words. Only names and descriptions are sent.", commandLabel: "AI ask your library" },
       { id: "ai-trigger", name: "Trigger test", text: "Check whether an agent actually picks each skill for realistic requests.", commandLabel: "AI trigger test" },
       { id: "ai-improve", name: "Improve a description", text: "Get rewrites that are re-tested and recommended only when they measurably help.", commandLabel: "AI improve description" },
       { id: "ai-budget", name: "Fit the listing budget", text: "Shorten the largest descriptions so every skill stays visible, keeping only versions that still trigger.", commandLabel: "AI fit listing budget" },

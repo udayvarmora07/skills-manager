@@ -557,7 +557,8 @@ its budget and marks each shorter version safe only if it still triggers.
 must quote its file, and risk opinions never change a finding. `ai_evals.py`
 (A8) produces with/without-skill outputs for `evals.record_runs`, which grades
 them with the case assertions; no model grading. `AiRun.ask_text` serves
-plain-text answers. Both are read-only towards skills; no Store method,
+plain-text answers. `ai_ask.py` (A9) answers "which skill fits" from names and
+descriptions only and keeps only skills that exist. Both are read-only towards skills; no Store method,
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 

@@ -49,7 +49,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
 | A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | **Shipped** |
 | A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | **Shipped** |
-| A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | Planned |
+| A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | **Shipped** |
 | A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | Planned |
 | A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | Planned, gated |
 | A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | Idea |
@@ -109,6 +109,10 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[SPEC]** `ai_evals.run_evals` takes a library skill's `evals/evals.json` (at most 20 cases per run; input files are read with containment and bounded at 8,000 characters each). Every case runs twice: with the whole `SKILL.md` as system instructions, and with only a neutral agent instruction. Outputs (at most 1,500 output tokens, possibly cut off) are passed to the existing `evals.record_runs`, which grades them with the case's deterministic assertions and writes the next `iteration-N` atomically. No model grades anything, so cases without assertions are reported as ungraded. `not-needed` means every graded case passed both with and without the skill: the skill may add nothing for this model. It is a prompt, not a deletion.
 
-## 12. Next
+## 12. A9 ask your library
 
-A9 ask your library, A10 porting notes, then A11 verified drafting.
+**[SPEC]** `ai_ask.ask_library` sends the question with skill names, the scopes holding them and the first 300 description characters, never bodies. Above 300 skills it narrows by word overlap with the question first. Suggested names that are not real skills are dropped and counted, so every link in the answer opens a skill that exists.
+
+## 13. Next
+
+A10 porting notes (facts from `key_support`, model writes prose only), then A11 verified drafting.

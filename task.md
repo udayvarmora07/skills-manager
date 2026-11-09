@@ -15,6 +15,7 @@
 - [x] A5 review briefing for registry fetch and update review.
 - [x] A7 regression pack: saved prompt sets re-run after edits and model changes.
 - [x] A8 eval runner with and without the skill.
+- [x] A9 ask your library (names and descriptions only; real skills only).
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
 - [ ] Measure trigger-test fidelity against a real agent's choices.
 

@@ -62,6 +62,7 @@ skills-manager/
     ai_budget.py     # AI listing-budget fitter, verified by re-testing
     ai_review.py     # AI briefing for update and registry reviews
     ai_evals.py      # AI eval runner: with/without skill, graded by assertions
+    ai_ask.py        # AI ask-your-library over names and descriptions
     lockfiles.py     # read-only skills-CLI lockfile evidence (project/global)
     key_support.py   # documented per-consumer frontmatter keys (pure table)
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
