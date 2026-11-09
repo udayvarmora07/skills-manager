@@ -51,7 +51,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | **Shipped** |
 | A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | **Shipped** |
 | A10 | Porting notes per consumer, facts from `key_support`, model writes prose only | opencode #34498 (70), codex #29989 (62), claude-code #31005 (613) | **Shipped** |
-| A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | Planned, gated |
+| A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | **Shipped** |
 | A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | Idea |
 | A13 | Conciseness / splitter advisor (move bulk to `references/`) | claude-code #74473 (210k tokens) | Idea |
 | A14 | CI mode: fixed-seed trigger test with machine-readable output | Sanity on X; skill-linter SARIF | Idea; needs CLI approval |
@@ -130,9 +130,31 @@ disconnected runs are excluded from regression baselines.
 
 **[SPEC]** `ai_port.porting_notes` lists, without AI, every frontmatter key (other than `name` and `description`) the target consumer's documentation does not list, and fixed-pattern references to one agent's conventions (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `$ARGUMENTS`, `${CLAUDE_*}`, `~/.claude` and `~/.codex` paths, `mcp__` tool names, Claude Code tool names, subagents) with the line they occur on. Only when facts exist is the model asked to explain them; each note must name a listed fact or it is dropped. "Not documented" means the target's own page does not list the key, not that the key is rejected.
 
-## 14. Not yet built
+## 14. A11 verified drafting
 
-- **A11 verified drafting**: draft a `SKILL.md` from a brief, then require the A1 trigger test and validation before it can be saved (§2.4 says unverified drafts do not help).
+**[SPEC]** `ai_draft.draft_skill` treats the brief as untrusted data and
+produces a SKILL.md containing name, description and body. The draft passes
+`validator.validate_text` plus explicit limits of 1,024 description characters
+and 500 body lines. A name already installed in the scope, including a hidden
+or disabled skill, cannot be reused. Unsupported frontmatter is rejected so
+the New skill form can preserve the draft's fields.
+
+Valid drafts are measured using A1 with the full scope listing as distractors.
+Generated prompts include the draft, near misses and a bounded sample of
+existing skills; the report discloses how many existing skills were sampled.
+A stolen prompt is one the baseline routes to its expected existing skill
+but the augmented listing routes to the draft. Missing or invalid answers are
+reported; incomplete measurement cannot enable use. These are simulations by
+the configured model, not evidence of the real agent's routing fidelity.
+
+Estimate mode budgets the drafting and verification calls without contacting
+the provider. V2 Tools → Draft a skill shows the draft and evidence as text.
+Use this draft fills the existing New skill form, unsaved, and is disabled for
+validation errors or an unmeasured result. The user reviews that form and
+explicitly creates the skill through the existing scope-aware write path.
+
+## 15. Not yet built
+
 - **A12–A13** profile suggester and conciseness/splitter advisor.
 - **A14 CI mode**: needs a CLI surface, which needs maintainer approval (locked constraint 5).
 - **Fidelity**: measure the trigger simulation against a real agent's choices before treating its numbers as more than estimates.

@@ -655,10 +655,11 @@ const app = createApp({
     openPermanentDelete() {const skill=this.skill;if(!skill)return;this.openDialog({title:`Permanently delete “${skill.name}”?`,danger:true,confirm:"Delete permanently",lines:["This removes the selected copies without moving them to trash. There is no Undo or trash restore for this action."],picks:skill.copies.filter(c=>!c.readOnly&&c.record.addressable!==false&&c.state!=="link"&&this.agentOf(c.scope).writable).map(c=>({id:c.scope,label:this.agentOf(c.scope).name,path:shortPath(c.path)})),chosen:[],onConfirm:async d=>{this.busy=true;try{for(const scope of d.chosen)await api(`/api/skills/${encodeURIComponent(skill.name)}?scope=${encodeURIComponent(scope)}&purge=1`,{method:"DELETE"});await this.refresh();this.toast("Selected copies permanently deleted.");if(!this.m.byName.get(skill.name))location.hash="#/skills";}catch(e){await this.refresh();this.toast(e.message,{err:true});}finally{this.busy=false;}}});},
 
     /* ----- create, recovery, theme, help ----- */
-    openCreate() {
+    openCreate(prefill = {}) {
       const first = this.createTargets.find((x) => !x.library) || this.createTargets[0];
+      const target = this.createTargets.find((x) => x.id === prefill.scope);
       this.openDialog({
-        title: "New skill", form: { name: "", desc: "", scope: first ? first.id : "global", category:"",version:"",license:"",compatibility:"",allowed_tools:"",body:"## When to use\n\nDescribe the situations where an agent should use this skill.\n\n## Steps\n\n1. \n",template:"" }, confirm: "Create skill",
+        title: "New skill", form: { name: prefill.name || "", desc: prefill.description || "", scope: target ? target.id : first ? first.id : "global", category:prefill.category || "",version:prefill.version || "",license:prefill.license || "",compatibility:prefill.compatibility || "",allowed_tools:prefill.allowed_tools || "",body:typeof prefill.body === "string" ? prefill.body : "## When to use\n\nDescribe the situations where an agent should use this skill.\n\n## Steps\n\n1. \n",template:"" }, confirm: "Create skill",
         onConfirm: async (d) => {
           const f = d.form; this.busy = true;
           try {
@@ -673,6 +674,14 @@ const app = createApp({
       });
       const dialog=this.dialog;
       api("/api/templates").then(r=>{if(this.dialog===dialog)this.createTemplates=r.templates||[];}).catch(e=>{if(this.dialog===dialog)dialog.error="Templates unavailable: "+this.friendly(e.message);});
+    },
+    useDraft(draft) {
+      if (!draft || typeof draft !== "object") return;
+      this.openCreate({
+        scope: draft.scope, name: draft.name, description: draft.description, body: draft.body,
+        category: draft.category, version: draft.version, license: draft.license,
+        compatibility: draft.compatibility, allowed_tools: draft.allowed_tools,
+      });
     },
     async loadCreateTemplate() {const d=this.dialog;if(!d?.form?.template)return;const name=d.form.template;d.templateLoading=true;try{const t=await api("/api/templates/"+encodeURIComponent(name));if(this.dialog===d&&d.form.template===name)d.form.body=stripFrontmatter(t.body||"");}catch(e){if(this.dialog===d)d.error=this.friendly(e.message);}finally{if(this.dialog===d)d.templateLoading=false;}},
     async loadTrash() { this.trashLoading=true;try { this.trash = await api("/api/trash");this.trashError=""; } catch (e) { this.trashError=this.friendly(e.message); } finally {this.trashLoading=false;} },

@@ -10,7 +10,7 @@
 
   window.SkillsV2AiCenter = {
     props: { page: String, records: { type: Array, default: () => [] }, scopes: { type: Array, default: () => [] }, target: Object },
-    emits: ["changed"],
+    emits: ["changed", "use-draft"],
     data() {
       return {
         settings: null, form: { provider: "", model: "", base_url: "", api_key: "", max_run_tokens: 300000, max_day_tokens: 2000000 },
@@ -22,6 +22,7 @@
         evalName: "", evalMax: 10, evalResult: null, evalEstimate: null,
         savedCount: 0, savedPrompts: [], savedNote: "", savedError: "", savedBusy: false, savedRequest: 0,
         pastRuns: [], pastRun: null, historyError: "", historyBusy: false, historyRequest: 0,
+        draftScope: "", draftName: "", draftBrief: "", draftEstimate: null, draftEstimateKey: "", draftResult: null,
         budgetChars: "", budgetMax: 5, budget: null, budgetEstimate: null, appliedNames: [],
         overlapLimit: 6, pairA: "", pairB: "", pairs: [], overlap: null, overlapEstimate: null,
         improveName: "", candidates: 2, improve: null, improveEstimate: null, applied: "",
@@ -49,11 +50,26 @@
       },
       troubled() { return ((this.result && this.result.skills) || []).filter((s) => s.verdict !== "fires"); },
       usage() { return (this.settings && this.settings.usage) || null; },
+      draftScopes() {
+        return this.scopes.filter((s) => s.writable && s.availability !== "read-only")
+          .map((s) => ({ id: s.id, label: s.id === "global" ? "Your library" : s.label || s.id, count: Number(s.count) || 0 }));
+      },
+      draftEstimateCurrent() { return !!this.draftEstimate && this.draftEstimateKey === this.draftInputKey(); },
+      canUseDraft() {
+        const draft = this.draftResult && this.draftResult.draft;
+        return !!(this.draftResult && this.draftResult.status === "verified" && this.draftResult.validation
+          && this.draftResult.validation.valid === true && draft
+          && ["name", "description", "body"].every((key) => typeof draft[key] === "string"));
+      },
     },
     watch: {
       page: { immediate: true, handler() { this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
       scope() { this.ported = null; this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
+      draftScope() { this.clearDraftProposal(); },
+      draftName() { this.clearDraftProposal(); },
+      draftBrief() { this.clearDraftProposal(); },
       agentScopes: { immediate: true, handler(list) { if (!this.scope && list.length) this.scope = (list.find((s) => s.id === "claude-code") || list[0]).id; } },
+      draftScopes: { immediate: true, handler(list) { if (!list.some((s) => s.id === this.draftScope)) this.draftScope = (list.find((s) => s.id === "global") || list[0] || {}).id || ""; } },
     },
     methods: {
       pct,
@@ -85,6 +101,40 @@
       verdictLabel(v) { return { fires: "Fires", "never-fires": "Never fires", unreliable: "Unreliable", unknown: "Unknown" }[v] || v; },
       skillLabel(n) { return n === "(none)" ? "no skill" : n; },
       choiceList(choices) { return Object.entries(choices || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => this.skillLabel(k) + (n > 1 ? " ×" + n : "")).join(", "); },
+      draftInputKey() { return JSON.stringify([this.draftScope, this.draftName.trim(), this.draftBrief.trim()]); },
+      clearDraftProposal() { this.draftEstimate = null; this.draftEstimateKey = ""; this.draftResult = null; },
+      draftBody(estimate) { return { scope: this.draftScope, brief: this.draftBrief.trim(), name: this.draftName.trim() || undefined, estimate }; },
+      async estimateDraft() {
+        if (!this.draftBrief.trim() || !this.draftScope) return;
+        this.clearDraftProposal();
+        const key = this.draftInputKey();
+        const r = await this.guard(() => post("/api/ai/draft-skill", this.draftBody(true)));
+        if (r && key === this.draftInputKey() && r.status === "estimate") { this.draftEstimate = r; this.draftEstimateKey = key; }
+      },
+      async runDraft() {
+        if (!this.draftEstimateCurrent || !this.draftBrief.trim() || !this.draftScope) return;
+        const key = this.draftInputKey();
+        this.draftResult = null;
+        const r = await this.guard(() => post("/api/ai/draft-skill", this.draftBody(false)));
+        if (r && key === this.draftInputKey() && ["verified", "invalid", "unverified"].includes(r.status)) {
+          this.draftResult = r; this.draftEstimate = null; this.draftEstimateKey = ""; this.loadRuns();
+        }
+      },
+      useDraft() {
+        if (!this.canUseDraft) return;
+        const draft = this.draftResult.draft || {};
+        if (!["name", "description", "body"].every((key) => typeof draft[key] === "string")) return;
+        this.$emit("use-draft", {
+          scope: this.draftResult.scope, name: draft.name, description: draft.description, body: draft.body,
+          category: draft.category, version: draft.version, license: draft.license,
+          compatibility: draft.compatibility, allowed_tools: draft.allowed_tools,
+        });
+      },
+      stolenPromptText(prompt) {
+        if (typeof prompt === "string") return prompt;
+        if (!prompt || typeof prompt !== "object") return String(prompt == null ? "" : prompt);
+        return typeof prompt.text === "string" ? prompt.text : JSON.stringify(prompt);
+      },
       takeHandoff() {
         let t = null;
         try { t = JSON.parse(sessionStorage.getItem(HANDOFF) || "null"); sessionStorage.removeItem(HANDOFF); } catch (e) { t = null; }
@@ -234,7 +284,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-port':'Porting notes','ai-ask':'Ask your library','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-port':'Porting notes','ai-ask':'Ask your library','ai-draft':'Draft a skill','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -310,6 +360,56 @@
               <tbody><tr v-for="p in result.prompts" :key="p.id"><td>{{ p.text }}</td><td class="tp-mono">{{ p.expected || 'none' }}</td><td class="tp-mono">{{ choiceList(p.choices) }}</td></tr></tbody></table></details>
           <div class="tp-acts" v-if="result.prompt_source!=='saved'"><button class="btn btn-line btn-sm" :disabled="busy || savedBusy" @click="saveTests()">Save these prompts as regression tests</button></div>
           <p class="tp-fine">{{ result.run.advisory }} Invalid answers: {{ result.invalid_answers }}.</p>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-draft'">
+        <h1 class="h1" id="h1" tabindex="-1">Draft a skill</h1>
+        <p class="lede">Describe a task or workflow. The draft is checked and tested against the selected scope before it can fill the New skill form.</p>
+        <section class="card tp-panel" aria-labelledby="ai-draft-h">
+          <h2 id="ai-draft-h">Describe the skill</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-draft-scope"><b>Test against</b><small>Choose where this skill would be used. Empty writable scopes are included.</small></label>
+              <select id="ai-draft-scope" class="field" v-model="draftScope" :disabled="busy"><option v-for="s in draftScopes" :key="s.id" :value="s.id">{{ s.label }} ({{ s.count }} skills)</option></select></div>
+            <div class="tp-set-row"><label for="ai-draft-name"><b>Skill name</b><small>Optional. Leave blank to let the model suggest one.</small></label><input id="ai-draft-name" class="field" v-model.trim="draftName" maxlength="64" autocomplete="off" spellcheck="false" :disabled="busy"></div>
+          </div>
+          <label class="tp-field" for="ai-draft-brief">What should the skill help an agent do?</label>
+          <textarea id="ai-draft-brief" class="field ai-text" v-model="draftBrief" rows="7" maxlength="10000" placeholder="Describe the task, when the agent should use this skill, and any steps or constraints to follow." :disabled="busy"></textarea>
+          <p class="tp-fine">The brief goes to your configured model. The app then validates the draft and checks its trigger against generated requests and near-misses.</p>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !draftScope || !draftBrief.trim()" @click="estimateDraft()">Check what will be sent</button></div>
+          <div v-if="draftEstimateCurrent" class="ai-confirm" role="region" aria-label="Before sending the draft request">
+            <p v-for="(line,i) in draftEstimate.egress || []" :key="i" class="tp-fine">{{ line }}</p>
+            <p class="tp-fine">About {{ fmt(draftEstimate.run && draftEstimate.run.estimated_input_tokens) }} input tokens to {{ draftEstimate.run && draftEstimate.run.model }}. No draft has been generated yet.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy" @click="runDraft()">Send and verify draft</button><button class="btn btn-line" :disabled="busy" @click="clearDraftProposal()">Cancel</button></div>
+          </div>
+        </section>
+        <section v-if="draftResult" class="card tp-panel" aria-labelledby="ai-draft-result-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-draft-result-h">Draft result</h2><p>{{ draftResult.scope }} · {{ draftResult.run && draftResult.run.model }}</p></div>
+            <span :class="['pill', draftResult.status === 'verified' && draftResult.validation && draftResult.validation.valid === true ? 'ok' : 'warn']">{{ draftResult.status === 'verified' ? 'Verified' : draftResult.status === 'unverified' ? 'Not verified' : 'Needs work' }}</span></header>
+          <div v-if="draftResult.draft" class="ai-cand">
+            <h3>{{ draftResult.draft.name || 'Unnamed draft' }}</h3>
+            <p>{{ draftResult.draft.description }}</p>
+            <details class="tp-more"><summary>Full SKILL.md draft</summary><pre class="ai-run-text tp-mono">{{ draftResult.draft.text || draftResult.draft.body || '' }}</pre></details>
+          </div>
+          <p v-else class="tp-fine">The model did not return a usable draft.</p>
+          <section aria-labelledby="ai-draft-validation-h"><h3 id="ai-draft-validation-h">Validation</h3>
+            <p v-if="draftResult.validation && draftResult.validation.valid" class="tp-fine">The draft passed document validation.</p>
+            <p v-for="(issue,i) in (draftResult.validation && draftResult.validation.issues) || []" :key="i" :class="['tp-issue', issue.level === 'error' ? 'bad' : 'warn']">{{ issue.level || 'Issue' }} · {{ issue.key || 'draft' }}: {{ issue.message }}</p>
+            <p v-if="draftResult.validation && !draftResult.validation.valid && !(draftResult.validation.issues || []).length" class="tp-issue bad">The draft did not pass validation; no issue details were returned.</p>
+          </section>
+          <section v-if="draftResult.verification" aria-labelledby="ai-draft-verification-h"><h3 id="ai-draft-verification-h">Trigger check</h3>
+            <div class="ai-stats"><div><b class="num">{{ pct(draftResult.verification.draft_hit_rate) }}</b><small>generated requests that picked this draft</small></div>
+              <div><b class="num">{{ pct(draftResult.verification.near_miss_false_trigger_rate) }}</b><small>near-misses that picked it</small></div>
+              <div><b class="num">{{ fmt(draftResult.verification.existing_skills_sampled) }} / {{ fmt(draftResult.verification.existing_skills_total) }}</b><small>existing skills sampled / total</small></div></div>
+            <p class="tp-fine">Missing answers: {{ fmt(draftResult.verification.missing_answers) }} · Invalid answers: {{ fmt(draftResult.verification.invalid_answers) }}</p>
+            <h4>Existing skills whose requests the draft also won</h4>
+            <p v-if="!(draftResult.verification.stolen || []).length" class="tp-empty">No stolen prompts were reported.</p>
+            <ul v-else class="tp-rows"><li v-for="s in draftResult.verification.stolen" :key="s.name" class="v2-tool-row"><span class="tp-row-main"><strong class="tp-mono">{{ s.name }}</strong><small>{{ fmt(s.count) }} prompt(s)</small>
+              <small v-for="(p,i) in (s.prompts || [])" :key="i">{{ stolenPromptText(p) }}</small></span></li></ul>
+          </section>
+          <p v-if="draftResult.run && draftResult.run.advisory" class="tp-fine">{{ draftResult.run.advisory }}</p>
+          <div class="tp-acts"><button class="btn btn-ink" :disabled="busy || !canUseDraft" @click="useDraft()">Use this draft in New skill</button>
+            <span v-if="!canUseDraft" class="tp-fine">This draft must pass validation and trigger checks before it can be used.</span></div>
         </section>
       </template>
 

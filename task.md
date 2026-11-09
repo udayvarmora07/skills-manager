@@ -20,7 +20,8 @@
 - [x] A8 eval runner with and without the skill.
 - [x] A9 ask your library (names and descriptions only; real skills only).
 - [x] A10 porting notes (deterministic facts; model explains only those).
-- [ ] A11 verified drafting; A12 profile suggester; A13 conciseness advisor.
+- [x] A11 verified drafting: validation and measured routing, unsaved New skill form.
+- [ ] A12 profile suggester; A13 conciseness advisor.
   Handoff with prompts and acceptance criteria: @docs/40-codex-handoff-2026-11-09.md.
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
 - [ ] Measure trigger-test fidelity against a real agent's choices.

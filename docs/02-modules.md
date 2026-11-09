@@ -572,6 +572,20 @@ references) and lets the model explain only those facts. Both are read-only towa
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 
+## `ai_draft.py`
+
+**[SPEC] Verified drafting (A11).** `draft_skill` produces a bounded SKILL.md
+from an untrusted brief, validates it with `validator.validate_text`, and
+rejects name collisions, unsupported frontmatter, descriptions over 1,024
+characters and bodies over 500 lines. Validation errors prevent routing and
+use. A valid draft is added to the full scope listing for A1 routing, with
+generated draft prompts, near misses and a bounded sample of existing skills.
+Baseline-versus-augmented routing identifies prompts taken from existing
+skills; sample coverage and missing/invalid answers are reported. Estimate
+mode sends nothing. Results live in the existing AI run history. The v2 tool
+fills the existing New skill form without saving; ordinary explicit creation
+remains the write path.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official

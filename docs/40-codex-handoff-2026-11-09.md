@@ -85,6 +85,10 @@ provider; docs/08 and docs/39 updated.
 
 ### 3.2 A11 verified drafting
 
+**[NOTE] Completed 2026-11-09 on `codex/remaining-tasks`.** Draft validation,
+measured routing, sample coverage and unsaved New skill prefill are implemented.
+Evidence: @docs/06-progress-log.md.
+
 ```text
 Implement docs/39 A11 "verified drafting" in a new module skillsmgr/ai_draft.py with
 POST /api/ai/draft-skill {scope, brief, name?, estimate?}.

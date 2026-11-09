@@ -8,6 +8,30 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Handoff 3.2: verified skill drafting
+
+**[SPEC]** A11 adds `ai_draft.py` and `POST /api/ai/draft-skill`: draft from an
+untrusted brief, validate the document and limits, then measure A1 routing with
+the draft added to the scope's listing. Existing-skill prompts are tested
+before and after adding the draft to identify prompts it steals; the report
+discloses sampled coverage. Invalid or incompletely measured drafts cannot be
+used. Empty scopes are supported. Estimate mode contacts no provider.
+
+**[SPEC]** V2 Tools → Draft a skill displays draft text, validation issues and
+routing evidence. Use this draft prefills the existing New skill form and
+saves nothing until its ordinary Create skill action. No CLI command, Store
+method, runtime dependency or SQLite schema changed.
+
+**[NOTE]** Seven red-first fake-provider tests cover valid and stealing drafts,
+invalid names and name shapes, oversized bodies, missing routing/near-miss
+coverage, empty scopes, collisions (including disabled skills, husks and
+dangling links), and no-send estimates over HTTP. Browser checks against an
+isolated fake provider covered valid/invalid/unverified results, the stealing
+report, estimate with no usage entry, unsaved New skill prefill, and a 390px
+viewport with wrapped draft text and no overflow or console warnings/errors.
+Complexity: 1,130 functions across 39 measured files, no baseline raised.
+Results remain model simulations; no real provider was called.
+
 ## 2026-11-09 — Handoff 3.1: AI retention, disconnects and run history
 
 **[SPEC]** Work is isolated in `~/skills-manager-codex` on

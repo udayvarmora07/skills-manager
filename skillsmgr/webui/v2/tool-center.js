@@ -25,7 +25,7 @@
 
   window.SkillsV2ToolCenter = {
     props: {page:String, records:{type:Array,default:()=>[]}, scopes:{type:Array,default:()=>[]}, target:Object},
-    emits:['changed','inspect','preference'],
+    emits:['changed','inspect','preference','use-draft'],
     data() { return {
       busy:false,error:'',result:null,sequence:0,readTokens:{},loading:{},qualityEnvelope:null, tab:'registry', source:'',op:'browse',view:'all-time',stale:false, pageNo:0,review:null,trust:false,
       runnerPreview:'',runner:'npx',runnerScope:'global',agents:'',filter:'',copy:false,listOnly:false,files:[],reviewedFiles:[],folderReviewed:false,folderTrust:false,folderDocuments:[],
@@ -310,7 +310,7 @@
       </template>
 
       <template v-else-if="page.startsWith('ai-')">
-        <ai-center :page="page" :records="records" :scopes="scopes" :target="target" @changed="$emit('changed')"></ai-center>
+        <ai-center :page="page" :records="records" :scopes="scopes" :target="target" @changed="$emit('changed')" @use-draft="$emit('use-draft',$event)"></ai-center>
       </template>
 
       <template v-else-if="page==='install'">
