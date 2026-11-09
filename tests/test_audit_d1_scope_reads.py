@@ -42,6 +42,7 @@ from pathlib import Path
 from unittest import mock
 
 from skillsmgr import context
+import skillsmgr.path_safety as path_safety_module
 import skillsmgr.paths as paths_module
 from skillsmgr import documents, loader, observations, scopes
 from skillsmgr.store import Store
@@ -150,7 +151,7 @@ class MergedScanDoesNotRederivePathsTests(ScopeReadCase):
         """RED-FIRST: pre-fix this called ``contained_entry`` once per row."""
         self._seed_flat(4)
         patcher, seen = self._counting(
-            paths_module, "contained_entry", lambda self, *a, **k: True
+            path_safety_module, "contained_entry", lambda self, *a, **k: True
         )
         with patcher:
             rows = scopes.scan_scope("gemini")
@@ -162,7 +163,7 @@ class MergedScanDoesNotRederivePathsTests(ScopeReadCase):
     def test_a_recursive_scope_scan_never_re_derives_a_validated_path(self):
         self._seed_recursive()
         patcher, seen = self._counting(
-            paths_module, "contained_entry", lambda self, *a, **k: True
+            path_safety_module, "contained_entry", lambda self, *a, **k: True
         )
         with patcher:
             rows = scopes.scan_scope("agents")
@@ -173,7 +174,7 @@ class MergedScanDoesNotRederivePathsTests(ScopeReadCase):
         self._seed_flat(3)
         self._seed_recursive()
         patcher, seen = self._counting(
-            paths_module, "contained_entry", lambda self, *a, **k: True
+            path_safety_module, "contained_entry", lambda self, *a, **k: True
         )
         with patcher:
             rows = scopes.list_all()
@@ -193,7 +194,7 @@ class ScanScopePathValueTests(ScopeReadCase):
             self.assertEqual(str(Path(row["path"]).resolve()), row["physical_path"])
             # And the pre-fix expression the annotation loop used to evaluate.
             self.assertEqual(
-                str(paths_module.contained_entry(scope.base, row["name"])), row["path"]
+                str(path_safety_module.contained_entry(scope.base, row["name"])), row["path"]
             )
 
     def test_a_symlinked_scope_base_still_reports_the_resolved_base(self):

@@ -36,6 +36,7 @@ from pathlib import Path
 from unittest import mock
 
 from skillsmgr import context
+import skillsmgr.path_safety as path_safety_module
 import skillsmgr.paths as paths_module
 from skillsmgr import loader, scopes
 from skillsmgr.store import Store, StoreError
@@ -478,13 +479,13 @@ class AggregateScanCostTests(BatchSixCase):
         for index in range(6):
             self._agent_skill("agents", f"resolve-{index}")
         calls: list[str] = []
-        real = paths_module.contained_entry
+        real = path_safety_module.contained_entry
 
         def counting(root, *args, **kwargs):
             calls.append(str(root))
             return real(root, *args, **kwargs)
 
-        with mock.patch.object(paths_module, "contained_entry", counting):
+        with mock.patch.object(path_safety_module, "contained_entry", counting):
             rows = loader.scan_dir(scope_dir, recursive=True)
 
         self.assertEqual(len(rows), 6)
@@ -515,7 +516,7 @@ class MultipartFidelityTests(unittest.TestCase):
         return body
 
     def _parse(self, raw: bytes):
-        from skillsmgr.webapp import _parse_multipart
+        from skillsmgr.web_upload import parse_multipart as _parse_multipart
 
         return _parse_multipart(raw, self.BOUNDARY)
 
@@ -573,8 +574,8 @@ class MultipartFidelityTests(unittest.TestCase):
         self.assertEqual(parts[0]["content"], b"body")
 
     def test_the_pinned_legacy_shape_is_unchanged(self):
-        # tests/test_compatibility.py pins this exact call; keep it working.
-        from skillsmgr.webapp import _parse_multipart
+        # A complete one-file part parses to its name, filename and bytes.
+        from skillsmgr.web_upload import parse_multipart as _parse_multipart
 
         raw = (
             b"--compat-boundary\r\n"

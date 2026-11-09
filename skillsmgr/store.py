@@ -10,7 +10,6 @@ skills via :meth:`Store.resync` / :meth:`Store.db_rebuild`.
 from __future__ import annotations
 
 import copy
-import errno
 import io
 import json
 import os
@@ -29,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import paths
+from . import path_safety
 from . import __version__
 from .diagnostics import diagnose as _diagnose
 from .atomic_io import atomic_write_text, mutation_lock, tree_content_hash
@@ -46,8 +46,6 @@ from .frontmatter import dump_frontmatter, parse_frontmatter, FrontmatterError
 from .validator import (
     MAX_COMPATIBILITY,
     MAX_DESCRIPTION,
-    MAX_NAME,
-    NAME_RE,
     validate_skill_name,
 )
 
@@ -296,10 +294,10 @@ def _sync_parent_directory(path: Path) -> None:
 def _unique_dest(directory: Path, stem: str, suffix: str) -> Path:
     """Return an unused ``stem + suffix`` path inside *directory*."""
     directory.mkdir(parents=True, exist_ok=True)
-    target = paths.contained_path(directory, f"{stem}{suffix}")
+    target = path_safety.contained_path(directory, f"{stem}{suffix}")
     counter = 1
     while target.exists():
-        target = paths.contained_path(directory, f"{stem}-{counter}{suffix}")
+        target = path_safety.contained_path(directory, f"{stem}-{counter}{suffix}")
         counter += 1
     return target
 
@@ -313,18 +311,6 @@ def _explicit_export_destination(dest: str | Path) -> Path:
         return target
     except (OSError, RuntimeError, ValueError):
         raise StoreError("cannot prepare archive destination; check the path and permissions") from None
-
-
-def _move_within_tree(source: Path, dest: Path) -> None:
-    """Move *source* to *dest*, falling back to copy+delete across devices."""
-    try:
-        os.replace(source, dest)
-        return
-    except OSError as exc:
-        if exc.errno != errno.EXDEV:
-            raise
-    shutil.copytree(source, dest, symlinks=True)
-    shutil.rmtree(source)
 
 
 def _archive_members(root: Path) -> list[Path]:
@@ -461,13 +447,13 @@ def _check_snapshot_target(scope: str, name: str) -> None:
 
 def write_snapshot(data_dir: Path, scope: str, name: str, text: str) -> str:
     """Save pre-write skill content and retain only the newest five snapshots."""
-    return _write_snapshot_bytes(data_dir, scope, name, text.encode("utf-8"))
+    return write_snapshot_bytes(data_dir, scope, name, text.encode("utf-8"))
 
 
-def _write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes) -> str:
+def write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes) -> str:
     """Preserve exact bytes in the ordinary snapshot location."""
     _check_snapshot_target(scope, name)
-    snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
+    snap_dir = path_safety.contained_path(Path(data_dir) / "snapshots", scope, name)
     snap_dir.mkdir(parents=True, exist_ok=True)
     with mutation_lock(snap_dir):
         base = _trash_timestamp()
@@ -487,7 +473,7 @@ def _write_snapshot_bytes(data_dir: Path, scope: str, name: str, content: bytes)
 def list_snapshots(data_dir: Path, scope: str, name: str) -> list[str]:
     """Return valid snapshot ids for a skill, newest first."""
     _check_snapshot_target(scope, name)
-    snap_dir = paths.contained_path(Path(data_dir) / "snapshots", scope, name)
+    snap_dir = path_safety.contained_path(Path(data_dir) / "snapshots", scope, name)
     if not snap_dir.is_dir():
         return []
     return sorted(
@@ -501,7 +487,7 @@ def read_snapshot(data_dir: Path, scope: str, name: str, snapshot: str) -> str:
     _check_snapshot_target(scope, name)
     if not _SNAPSHOT_ID_RE.fullmatch(snapshot):
         raise StoreError(f"invalid snapshot id {snapshot!r}")
-    path = paths.contained_path(Path(data_dir) / "snapshots", scope, name, f"{snapshot}.md")
+    path = path_safety.contained_path(Path(data_dir) / "snapshots", scope, name, f"{snapshot}.md")
     if not path.is_file():
         raise StoreError(f"no snapshot {snapshot!r} for '{name}' in scope '{scope}'")
 
@@ -718,7 +704,7 @@ def _plan_full_restore(store: "Store", tmp: Path, manifest: dict) -> list[tuple[
             if not _validate_full_payload(kind, source):
                 raise StoreError(f"archive {kind} entry is missing or invalid: {label!r}")
             try:
-                dest = paths.contained_path(dest_root, label)
+                dest = path_safety.contained_path(dest_root, label)
             except ValueError as exc:
                 raise StoreError(f"archive {kind} entry escapes the data directory: {label!r}") from exc
             entries.append((kind, label, source, dest))
@@ -780,7 +766,7 @@ def _extract_tar_archive(archive: Path, dest: Path) -> None:
 def _safe_skill_path(root: Path, name: str) -> Path:
     """Return a validated, root-contained skill path as ``StoreError``."""
     try:
-        return paths.safe_skill_path(root, name)
+        return path_safety.safe_skill_path(root, name)
     except ValueError as exc:
         raise StoreError(str(exc)) from exc
 
@@ -794,7 +780,7 @@ def _safe_skill_path_under(resolved_root: Path, name: str) -> Path:
     ones ``_safe_skill_path`` applies, so nothing is skipped to buy the speed.
     """
     try:
-        return paths.safe_skill_path_under(resolved_root, name)
+        return path_safety.safe_skill_path_under(resolved_root, name)
     except ValueError as exc:
         raise StoreError(str(exc)) from exc
 
@@ -1597,7 +1583,7 @@ class Store:
                 f"frontmatter name {data['name']!r} does not match target name "
                 f"{chosen!r}; rename the skill first"
             )
-        skill_dir = _safe_skill_path(self.skills_dir, chosen)
+        _safe_skill_path(self.skills_dir, chosen)
         # Never install a directory that already violates the one-document
         # invariant: the store would inherit a skill whose next toggle
         # destroys one of the two documents (STORE-3).  Checked before the
@@ -1785,7 +1771,7 @@ class Store:
 
     def remove(self, name: str, purge: bool = False) -> dict:
         """Move a skill to the trash, or permanently delete it with ``purge``."""
-        skill_dir = _safe_skill_path(self.skills_dir, name)
+        _safe_skill_path(self.skills_dir, name)
         # Whole-directory moves must serialize with create/edit/restore which
         # lock the same per-skill path; otherwise a concurrent writer can
         # strand its temp file inside a trash copy (see atomic_io). A bare
@@ -1804,9 +1790,6 @@ class Store:
             raise SkillNotFound(f"skill '{name}' is not installed")
         conn = self._connect()
         try:
-            row = conn.execute(
-                "SELECT status FROM skills WHERE name = ?", (name,)
-            ).fetchone()
             if purge:
                 self._purge_skill(skill_dir, name)
                 conn.execute("DELETE FROM skills WHERE name = ?", (name,))
@@ -1814,12 +1797,12 @@ class Store:
                 result = {"name": name, "action": "purged"}
             else:
                 self.trash_dir.mkdir(parents=True, exist_ok=True)
-                target = paths.contained_path(
+                target = path_safety.contained_path(
                     self.trash_dir, f"{name}-{_trash_timestamp()}"
                 )
                 counter = 1
                 while target.exists():
-                    target = paths.contained_path(
+                    target = path_safety.contained_path(
                         self.trash_dir, f"{name}-{_trash_timestamp()}-{counter}"
                     )
                     counter += 1
@@ -1977,7 +1960,7 @@ class Store:
 
     def disable(self, name: str) -> dict:
         """Rename SKILL.md to SKILL.md.disabled so validators skip the skill."""
-        skill_dir = _safe_skill_path(self.skills_dir, name)
+        _safe_skill_path(self.skills_dir, name)
         out = _with_index_lock(self.skills_dir, self._disable_unlocked, name)
         return {"name": name, "disabled": out}
 
@@ -1997,7 +1980,7 @@ class Store:
 
     def enable(self, name: str) -> dict:
         """Rename SKILL.md.disabled back to SKILL.md."""
-        skill_dir = _safe_skill_path(self.skills_dir, name)
+        _safe_skill_path(self.skills_dir, name)
         out = _with_index_lock(self.skills_dir, self._enable_unlocked, name)
         return {"name": name, "disabled": out}
 

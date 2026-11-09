@@ -12,12 +12,11 @@ import os
 import re
 import shutil
 import threading
-import contextlib
-from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import paths
+from . import path_safety
 from .diagnostics import diagnose as _diagnose
 from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
 from .documents import (
@@ -41,7 +40,11 @@ from .store import (
     StoreError,
     _coalesced_read,
 )
-from .validator import validate_skill_name
+from .native_state import observe_native_entries
+from .search import MAX_SEARCH_LENGTH, rank_results
+from .store import list_snapshots, read_snapshot, write_snapshot, write_snapshot_bytes
+from .tokens import aggregate, estimate
+from .validator import MAX_COMPATIBILITY, MAX_DESCRIPTION, validate_skill_name
 
 _SCOPE_READ_FLIGHTS: dict = {}
 _SCOPE_READ_FLIGHTS_LOCK = threading.Lock()
@@ -77,7 +80,7 @@ def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
     twice, and remove() deleted the target while leaving a dangling link.
     """
     try:
-        direct = paths.contained_entry(scope.base, name)
+        direct = path_safety.contained_entry(scope.base, name)
         # SCOPE-18: the flat short-circuit used to accept *any* directory with
         # the requested name, so `deploy/deploy/SKILL.md` resolved to the
         # grouping directory `deploy`, which holds no document -- the two views
@@ -96,7 +99,7 @@ def _safe_scope_skill_path(scope: "Scope", name: str) -> Path:
                     relative = Path(record["path"]).resolve().relative_to(resolved_base)
                 except (ValueError, OSError):
                     continue
-                return paths.contained_entry_under(resolved_base, *relative.parts)
+                return path_safety.contained_entry_under(resolved_base, *relative.parts)
         return direct
     except ValueError as exc:
         raise _refused_path_error(scope, name, exc) from exc
@@ -163,7 +166,7 @@ def _peer_link_info(scope: "Scope", name: str) -> dict | None:
         if not relative.parts:
             continue
         try:
-            contained = paths.contained_entry_under(peer_root, *relative.parts)
+            contained = path_safety.contained_entry_under(peer_root, *relative.parts)
         except ValueError:
             continue
         return {
@@ -349,8 +352,6 @@ def list_scopes(
     of rescanning every root.  The default remains the filesystem-source-of-
     truth scan for existing callers.
     """
-    from .tokens import aggregate as _agg
-
     # A broken layout is one condition with one answer, whatever the route.
     # Reporting the global root as ``missing`` -- and ``writable`` -- while four
     # other routes answer 404 was how the UI ended up half-broken and
@@ -376,7 +377,7 @@ def list_scopes(
                 else []
             )
         )
-        agg = _agg(entries)
+        agg = aggregate(entries)
         out.append(
             {
                 "id": s.id,
@@ -407,7 +408,7 @@ def _global_row_path(store: Store, name: str, paths_module):
     together.  A row the tool cannot address simply has no path.
     """
     try:
-        return str(paths_module.safe_skill_path(store.skills_dir, name))
+        return str(path_safety.safe_skill_path(store.skills_dir, name))
     except ValueError:
         return None
 
@@ -443,7 +444,7 @@ def _annotate_scope_entries(entries: list[dict], scope: Scope, physical_root: st
         try:
             # ``contained_entry`` keeps the *named* entry so a read and a write
             # of the same skill address the same path (SCOPE-3).
-            e["path"] = e.get("path") or str(paths.contained_entry(scope.base, e["name"]))
+            e["path"] = e.get("path") or str(path_safety.contained_entry(scope.base, e["name"]))
         except (ValueError, OSError):
             continue
         e["physical_root"] = physical_root
@@ -465,8 +466,6 @@ def _skill_document(entry: dict) -> Path | None:
 
 
 def _annotate_native_entries(entries: list[dict], scope: Scope) -> list[dict]:
-    from .native_state import observe_native_entries
-
     documents = [(entry["name"], _skill_document(entry)) for entry in entries]
     states = observe_native_entries(scope.consumer, documents,
                                     home=paths.home_dir(), project=_cwd())
@@ -491,11 +490,9 @@ def _enrich_global_row(r: dict, store: Store, physical_root: str) -> None:
     # (docs/24 §D1).
     if "tokens" not in r or not r.get("tokens"):
         try:
-            from .tokens import estimate as _est
-
-            p = paths.safe_skill_path(store.skills_dir, r["name"])
+            p = path_safety.safe_skill_path(store.skills_dir, r["name"])
             raw = document_text(p)
-            tok = _est(raw)
+            tok = estimate(raw)
             r["tokens"] = tok["tokens"]
             r["tokens_method"] = tok["method"]
             r["tokens_pct"] = tok["pct_window"]
@@ -656,21 +653,19 @@ def get_skill(scope_id: str, name: str) -> dict:
         rec["scope_label"] = "Global"
         # Token enrichment for detail view.
         try:
-            from .tokens import estimate as _est
-
             p = (
                 Path(rec["path"])
                 if rec.get("path")
-                else paths.safe_skill_path(paths.skills_dir(), name)
+                else path_safety.safe_skill_path(paths.skills_dir(), name)
             )
             raw = document_text(p)
-            tok = _est(raw)
+            tok = estimate(raw)
             rec["tokens"] = tok["tokens"]
             rec["tokens_method"] = tok["method"]
             rec["tokens_pct"] = tok["pct_window"]
             rec["chars"] = tok["chars"]
             rec["lines"] = tok["lines"]
-            rec["body_tokens"] = _est(rec.get("body") or "")["tokens"]
+            rec["body_tokens"] = estimate(rec.get("body") or "")["tokens"]
             rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
         except Exception as exc:
             _diagnose("global scope detail enrichment failed", exc)
@@ -697,9 +692,7 @@ def get_skill(scope_id: str, name: str) -> dict:
             entry["compatibility"] = data["compatibility"]
         if isinstance(data.get("allowed-tools"), str):
             entry["allowed_tools"] = data["allowed-tools"]
-        from .tokens import estimate as _est2
-
-        entry["body_tokens"] = _est2(entry.get("body") or "")["tokens"]
+        entry["body_tokens"] = estimate(entry.get("body") or "")["tokens"]
         entry["frontmatter_tokens"] = max(0, (entry.get("tokens", 0) or 0) - entry["body_tokens"])
         entry["lines"] = raw.count("\n") + 1 if raw else 0
     except Exception as exc:
@@ -715,7 +708,7 @@ def get_raw(scope_id: str, name: str) -> str:
         p = (
             Path(rec["path"])
             if rec.get("path")
-            else paths.safe_skill_path(paths.skills_dir(), name)
+            else path_safety.safe_skill_path(paths.skills_dir(), name)
         )
     else:
         scope = _scope_by_id(scope_id)
@@ -770,8 +763,6 @@ def create_skill(
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
     # Reuse Store.create logic but write to scope base.
-    from .validator import MAX_COMPATIBILITY, MAX_DESCRIPTION, MAX_NAME, NAME_RE
-
     try:
         name = validate_skill_name(name.strip())
     except ValueError as exc:
@@ -787,7 +778,7 @@ def create_skill(
     # resolver may return an existing nested instance for reads, but that must
     # not make an unrelated category prevent creating the flat skill.
     try:
-        skill_dir = paths.contained_entry(scope.base, name)
+        skill_dir = path_safety.contained_entry(scope.base, name)
     except ValueError as exc:
         raise _refused_path_error(scope, name, exc) from exc
     # Do not let the sidecar lock's preparation create the candidate directory;
@@ -909,9 +900,7 @@ def edit_skill(
                 orig_body = body
                 changed = True
         if changed:
-            from .store import write_snapshot as _write_snapshot
-
-            _write_snapshot(_global_store().data_dir, scope_id, name, text)
+            write_snapshot(_global_store().data_dir, scope_id, name, text)
             order = orig_keys + [k for k in data if k not in orig_keys]
             try:
                 atomic_write_text(md, dump_frontmatter(data, key_order=order) + orig_body)
@@ -938,10 +927,10 @@ def remove_skill(scope_id: str, name: str, *, purge: bool = False) -> dict:
     from datetime import datetime, timezone
 
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%SZ")
-    target = paths.contained_path(trash, f"{scope_id}__{name}-{ts}")
+    target = path_safety.contained_path(trash, f"{scope_id}__{name}-{ts}")
     counter = 1
     while target.exists():
-        target = paths.contained_path(trash, f"{scope_id}__{name}-{ts}-{counter}")
+        target = path_safety.contained_path(trash, f"{scope_id}__{name}-{ts}-{counter}")
         counter += 1
     shutil.move(str(skill_dir), str(target))
     return {"name": name, "action": "trashed", "scope": scope_id, "trash_path": str(target)}
@@ -1213,13 +1202,12 @@ def _snapshot_sync_target(dest: Path, data_dir: Path, scope_id: str, name: str, 
         return True
     if not force:
         return False
-    from .store import _write_snapshot_bytes
     try:
         active = dest / "SKILL.md"
         disabled = dest / "SKILL.md.disabled"
         document = active if active.is_file() else disabled
         content = document.read_bytes() if document.is_file() else b""
-        _write_snapshot_bytes(data_dir, scope_id, name, content)
+        write_snapshot_bytes(data_dir, scope_id, name, content)
     except OSError as exc:
         raise StoreError(f"could not snapshot skill '{name}' in scope '{scope_id}' safely") from exc
     return True
@@ -1354,25 +1342,20 @@ def sync_skill(
 
 
 def list_snapshots_for(scope_id: str, name: str) -> list[str]:
-    from .store import list_snapshots as _list_snapshots
-
     if scope_id == "global":
-        return _list_snapshots(_global_store().data_dir, "global", name)
+        return list_snapshots(_global_store().data_dir, "global", name)
     if _scope_by_id(scope_id) is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    return _list_snapshots(_global_store().data_dir, scope_id, name)
+    return list_snapshots(_global_store().data_dir, scope_id, name)
 
 
 def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
-    from .store import read_snapshot as _read_snapshot
-    from .store import write_snapshot as _write_snapshot
-
     if scope_id == "global":
         return _global_store().restore(name, snapshot=snapshot)
     scope = _scope_by_id(scope_id)
     if scope is None:
         raise StoreError(f"unknown scope {scope_id!r}")
-    content = _read_snapshot(_global_store().data_dir, scope_id, name, snapshot)
+    content = read_snapshot(_global_store().data_dir, scope_id, name, snapshot)
     skill_dir = _safe_scope_skill_path(scope, name)
     md = skill_dir / "SKILL.md"
     with _scope_mutation_lock(skill_dir):
@@ -1382,7 +1365,7 @@ def restore_snapshot(scope_id: str, name: str, snapshot: str) -> dict:
                 raise StoreError(f"skill '{name}' is disabled in scope '{scope_id}'; enable it first")
             raise SkillNotFound(f"skill '{name}' has no SKILL.md in scope '{scope_id}'")
         current = read_skill_text_strict(md, subject=f"skill '{name}' in scope '{scope_id}'")
-        _write_snapshot(_global_store().data_dir, scope_id, name, current)
+        write_snapshot(_global_store().data_dir, scope_id, name, current)
         try:
             atomic_write_text(md, content)
         except OSError as exc:
@@ -1459,7 +1442,7 @@ def _search_all_uncached(
     optional store selects the global records for callers serving a requested
     data directory; agent scopes continue using their filesystem adapters.
     """
-    if len(term) > 200:
+    if len(term) > MAX_SEARCH_LENGTH:
         raise StoreError("search query too long")
     if scope_id in (None, "all"):
         pool: list[dict] = []
@@ -1477,8 +1460,6 @@ def _search_all_uncached(
     # ValueError for bounded wildcard violations; scope callers expose the
     # established StoreError contract instead of leaking that implementation
     # exception through CLI or REST adapters.
-    from .search import rank_results
-
     try:
         ranked = rank_results(pool, term) if term else [(r, 0) for r in pool]
     except ValueError as exc:

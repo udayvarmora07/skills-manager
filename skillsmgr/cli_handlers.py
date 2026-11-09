@@ -10,19 +10,17 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shlex
 import subprocess  # nosec B404 - reviewed editor and allowlisted installer calls use list argv.
 import sys
-import tempfile
 from pathlib import Path
 
+from . import path_safety
 from . import colors
 from . import doctor, install
 from .documents import document_path, document_text
 from . import search as search_mod
 from . import templates as templates_mod
-from .diagnostics import diagnose as _diagnose
 from .cli_output import (
     err as _output_err,
     print_json as _output_print_json,
@@ -455,7 +453,7 @@ def cmd_validate(args, store: Store) -> int:
 
         for name in sorted(p.name for p in _paths.skills_dir().iterdir() if p.is_dir()):
             try:
-                root = _paths.safe_skill_path(_paths.skills_dir(), name)
+                root = path_safety.safe_skill_path(_paths.skills_dir(), name)
             except ValueError:
                 root = None
             targets.append((name, root))
@@ -1155,11 +1153,9 @@ def _token_input_text(text: str) -> str:
 
 
 def cmd_tokens(args, store: Store) -> int:
-    from .tokens import WINDOWS as _WINDOWS, estimate as _est, format_tokens as _fmt
+    from .tokens import aggregate, estimate as _est, format_tokens as _fmt, window_name
 
-    window = getattr(args, "window", None) or "claude"
-    if window not in _WINDOWS:
-        raise StoreError(f"unknown window {window!r}; choose from {', '.join(_WINDOWS)}")
+    window = window_name(getattr(args, "window", None))
     scope = scope_from_args(args)
     if args.text:
         raw = _token_input_text(args.text)
@@ -1190,23 +1186,11 @@ def cmd_tokens(args, store: Store) -> int:
         print(f"{args.name} [{est['scope']}]  tokens: {est['tokens']} ({est['method']})  {est['pct_window']}% of {window} ({est['window_tokens']})")
         print(f"  chars: {est['chars']}  lines: {est['lines']}  frontmatter ~{max(0, est['tokens'] - _est(rec.get('body','') or '', window=window)['tokens'])} tok  body ~{_est(rec.get('body','') or '', window=window)['tokens']} tok")
         return EXIT_OK
-    # Aggregate
-    if scope in ("all", None, ""):
-        from .scopes import list_all as _list_all
-        from .tokens import aggregate as _agg
+    from .scopes import list_all, scan_scope
 
-        agg = _agg(_list_all())
-    else:
-        from .scopes import scan_scope as _scan_scope
-        from .tokens import aggregate as _agg2
-
-        agg = _agg2(_scan_scope(scope))
-    wtok = _WINDOWS[window]
-    pct = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
+    agg = aggregate(list_all() if scope in ("all", None, "") else scan_scope(scope), window)
+    wtok, pct = agg["window_tokens"], agg["pct_window"]
     if args.json:
-        agg["window"] = window
-        agg["window_tokens"] = wtok
-        agg["pct_window"] = pct
         _print_json(agg)
         return EXIT_OK
     print(f"scope: {scope}  window: {window} ({wtok})  total {agg['total_tokens']} tok ({_fmt(agg['total_tokens'])})  {pct}%")

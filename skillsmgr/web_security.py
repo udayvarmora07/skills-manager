@@ -64,8 +64,3 @@ def validate_request(
             actual = value.rstrip("/")
         if not parsed.scheme or actual.rstrip("/") not in allowed_origins:
             raise RequestError(403, "cross-origin request rejected")
-
-
-# Kept for callers written before the policy covered reads; the name is now a
-# misnomer because the same check guards GET too (SEC-1).
-validate_mutation_request = validate_request

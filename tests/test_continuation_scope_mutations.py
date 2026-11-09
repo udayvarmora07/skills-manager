@@ -295,7 +295,7 @@ class ScopeMutationTests(unittest.TestCase):
             scopes.create_skill("agents", "demo", "source")
             target = Path(scopes.create_skill("codex", "demo", "target")["path"])
             original = (target / "SKILL.md").read_bytes()
-            with mock.patch("skillsmgr.store._write_snapshot_bytes", side_effect=OSError("private bytes")):
+            with mock.patch("skillsmgr.scopes.write_snapshot_bytes", side_effect=OSError("private bytes")):
                 with self.assertRaisesRegex(scopes.StoreError, "could not snapshot") as error:
                     scopes.sync_skill("demo", "agents", ["codex"], force=True)
             self.assertNotIn("private bytes", str(error.exception))
@@ -313,7 +313,7 @@ class ScopeMutationTests(unittest.TestCase):
             entered, release, done = threading.Event(), threading.Event(), threading.Event()
             errors = []
             from skillsmgr import store as store_module
-            real_snapshot = store_module._write_snapshot_bytes
+            real_snapshot = store_module.write_snapshot_bytes
 
             def paused_snapshot(*args):
                 entered.set()
@@ -332,7 +332,7 @@ class ScopeMutationTests(unittest.TestCase):
                     if finished:
                         finished.set()
 
-            with mock.patch.object(store_module, "_write_snapshot_bytes", side_effect=paused_snapshot):
+            with mock.patch.object(scopes, "write_snapshot_bytes", side_effect=paused_snapshot):
                 first = threading.Thread(target=run, args=(lambda: scopes.sync_skill("demo", "agents", ["codex"], force=True),))
                 second = None
                 first.start()

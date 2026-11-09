@@ -329,7 +329,7 @@ class ClaudeListingContracts(unittest.TestCase):
         self.assertIn("claude_listing", encoded)
 
     def test_an_unknown_window_is_a_clean_error(self):
-        with self.assertRaises(hygiene.HygieneError) as caught:
+        with self.assertRaises(ValueError) as caught:
             hygiene.hygiene_report([], scope="all", window="bogus")
         self.assertIn("bogus", str(caught.exception))
 

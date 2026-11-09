@@ -13,17 +13,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .path_safety import (
-    contained_entry,
-    contained_entry_under,
-    contained_path,
-    contained_path_under,
-    mkdir_private,
-    safe_skill_path,
-    safe_skill_path_under,
-    tighten_private_root,
-    trusted_root,
-)
+from .path_safety import mkdir_private, tighten_private_root, trusted_root
 
 
 def home_dir() -> Path:
@@ -122,13 +112,3 @@ def ensure_dirs() -> None:
         mkdir_private(path)
 
 
-def find_skill_dir(name: str) -> Path | None:
-    """Locate an installed skill directory by name, or None if absent.
-
-    The name must match the directory exactly (case-sensitive) to prevent
-    ambiguous lookups across differently-cased skills.
-    """
-    candidate = safe_skill_path(skills_dir(), name)
-    if candidate.is_dir():
-        return candidate
-    return None

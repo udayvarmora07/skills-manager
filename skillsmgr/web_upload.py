@@ -95,7 +95,6 @@ def parse_multipart(raw: bytes, boundary: str) -> list[dict]:
             elif content.endswith(b"\n"):
                 content = content[:-1]
         headers = BytesParser(policy=_email_policy).parsebytes(header_blob + b"\r\n")
-        disposition = headers.get("Content-Disposition", "")
         name = headers.get_param("name", header="content-disposition") or ""
         filename = headers.get_param("filename", header="content-disposition")
         if isinstance(filename, tuple):

@@ -10,6 +10,9 @@ from __future__ import annotations
 import argparse
 
 from . import __version__
+from .tokens import WINDOWS
+
+_WINDOW_HELP = "context window: " + ", ".join(f"{name} ({size:,})" for name, size in WINDOWS.items())
 
 
 def add_scope_arg(parser) -> None:
@@ -256,7 +259,7 @@ def build_parser(commands) -> argparse.ArgumentParser:
     p.add_argument("name", nargs="?", help="skill name; omit to aggregate over --scope")
     p.add_argument("--scope", metavar="SCOPE", default="all", help="scope for lookup/aggregate (global, claude-code, all, ...). Default: all")
     p.add_argument("--text", metavar="TEXT", help="raw text to estimate instead of a skill (prefix @ for file path)")
-    p.add_argument("--window", metavar="WINDOW", default="claude", help="context window: claude (1M), claude-haiku (200k), gpt-5.6 (1.05M), gpt-5 (400k), gpt-4o (128k legacy), gemini (1M), gemini-2m (2M)")
+    p.add_argument("--window", metavar="WINDOW", default="claude", help=_WINDOW_HELP)
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=commands["cmd_tokens"])
 

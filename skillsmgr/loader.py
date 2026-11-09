@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .frontmatter import FrontmatterError, parse_frontmatter
 from .observations import document_observations
-from . import paths
+from . import path_safety
 from .documents import (
     ACTIVE_DOCUMENT,
     DISABLED_DOCUMENT,
@@ -182,7 +182,7 @@ def _peer_link_record(skill_dir: Path, link_roots: tuple[Path, ...]) -> dict | N
         if not relative.parts:
             continue
         try:
-            contained = paths.contained_entry_under(peer_root, *relative.parts)
+            contained = path_safety.contained_entry_under(peer_root, *relative.parts)
         except ValueError:
             continue
         try:
@@ -738,7 +738,7 @@ def scan_dir(
             except (ValueError, OSError):
                 continue
         try:
-            named = paths.contained_entry_under(resolved_root, *relative_parts)
+            named = path_safety.contained_entry_under(resolved_root, *relative_parts)
         except ValueError as exc:
             # SCOPE-2: a skill directory that is a symlink out of the root is
             # invisible to every read view, yet every name-addressed operation

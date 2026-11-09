@@ -14,7 +14,7 @@ from unittest import mock
 
 from skillsmgr import cli
 from skillsmgr.loader import scan_dir
-from skillsmgr.paths import contained_path
+from skillsmgr.path_safety import contained_path
 from skillsmgr.scopes import (
     edit_skill,
     get_raw,

@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import key_support, loader, lockfiles, native_state, paths, source_lock, validator
-from .tokens import DEFAULT_WINDOW, WINDOWS, count_tokens, estimate
+from .tokens import DEFAULT_WINDOW, WINDOWS, count_tokens, estimate, window_name
 
 
 MAX_PAIRS = 100_000
@@ -1117,7 +1117,7 @@ def _name_only_candidates(pairs: list[tuple[dict, str, dict]],
 def _listing_budget(observation: dict, window: str) -> dict:
     """Resolve the documented character budget, stating which basis was used."""
     env = observation.get("env_budget") or {}
-    window_tokens = WINDOWS.get(window, WINDOWS[DEFAULT_WINDOW])
+    window_tokens = WINDOWS[window]
     if env.get("status") == "set":
         chars = int(env["value"])
         return {
@@ -1603,15 +1603,6 @@ def _report_extras(project_root, home, xdg_state_home) -> dict:
     return extras
 
 
-def _validated_window(window: str) -> str:
-    """A known context window, or a clean error naming the valid choices."""
-    if window not in WINDOWS:
-        raise HygieneError(
-            f"unknown context window {window!r}; choose one of: " + ", ".join(sorted(WINDOWS))
-        )
-    return window
-
-
 def hygiene_report(
     records: list[dict],
     *,
@@ -1629,7 +1620,7 @@ def hygiene_report(
             records,
             scope=scope,
             max_instances=max_instances,
-            window=_validated_window(window),
+            window=window_name(window),
             **_report_extras(project_root, home, xdg_state_home),
         )
     finally:

@@ -21,18 +21,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import doctor, install
+from . import doctor, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
+from .loader import scan_dir
+from .tokens import DEFAULT_WINDOW, aggregate, estimate, window_name
 from .diagnostics import diagnose as _diagnose
 from .launcher_security import trusted_executable
-# ``RequestError`` is re-exported deliberately: callers imported it from this
-# module before the web_security extraction, and tests/test_compatibility.py
-# pins that import path.  It is not dead code (BUG-15).
-from .web_security import RequestError, validate_request  # noqa: F401
+from .web_security import RequestError, validate_request
 from .web_serialization import json_bytes, parse_json_object
-from .web_upload import MAX_UPLOAD_PARTS, parse_multipart, staged_single_skill, upload_folder
+from .adapters import workspaces_payload
+from .catalog import delete_profile, enrich_rows, load_catalog, plan_hash, profile_preview, save_profile, update_tags
+from .external_scan import scan_options
+from .path_safety import contained_path
+from .source_update import cancel_update_review, commit_update_review, list_update_snapshots, prepare_local_update, prepare_snapshot_update, read_update_review
+from .templates import create_template, list_templates, read_template, template_path
+from .validator import validate_skill
+from .web_upload import MAX_UPLOAD_BYTES, parse_multipart, staged_single_skill, upload_folder
 
 _WEBUI_DIR = Path(__file__).resolve().parent / "webui"
 _STATIC_TYPES = {
@@ -135,8 +141,6 @@ def _registry_install_result(store: Store, data: dict) -> dict | None:
         raise StoreError("registry operations cannot be combined with run or preview")
     allow_stale = bool(data.get("allow_stale"))
     if operation == "fetch":
-        from .external_scan import scan_options
-
         return install.registry_fetch(
             store,
             source=data.get("source"),
@@ -277,9 +281,7 @@ def _enrich_one_row_with_tokens(store: Store, row: dict, physical_root: str) -> 
         except OSError:
             row.setdefault("physical_path", str(row["path"]))
     if _row_needs_token_read(row):
-        from .tokens import estimate as _est
-
-        _apply_token_estimate(row, _est(document_text(store.skills_dir / row["name"])))
+        _apply_token_estimate(row, estimate(document_text(store.skills_dir / row["name"])))
 
 
 def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None:
@@ -325,8 +327,6 @@ def _enrich_rows_with_tokens(store: Store, rows: list[dict], label: str) -> None
 
 def _enrich_rows_with_catalog(store: Store, rows: list[dict]) -> None:
     """Attach manager-owned tags without changing skill or index authority."""
-    from .catalog import enrich_rows
-
     enrich_rows(rows, data_dir=store.data_dir)
 
 
@@ -415,7 +415,6 @@ def _batch_rooted_path(value: object, scope, base: Path) -> Path:
 
 def _batch_tree_evidence(row: dict) -> str:
     """Validate the named scope entry before reading any tree bytes."""
-    from . import scopes
 
     if row.get("read_only") or row.get("instance_state") in {"link_escape", "link_followed"}:
         raise StoreError("batch skill is not a writable scope entry")
@@ -501,9 +500,8 @@ def _batch_targets(data: dict) -> list[dict]:
     raw = data.get("targets")
     if not isinstance(raw, list) or not raw or len(raw) > 500:
         raise StoreError("targets must be a non-empty list of at most 500 items")
-    from .scopes import list_all as _list_all
 
-    records = _list_all()
+    records = scopes.list_all()
     seen: set[tuple[str, str, str]] = set()
     targets = [_resolve_batch_target(item, records, seen, include_tree=data.get("operation") in {"remove", "sync"}) for item in raw]
     return _with_sync_destinations(targets, data, records)
@@ -616,36 +614,29 @@ def _list_page(rows: list, qs: dict[str, list[str]]) -> tuple[list, int]:
 
 def _scope_summary(store: Store) -> list[dict]:
     """Reuse merged agent rows while keeping global counts filesystem-based."""
-    from .loader import scan_dir
-    from .scopes import list_all, list_scopes
-
     try:
-        records = list_all()
+        records = scopes.list_all()
     except StoreError:
         # Scope discovery previously needed no readable SQLite index. Keep
         # that behavior, without rebuilding it as a side effect of this GET.
-        return list_scopes()
+        return scopes.list_scopes()
     # Global list rows come through the index and can omit newly added,
     # unindexed documents. The scope descriptor must still count those files.
     summary_rows = [record for record in records if record.get("scope") != "global"]
     summary_rows.extend({**record, "scope": "global"} for record in scan_dir(store.skills_dir))
-    return list_scopes(records=summary_rows)
+    return scopes.list_scopes(records=summary_rows)
 
 
 def _window_param(qs: dict[str, list[str]], name: str = "window") -> str:
     """Return the requested context window, or raise a clean 400.
 
-    ``?window=bogus`` used to answer 200 with Claude's window, so a typo looked
-    like a successful budget report for a window nobody asked about.
+    ``?window=bogus`` and an explicitly blank ``?window=`` used to answer 200
+    with Claude's window, so a typo looked like a successful budget report.
     """
-    from .tokens import WINDOWS as _WINDOWS
-
-    raw = qs.get(name, ["claude"])[0].strip()
-    if raw not in _WINDOWS:
-        raise StoreError(
-            f"unknown {name} {raw!r}; choose one of {', '.join(sorted(_WINDOWS))}"
-        )
-    return raw
+    raw = qs.get(name, [DEFAULT_WINDOW])[0]
+    if not raw.strip():
+        raise StoreError(f"{name} must not be blank")
+    return window_name(raw)
 
 
 def _history_limit(qs: dict[str, list[str]]) -> int:
@@ -693,9 +684,8 @@ def _trash_rows(store, qs: dict[str, list[str]]) -> list[dict]:
     scope = _trash_scope(qs)
     if scope == "global":
         return store.trash_list()
-    from .scopes import scope_trash_list as _scope_trash_list
 
-    return _scope_trash_list(scope)
+    return scopes.scope_trash_list(scope)
 
 
 # Paging parameters a client might reasonably send that this API does not
@@ -752,8 +742,6 @@ def _page_rows(rows: list, qs: dict[str, list[str]]) -> tuple[list, int]:
 
 
 def _batch_plan(operation: str, targets: list[dict], data: dict) -> dict:
-    from .catalog import plan_hash
-
     options = {
         "force": bool(data.get("force")),
         "to_scopes": sorted(set(_scope_list(data))),
@@ -793,21 +781,8 @@ def _head_safe_body(command: str, body: bytes) -> bytes:
 _ALLOWED_METHODS = "GET, HEAD, POST, PATCH, PUT, DELETE"
 _METHOD_NOT_ALLOWED_BODY = b'{"error": "method not allowed"}'
 
-MAX_BODY_BYTES = 25 * 1024 * 1024
-MAX_UPLOAD_PARTS = 200
-MAX_QUERY_LEN = 200
+MAX_BODY_BYTES = MAX_UPLOAD_BYTES
 MAX_HISTORY_LIMIT = 200
-
-
-# Compatibility aliases for callers/tests that imported these implementation
-# helpers before the internal extraction.  They are intentionally private and
-# keep the old call shape, including the ignored serialization status argument.
-def _json_bytes(obj, status: int = 200) -> bytes:
-    return json_bytes(obj)
-
-
-def _parse_multipart(raw: bytes, boundary: str) -> list[dict]:
-    return parse_multipart(raw, boundary)
 
 
 class WebAppHandler(BaseHTTPRequestHandler):
@@ -930,7 +905,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, obj, status: int = 200,
                    extra_headers: dict[str, str] | None = None) -> None:
-        self._send(status, _json_bytes(obj), extra_headers=extra_headers)
+        self._send(status, json_bytes(obj), extra_headers=extra_headers)
 
     def _send_page(self, rows: list, qs: dict[str, list[str]]) -> None:
         """Send one page of ``rows`` with an ``X-Total-Count`` header.
@@ -973,9 +948,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return {}
         return parse_json_object(raw, self.headers.get("Content-Type", ""))
 
-    @staticmethod
-    def _unquote(name: str) -> str:
-        return unquote(name)
 
     # -- routing ----------------------------------------------------------
 
@@ -1080,11 +1052,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
             print(f"webui internal error: {exc!r}", file=sys.stderr)
             self._send_error(500, "internal error")
 
-    def _expected_origin(self) -> str:
-        host = self.server.server_address[0]  # type: ignore[attr-defined]
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"
-        return f"http://{host}:{self.server.server_port}"  # type: ignore[attr-defined]
 
     def _validate_request(self) -> None:
         validate_request(
@@ -1175,8 +1142,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
     # -- GET routes -------------------------------------------------------
 
     def _route_source_update_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
-        from .source_update import list_update_snapshots, read_update_review
-
         if len(parts) == 4 and parts[:3] == ["api", "source-updates", "reviews"]:
             self._send_json(read_update_review(self.store.data_dir, parts[3]))
             return True
@@ -1203,13 +1168,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(_scope_summary(self.store))
             return True
         if parts == ["api", "catalog"]:
-            from .catalog import load_catalog
-
             self._send_json(load_catalog(self.store.data_dir))
             return True
         if parts == ["api", "workspaces"]:
-            from .adapters import workspaces_payload
-
             project = (qs.get("project", [""])[0] or "").strip() or None
             roots = getattr(self.server, "diagnostics_roots", None) or [self.store.data_dir]
             self._send_json(workspaces_payload(project, roots))
@@ -1224,14 +1185,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
         reads beside it.
         """
         if len(parts) == 5 and parts[:3] == ["api", "catalog", "profiles"] and parts[4] == "preview":
-            from .catalog import load_catalog, profile_preview
-            from .scopes import list_all as _list_all
-
             profile_name = parts[3]
             profile = load_catalog(self.store.data_dir)["profiles"].get(profile_name)
             if profile is None:
                 raise SkillNotFound(f"profile '{profile_name}' not found")
-            self._send_json({"name": profile_name, **profile_preview(profile, _list_all())})
+            self._send_json({"name": profile_name, **profile_preview(profile, scopes.list_all())})
             return True
         return False
 
@@ -1252,32 +1210,28 @@ class WebAppHandler(BaseHTTPRequestHandler):
         q = (qs.get("q", [""])[0] or "").strip()
         if scope == "all":
             if q:
-                from .scopes import search_all as _search_all
 
-                rows = _search_all(q, scope_id="all", store=self.store)
+                rows = scopes.search_all(q, scope_id="all", store=self.store)
             else:
-                from .scopes import list_all as _list_all
 
-                rows = _list_all()
+                rows = scopes.list_all()
             _enrich_rows_with_catalog(self.store, rows)
             self._send_page(rows, qs)
             return True
         if scope and scope != "global":
-            from .scopes import scan_scope as _scan_scope, search_all as _search_all
 
             if q:
-                rows = _search_all(q, scope_id=scope)
+                rows = scopes.search_all(q, scope_id=scope)
             else:
-                rows = _scan_scope(scope)
+                rows = scopes.scan_scope(scope)
             _enrich_rows_with_catalog(self.store, rows)
             self._send_page(rows, qs)
             return True
         # scope == "" or "global": use the scope adapter so wildcard
         # validation and body-aware ranking share one StoreError seam.
         if q:
-            from .scopes import search_all as _search_all
 
-            rows = _search_all(q, scope_id="global", store=self.store)
+            rows = scopes.search_all(q, scope_id="global", store=self.store)
             for r in rows:
                 r.setdefault("scope", "global")
                 r.setdefault("scope_label", "Global")
@@ -1299,39 +1253,15 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def _route_search_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
         """Serve ``GET /api/search`` -- ranked rows, no paging.
 
-        Distinct from ``GET /api/skills?q=`` because it is unpaged and it is
-        the one route that bounds the query string before doing any work.
+        Distinct from ``GET /api/skills?q=`` because it is unpaged.  The query
+        bound is enforced by ``scopes.search_all`` before any work.
         """
         if parts != ["api", "search"]:
             return False
         scope = (qs.get("scope", [""])[0] or "global").strip() or "global"
-        q = qs.get("q", [""])[0]
-        if len(q) > MAX_QUERY_LEN:
-            self._send_error(400, "search query too long")
-            return True
-        # ``scope`` cannot be empty: line above coerces "", "   " and an absent
-        # parameter all to "global".  A ``scope in ("all", "")`` test therefore
-        # had an unreachable else-branch calling ``self.store.search(q)``, which
-        # read as though that were a live path and hid where search really runs
-        # (``scopes.search_all``).  Removed rather than left to mislead.
-        if scope == "all":
-            from .scopes import search_all as _search_all
-
-            rows = _search_all(q, scope_id="all", store=self.store)
-            _enrich_rows_with_catalog(self.store, rows)
-            self._send_json(rows)
-        elif scope == "global":
-            from .scopes import search_all as _search_all
-
-            rows = _search_all(q, scope_id="global", store=self.store)
-            _enrich_rows_with_catalog(self.store, rows)
-            self._send_json(rows)
-        else:
-            from .scopes import search_all as _search_all
-
-            rows = _search_all(q, scope_id=scope)
-            _enrich_rows_with_catalog(self.store, rows)
-            self._send_json(rows)
+        rows = scopes.search_all(qs.get("q", [""])[0], scope_id=scope, store=self.store)
+        _enrich_rows_with_catalog(self.store, rows)
+        self._send_json(rows)
         return True
 
     def _route_skill_raw_get(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
@@ -1345,9 +1275,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return False
         scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
         if scope != "global":
-            from .scopes import get_raw as _get_raw
 
-            raw = _get_raw(scope, parts[2])
+            raw = scopes.get_raw(scope, parts[2])
             self._send(200, raw.encode("utf-8"), "text/plain; charset=utf-8")
             return True
         # Resolve through Store.get() first so the decoded path segment is
@@ -1368,9 +1297,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             return False
         scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
         if scope != "global":
-            from .scopes import get_skill as _get_skill
 
-            record = _get_skill(scope, parts[2])
+            record = scopes.get_skill(scope, parts[2])
             _enrich_rows_with_catalog(self.store, [record])
             self._send_json(record)
             return True
@@ -1380,12 +1308,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
         rec.setdefault("scope", "global")
         rec.setdefault("scope_label", "Global")
         try:
-            from .tokens import estimate as _estD
-
-            tok = _estD(document_text(self.store.skills_dir / parts[2]))
+            tok = estimate(document_text(self.store.skills_dir / parts[2]))
             _apply_token_estimate(rec, tok)
             rec["lines"] = tok["lines"]
-            rec["body_tokens"] = _estD(rec.get("body") or "")["tokens"]
+            rec["body_tokens"] = estimate(rec.get("body") or "")["tokens"]
             rec["frontmatter_tokens"] = max(0, tok["tokens"] - rec["body_tokens"])
         except Exception as exc:
             _diagnose(f"detail token enrichment failed for {parts[2]!r}", exc)
@@ -1398,15 +1324,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
     def _route_templates_get(self, parts: list[str]) -> bool:
         """Read stored templates without allowing a template link to escape data."""
         if parts == ["api", "templates"]:
-            from .templates import list_templates
-
             self._send_json({"templates": list_templates(self.store.templates_dir)})
             return True
         if len(parts) != 3 or parts[:2] != ["api", "templates"]:
             return False
-        from .paths import contained_path
-        from .templates import read_template, template_path
-
         name = parts[2]
         entry = template_path(self.store.templates_dir, name)
         try:
@@ -1459,9 +1380,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
                 snapshots = _list_snapshots(self.store.data_dir, "global", name)
             else:
-                from .scopes import list_snapshots_for as _list_snapshots_for
 
-                snapshots = _list_snapshots_for(scope, name)
+                snapshots = scopes.list_snapshots_for(scope, name)
             self._send_json({"name": name, "scope": scope, "snapshots": snapshots})
             return True
         self._send_json(self.store.history(name=name, limit=limit))
@@ -1480,38 +1400,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
         st = self.store.stats()
         win_qs = _window_param(qs)
         try:
-            from .scopes import list_scopes as _list_scopes
-            from .tokens import WINDOWS as _WINDOWS
-
-            from .scopes import list_all as _list_all
-
-            records = _list_all()
-            scopes = _list_scopes(records=records)
-            st["scopes"] = scopes
-            st["all_total"] = sum(s["count"] for s in scopes)
-            st["all_tokens"] = sum(s.get("tokens", 0) for s in scopes)
+            records = scopes.list_all()
+            summary = scopes.list_scopes(records=records)
+            st["scopes"] = summary
+            st["all_total"] = sum(s["count"] for s in summary)
+            totals = aggregate(records, win_qs)
+            st["all_tokens"] = sum(s.get("tokens", 0) for s in summary)
             st["all_avg_tokens"] = (st["all_tokens"] // st["all_total"]) if st["all_total"] else 0
-            # Token budget vs selected window.
-            win = _WINDOWS.get(win_qs, _WINDOWS.get("claude", 200_000))
             st["window"] = win_qs
-            st["window_tokens"] = win
-            st["all_pct_window"] = round(st["all_tokens"] / win * 100, 1) if win else 0
-            # Top 5 largest across all scopes.
-            try:
-                st["largest"] = sorted(records, key=lambda r: r.get("tokens", 0), reverse=True)[:5]
-                st["largest"] = [{"name": r["name"], "scope": r.get("scope"), "tokens": r.get("tokens", 0)} for r in st["largest"]]
-            except Exception as exc:
-                _diagnose("stats largest-skills scan failed", exc)
-                st["largest"] = []
-                st.setdefault("degraded", []).append("largest")
-            # Whether exact counting is available.
-            try:
-                from .tokens import _HAS_TIKTOKEN as _ht
-
-                st["has_tiktoken"] = bool(_ht)
-            except Exception as exc:
-                _diagnose("stats tokenizer probe failed", exc)
-                st["has_tiktoken"] = False
+            st["window_tokens"] = totals["window_tokens"]
+            st["all_pct_window"] = round(st["all_tokens"] / totals["window_tokens"] * 100, 1)
+            st["largest"] = totals["largest"]
+            st["has_tiktoken"] = totals["has_tiktoken"]
         except Exception as exc:
             # BUG-8/BUG-7: this is the swallow that returned a 200 payload
             # with documented keys missing.  Report it and fill the keys the
@@ -1542,41 +1442,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
         scope = (qs.get("scope", ["all"])[0] or "all").strip()
         text = (qs.get("text", [""])[0] or "")
         if text:
-            from .tokens import estimate as _est
-
-            self._send_json(_est(text, window=win))
+            self._send_json(estimate(text, window=win))
             return True
         if name:
-            from .tokens import estimate as _est2
-
             rec = self._tokens_record(name, scope)
-            self._send_json(_est2(self._tokens_document(rec), window=win))
+            self._send_json(estimate(self._tokens_document(rec), window=win))
             return True
-        # No name/text: aggregate over scope.
-        if scope in ("all", "", None):
-            from .scopes import list_all as _list_all
-            from .tokens import aggregate as _agg
-
-            agg = _agg(_list_all())
-            agg["window"] = win
-            from .tokens import WINDOWS as _WW
-
-            wtok = _WW.get(win, _WW.get("claude", 200_000))
-            agg["window_tokens"] = wtok
-            agg["pct_window"] = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
-            self._send_json(agg)
-            return True
-        from .scopes import scan_scope as _scan_scope
-        from .tokens import aggregate as _agg2
-
-        agg = _agg2(_scan_scope(scope))
-        agg["window"] = win
-        from .tokens import WINDOWS as _WW2
-
-        wtok = _WW2.get(win, _WW2.get("claude", 200_000))
-        agg["window_tokens"] = wtok
-        agg["pct_window"] = round(agg["total_tokens"] / wtok * 100, 1) if wtok else 0
-        self._send_json(agg)
+        records = scopes.list_all() if scope in ("all", "") else scopes.scan_scope(scope)
+        self._send_json(aggregate(records, win))
         return True
 
     def _tokens_record(self, name: str, scope: str) -> dict:
@@ -1588,20 +1461,17 @@ class WebAppHandler(BaseHTTPRequestHandler):
         still usable, and the reason is diagnosed rather than swallowed.
         """
         if scope and scope not in ("all", ""):
-            from .scopes import get_skill as _get_skill
 
-            return _get_skill(scope, name)
+            return scopes.get_skill(scope, name)
         # Find first match across all scopes.
-        from .scopes import list_all as _list_all
 
-        rec = next((r for r in _list_all() if r["name"] == name), None)
+        rec = next((r for r in scopes.list_all() if r["name"] == name), None)
         if rec is None:
             raise SkillNotFound(f"skill '{name}' not found")
         # Enrich with full record for body.
         try:
-            from .scopes import get_skill as _gs
 
-            rec = _gs(rec.get("scope", "global"), name)
+            rec = scopes.get_skill(rec.get("scope", "global"), name)
         except Exception as exc:
             # The listing record is still usable; say why it is thin
             # rather than silently returning a partial record.
@@ -1664,7 +1534,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if operation == "sync" and not plan["options"]["to_scopes"]:
             raise StoreError("sync batch plans require at least one target scope")
         results: list[dict] = []
-        from .scopes import remove_skill as _remove_skill, sync_skill as _sync_skill, toggle_skill as _toggle_skill
 
         for target in targets:
             item = {"name": target["name"], "scope": target["scope"], "status": "ok"}
@@ -1674,11 +1543,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     if target["disabled"] == (not desired):
                         item["result"] = "already-set"
                     else:
-                        item.update(_toggle_skill(target["scope"], target["name"], enable=desired))
+                        item.update(scopes.toggle_skill(target["scope"], target["name"], enable=desired))
                 elif operation == "remove":
-                    item.update(_remove_skill(target["scope"], target["name"], purge=False))
+                    item.update(scopes.remove_skill(target["scope"], target["name"], purge=False))
                 else:
-                    item.update(_sync_skill(
+                    item.update(scopes.sync_skill(
                         target["name"], target["scope"], plan["options"]["to_scopes"],
                         force=bool(plan["options"]["force"]),
                     ))
@@ -1719,8 +1588,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
             values = data.get("tags")
             if not isinstance(names, list) or not isinstance(values, list):
                 raise StoreError("tag updates require names and tags lists")
-            from .catalog import update_tags
-
             self._send_json(update_tags(self.store.data_dir, names, data.get("operation", "add"), values))
             return True
         if parts != ["api", "catalog", "profiles"]:
@@ -1729,8 +1596,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         name = data.pop("name", None)
         if not isinstance(name, str):
             raise StoreError("profile name must be a string")
-        from .catalog import save_profile
-
         self._send_json(save_profile(self.store.data_dir, name, data))
         return True
 
@@ -1753,9 +1618,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         return fields, files
 
     def _route_source_update_post(self, parts: list[str]) -> bool:
-        from .external_scan import scan_options
-        from .source_update import commit_update_review, prepare_local_update, prepare_snapshot_update
-
         if parts == ["api", "source-updates", "reviews"]:
             content_type = self.headers.get("Content-Type", "")
             if not content_type.lower().startswith("multipart/form-data"):
@@ -1764,7 +1626,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not boundary:
                 raise StoreError("multipart boundary missing")
             fields, files = self._multipart_fields(
-                _parse_multipart(self._read_body(), boundary.group(1).strip('"'))
+                parse_multipart(self._read_body(), boundary.group(1).strip('"'))
             )
             options = scan_options(fields.get("external_scan"))
             with staged_single_skill(files) as source_dir:
@@ -1816,9 +1678,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         force = bool(data.get("force"))
         if not name:
             raise StoreError("name is required for sync")
-        from .scopes import sync_skill as _sync_skill
 
-        self._send_json(_sync_skill(name, from_scope, to_scopes, force=force))
+        self._send_json(scopes.sync_skill(name, from_scope, to_scopes, force=force))
         return True
 
     def _route_install_post(self, parts: list[str]) -> bool:
@@ -1881,9 +1742,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             raise StoreError("description must be a non-empty string")
         fields = _validated_skill_fields(data)
         if scope != "global":
-            from .scopes import create_skill as _create_skill
 
-            self._send_json(_create_skill(scope, name, description, **fields), 201)
+            self._send_json(scopes.create_skill(scope, name, description, **fields), 201)
             return True
         self._send_json(self.store.create(name, description, **fields), 201)
         return True
@@ -1899,9 +1759,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         name = parts[2]
         scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
         if scope != "global":
-            from .scopes import toggle_skill as _toggle_skill
 
-            self._send_json(_toggle_skill(scope, name, enable=(parts[3] == "enable")))
+            self._send_json(scopes.toggle_skill(scope, name, enable=(parts[3] == "enable")))
             return True
         action = getattr(self.store, parts[3])
         action(name)
@@ -1939,17 +1798,15 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if scope == "global":
                 self._send_json(self.store.restore(name, snapshot=snapshot))
             else:
-                from .scopes import restore_snapshot as _restore_snapshot
 
-                self._send_json(_restore_snapshot(scope, name, snapshot))
+                self._send_json(scopes.restore_snapshot(scope, name, snapshot))
             return
         if scope != "global":
-            from .scopes import restore_trashed as _restore_trashed
 
             trash_path = self._body_json().get("trash_path")
             if trash_path is not None and not isinstance(trash_path, str):
                 raise StoreError("trash_path must be a string")
-            self._send_json(_restore_trashed(scope, name, trash_path=trash_path))
+            self._send_json(scopes.restore_trashed(scope, name, trash_path=trash_path))
             return
         self._send_json(self.store.restore(name))
 
@@ -1969,8 +1826,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         body = data.get("body")
         if body is not None and not isinstance(body, str):
             raise StoreError("template body must be a string")
-        from .templates import create_template
-
         try:
             path = create_template(self.store.templates_dir, name, data.get("body") or None)
         except FileExistsError as exc:
@@ -1989,8 +1844,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """
         if parts != ["api", "validate"]:
             return False
-        from .validator import validate_skill
-
         data = self._body_json()
         raw_name = data.get("name")
         if not isinstance(raw_name, str) or not raw_name.strip():
@@ -2003,9 +1856,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if requested_scope == "global":
             record = self.store.get(name)
         else:
-            from .scopes import get_skill as _get_scope_skill
 
-            record = _get_scope_skill(requested_scope, name)
+            record = scopes.get_skill(requested_scope, name)
         if not record.get("path"):
             raise StoreError(f"skill '{name}' has no directory on disk")
         result = validate_skill(name, Path(record["path"]))
@@ -2084,9 +1936,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             data = self._body_json()
             fields = _validated_skill_fields(data, keep_empty=True)
             if scope != "global":
-                from .scopes import edit_skill as _edit_skill
 
-                self._send_json(_edit_skill(scope, parts[2], **fields))
+                self._send_json(scopes.edit_skill(scope, parts[2], **fields))
                 return
             self._send_json(self.store.edit(parts[2], **fields))
         else:
@@ -2095,8 +1946,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
     # -- DELETE routes ----------------------------------------------------
 
     def _route_source_update_delete(self, parts: list[str]) -> bool:
-        from .source_update import cancel_update_review
-
         if len(parts) == 4 and parts[:3] == ["api", "source-updates", "reviews"]:
             self._send_json(cancel_update_review(self.store.data_dir, parts[3]))
             return True
@@ -2107,14 +1956,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
             purge = qs.get("purge", ["0"])[0] in ("1", "true", "yes")
             scope = (qs.get("scope", ["global"])[0] or "global").strip() or "global"
             if scope != "global":
-                from .scopes import remove_skill as _remove_skill
 
-                self._send_json(_remove_skill(scope, parts[2], purge=purge))
+                self._send_json(scopes.remove_skill(scope, parts[2], purge=purge))
                 return
             self._send_json(self.store.remove(parts[2], purge=purge))
         elif len(parts) == 4 and parts[:3] == ["api", "catalog", "profiles"]:
-            from .catalog import delete_profile
-
             self._send_json(delete_profile(self.store.data_dir, parts[3]))
         else:
             self._send_error(404, "unknown endpoint", code="unknown_endpoint")
@@ -2136,8 +1982,8 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not boundary_m:
                 self._send_error(400, "multipart boundary missing")
                 return
-            file_parts = _parse_multipart(self._read_body(), boundary_m.group(1).strip('"'))
-            uploaded = self._upload_folder(file_parts)
+            file_parts = parse_multipart(self._read_body(), boundary_m.group(1).strip('"'))
+            uploaded = upload_folder(file_parts, self.store.add)
             self._send_json(uploaded)
         elif parts == ["api", "import"]:
             filename = os.path.basename(
@@ -2169,15 +2015,6 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(result)
         else:
             self._send_error(404, "unknown endpoint", code="unknown_endpoint")
-
-    def _upload_folder(self, file_parts: list[dict]) -> dict:
-        """Install skills from an uploaded skill folder (webkitdirectory)."""
-        return upload_folder(
-            file_parts,
-            self.store.add,
-            max_parts=MAX_UPLOAD_PARTS,
-            max_bytes=MAX_BODY_BYTES,
-        )
 
 
 def _diagnostics_roots(store: Store, extra_allowed_roots) -> list[Path]:

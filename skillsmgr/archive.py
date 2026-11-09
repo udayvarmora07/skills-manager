@@ -13,7 +13,8 @@ import zipfile
 import zlib
 from pathlib import Path
 
-from . import paths, __version__
+from . import __version__
+from . import path_safety
 from .errors import StoreError
 from .sidecar_binding import MANAGER_SIDECARS
 from .atomic_io import tree_content_hash
@@ -432,7 +433,7 @@ def extract_zip_members(
     """Extract validated ZIP regular files into a private destination."""
     expanded_written = 0
     for member, normalized in members:
-        target = paths.contained_path(dest, *normalized.split("/"))
+        target = path_safety.contained_path(dest, *normalized.split("/"))
         if _zip_member_is_dir(member):
             target.mkdir(parents=True, exist_ok=True)
             continue
@@ -471,7 +472,7 @@ def extract_members(tar: tarfile.TarFile, dest: Path, members: list[tuple[tarfil
             raise ArchiveError(f"invalid archive extraction: {exc}") from exc
         return
     for member, normalized in members:
-        target = paths.contained_path(dest, *normalized.split("/"))
+        target = path_safety.contained_path(dest, *normalized.split("/"))
         if member.isdir():
             target.mkdir(parents=True, exist_ok=True)
             continue

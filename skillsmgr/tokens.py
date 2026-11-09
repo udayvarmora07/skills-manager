@@ -47,6 +47,14 @@ except Exception:
         return None
 
 
+def window_name(window: str | None) -> str:
+    """A known context window name (blank means the default), else ``ValueError``."""
+    name = (window or "").strip() or DEFAULT_WINDOW
+    if name not in WINDOWS:
+        raise ValueError(f"unknown context window {name!r}; choose one of: {', '.join(sorted(WINDOWS))}")
+    return name
+
+
 def count_tokens(text: str) -> tuple[int, str]:
     """Return (tokens, method) for text.
 
@@ -87,29 +95,21 @@ def estimate(text: str, window: str = DEFAULT_WINDOW) -> dict:
     }
 
 
-def estimate_skill_text(description: str, body: str, extra_frontmatter: str = "") -> dict:
-    """Estimate for a skill from its parts (description + body + frontmatter snippet)."""
-    combined = "\n".join(p for p in (extra_frontmatter, description or "", body or "") if p)
-    return estimate(combined)
-
-
-def aggregate(skills: list[dict]) -> dict:
-    """Aggregate token stats over a list of skill dicts that have 'tokens'."""
-    if not skills:
-        return {"total_tokens": 0, "avg_tokens": 0, "max_tokens": 0, "count": 0, "largest": []}
-    toks = [(s.get("tokens", 0), s.get("name", "")) for s in skills]
-    total = sum(t for t, _ in toks)
-    avg = total // len(toks) if toks else 0
-    mx = max(t for t, _ in toks) if toks else 0
+def aggregate(skills: list[dict], window: str = DEFAULT_WINDOW) -> dict:
+    """Aggregate token stats over skill dicts that carry ``tokens``."""
+    window_tokens = WINDOWS[window]
+    total = sum(s.get("tokens", 0) for s in skills)
     largest = sorted(skills, key=lambda s: s.get("tokens", 0), reverse=True)[:5]
-    largest = [{"name": s.get("name"), "tokens": s.get("tokens", 0), "scope": s.get("scope")} for s in largest]
     return {
         "total_tokens": total,
-        "avg_tokens": avg,
-        "max_tokens": mx,
+        "avg_tokens": total // len(skills) if skills else 0,
+        "max_tokens": max((s.get("tokens", 0) for s in skills), default=0),
         "count": len(skills),
-        "largest": largest,
+        "largest": [{"name": s.get("name"), "tokens": s.get("tokens", 0), "scope": s.get("scope")} for s in largest],
         "has_tiktoken": _HAS_TIKTOKEN,
+        "window": window,
+        "window_tokens": window_tokens,
+        "pct_window": round(total / window_tokens * 100, 1),
     }
 
 

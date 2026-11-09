@@ -258,11 +258,3 @@ def contained_entry_under(resolved_root: Path, *parts: str | Path) -> Path:
     return candidate
 
 
-def realpath_or_none(path: Path) -> Path | None:
-    """Return the symlink target of *path*, or ``None`` when it is not a link."""
-    try:
-        if not path.is_symlink():
-            return None
-        return Path(os.path.realpath(path))
-    except OSError:
-        return None

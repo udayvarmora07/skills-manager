@@ -133,9 +133,6 @@ def local_manifest(root: str | Path) -> dict:
     return {"root": str(root), "files": files, "public_files": public, "sha256": digest.hexdigest()}
 
 
-    return entries
-
-
 def _iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
