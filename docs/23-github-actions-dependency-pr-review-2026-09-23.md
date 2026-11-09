@@ -1,8 +1,39 @@
 # GitHub Actions Dependency PR Review — 2026-09-23
 
-**Version 1.3.0**
+**Version 1.4.0**
 
-**AI manifest**: Dated, read-only review of Dependabot PRs #15–#19 against the exact workflow uses, upstream action metadata, current CI evidence, and the release artifact contract. Recommendations are review guidance only; no GitHub review, comment, branch update, or merge was posted. Re-verified 2026-10-06: all five PRs are still open, every SHA recorded below still matches the `uses:` ref its PR introduces, and the CI evidence is refreshed against the current (now green) `main`.
+**AI manifest**: Dated review of Dependabot action pins against exact workflow uses, upstream metadata, CI evidence and the release artifact contract. Handoff 3.6 re-verification on 2026-11-09 confirms #16 and #18 are closed and superseded by merged #20. Earlier sections preserve their historical observations. This session posted no GitHub review/comment, branch update or merge.
+
+## Re-verification — 2026-11-09 (handoff 3.6)
+
+**[SPEC]** Both requested Dependabot PRs were closed unmerged on 2026-11-07:
+[#16 checkout](https://github.com/udayvarmora07/skills-manager/pull/16) and
+[#18 setup-node](https://github.com/udayvarmora07/skills-manager/pull/18).
+They are superseded by merged
+[#20](https://github.com/udayvarmora07/skills-manager/pull/20). Disposition:
+keep the accepted consolidated pins; neither old branch needs revival or merge.
+
+| Action | Accepted version and full SHA | Runtime evidence |
+|---|---|---|
+| checkout | v7.0.1 `3d3c42e5aac5ba805825da76410c181273ba90b1` | [pinned action.yml](https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/action.yml): node24 |
+| setup-node | v7.1.0 `949feb2413d6458794dcd2491c4babbbce0c15c1` | [pinned action.yml](https://github.com/actions/setup-node/blob/949feb2413d6458794dcd2491c4babbbce0c15c1/action.yml): node24 |
+
+**[NOTE]** The accepted pins match fetched `origin/main` (`03b9ad6`), workflow
+comments and the reviewed-SHA test table. PR #20's exact head
+`7bde3f372835e9f0e79c5fa88eefde4a10f68dc1` passed all 16 checks in
+[run 42366908752](https://github.com/udayvarmora07/skills-manager/actions/runs/42366908752).
+The release dry-run limits in the Resolution below still apply.
+
+**[NOTE]** Old-head evidence was inspected, not rerun: #16 head
+`66191bbf3e4e98fefdc3fefa4c38eff70a9077d4` has its historical five unit
+failures and skipped downstream jobs in
+[run 35774043493](https://github.com/udayvarmora07/skills-manager/actions/runs/35774043493).
+#18 head `07084c852067016e21929be7be191f135a950f30` has its historical browser
+failure in [run 37215517963](https://github.com/udayvarmora07/skills-manager/actions/runs/37215517963).
+The old v7.0.0 setup-node pin also used node24; its stale-base failure is
+documented below. No new hosted CI run, remote branch mutation, merge or release
+action was performed. Local handoff verification is recorded in
+@docs/06-progress-log.md.
 
 ## Resolution — 2026-11-07
 

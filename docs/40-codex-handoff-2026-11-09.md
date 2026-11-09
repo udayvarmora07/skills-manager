@@ -159,6 +159,27 @@ Record results in docs/39 §5 replacing the [?] about fidelity.
 
 ### 3.6 Repository chores
 
+**[NOTE] Reviewed 2026-11-09; archives preserved.** Dependabot #16/#18 were
+already closed unmerged and superseded by merged #20; accepted full pins,
+node24 runtimes and exact-head CI evidence were verified. Disposition:
+@docs/23-github-actions-dependency-pr-review-2026-09-23.md. No remote changes
+or new hosted CI run were made.
+
+The milestone-5 branch's useful code is already represented in main; its
+remaining value is historical rationale and test evidence. No cherry-pick is
+recommended. Preserve it and its archive tag, the backup branch and both old
+stashes:
+
+| Archive | Observed SHA | Disposition |
+|---|---|---|
+| `origin/agents/milestone5-research-user-needs` and `archive/milestone5-research-user-needs-c5a7161` | `c5a7161f4832d4240f14b19098ea2aeb0be18b3a` | Keep historical research, ZIP-signature/traversal evidence and decisions; current import, preview/help and launcher implementations supersede its code |
+| `backup/pre-message-rewrite` | `232226a51cee46f30197951b8a069e517ee72891` | Keep: 29 commits absent fetched main; patches represented in the still-unmerged redesign work |
+| `stash@{0}` — `fix-bugs-in-frontend-test-report`, 2026-09-16 | `41447f2814cca1100cab2fc5fa768474c7cfb3c6` | Keep seven-file archive |
+| `stash@{1}` — `complete-todo-plan-implementation`, 2026-09-16 | `27fcd4456e1b2de5271b330e177d98bfc463e500` | Keep twenty-file archive |
+
+Stash indices can move; the SHAs identify this observation. No archive was
+deleted or popped. Any later deletion needs the maintainer's explicit yes.
+
 ```text
 - Review the two open Dependabot branches (actions/checkout 7.0.1, actions/setup-node
   7.0.0) against docs/23 rules: pin full SHAs, check Node runtime, run CI. Record a
@@ -178,6 +199,36 @@ Record results in docs/39 §5 replacing the [?] about fidelity.
 - **Transcript-based usage counts** and a **project skill lockfile**. Transcripts are private; any AI use there would be local-model only.
 - **Monetization questions MON-Q1…MON-Q5** in @docs/27-monetization-five-pass-analysis-2026-10-30.md.
 - **OS keychain storage** for AI keys (D-AI-3 follow-up).
+
+### First decision proposal: minimal AI CLI and CI mode
+
+**[NOTE] Proposed, unapproved and not implemented.** Approve one initial
+`skills-mgr ai trigger-test` surface, reusing the existing A1/A7 engine. Keep
+the other section 4 items pending.
+
+- Default to a no-send estimate; require `--run` to contact the configured
+  provider. Reuse existing configuration/environment credentials; accept no
+  API key argument. CI supplies an ephemeral configured data directory.
+- Accept the existing scope, saved regression prompts and repeat limits;
+  provide `--json` for a stable versioned machine-readable result with model,
+  prompt/listing fingerprints and advisory labels.
+- Expose `--seed` for stable sampling/listing order, recording it in the
+  result. A fixed seed cannot guarantee identical provider output.
+- Add opt-in `--fail-on-regression` for saved-baseline comparisons in CI.
+  Preserve existing CLI exit conventions; missing baselines remain explicit.
+  Applying model output stays outside this command.
+
+Illustrative proposed invocations (these commands do not exist yet):
+
+```sh
+skills-mgr ai trigger-test --scope claude-code --saved --estimate --json
+skills-mgr ai trigger-test --scope claude-code --saved --run --seed 0 --json
+```
+
+Implementation would touch the existing parser/handler adapter, A1 seed/result
+metadata, contract tests and CLI docs, while preserving stdlib-only operation,
+filesystem truth, Store surface and SQLite schema. Approval is required by
+AGENTS.md locked constraint 5. Work stops here pending that decision.
 
 ## 5. Human only — an agent must not do these
 

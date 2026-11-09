@@ -8,6 +8,26 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Handoff 3.6: chore dispositions and decision handoff
+
+**[NOTE]** Read-only GitHub/source review found Dependabot #16/#18 already
+closed unmerged and superseded by merged #20. Accepted full SHA pins and node24
+runtimes match fetched main and contract expectations; #20's exact head has
+16 green recorded checks. Old PR heads were inspected, not rerun. No GitHub
+comment/review, new hosted CI run, remote branch mutation, merge or release was
+performed. Current disposition: @docs/23-github-actions-dependency-pr-review-2026-09-23.md.
+
+**[NOTE]** Milestone-5's remaining value is historical research/test evidence;
+its code is superseded, so no cherry-pick is recommended. Its remote branch
+and archive tag, the backup branch with 29 commits absent fetched main, and
+both old stashes were inventoried and preserved. Exact SHAs and rationale:
+@docs/40-codex-handoff-2026-11-09.md. No stash was popped or archive deleted.
+
+**[NOTE]** Section 3 agent implementation/preparation is now recorded in the
+handoff. The live fidelity study still needs the present maintainer; section 5
+was left untouched. A concrete minimal AI CLI/CI proposal is prepared in
+section 4, without implementation, pending approval under locked constraint 5.
+
 ## 2026-11-09 — Handoff 3.5: developer fidelity harness, study pending
 
 **[SPEC]** `tools/ai_fidelity/run.py` prepares a comparison between an existing
