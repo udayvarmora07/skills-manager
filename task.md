@@ -26,6 +26,8 @@
   Handoff with prompts and acceptance criteria: @docs/40-codex-handoff-2026-11-09.md.
 - [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
 - [ ] Measure trigger-test fidelity against a real agent's choices.
+- [x] Prepare developer fidelity harness with dry-run default, explicit
+  maintainer execution and fake-executable tests; real measurement stays pending.
 
 ## Audited merged-work cleanup (2026-11-09)
 

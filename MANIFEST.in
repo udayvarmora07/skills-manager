@@ -7,3 +7,6 @@
 # from the released wheel's own verification job), never from an sdist, so it is
 # pruned here. `tests/` is also on that gate's must-never-ship list.
 prune tests
+
+# Fidelity harness is development-only and can execute an external agent.
+prune tools/ai_fidelity

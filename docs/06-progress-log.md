@@ -8,6 +8,40 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-09 — Handoff 3.5: developer fidelity harness, study pending
+
+**[SPEC]** `tools/ai_fidelity/run.py` prepares a comparison between an existing
+saved trigger simulation and successful native-agent Skill events. It defaults
+to a no-subprocess dry-run; actual execution requires a present maintainer and
+two explicit flags. Complete exact input matching and untied choices are
+required. Failed, malformed, incomplete or resource-limited observations are
+inconclusive. First-successful-choice agreement is labelled explicitly and
+multiple loads disclosed; model prose is not evidence.
+
+**[SPEC]** Time/output/case limits, POSIX process-group cleanup and approximate
+native per-call budgets bound the attended operation. Raw prompts, transcripts
+and stderr are omitted from reports. Native hooks/configuration can still have
+side effects; this tool is not a sandbox, and missing historical listing
+snapshots/restricted tool context limit any fidelity conclusion. Distribution
+excludes the development harness. No real agent/provider was run, and docs/39's
+unmeasured-fidelity uncertainty remains. No product CLI command, Store method,
+runtime dependency or schema changed.
+
+**[NOTE]** Thirteen fake-executable tests and a separate real script-entrypoint
+dry-run passed; the latter used a nonexistent agent path and reported no
+conclusive cases or measured agreement. Review added deep-JSON and malformed,
+unknown, terminal-only/truncated stream guards, successful tool-result pairing,
+auxiliary EndConversation handling, first-choice/multiple-load labels and
+timeout/output/process-group tests. Complexity: 1,187 functions across 42
+files, no baseline raised.
+
+**[NOTE]** A temporary virtualenv installed the exact hash-locked build tools.
+The pinned no-isolation build produced wheel and sdist; both passed package-data
+checks, and direct archive inspection confirmed the harness is absent from
+each. The wheel also passed an offline clean-install/resource probe. Nothing
+was published. Native-agent hooks, source-listing equivalence and billing are
+not certified by these fake-only checks.
+
 ## 2026-11-09 — Handoff 3.4: contained metadata-only profile suggestions
 
 **[SPEC]** A12 adds `ai_profiles.py` and `POST /api/ai/suggest-profile`.

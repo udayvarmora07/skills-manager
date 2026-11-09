@@ -143,6 +143,11 @@ Acceptance: tests including a project outside managed roots; browser check.
 
 ### 3.5 Trigger-test fidelity study (needs the maintainer's key and an agent CLI)
 
+**[NOTE] Tooling prepared; live study remains pending.** The developer harness
+and fake-executable tests are implemented. Default dry-run executes no agent.
+No real provider or maintainer agent was run, so docs/39's fidelity uncertainty
+is retained. See @tools/ai_fidelity/README.md before an attended study.
+
 ```text
 Write tools/ai_fidelity/run.py (dev-only, not packaged): for a saved prompt set,
 compare the trigger test's simulated choice with the skill Claude Code actually loads

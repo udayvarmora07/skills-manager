@@ -93,6 +93,28 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 
 **[?]** The trigger test is a *simulation by the configured model*, not the agent's real router; results are labelled as estimates. Fidelity against a real agent's choices has not been measured.
 
+**[NOTE] Handoff 3.5 tooling is prepared, measurement remains pending.**
+`tools/ai_fidelity/run.py` consumes a matching saved prompt set and completed
+saved simulation. Its default dry-run makes no subprocess or provider call.
+Only a present maintainer may use both `--run-agent` and
+`--maintainer-present` to start the configured native agent. Tests use fake
+executables exclusively. No maintainer agent or real key was exercised.
+
+The report counts first-successful-Skill agreement, matching A1's first-choice
+question, with multiple loads disclosed separately. It requires completed
+stream evidence and successful matching tool results; failures, missing or
+malformed evidence and resource-limit failures are inconclusive and excluded
+from agreement. Exact tuple matching, untied simulation choices and hash
+provenance protect the comparison inputs. Reports omit raw prompt/stream/stderr
+text; prompt hashes are not anonymity guarantees.
+
+The historical simulator saved no listing snapshot, and the harness restricts
+tools, so listing/configuration equivalence and normal-agent fidelity cannot
+be inferred from its numbers alone. Native configuration, hooks and dynamic
+skill behavior can have side effects. The harness uses native-agent budgets,
+not the manager's AI ledger; cost limits are approximate. Invocation and
+verified CLI flag source: @tools/ai_fidelity/README.md.
+
 ## 6. Verification
 
 **[NOTE]** `tests/test_ai_features.py` (19 tests) runs against a fake provider on 127.0.0.1 that speaks both request shapes. It covers key privacy (header only, never in body, settings, ledger or responses), env precedence, clearing, plain-http refusal, redirect refusal, caps refusing before any request, estimate mode sending nothing, never-fires detection, held-out-verified recommendation, read-only behaviour and the HTTP routes. The v2 pages were exercised in a browser against the same fake model: settings save, connection test, trigger test, improve and apply (the edit left a snapshot). No real provider was called.

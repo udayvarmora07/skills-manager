@@ -617,6 +617,20 @@ the v2 user confirms a save or overwrite through the existing catalog API.
 No native agent settings are changed. Safe scanning requires the same POSIX
 descriptor support as conciseness capture.
 
+## `tools/ai_fidelity/run.py`
+
+**[SPEC] Developer-only fidelity preparation.** Consumes a saved prompt set and
+its complete saved trigger simulation, validating their exact tuple join and
+rejecting tied, missing or invalid choices. Default dry-run starts no child
+process. Maintainer-attended execution needs two explicit flags and observes
+successful Skill tool calls/results from the agent stream. Failed/incomplete
+cases are inconclusive, not no-skill choices. Agreement measures the first
+successful skill choice; multiple loads are reported separately. Reports keep
+hash provenance and skill/model labels, without raw prompts, transcripts or
+stderr. The tool is excluded from distribution artifacts. Its restricted tool
+context and absent historical listing snapshot limit what a future comparison
+can establish; no real-agent fidelity has been measured.
+
 ## `evals.py`
 
 File-based, advisory-only eval harness implementing the official

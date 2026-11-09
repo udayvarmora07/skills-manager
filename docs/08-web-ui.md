@@ -451,7 +451,13 @@ stated beside the setting and in every result.
 | GET | `/api/ai/runs` | newest 20 saved runs (files under `<data>/ai/runs/`); `status: disconnected` identifies partial runs. Shown on every v2 AI page in Past runs |
 | GET | `/api/ai/runs/<run_id>` | one saved run, rendered as text in Past runs; no model output is interpreted as HTML |
 
-AI errors use the standard error shape with codes `ai-not-configured` (409), `ai-budget` (409), `ai-input` (400), `ai-settings` (400), `ai-provider` / `ai-bad-output` / `ai-refused` (502) and `ai-not-found` (404).
+AI errors use the standard error shape with codes `ai-not-configured` (409), `ai-budget` (409), `ai-conflict` (409), `ai-input` (400, or 403 for project confinement), `ai-settings` (400), `ai-provider` / `ai-bad-output` / `ai-refused` (502) and `ai-not-found` (404).
+
+The developer fidelity harness consumes the existing saved prompt-set and run
+files. A maintainer must attend and explicitly enable its agent execution;
+the web trigger reports remain model estimates. See
+@docs/39-ai-features-research-and-catalogue-2026-11-09.md and
+@tools/ai_fidelity/README.md for its comparison limits and invocation contract.
 
 ### Templates
 
