@@ -35,6 +35,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 import skillsmgr.paths as paths_module
 from skillsmgr import loader, scopes
 from skillsmgr.store import Store, StoreError
@@ -52,11 +53,11 @@ class BatchSixCase(unittest.TestCase):
         self._old = {key: os.environ.get(key) for key in ("HOME", "SKILLS_MANAGER_DATA")}
         os.environ["HOME"] = str(self.home)
         os.environ["SKILLS_MANAGER_DATA"] = str(self.base / "data")
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         self.addCleanup(self._restore_env)
 
     def _restore_env(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         for key, old in self._old.items():
             if old is None:
                 os.environ.pop(key, None)
@@ -276,7 +277,7 @@ class SymlinkedScopeRootTests(BatchSixCase):
     def test_nested_skills_stay_reachable_below_a_symlinked_home(self):
         linked = self._linked_home()
         os.environ["HOME"] = str(linked)
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         base = linked / ".cursor" / "skills"
         for relative, name in (("cat/one", "one"), ("grp/sub/two", "two")):
             target = base / relative
@@ -297,7 +298,7 @@ class SymlinkedScopeRootTests(BatchSixCase):
     def test_a_symlinked_scope_root_itself_stays_addressable(self):
         linked = self._linked_home()
         os.environ["HOME"] = str(linked)
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         real_root = self.base / "real-cursor-skills"
         (real_root / "cat" / "nested").mkdir(parents=True)
         (real_root / "cat" / "nested" / "SKILL.md").write_text(
@@ -315,7 +316,7 @@ class SymlinkedScopeRootTests(BatchSixCase):
         # resolver: the flat path exists but holds no document.
         linked = self._linked_home()
         os.environ["HOME"] = str(linked)
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         target = linked / ".cursor" / "skills" / "deploy" / "deploy"
         target.mkdir(parents=True)
         (target / "SKILL.md").write_text(self._document("deploy"), encoding="utf-8")

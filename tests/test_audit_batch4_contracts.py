@@ -17,6 +17,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
+
 
 class BatchFourCase(unittest.TestCase):
     """Base: fresh HOME + data root per test, no environment leakage."""
@@ -138,8 +140,8 @@ class RogueIndexRowTests(BatchFourCase):
         from skillsmgr import scopes
 
         store = self._store_with_rogue_row()
-        scopes.set_global_store(store)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(store)
+        self.addCleanup(context.set_active_store, None)
 
         for label, call in (
             ("list()", store.list),
@@ -155,8 +157,8 @@ class RogueIndexRowTests(BatchFourCase):
         from skillsmgr import scopes
 
         store = self._store_with_rogue_row()
-        scopes.set_global_store(store)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(store)
+        self.addCleanup(context.set_active_store, None)
 
         rows = {row["name"]: row for row in scopes.scan_scope("global")}
         self.assertIn("Bad_Name", rows)

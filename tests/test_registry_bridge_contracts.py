@@ -1,4 +1,4 @@
-"""Contract tests for the offline registry bridge (insights + install surfaces).
+"""Contract tests for the offline registry bridge (registry + install surfaces).
 
 Hermetic and stdlib-only: no test performs a network request, and one test
 pins that the bridge modules import no network client at all.
@@ -18,13 +18,14 @@ from pathlib import Path
 from unittest import mock
 from urllib.request import Request, urlopen
 
-from skillsmgr import cli, insights
+from skillsmgr import cli, install, registry
+from skillsmgr.errors import StoreError
 
 
 class RegistryReferenceTests(unittest.TestCase):
     def test_bare_source_and_github_url_forms(self):
         for spec in ("vercel-labs/skills", "https://github.com/vercel-labs/skills"):
-            reference = insights.registry_reference(spec)
+            reference = registry.registry_reference(spec)
             self.assertEqual(reference["source"], "vercel-labs/skills")
             self.assertIsNone(reference["slug"])
             self.assertEqual(reference["form"], "source")
@@ -37,7 +38,7 @@ class RegistryReferenceTests(unittest.TestCase):
             "https://skills.sh/vercel-labs/skills/find-skills",
             "https://www.skills.sh/vercel-labs/skills/find-skills",
         ):
-            reference = insights.registry_reference(spec)
+            reference = registry.registry_reference(spec)
             self.assertEqual(reference["source"], "vercel-labs/skills")
             self.assertEqual(reference["slug"], "find-skills")
             self.assertEqual(reference["registry_id"], "vercel-labs/skills/find-skills")
@@ -46,19 +47,19 @@ class RegistryReferenceTests(unittest.TestCase):
                 "https://skills.sh/vercel-labs/skills/find-skills",
             )
             providers = [link["provider"] for link in reference["audit_links"]]
-            self.assertEqual(providers, list(insights.REGISTRY_AUDIT_PROVIDERS))
+            self.assertEqual(providers, list(registry.REGISTRY_AUDIT_PROVIDERS))
             self.assertTrue(
                 all("/security/" in link["url"] for link in reference["audit_links"])
             )
 
     def test_well_known_source_page_url(self):
-        reference = insights.registry_reference("https://skills.sh/mintlify.com/mintlify")
+        reference = registry.registry_reference("https://skills.sh/mintlify.com/mintlify")
         self.assertEqual(reference["source"], "mintlify.com")
         self.assertEqual(reference["slug"], "mintlify")
         self.assertEqual(reference["page_url"], "https://skills.sh/mintlify.com/mintlify")
 
     def test_url_query_and_fragment_are_ignored(self):
-        reference = insights.registry_reference(
+        reference = registry.registry_reference(
             "https://skills.sh/vercel-labs/skills/find-skills?utm=1#readme"
         )
         self.assertEqual(reference["registry_id"], "vercel-labs/skills/find-skills")
@@ -80,33 +81,33 @@ class RegistryReferenceTests(unittest.TestCase):
         ):
             with self.subTest(spec=bad):
                 with self.assertRaises(ValueError):
-                    insights.registry_reference(bad)
+                    registry.registry_reference(bad)
 
     def test_segment_length_cap(self):
-        long_segment = "a" * (insights.MAX_REGISTRY_SEGMENT + 1)
+        long_segment = "a" * (registry.MAX_REGISTRY_SEGMENT + 1)
         with self.assertRaises(ValueError):
-            insights.registry_reference(f"owner/{long_segment}")
+            registry.registry_reference(f"owner/{long_segment}")
 
 
 class InstallCommandTests(unittest.TestCase):
     def test_argv_matches_the_historical_display_contract(self):
         self.assertEqual(
-            insights.install_command_line("vercel-labs/agent-skills", "npx", "global"),
+            install.install_command_line("vercel-labs/agent-skills", "npx", "global"),
             "npx skills add vercel-labs/agent-skills -g",
         )
         self.assertEqual(
-            insights.install_command_line("vercel-labs/agent-skills", "pnpm", "project"),
+            install.install_command_line("vercel-labs/agent-skills", "pnpm", "project"),
             "pnpm dlx skills add vercel-labs/agent-skills",
         )
         self.assertEqual(
-            insights.install_command_line("vercel-labs/agent-skills", "yarn", "project"),
+            install.install_command_line("vercel-labs/agent-skills", "yarn", "project"),
             "yarn dlx skills add vercel-labs/agent-skills",
         )
         self.assertEqual(
-            insights.install_command_line("vercel-labs/agent-skills", "bunx", "global"),
+            install.install_command_line("vercel-labs/agent-skills", "bunx", "global"),
             "bunx skills add vercel-labs/agent-skills -g",
         )
-        command = insights.install_command_line(
+        command = install.install_command_line(
             "vercel-labs/agent-skills", "npx", "global", ["claude-code"], ["review-pr"],
             True, True,
         )
@@ -115,23 +116,13 @@ class InstallCommandTests(unittest.TestCase):
             "npx skills add vercel-labs/agent-skills -g -a claude-code -s review-pr --copy -l",
         )
 
-    def test_cli_display_helper_delegates_to_the_shared_renderer(self):
-        from skillsmgr.cli_handlers import install_command_for_display
-
-        self.assertEqual(
-            install_command_for_display("vercel-labs/x", "pnpm", "global", None, None, False, False),
-            insights.install_command_line("vercel-labs/x", "pnpm", "global"),
-        )
-
     def test_argv_rejects_injection_shapes(self):
         for source in ("--flag", "a;b", "$(whoami)", "a b"):
             with self.subTest(source=source):
-                with self.assertRaises(ValueError):
-                    insights.install_argv(source)
+                with self.assertRaises(StoreError):
+                    install.install_argv(source)
 
     def test_cli_rejects_traversal_absolute_and_oversized_install_values(self):
-        from skillsmgr.cli_handlers import validated_install_source, validated_install_value
-
         for label, value in (
             ("source", "../../tmp/pwn"),
             ("source", "/etc/passwd"),
@@ -146,20 +137,20 @@ class InstallCommandTests(unittest.TestCase):
             with self.subTest(label=label, value=value):
                 with self.assertRaises(Exception):
                     if label == "source":
-                        validated_install_source(value)
+                        install.install_source(value)
                     else:
-                        validated_install_value(label, value)
-        for runner in ("unknown", "uvx", ""):
+                        install.install_value(label, value)
+        for runner in ("unknown", "uvx"):
             with self.subTest(runner=runner):
-                with self.assertRaises(ValueError):
-                    insights.install_argv("owner/repo", runner)
-        with self.assertRaises(ValueError):
-            insights.install_argv("owner/repo", "npx", "global", None, ["--evil"])
+                with self.assertRaises(StoreError):
+                    install.install_argv("owner/repo", runner)
+        with self.assertRaises(StoreError):
+            install.install_argv("owner/repo", "npx", "global", None, ["--evil"])
 
 
 class RegistryBridgePlanTests(unittest.TestCase):
     def test_plan_maps_a_skill_id_onto_the_runner_command(self):
-        plan = insights.registry_bridge_plan(
+        plan = install.registry_bridge_plan(
             "vercel-labs/skills/find-skills",
             trust_confirmed=True,
             description="finds skills",
@@ -180,7 +171,7 @@ class RegistryBridgePlanTests(unittest.TestCase):
         self.assertIn("no registry API request", plan["network"])
 
     def test_plan_blocks_without_trust_and_reports_provenance(self):
-        plan = insights.registry_bridge_plan("vercel-labs/skills")
+        plan = install.registry_bridge_plan("vercel-labs/skills")
         self.assertFalse(plan["may_install"])
         self.assertFalse(plan["trust_confirmed"])
         self.assertFalse(plan["trust_requested"])
@@ -192,7 +183,7 @@ class RegistryBridgePlanTests(unittest.TestCase):
         self.assertIn("authenticated catalog read", plan["provenance_note"])
 
     def test_plan_reports_a_supplied_hash(self):
-        plan = insights.registry_bridge_plan(
+        plan = install.registry_bridge_plan(
             "vercel-labs/skills/find-skills",
             trust_confirmed=True,
             description="finds skills",
@@ -204,7 +195,7 @@ class RegistryBridgePlanTests(unittest.TestCase):
         self.assertIn("authenticated registry read", plan["hash_use"])
 
     def test_INS_2_offline_plan_never_asserts_verified_trust_eligibility_or_hash(self):
-        plan = insights.registry_bridge_plan(
+        plan = install.registry_bridge_plan(
             "vercel-labs/skills/find-skills",
             trust_confirmed=True,
             description="finds skills",
@@ -223,7 +214,7 @@ class RegistryBridgePlanTests(unittest.TestCase):
                             for blocker in plan["blockers"]))
 
     def test_agent_scope_plan_omits_the_global_flag(self):
-        plan = insights.registry_bridge_plan(
+        plan = install.registry_bridge_plan(
             "mintlify.com/mintlify", scope="agents", trust_confirmed=True,
             description="docs",
         )
@@ -234,8 +225,8 @@ class RegistryBridgePlanTests(unittest.TestCase):
 class NoNetworkImportTests(unittest.TestCase):
     def test_bridge_modules_import_no_network_client(self):
         banned = {"urllib.request", "http.client", "socket", "ssl", "requests"}
-        for module in ("insights.py", "evals.py", "web_upload.py"):
-            path = Path(insights.__file__).parent / module
+        for module in ("risk.py", "evals.py", "web_upload.py"):
+            path = Path(install.__file__).parent / module
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             imported: set[str] = set()
             for node in ast.walk(tree):
@@ -296,7 +287,7 @@ class InstallPreviewCliTests(unittest.TestCase):
         self.assertIn("unsupported registry host", err)
         self.assertNotIn("Traceback", err)
 
-    @mock.patch("skillsmgr.cli_handlers.subprocess.run")
+    @mock.patch("skillsmgr.install.subprocess.run")
     def test_list_only_executes_runner_with_list_flag_and_reports_output(self, run):
         run.return_value = mock.Mock(returncode=0, stdout="available-skill\n", stderr="")
 
@@ -315,7 +306,7 @@ class InstallPreviewCliTests(unittest.TestCase):
         self.assertIn("available-skill", out)
         self.assertEqual(err, "")
 
-    @mock.patch("skillsmgr.cli_handlers.subprocess.run")
+    @mock.patch("skillsmgr.install.subprocess.run")
     def test_list_only_returns_runner_exit_behavior_and_json_output(self, run):
         run.return_value = mock.Mock(returncode=7, stdout="partial\n", stderr="runner failed\n")
 
@@ -333,7 +324,7 @@ class InstallPreviewCliTests(unittest.TestCase):
         })
         self.assertEqual(err, "")
 
-    @mock.patch("skillsmgr.cli_handlers.subprocess.run")
+    @mock.patch("skillsmgr.install.subprocess.run")
     def test_dry_run_does_not_execute_runner(self, run):
         code, out, err = self.invoke([
             "install", "vercel-labs/agent-skills", "--dry-run",

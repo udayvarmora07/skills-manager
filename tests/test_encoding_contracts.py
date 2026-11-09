@@ -30,6 +30,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from skillsmgr import context
 from skillsmgr import cli, scopes
 from skillsmgr.frontmatter import dump_frontmatter
 from skillsmgr.loader import load_skill, scan_dir
@@ -59,11 +60,11 @@ class EncodingCase(unittest.TestCase):
         os.environ["HOME"] = self.tmp.name
         self.store = Store()
         self.store.init_db()
-        scopes.set_global_store(self.store)
+        context.set_active_store(self.store)
         self.addCleanup(self._reset_environment)
 
     def _reset_environment(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         for key, old in (
             ("SKILLS_MANAGER_DATA", self._old_data),
             ("HOME", self._old_home),

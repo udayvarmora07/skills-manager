@@ -28,6 +28,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import path_safety, registry
 from skillsmgr.path_safety import contained_path
 from skillsmgr.registry import RegistryError, read_provenance
@@ -293,8 +294,8 @@ class ScanScopeGlobalReadTests(ReadPathTestCase):
                 mock.patch.object(Path, "read_text", _count("read_text", real_read_text)):
             from skillsmgr import scopes
 
-            scopes.set_global_store(self.store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(self.store)
+            self.addCleanup(context.set_active_store, None)
             rows = scopes.scan_scope("global")
 
         self.assertEqual(6, len(rows))
@@ -308,8 +309,8 @@ class ScanScopeGlobalReadTests(ReadPathTestCase):
         self.seed(3)
         from skillsmgr import scopes
 
-        scopes.set_global_store(self.store)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(self.store)
+        self.addCleanup(context.set_active_store, None)
         rows = scopes.scan_scope("global")
         self.assertEqual(3, len(rows))
         for row in rows:

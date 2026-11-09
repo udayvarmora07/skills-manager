@@ -14,6 +14,7 @@ import zlib
 from pathlib import Path
 
 from . import paths, __version__
+from .sidecar_binding import MANAGER_SIDECARS
 from .atomic_io import tree_content_hash
 from .diagnostics import diagnose as _diagnose
 from .frontmatter import FrontmatterError, parse_frontmatter
@@ -54,12 +55,11 @@ _TAR_DECOMPRESSION_ERRORS = (
 # arrives from outside — an added folder, an archive, an upload — is never
 # trusted: a forged provenance file once made ``Store.get`` report
 # ``hash_verified: true`` for a skill that was never fetched (R2/S2).
-MANAGER_SIDECAR_NAMES = frozenset({".skillsmgr-provenance.json", ".skillsmgr-source-lock.json"})
 
 
 def ignore_manager_sidecars(_directory: str, names: list[str]) -> set[str]:
     """``shutil.copytree`` ignore callable that drops manager sidecars at any depth."""
-    return {name for name in names if name in MANAGER_SIDECAR_NAMES}
+    return {name for name in names if name in MANAGER_SIDECARS}
 
 
 def strip_manager_sidecars(root: Path) -> list[str]:
@@ -71,7 +71,7 @@ def strip_manager_sidecars(root: Path) -> list[str]:
     removed: list[str] = []
     try:
         candidates = sorted(
-            (path for path in Path(root).rglob("*") if path.name in MANAGER_SIDECAR_NAMES),
+            (path for path in Path(root).rglob("*") if path.name in MANAGER_SIDECARS),
             key=lambda item: len(item.parts),
             reverse=True,
         )

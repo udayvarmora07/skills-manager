@@ -15,6 +15,7 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes, webapp
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
@@ -57,7 +58,7 @@ class BatchPlanBindingTests(unittest.TestCase):
             self.server.shutdown()
             thread.join(timeout=5)
             self.server.httpd.server_close()
-            scopes.set_global_store(None)
+            context.set_active_store(None)
 
         self.addCleanup(stop)
 

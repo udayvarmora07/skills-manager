@@ -28,6 +28,7 @@ from .loader import (
     scan_dir,
 )
 from . import root_discovery as _root_discovery
+from .context import active_store
 from .store import (
     SkillNotFound,
     Store,
@@ -38,42 +39,12 @@ from .store import (
 )
 from .validator import validate_skill_name
 
-# Injectable override for the global Store (lets the web UI + tests share one
-# data_dir instead of each call constructing Store() with default resolution).
-#
-# SCOPE-10: this is a ``ContextVar``, not a module global.  As a plain global
-# the last ``set_global_store`` won for every caller in the process, so a second
-# in-process ``WebAppServer`` silently redirected the first server's global
-# reads *and* its snapshot writes to another data dir.  A ContextVar is
-# per-thread, and the web server rebinds it from its own ``store`` at the start
-# of every request thread, so two servers can no longer affect each other.
-_GLOBAL_STORE: ContextVar[Store | None] = ContextVar("skillsmgr_global_store", default=None)
 _SCOPE_READ_FLIGHTS: dict = {}
 _SCOPE_READ_FLIGHTS_LOCK = threading.Lock()
 
 
-def set_global_store(store: Store | None) -> None:
-    """Override the Store used for global-scope operations (or reset with None)."""
-    _GLOBAL_STORE.set(store)
-
-
-@contextlib.contextmanager
-def _bound_global_store(store: Store):
-    """Bind ``store`` for the ``global`` scope, restoring the prior binding.
-
-    An in-process caller (the CLI) must resolve ``global`` through the Store it
-    was asked for, not one a previously constructed ``WebAppServer`` left bound
-    in this thread.
-    """
-    token = _GLOBAL_STORE.set(store)
-    try:
-        yield store
-    finally:
-        _GLOBAL_STORE.reset(token)
-
-
 def _global_store() -> Store:
-    store = _GLOBAL_STORE.get()
+    store = active_store()
     return store if store is not None else Store()
 
 
@@ -88,7 +59,7 @@ def _global_skills_dir() -> Path:
     ``get_skill("global", ...)`` could never see.  There is now one identity:
     the injected Store's own tree whenever a Store is injected.
     """
-    store = _GLOBAL_STORE.get()
+    store = active_store()
     return store.skills_dir if store is not None else paths.skills_dir()
 
 

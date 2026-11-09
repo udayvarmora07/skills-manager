@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from skillsmgr import context
 from skillsmgr import cli, scopes
 from skillsmgr.store import Store
 
@@ -23,8 +24,8 @@ class CliContinuationTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.store = Store()
-        self.token = scopes._GLOBAL_STORE.set(self.store)
-        self.addCleanup(scopes._GLOBAL_STORE.reset, self.token)
+        self.token = context.ACTIVE_STORE.set(self.store)
+        self.addCleanup(context.ACTIVE_STORE.reset, self.token)
 
     def invoke(self, args):
         out, err = io.StringIO(), io.StringIO()

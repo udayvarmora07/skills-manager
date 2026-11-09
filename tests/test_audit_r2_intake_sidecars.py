@@ -154,15 +154,15 @@ class IntakeStripsSidecars(unittest.TestCase):
     def test_registry_install_is_undone_when_provenance_cannot_be_recorded(self) -> None:
         from unittest import mock
 
-        from skillsmgr import cli_handlers
+        from skillsmgr import install
 
         source = self.tmp / "staged" / "demo"
         source.mkdir(parents=True)
         (source / "SKILL.md").write_text(DOCUMENT, encoding="utf-8")
         installed = self.store.add(source)
-        with mock.patch.object(registry, "write_provenance", side_effect=registry.RegistryError("disk full")):
+        with mock.patch.object(install, "write_provenance", side_effect=registry.RegistryError("disk full")):
             with self.assertRaises(StoreError) as ctx:
-                cli_handlers._record_registry_provenance(
+                install._record_provenance(
                     self.store, "demo", installed, registry.provenance_for_snapshot(_snapshot())
                 )
         self.assertIn("rolled back", str(ctx.exception))

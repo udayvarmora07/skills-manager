@@ -12,6 +12,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
+from skillsmgr import context
 from skillsmgr import cli_handlers, hygiene, scopes
 
 DOCUMENT = "---\nname: {name}\ndescription: Use {name} when testing the bridge.\n---\n# {name}\n"
@@ -30,7 +31,7 @@ class AgentsBridgeTests(unittest.TestCase):
         self._old = {key: os.environ.get(key) for key in ("HOME", "SKILLS_MANAGER_DATA")}
         os.environ["HOME"] = str(self.home)
         os.environ["SKILLS_MANAGER_DATA"] = str(data)
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         self.addCleanup(self._restore)
         self.agents = self.home / ".agents/skills"
         self.claude = self.home / ".claude/skills"
@@ -41,7 +42,7 @@ class AgentsBridgeTests(unittest.TestCase):
         (self.agents / "turned-off/SKILL.md").rename(self.agents / "turned-off/SKILL.md.disabled")
 
     def _restore(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         for key, old in self._old.items():
             if old is None:
                 os.environ.pop(key, None)

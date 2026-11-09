@@ -19,9 +19,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import sidecar_binding
+from .sidecar_binding import PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME
 from .atomic_io import atomic_write_text, mutation_lock
 from .diagnostics import diagnose as _diagnose
-from .insights import risk_scan
+from .risk import risk_file_listing, risk_scan
 from .validator import validate_text
 
 
@@ -31,8 +32,6 @@ MAX_SOURCE_TOTAL_BYTES = 16 * 1024 * 1024
 MAX_SOURCE_PATH_DEPTH = 16
 MAX_DIFF_LINES = 200
 MAX_TOTAL_DIFF_LINES = 1000
-_PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
-SOURCE_LOCK_FILENAME = ".skillsmgr-source-lock.json"
 MAX_SOURCE_LOCK_BYTES = 32 * 1024
 _SOURCE_KINDS = frozenset({"local", "git", "archive", "registry"})
 _SOURCE_STATES = frozenset({"local-only", "known-verified", "known-unverified"})
@@ -97,7 +96,7 @@ def local_manifest(root: str | Path) -> dict:
         files = []
         total = 0
         for path in sorted(root.rglob("*")):
-            if path.name in {_PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}:
+            if path.name in {PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}:
                 continue
             if path.is_symlink():
                 raise SourceLockError(f"source contains a symlink: {_relative_file(root, path)}")
@@ -134,57 +133,6 @@ def local_manifest(root: str | Path) -> dict:
     return {"root": str(root), "files": files, "public_files": public, "sha256": digest.hexdigest()}
 
 
-_RISK_SCRIPT_SUFFIXES = frozenset({
-    ".py", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".psm1", ".bat", ".cmd",
-    ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl", ".php",
-})
-_RISK_LISTING_FILES = 256
-_RISK_TEXT_FILES = 50
-_RISK_TEXT_BYTES = 256 * 1024
-
-
-def _risk_entry(root: Path, path: Path, texts_read: int) -> dict | None:
-    """One bundled-file entry for risk_scan, or None for a skipped path."""
-    try:
-        relative = _relative_file(root, path)
-    except SourceLockError:
-        return None
-    entry: dict = {"path": relative}
-    if (path.suffix.lower() in _RISK_SCRIPT_SUFFIXES and texts_read < _RISK_TEXT_FILES
-            and path.stat().st_size <= _RISK_TEXT_BYTES):
-        try:
-            entry["contents"] = path.read_bytes().decode("utf-8")
-        except UnicodeDecodeError:
-            pass
-    return entry
-
-
-def risk_file_listing(root: str | Path) -> list[dict]:
-    """Bounded ``{path, contents?}`` listing of a staged candidate for risk_scan.
-
-    Symlinks are skipped, never followed. ``SKILL.md`` (scanned as the body) and
-    manager sidecars are left out. Script-like files up to 256 KiB carry their
-    UTF-8 text so the bundled-script and ``ast`` checks can run; every other
-    file, ``.pyc`` included, is listed by path only and never read.
-    """
-    root = Path(root).expanduser()
-    if not root.is_dir() or root.is_symlink():
-        return []
-    skipped = {"SKILL.md", "SKILL.md.disabled", _PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}
-    entries: list[dict] = []
-    texts_read = 0
-    try:
-        for path in sorted(root.rglob("*")):
-            if len(entries) >= _RISK_LISTING_FILES:
-                break
-            if path.is_symlink() or not path.is_file() or path.name in skipped:
-                continue
-            entry = _risk_entry(root, path, texts_read)
-            if entry is not None:
-                texts_read += "contents" in entry
-                entries.append(entry)
-    except OSError:
-        return entries
     return entries
 
 
@@ -656,7 +604,7 @@ def _copy_tree_without_manager_sidecars(source: Path, destination: Path) -> None
     try:
         local_manifest(source)
         shutil.copytree(source, destination, symlinks=False)
-        for filename in (SOURCE_LOCK_FILENAME, _PROVENANCE_FILENAME):
+        for filename in (SOURCE_LOCK_FILENAME, PROVENANCE_FILENAME):
             (destination / filename).unlink(missing_ok=True)
     except SourceLockError:
         raise

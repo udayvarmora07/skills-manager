@@ -19,9 +19,9 @@ from skillsmgr.scopes import (
     edit_skill,
     get_raw,
     remove_skill,
-    set_global_store,
     toggle_skill,
 )
+from skillsmgr.context import set_active_store
 from skillsmgr.store import Store, StoreError
 from skillsmgr.validator import validate_skill_name
 
@@ -115,7 +115,7 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
                 victim.mkdir()
                 global_store = Store(data_dir=Path(tmp) / "data")
                 global_store.init_db()
-                set_global_store(global_store)
+                set_active_store(global_store)
                 with self.assertRaises((StoreError, ValueError)):
                     remove_skill("agents", "../../victim", purge=True)
                 for operation in (
@@ -127,7 +127,7 @@ class TestStoreAndEntryPointGuards(unittest.TestCase):
                         operation()
                 self.assertTrue(victim.is_dir())
             finally:
-                set_global_store(None)
+                set_active_store(None)
                 if old_home is None:
                     __import__("os").environ.pop("HOME", None)
                 else:

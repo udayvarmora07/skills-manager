@@ -24,6 +24,7 @@ import threading
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from skillsmgr import context
 from skillsmgr import cli, external_scan, scopes, source_update
 from skillsmgr.webapp import WebAppServer
 from skillsmgr.store import Store, StoreError
@@ -240,7 +241,7 @@ class ExternalScanFlowTests(_FakeScannerCase):
             "---\nname: demo\ndescription: Use demo when testing.\n---\nnew body\n")
 
     def tearDown(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
 
     def invoke(self, argv):
         out, err = io.StringIO(), io.StringIO()
@@ -281,7 +282,7 @@ class ExternalScanFlowTests(_FakeScannerCase):
 
         fake = mock.Mock()
         fake.fetch.return_value = _snapshot()
-        with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             code, out, _ = self.invoke(["install", "--fetch", "owner/repo/demo",
                                         "--external-scan-llm", "--json"])
             self.assertEqual(code, cli.EXIT_OK, out)
@@ -313,7 +314,7 @@ class ExternalScanFlowTests(_FakeScannerCase):
 
             fake = mock.Mock()
             fake.fetch.return_value = _snapshot()
-            with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+            with mock.patch("skillsmgr.install.registry_client", return_value=fake):
                 status, body = post({"fetch": True, "source": "owner/repo/demo", "external_scan": "yes"})
                 self.assertEqual(status, 400)
                 self.assertIn("external_scan", body["error"])

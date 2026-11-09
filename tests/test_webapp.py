@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import quote
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr.store import Store, StoreError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -674,8 +675,8 @@ class DoctorScopeEnrichmentSeamTests(unittest.TestCase):
 
         from skillsmgr import scopes
 
-        scopes.set_global_store(self.store)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(self.store)
+        self.addCleanup(context.set_active_store, None)
 
     def test_enrichment_merges_once_and_reports_identical_values(self):
         from skillsmgr import scopes

@@ -21,6 +21,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from . import install
+from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
 from .diagnostics import diagnose as _diagnose
 from .launcher_security import trusted_executable
@@ -62,19 +64,13 @@ def _install_preview_payload(store: Store, data: dict, source: str, cmd_str: str
     payload = {"command": cmd_str, "runner": runner, "source": source, "executed": False}
     if not data.get("preview"):
         return payload
-    from .insights import registry_bridge_plan
-
-    raw_agents = data.get("agents")
-    raw_skills = data.get("skills")
-    agents = [raw_agents] if isinstance(raw_agents, str) else raw_agents
-    skills = [raw_skills] if isinstance(raw_skills, str) else raw_skills
     description = data.get("description")
-    payload["registry"] = registry_bridge_plan(
+    payload["registry"] = install.registry_bridge_plan(
         source,
         runner=runner,
         scope=str(data.get("scope", "global") or "global"),
-        agents=agents,
-        skills=skills,
+        agents=_option_list(data.get("agents")),
+        skills=_option_list(data.get("skills")),
         copy=bool(data.get("copy")),
         list_only=bool(data.get("list_only")),
         trust_confirmed=bool(data.get("trust_confirmed")),
@@ -100,6 +96,17 @@ def _registry_operation_kind(data: dict) -> str | None:
     return operations[0] if operations else None
 
 
+def _option_list(value) -> list | None:
+    """Coerce one repeated install option into a list, or drop it.
+
+    A bare string is a one-element list (what the UI sends for one target);
+    any other non-list shape is dropped rather than guessed at.
+    """
+    if isinstance(value, list):
+        return value
+    return [value] if isinstance(value, str) else None
+
+
 def _registry_read_result(client, operation: str, data: dict, allow_stale: bool) -> dict:
     """Run a read-only registry operation from an install payload."""
     if operation == "browse":
@@ -118,36 +125,6 @@ def _registry_read_result(client, operation: str, data: dict, allow_stale: bool)
         return client.curated(allow_stale=allow_stale)
 
 
-def _registry_fetch_result(store: Store, data: dict, allow_stale: bool) -> dict:
-    """Run the registry review or the separate reviewed commit transaction."""
-    from .cli_handlers import _commit_registry_review, _prepare_registry_skill
-
-    review_id = data.get("review_id")
-    if review_id is not None:
-        if not isinstance(review_id, str) or not review_id.strip():
-            raise StoreError("review_id must be a non-empty string")
-        if data.get("trust_confirmed") is not True:
-            raise StoreError("registry commit requires trust_confirmed after reviewing the fetched snapshot")
-        return _commit_registry_review(store, review_id.strip())
-    if data.get("trust_confirmed") is True:
-        raise StoreError("fetch and trust confirmation are separate: fetch first, then commit with review_id and trust_confirmed")
-    source = data.get("source")
-    if not isinstance(source, str) or not source.strip():
-        raise StoreError("fetch requires a registry skill id in source")
-    scope = data.get("scope", "global")
-    if not isinstance(scope, str) or (scope.strip() or "global") != "global":
-        raise StoreError("registry fetch currently targets the global manager store only")
-    expected_hash = data.get("registry_hash")
-    if expected_hash is not None and not isinstance(expected_hash, str):
-        raise StoreError("registry_hash must be a string")
-    from .external_scan import scan_options
-
-    return _prepare_registry_skill(
-        store, source.strip(), expected_hash=expected_hash, allow_stale=allow_stale,
-        external_scan=scan_options(data.get("external_scan")),
-    )
-
-
 def _registry_install_result(store: Store, data: dict) -> dict | None:
     """Handle registry operations carried by the existing install route."""
     operation = _registry_operation_kind(data)
@@ -155,13 +132,21 @@ def _registry_install_result(store: Store, data: dict) -> dict | None:
         return None
     if data.get("run") or data.get("preview"):
         raise StoreError("registry operations cannot be combined with run or preview")
-    from .registry import RegistryClient
-
-    client = RegistryClient(store.data_dir)
     allow_stale = bool(data.get("allow_stale"))
     if operation == "fetch":
-        return _registry_fetch_result(store, data, allow_stale)
-    return _registry_read_result(client, operation, data, allow_stale)
+        from .external_scan import scan_options
+
+        return install.registry_fetch(
+            store,
+            source=data.get("source"),
+            review_id=data.get("review_id"),
+            trust_confirmed=data.get("trust_confirmed") is True,
+            scope=data.get("scope", "global"),
+            expected_hash=data.get("registry_hash"),
+            allow_stale=allow_stale,
+            external_scan=scan_options(data.get("external_scan")),
+        )
+    return _registry_read_result(install.registry_client(store), operation, data, allow_stale)
 
 
 def _validate_payload(store: Store, data: dict, name: str, skill_dir: Path,
@@ -1959,8 +1944,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
         """Serve ``POST /api/install`` -- registry reads and runner install.
 
         Three families share this path: the bounded skills.sh operations
-        (browse/search/curated/fetch, handled entirely by
-        ``_registry_install_result``), an offline preview of the command the
+        (browse/search/curated/fetch), an offline preview of the command the
         runner *would* run, and the execution itself.  Only the last one runs a
         subprocess, and only for an explicit ``run``.
         """
@@ -1971,110 +1955,30 @@ class WebAppHandler(BaseHTTPRequestHandler):
         if result is not None:
             self._send_json(result)
             return True
-        raw_source = data.get("source")
-        if not isinstance(raw_source, str):
-            raise StoreError("source must be a string")
-        source = raw_source.strip()
-        if not source:
-            raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
-        from .cli_handlers import validated_install_source
-
-        source = validated_install_source(source)
+        source = install.install_source(data.get("source"))
         raw_scope = data.get("scope", "global")
+        raw_runner = data.get("runner", "npx")
         if not isinstance(raw_scope, str):
             raise StoreError("scope must be a string")
-        scope = raw_scope.strip() or "global"
-        raw_runner = data.get("runner", "npx")
         if not isinstance(raw_runner, str):
             raise StoreError("runner must be a string")
-        runner = raw_runner.strip() or "npx"
-        cmd_parts = self._install_argv_for(source, runner, scope, data)
+        scope = raw_scope.strip() or "global"
+        runner = install.install_runner(raw_runner)
+        cmd_parts = install.install_argv(
+            source, runner, scope,
+            _option_list(data.get("agents")), _option_list(data.get("skills")),
+            bool(data.get("copy")), bool(data.get("list_only")),
+        )
         cmd_str = " ".join(cmd_parts)
         if not data.get("run"):
             self._send_json(_install_preview_payload(self.store, data, source, cmd_str, runner))
             return True
-        try:
-            proc = subprocess.run(  # nosec B603 - runner/options are allowlisted and argv is shell-free.
-                cmd_parts, capture_output=True, text=True, timeout=120
-            )
-            self._send_json({
-                "command": cmd_str,
-                "runner": runner,
-                "source": source,
-                "executed": True,
-                "exit_code": proc.returncode,
-                "stdout": proc.stdout[-8000:],
-                "stderr": proc.stderr[-8000:],
-            })
-        except subprocess.TimeoutExpired as exc:
-            self._send_json({"command": cmd_str, "error": f"timed out after 120s: {exc}", "executed": True}, 500)
-        except FileNotFoundError as exc:
-            raise StoreError(f"runner not found: {exc}")
+        self._send_json({
+            "command": cmd_str, "runner": runner, "source": source, "executed": True,
+            **install.run_install(cmd_parts),
+        })
         return True
 
-    @staticmethod
-    def _validate_install_runner(runner: str) -> None:
-        """Keep the route's runner contract and its exact error messages.
-
-        The allowlist is the security boundary: the runner is never a shell
-        string, and ``uvx`` is refused outright because it is not a way to run
-        the npm ``skills`` package.  ``insights.install_argv`` enforces the same
-        allowlist, but this route's messages are part of its REST contract.
-        """
-        if runner == "uvx":
-            raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python tools use pipx/uvx with a PyPI package.")
-        allowed_runners = {"npx", "pnpm", "yarn", "bunx", "bun"}
-        if runner not in allowed_runners:
-            raise StoreError(f"unsupported runner {runner!r}; use npx, pnpm, yarn, or bunx")
-
-    def _install_argv_for(self, source: str, runner: str, scope: str,
-                          data: dict) -> list[str]:
-        """Render this route's ``skills add`` argv through the shared renderer.
-
-        ``insights.install_argv`` is the only place the command line is built;
-        the route keeps its own validation and error responses for the runner
-        and every forwarded option value.
-        """
-        from .insights import install_argv
-
-        self._validate_install_runner(runner)
-        return install_argv(
-            source,
-            runner,
-            scope,
-            self._validated_install_values("agent", data.get("agents")),
-            self._validated_install_values("skill", data.get("skills")),
-            bool(data.get("copy")),
-            bool(data.get("list_only")),
-        )
-
-    @staticmethod
-    def _as_option_list(value) -> list | None:
-        """Coerce one repeated-option value into a list, or drop it.
-
-        ``agents`` and ``skills`` accept a bare string as a one-element list
-        (what the UI sends for a single target); any other non-list shape is
-        dropped rather than guessed at.  Named once because both options used
-        to repeat the rule, and two copies of one rule drift apart.
-        """
-        if value is None:
-            return None
-        if isinstance(value, list):
-            return value
-        return [value] if isinstance(value, str) else None
-
-    def _validated_install_values(self, label: str, raw) -> list[str] | None:
-        """Validate one repeated option into the shared renderer's shape.
-
-        Every value that reaches the argv is run through the shared install
-        guard, so an option cannot smuggle an argument into the runner.
-        """
-        from .cli_handlers import validated_install_value
-
-        values = self._as_option_list(raw)
-        if not values:
-            return None
-        return [validated_install_value(label, str(value)) for value in values]
 
     def _route_skill_write_post(self, parts: list[str], qs: dict[str, list[str]]) -> bool:
         """Serve ``POST /api/skills`` -- create one skill, 201 on success.
@@ -2425,9 +2329,7 @@ class _StoreBoundHTTPServer(ThreadingHTTPServer):
 
     def process_request_thread(self, request, client_address):
         if self.store is not None:  # type: ignore[attr-defined]
-            from .scopes import set_global_store
-
-            set_global_store(self.store)  # type: ignore[attr-defined]
+            set_active_store(self.store)  # type: ignore[attr-defined]
         super().process_request_thread(request, client_address)
 
 
@@ -2481,12 +2383,7 @@ class WebAppServer:
         # Also bind in the *constructing* thread so direct (non-HTTP) callers in
         # that thread see this server's store; request threads rebind their own
         # copy above, which is what stops two servers from crossing over.
-        try:
-            from .scopes import set_global_store as _set_global_store
-
-            _set_global_store(store)
-        except Exception as exc:
-            _diagnose("could not bind the server store to the scope adapter", exc)
+        set_active_store(store)
 
     @property
     def url(self) -> str:

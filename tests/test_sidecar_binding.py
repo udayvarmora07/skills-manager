@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import atomic_io, hygiene, registry, scopes, sidecar_binding
 from skillsmgr.source_lock import (
     SourceLockError,
@@ -83,8 +84,8 @@ class SidecarBindingTests(unittest.TestCase):
         # An earlier test module can leave its own (since deleted) Store bound
         # in this thread; bindings resolve through that context first, so the
         # fixture must start from no binding and put the old one back.
-        token = scopes._GLOBAL_STORE.set(None)
-        self.addCleanup(scopes._GLOBAL_STORE.reset, token)
+        token = context.ACTIVE_STORE.set(None)
+        self.addCleanup(context.ACTIVE_STORE.reset, token)
         self.skills = self.data / "skills"
         self.skills.mkdir(mode=0o700)
 
@@ -378,13 +379,13 @@ class SidecarBindingTests(unittest.TestCase):
         store_a = SimpleNamespace(data_dir=self.data)
         other = self.tmp / "other"
         other.mkdir(mode=0o700)
-        with scopes._bound_global_store(store_a):
+        with context.bound_store(store_a):
             write_source_lock(skill, _lock_record(skill))
             atomic_io.register_lock_root(other)
             self.assertTrue(source_lock_status(skill)["trusted"])
-        with scopes._bound_global_store(SimpleNamespace(data_dir=other)):
+        with context.bound_store(SimpleNamespace(data_dir=other)):
             self.assertFalse(source_lock_status(skill)["trusted"])
-        with scopes._bound_global_store(store_a):
+        with context.bound_store(store_a):
             self.assertTrue(source_lock_status(skill)["trusted"])
 
     def test_binding_state_creates_nothing(self) -> None:

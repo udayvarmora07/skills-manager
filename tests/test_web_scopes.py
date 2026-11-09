@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes
 from skillsmgr.store import StoreError
 
@@ -31,11 +32,11 @@ class ScopedHomeTestCase(unittest.TestCase):
         os.environ["SKILLS_MANAGER_DATA"] = str(
             Path(self._tmp.name) / "data"
         )
-        scopes.set_global_store(scopes.Store())
+        context.set_active_store(scopes.Store())
         scopes._global_store().init_db()
 
     def tearDown(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         if self._old_home is None:
             os.environ.pop("HOME", None)
         else:

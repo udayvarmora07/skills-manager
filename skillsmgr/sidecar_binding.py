@@ -17,7 +17,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import atomic_io
+from .context import active_store
 
+
+PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
+SOURCE_LOCK_FILENAME = ".skillsmgr-source-lock.json"
+MANAGER_SIDECARS = frozenset({PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME})
 
 BINDING_DIRNAME = "sidecar-bindings"
 MAX_BINDING_BYTES = 4096
@@ -31,10 +36,7 @@ def _real_skill_dir(skill_dir: str | Path) -> Path:
 
 def _binding_root(resolved: Path) -> Path:
     """Choose the requesting store, or a stable root for unbound callers."""
-    # Import lazily: scopes imports the modules that read sidecar bindings.
-    from . import scopes
-
-    store = scopes._GLOBAL_STORE.get()
+    store = active_store()
     if store is not None:
         return Path(os.path.realpath(Path(store.data_dir).expanduser()))
     # Preserve direct operations on a Store's own tree without allowing an

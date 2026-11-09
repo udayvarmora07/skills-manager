@@ -50,6 +50,8 @@ TARGET_FILES = (
     "skillsmgr/external_scan.py",
     "skillsmgr/lockfiles.py",
     "skillsmgr/key_support.py",
+    "skillsmgr/install.py",
+    "skillsmgr/risk.py",
 )
 DEFAULT_THRESHOLD = 15
 DEFAULT_TOP_N = 10

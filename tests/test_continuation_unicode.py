@@ -1,5 +1,5 @@
 import unittest
-from skillsmgr.insights import risk_scan
+from skillsmgr.risk import risk_scan
 
 
 class UnicodeAdvisoryTests(unittest.TestCase):

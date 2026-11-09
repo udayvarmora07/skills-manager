@@ -1,6 +1,6 @@
 """R15: ``/api/install`` must render its argv through one shared renderer.
 
-``insights.install_argv``/``install_command_line`` is the single renderer for
+``install.install_argv``/``install_command_line`` is the single renderer for
 the ``skills add`` command line.  The CLI already used it, but ``webapp.py``
 built the same argv itself in ``_install_command_parts`` and
 ``_install_option_argv`` -- two copies of the runner allowlist, the scope flag,
@@ -26,11 +26,10 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-from skillsmgr import insights
+from skillsmgr import install
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
 
-WEBAPP_SOURCE = Path(__file__).resolve().parent.parent / "skillsmgr" / "webapp.py"
 
 UVX_ERROR = (
     "uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn "
@@ -267,7 +266,7 @@ class InstallArgvSingleSourceTests(unittest.TestCase):
                             },
                         )
                     self.assertEqual(
-                        insights.install_command_line(**kwargs), expected
+                        install.install_command_line(**kwargs), expected
                     )
                 else:
                     self.assertEqual(
@@ -287,23 +286,17 @@ class InstallArgvSingleSourceTests(unittest.TestCase):
         }
         completed = mock.Mock(returncode=0, stdout="ok\n", stderr="")
         with mock.patch(
-            "skillsmgr.webapp.subprocess.run", return_value=completed
+            "skillsmgr.install.subprocess.run", return_value=completed
         ) as run:
             status, body = self._post(payload)
         self.assertEqual(status, 200)
-        expected = insights.install_argv(
+        expected = install.install_argv(
             "owner/repo", "pnpm", "project", ["a"], ["s"], True, True
         )
         self.assertEqual(run.call_args.args[0], expected)
         self.assertFalse(run.call_args.kwargs.get("shell", False))
         self.assertEqual(body["command"], " ".join(expected))
         self.assertTrue(body["executed"])
-
-    def test_webapp_uses_the_shared_renderer_instead_of_its_own_argv(self):
-        source = WEBAPP_SOURCE.read_text(encoding="utf-8")
-        self.assertNotIn("def _install_command_parts", source)
-        self.assertNotIn("def _install_option_argv", source)
-        self.assertIn("install_argv", source)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,9 @@ skills-manager/
     web_security.py  # loopback mutation validation policy
     web_serialization.py # JSON body/response helpers
     web_upload.py    # multipart folder-upload staging policy
-    insights.py      # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
+    install.py       # ecosystem runner + reviewed registry install (both front-ends)
+    risk.py          # advisory risk_scan + its bounded file listing
+    context.py       # ContextVar: the Store `global` means for this thread
     source_lock.py   # bounded source identity and whole-tree update previews
     backup_sync.py   # bounded backup/sync manifests and dry-run plans
     bundles.py       # offline HMAC manifest evidence; no archive integration
@@ -157,7 +159,7 @@ path parameters, and CLI names.
   that previously could not be re-imported now round-trips (STORE-9).
 - An out-of-root link *target* mentioned inside a document stays a warning and
   never fails `validate` (issue #7 verdict); the enforcement signal is
-  `insights.risk_scan()`'s medium finding.
+  `risk.risk_scan()`'s medium finding.
 
 ## Locking model
 

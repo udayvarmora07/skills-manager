@@ -22,6 +22,8 @@ from urllib.parse import quote, urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from . import sidecar_binding
+from .atomic_io import mutation_lock
+from .sidecar_binding import MANAGER_SIDECARS, PROVENANCE_FILENAME
 from .errors import StoreError
 from .review_artifacts import (
     encode_review,
@@ -53,9 +55,6 @@ REGISTRY_DOWNLOAD_PATH = "/api/download"          # public: skill snapshot
 REGISTRY_AUDIT_PATH = "/api/v1/skills/audit"      # public: third-party audits
 REGISTRY_CACHE_DIRNAME = "registry-cache"
 REGISTRY_REVIEW_DIRNAME = "registry-reviews"
-PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
-_SOURCE_LOCK_FILENAME = ".skillsmgr-source-lock.json"
-_MANAGER_SIDECARS = frozenset({PROVENANCE_FILENAME, _SOURCE_LOCK_FILENAME})
 
 #: Message used whenever an authenticated-only route is requested without a
 #: token.  It names the working alternative instead of surfacing a bare HTTP 401,
@@ -270,7 +269,7 @@ def validate_snapshot(payload: object, *, verify_upstream_hash: bool = True) -> 
             raise RegistryError("registry snapshot files must contain text path and contents")
         if path != path.strip():
             raise RegistryError("registry snapshot paths cannot have surrounding whitespace")
-        if PurePosixPath(path).name in _MANAGER_SIDECARS:
+        if PurePosixPath(path).name in MANAGER_SIDECARS:
             raise RegistryError(
                 f"registry snapshots cannot include a manager sidecar ({PurePosixPath(path).name})"
             )
@@ -412,6 +411,11 @@ def _validate_review(value: object) -> dict:
     return result
 
 
+def registry_review_lock(data_dir: str | Path, review_id: str):
+    """The cross-process lock that makes one review's commit single-use."""
+    return mutation_lock(_review_path(data_dir, review_id))
+
+
 def read_registry_review(data_dir: str | Path, review_id: str) -> dict:
     """Read one pending registry review without contacting the network."""
     path = _review_path(data_dir, review_id)
@@ -512,6 +516,102 @@ def _validate_public_search(payload: object) -> dict:
     return result
 
 
+# Registry references are parsed offline (no request, cache or token).
+REGISTRY_BASE_URL = "https://skills.sh"
+# Documented partner slugs on the per-skill security page
+# (``/owner/repo/skill/security/{slug}``).
+REGISTRY_AUDIT_PROVIDERS = ("agent-trust-hub", "socket", "snyk")
+MAX_REGISTRY_SEGMENT = 96
+_REGISTRY_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_REGISTRY_HOSTS = ("skills.sh", "www.skills.sh")
+
+
+def _registry_segment(value: str, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} segment must be a non-empty string")
+    if len(value) > MAX_REGISTRY_SEGMENT:
+        raise ValueError(f"{label} segment is too long (max {MAX_REGISTRY_SEGMENT})")
+    if not _REGISTRY_SEGMENT_RE.fullmatch(value):
+        raise ValueError(f"unsafe {label} segment: {value!r}")
+    return value
+
+
+def _registry_segments(path_text: str, label: str) -> list[str]:
+    if not path_text or path_text.startswith("/") or path_text.endswith("/") or "//" in path_text:
+        raise ValueError(f"unsupported registry reference: {path_text!r}")
+    return [_registry_segment(part, label) for part in path_text.split("/")]
+
+
+def registry_audit_links(source: str, slug: str | None,
+                         providers=REGISTRY_AUDIT_PROVIDERS) -> list[dict]:
+    """Linkable per-skill audit pages (never fetched by this tool)."""
+    if not slug:
+        return []
+    base = f"{REGISTRY_BASE_URL}/{source}/{slug}/security"
+    return [{"provider": _registry_segment(provider, "provider"),
+             "url": f"{base}/{provider}"} for provider in providers]
+
+
+def _registry_result(source: str, slug: str | None, spec: str) -> dict:
+    registry_id = f"{source}/{slug}" if slug else None
+    return {
+        "spec": spec,
+        "form": "skill" if slug else "source",
+        "source": source,
+        "slug": slug,
+        "registry_id": registry_id,
+        "page_url": f"{REGISTRY_BASE_URL}/{registry_id}" if registry_id else None,
+        "audit_links": registry_audit_links(source, slug),
+    }
+
+
+def _registry_from_url(spec: str) -> dict:
+    match = re.match(r"https?://([^/\s?#]+)([^\s?#]*)", spec)
+    if match is None:
+        raise ValueError(f"unsupported registry URL: {spec!r}")
+    host = match.group(1).lower()
+    # A URL path always carries a leading separator; the bare-reference form
+    # must not, so strip it here instead of loosening the shared rule.
+    path_text = match.group(2)[1:] if match.group(2).startswith("/") else match.group(2)
+    if host in ("github.com", "www.github.com"):
+        segments = _registry_segments(path_text, "source")
+        if len(segments) < 2:
+            raise ValueError(f"unsupported GitHub URL: {spec!r}")
+        return _registry_result("/".join(segments[:2]), None, spec)
+    if host not in _REGISTRY_HOSTS:
+        raise ValueError(f"unsupported registry host: {host!r}")
+    segments = _registry_segments(path_text, "registry")
+    if len(segments) == 1:
+        return _registry_result(segments[0], None, spec)
+    # A skills.sh page path is always ``{source}/{slug}``, so the final
+    # segment is the skill slug (``mintlify.com/mintlify`` = well-known
+    # source, ``vercel-labs/skills/find-skills`` = GitHub source + slug).
+    return _registry_result("/".join(segments[:-1]), segments[-1], spec)
+
+
+def registry_reference(spec: str) -> dict:
+    """Parse a registry reference offline (no request, no cache, no token).
+
+    Accepted forms: ``owner/repo`` (a source), ``owner/repo/slug`` (a skill id
+    in ``{source}/{slug}`` form), ``https://skills.sh/{source}/{slug}``, and
+    ``https://github.com/owner/repo`` (the documented ``installUrl`` form).
+    """
+    if not isinstance(spec, str) or not spec.strip():
+        raise ValueError("registry reference must be a non-empty string")
+    raw = spec.strip()
+    if len(raw) > 512:
+        raise ValueError("registry reference is too long (max 512 characters)")
+    if "://" in raw:
+        return _registry_from_url(raw)
+    segments = _registry_segments(raw, "registry")
+    if len(segments) <= 2:
+        return _registry_result("/".join(segments), None, raw)
+    if len(segments) == 3:
+        return _registry_result("/".join(segments[:2]), segments[2], raw)
+    raise ValueError(f"unsupported registry reference: {raw!r}")
+
+
+
 def _validate_detail(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise RegistryError("registry detail response has an invalid shape")
@@ -523,8 +623,6 @@ def _validate_detail(payload: object) -> dict:
 
 def _reference(spec: str) -> dict:
     try:
-        from .insights import registry_reference
-
         return registry_reference(spec)
     except (ValueError, TypeError) as exc:
         raise RegistryError(str(exc)) from exc
@@ -1210,6 +1308,8 @@ def read_provenance(skill_dir: str | Path) -> dict | None:
 
 
 __all__ = [
+    "registry_review_lock",
+    "registry_reference",
     "DEFAULT_CACHE_TTL",
     "MAX_FILES",
     "MAX_RESPONSE_BYTES",

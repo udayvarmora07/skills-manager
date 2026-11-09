@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 from . import colors
+from . import install
 from . import search as search_mod
 from . import templates as templates_mod
 from .diagnostics import diagnose as _diagnose
@@ -35,11 +36,6 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_USAGE = 2
 EXIT_INTERRUPT = 130
-
-# Character class shared with the REST /api/install route for ecosystem
-# source/agent/skill values that are forwarded into runner commands.
-_SAFE_SOURCE_RE = re.compile(r"[A-Za-z0-9_@./:+-]+")
-_MAX_INSTALL_VALUE = 256
 
 
 _print_json = _output_print_json
@@ -1355,19 +1351,10 @@ def cmd_tokens(args, store: Store) -> int:
     return EXIT_OK
 
 
-def install_command_for_display(source: str, runner: str, scope: str, agents, skills_filter, copy_mode: bool, list_only: bool) -> str:
-    """Render the ecosystem runner command shown in ``--dry-run`` output."""
-    from .insights import install_command_line
-
-    return install_command_line(source, runner, scope, agents, skills_filter, copy_mode, list_only)
-
-
 def _install_preview_output(args, source, runner, scope, agents, skills_filter,
                             copied, list_flag) -> int:
     """Print the offline registry bridge preview (no network, no execution)."""
-    from .insights import registry_bridge_plan
-
-    plan = registry_bridge_plan(
+    plan = install.registry_bridge_plan(
         source,
         runner=runner,
         scope=scope,
@@ -1401,59 +1388,9 @@ def _install_preview_output(args, source, runner, scope, agents, skills_filter,
     return EXIT_OK
 
 
-def validated_install_runner(runner: str | None) -> str:
-    """Resolve the ecosystem runner, rejecting values outside the CLI contract."""
-    runner = (runner or "npx").strip() or "npx"
-    if runner == "uvx":
-        raise StoreError("uvx does not apply to the npm 'skills' package; use npx/pnpm dlx/yarn dlx/bunx. For Python packages use pipx/uvx with a PyPI package.")
-    allowed = {"npx", "pnpm", "yarn", "bunx", "bun"}
-    if runner not in allowed:
-        raise StoreError(f"unsupported runner {runner!r}")
-    return runner
-
-
-def validated_install_value(label: str, value: str) -> str:
-    """Accept one ecosystem value, rejecting command-injection shapes.
-
-    Mirrors the REST /api/install route: only the shared character class is
-    accepted and leading dashes are rejected either way.
-    """
-    value = str(value).strip()
-    invalid_path = (
-        not value
-        or len(value) > _MAX_INSTALL_VALUE
-        or not _SAFE_SOURCE_RE.fullmatch(value)
-        or value.startswith("-")
-        or value.startswith(("/", "\\"))
-        or "/../" in f"/{value}/"
-        or value in {".", ".."}
-        or any(segment in {".", ".."} for segment in value.replace("\\", "/").split("/"))
-        or (len(value) >= 2 and value[1] == ":")
-    )
-    if invalid_path:
-        if label == "source":
-            raise StoreError("invalid source value")
-        raise StoreError(f"invalid {label} value {value!r}")
-    return value
-
-
-def validated_install_source(raw: str | None) -> str:
-    """Require a non-empty ecosystem source and validate it."""
-    source = (raw or "").strip()
-    if not source:
-        raise StoreError("source is required (e.g. vercel-labs/agent-skills)")
-    return validated_install_value("source", source)
-
-
-def _registry_client(store: Store):
-    from .registry import RegistryClient
-
-    return RegistryClient(store.data_dir)
-
-
 def _registry_operation(args, store: Store) -> int:
     """Run an explicit registry read or review/commit through install."""
-    client = _registry_client(store)
+    client = install.registry_client(store)
     allow_stale = bool(getattr(args, "allow_stale", False))
     if getattr(args, "browse", False):
         result = client.browse(
@@ -1468,23 +1405,16 @@ def _registry_operation(args, store: Store) -> int:
         result = client.curated(allow_stale=allow_stale)
         title = "registry curated"
     else:
-        if scope_from_args(args) != "global":
-            raise StoreError("install --fetch currently targets the global manager store only")
-        review_id = getattr(args, "review", None)
-        if review_id:
-            if not getattr(args, "trust_confirmed", False):
-                raise StoreError("registry commit requires --trust-confirmed after reviewing the fetched snapshot")
-            result = _commit_registry_review(store, review_id)
-        else:
-            if getattr(args, "trust_confirmed", False):
-                raise StoreError("fetch and trust confirmation are separate: fetch first, then commit with --review REVIEW_ID --trust-confirmed")
-            result = _prepare_registry_skill(
-                store,
-                validated_install_source(args.source),
-                expected_hash=getattr(args, "registry_hash", None),
-                allow_stale=allow_stale,
-                external_scan=_external_scan_flag(args),
-            )
+        result = install.registry_fetch(
+            store,
+            source=args.source,
+            review_id=getattr(args, "review", None) or None,
+            trust_confirmed=bool(getattr(args, "trust_confirmed", False)),
+            scope=scope_from_args(args),
+            expected_hash=getattr(args, "registry_hash", None),
+            allow_stale=allow_stale,
+            external_scan=_external_scan_flag(args),
+        )
         title = "registry fetch"
     if args.json:
         _print_json(result)
@@ -1521,211 +1451,6 @@ def _registry_operation(args, store: Store) -> int:
     return EXIT_OK
 
 
-def _prepare_registry_skill(store: Store, spec: str, *, expected_hash: str | None,
-                            allow_stale: bool, external_scan: dict | None = None) -> dict:
-    """Fetch and inspect a registry snapshot without touching the managed Store.
-
-    ``external_scan`` (from ``external_scan.scan_options``) opts in to advisory
-    SkillSpector evidence on the staged copy; it never changes readiness.
-    """
-    from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
-    from .insights import risk_scan
-    from .source_lock import risk_file_listing
-    from .registry import (
-        materialize_snapshot,
-        provenance_for_snapshot,
-        write_registry_review,
-    )
-
-    snapshot = _registry_client(store).fetch(
-        spec, expected_hash=expected_hash, allow_stale=allow_stale
-    )
-    name = snapshot.get("slug")
-    try:
-        name = validate_skill_name(name)
-    except (TypeError, ValueError) as exc:
-        raise StoreError(f"registry slug cannot be installed as a skill name: {name!r}") from exc
-    local_snapshot = snapshot
-    normalization = None
-    try:
-        frontmatter, body = parse_frontmatter(
-            next(entry["contents"] for entry in snapshot["files"] if entry["path"] == "SKILL.md")
-        )
-        remote_name = frontmatter.get("name")
-        if isinstance(remote_name, str) and remote_name != name:
-            local_files = [dict(entry) for entry in snapshot["files"]]
-            root_file = next(entry for entry in local_files if entry["path"] == "SKILL.md")
-            frontmatter["name"] = name
-            root_file["contents"] = dump_frontmatter(
-                frontmatter, key_order=list(frontmatter.keys())
-            ) + body
-            local_snapshot = dict(snapshot)
-            local_snapshot["files"] = local_files
-            local_snapshot.pop("hash", None)
-            normalization = f"frontmatter.name {remote_name!r} normalized to slug {name!r}"
-            local_snapshot["normalization"] = normalization
-    except (FrontmatterError, StopIteration):
-        pass
-    provenance = provenance_for_snapshot(local_snapshot)
-    if normalization is not None:
-        provenance["remote_hash"] = snapshot.get("hash")
-        provenance["hash_verified"] = bool(snapshot.get("hash_verified"))
-    with tempfile.TemporaryDirectory(prefix="skillsmgr-registry-review-") as temporary:
-        staged = Path(temporary) / name
-        materialize_snapshot(local_snapshot, staged)
-        validation = validate_skill(name, staged)
-        if validation.errors:
-            summary = "; ".join(issue.message for issue in validation.errors[:3])
-            raise StoreError(f"registry snapshot failed validation before install: {summary}")
-        risk_findings = risk_scan({
-            "name": name,
-            "body": validation.body,
-            "allowed_tools": validation.data.get("allowed-tools"),
-            "description": validation.data.get("description"),
-            "files": risk_file_listing(staged),
-        })
-        external = _external_scan_evidence(staged, external_scan)
-    inspection = {
-        "validation": {
-            "valid": validation.valid,
-            "warnings": [
-                {"level": issue.level, "key": issue.key, "message": issue.message}
-                for issue in validation.warnings
-            ],
-        },
-        "risk": {
-            "policy": "advisory-only; heuristic evidence is not a safety or trust verdict",
-            "findings": risk_findings,
-        },
-        "reviewed_before_install": False,
-        "review_required": True,
-        "target_scope": "global",
-    }
-    _attach_external_scan(inspection, external)
-    local_snapshot["remote_hash"] = snapshot.get("hash")
-    review = write_registry_review(store.data_dir, local_snapshot, inspection)
-    registry = dict(review["registry"])
-    registry["remote_hash"] = snapshot.get("hash")
-    registry["remote_registry_hash"] = snapshot["registry_hash"]
-    registry["registry_hash"] = provenance["registry_hash"]
-    registry["snapshot_hash"] = provenance["local_snapshot_hash"]
-    registry["normalization"] = normalization
-    return {
-        "review_id": review["review_id"],
-        "review_expires_at": review["expires_at"],
-        "registry": registry,
-        "inspection": inspection,
-    }
-
-
-def _external_scan_evidence(staged: Path, options: dict | None) -> dict | None:
-    """Run the optional external scanner on a staged candidate when asked."""
-    if options is None:
-        return None
-    from .external_scan import skillspector_evidence
-
-    return skillspector_evidence(staged, llm=options["llm"])
-
-
-def _attach_external_scan(inspection: dict, evidence: dict | None) -> None:
-    """Add external-scanner evidence to a review only when a scan ran."""
-    if evidence is not None:
-        inspection["external_scan"] = evidence
-
-
-def _commit_registry_review(store: Store, review_id: str) -> dict:
-    """Commit one registry review under the cross-process single-use lock."""
-    from .atomic_io import mutation_lock
-    from .registry import _review_path
-
-    with mutation_lock(_review_path(store.data_dir, review_id)):
-        return _commit_registry_review_unlocked(store, review_id)
-
-
-def _record_registry_provenance(store: Store, name: str, installed: dict, provenance: dict) -> None:
-    """Write provenance into the installed skill, or undo the install."""
-    from .registry import RegistryError, write_provenance
-
-    try:
-        write_provenance(Path(installed["path"]), provenance)
-    except (RegistryError, OSError) as exc:
-        store.remove(name, purge=True)
-        raise StoreError(f"registry install rolled back: could not record provenance: {exc}") from exc
-
-
-def _commit_registry_review_unlocked(store: Store, review_id: str) -> dict:
-    """Commit one reviewed registry snapshot without another network request."""
-    from .frontmatter import FrontmatterError, dump_frontmatter, parse_frontmatter
-    from .insights import risk_scan
-    from .source_lock import risk_file_listing
-    from .registry import (
-        materialize_snapshot,
-        mark_registry_review_committed,
-        provenance_for_snapshot,
-        read_registry_review,
-    )
-
-    review = read_registry_review(store.data_dir, review_id)
-    snapshot = review["snapshot"]
-    name = snapshot.get("slug")
-    try:
-        name = validate_skill_name(name)
-    except (TypeError, ValueError) as exc:
-        raise StoreError(f"registry slug cannot be installed as a skill name: {name!r}") from exc
-    provenance = provenance_for_snapshot(snapshot)
-    remote_hash = snapshot.get("remote_hash")
-    if remote_hash is not None:
-        provenance["remote_hash"] = remote_hash
-        provenance["hash_verified"] = bool(snapshot.get("hash_verified"))
-    with tempfile.TemporaryDirectory(prefix="skillsmgr-registry-commit-") as temporary:
-        staged = Path(temporary) / name
-        materialize_snapshot(snapshot, staged)
-        validation = validate_skill(name, staged)
-        if validation.errors:
-            summary = "; ".join(issue.message for issue in validation.errors[:3])
-            raise StoreError(f"registry review failed validation before install: {summary}")
-        risk_findings = risk_scan({
-            "name": name,
-            "body": validation.body,
-            "allowed_tools": validation.data.get("allowed-tools"),
-            "description": validation.data.get("description"),
-            "files": risk_file_listing(staged),
-        })
-        # Store.add strips manager sidecars from external intake (R2), so the
-        # provenance this review earned is written to the installed copy.
-        installed = store.add(staged, name=name)
-        _record_registry_provenance(store, name, installed, provenance)
-    committed = mark_registry_review_committed(store.data_dir, review_id)
-    registry = dict(committed["registry"])
-    registry["remote_hash"] = remote_hash
-    registry["normalization"] = snapshot.get("normalization")
-    inspection = dict(review["inspection"])
-    inspection.update({
-        "risk": {
-            "policy": "advisory-only; heuristic evidence is not a safety or trust verdict",
-            "findings": risk_findings,
-        },
-        "reviewed_before_install": True,
-        "review_required": False,
-        "review_id": review_id,
-        "target_scope": "global",
-    })
-    return {
-        "name": installed["name"],
-        "path": installed["path"],
-        "registry": registry,
-        "inspection": inspection,
-    }
-
-
-def _fetch_registry_skill(store: Store, spec: str, *, expected_hash: str | None,
-                          allow_stale: bool) -> dict:
-    """Compatibility adapter for callers that used the old private helper."""
-    return _prepare_registry_skill(
-        store, spec, expected_hash=expected_hash, allow_stale=allow_stale
-    )
-
-
 def cmd_install(args, store: Store) -> int:
     if (
         getattr(args, "browse", False)
@@ -1734,17 +1459,15 @@ def cmd_install(args, store: Store) -> int:
         or getattr(args, "fetch", False)
     ):
         return _registry_operation(args, store)
-    runner = validated_install_runner(getattr(args, "runner", None))
+    runner = install.install_runner(getattr(args, "runner", None))
     agents = getattr(args, "agent", None)
     skills_filter = getattr(args, "skill", None)
     scope = getattr(args, "scope", None) or "global"
-    source = validated_install_source(getattr(args, "source", ""))
+    source = install.install_source(getattr(args, "source", ""))
     copied = bool(getattr(args, "copy", False))
     list_flag = bool(getattr(args, "list_only", False))
-    for label, values in (("agent", agents), ("skill", skills_filter)):
-        for value in values or []:
-            validated_install_value(label, value)
-    cmd_str = install_command_for_display(source, runner, scope, agents, skills_filter, copied, list_flag)
+    cmd = install.install_argv(source, runner, scope, agents, skills_filter, copied, list_flag)
+    cmd_str = " ".join(cmd)
     if getattr(args, "preview", False):
         return _install_preview_output(args, source, runner, scope, agents, skills_filter, copied, list_flag)
     if getattr(args, "dry_run", False):
@@ -1753,31 +1476,17 @@ def cmd_install(args, store: Store) -> int:
         else:
             print(cmd_str)
         return EXIT_OK
-    # Build subprocess command through the same shared renderer, so the printed
-    # dry-run text and the executed argv can never drift apart.  List-only is an
-    # executing mode: the runner's ``-l`` output is the requested inventory.
-    from .insights import install_argv
-
-    cmd = install_argv(source, runner, scope, agents, skills_filter, copied, list_flag)
     if not args.json:
         print(f"running: {cmd_str}")
-
-    try:
-        proc = subprocess.run(  # nosec B603 - runner and argv are validated before execution; shell stays false.
-            cmd, capture_output=True, text=True, timeout=120
-        )
-    except FileNotFoundError as exc:
-        raise StoreError(f"runner not found: {exc}")
-    except subprocess.TimeoutExpired as exc:
-        raise StoreError(f"timed out after 120s: {exc}")
+    result = install.run_install(cmd)
     if args.json:
-        _print_json({"command": cmd_str, "exit_code": proc.returncode, "stdout": proc.stdout[-4000:], "stderr": proc.stderr[-4000:]})
+        _print_json({"command": cmd_str, **result})
     else:
-        if proc.stdout:
-            print(proc.stdout[-8000:])
-        if proc.stderr:
-            print(proc.stderr[-8000:], file=sys.stderr)
-    return EXIT_OK if proc.returncode == 0 else EXIT_ERROR
+        if result["stdout"]:
+            print(result["stdout"])
+        if result["stderr"]:
+            print(result["stderr"], file=sys.stderr)
+    return EXIT_OK if result["exit_code"] == 0 else EXIT_ERROR
 
 
 def cmd_gui(args, store: Store) -> int:

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes
 from skillsmgr.store import Store, StoreError
 from skillsmgr.webapp import WebAppServer
@@ -52,7 +53,7 @@ class AgentScopeTrashTests(unittest.TestCase):
         cls.server.shutdown()
         cls.thread.join(timeout=5)
         cls.server.httpd.server_close()
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         cls.tmp.cleanup()
         if cls.old_data is None:
             os.environ.pop("SKILLS_MANAGER_DATA", None)

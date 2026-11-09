@@ -43,6 +43,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from skillsmgr import context
 from skillsmgr import loader, scopes
 from skillsmgr.store import SkillNotFound, Store, StoreError
 
@@ -84,8 +85,8 @@ class InvariantHomeTestCase(unittest.TestCase):
         os.environ["SKILLS_MANAGER_DATA"] = str(self.root / "data")
         (self.root / "home").mkdir(parents=True, exist_ok=True)
         self.store = Store()
-        scopes.set_global_store(self.store)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(self.store)
+        self.addCleanup(context.set_active_store, None)
         self.store.init_db()
 
     def _restore_env(self):

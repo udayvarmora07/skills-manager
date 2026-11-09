@@ -61,7 +61,7 @@ class RegistryCliIntegrationTests(unittest.TestCase):
         fake = mock.Mock()
         fake.browse.return_value = {"data": [{"id": "owner/repo/demo", "installs": 4}], "_registry": {"cache_state": "miss"}}
         fake.search.return_value = {"data": [{"id": "owner/repo/demo"}], "_registry": {"cache_state": "fresh"}}
-        with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             code, out, err = self.invoke(["install", "--browse", "--json"])
             self.assertEqual(code, cli.EXIT_OK)
             self.assertEqual(json.loads(out)["data"][0]["id"], "owner/repo/demo")
@@ -75,7 +75,7 @@ class RegistryCliIntegrationTests(unittest.TestCase):
     def test_fetch_installs_sidecar_and_exposes_it_in_store_records(self):
         fake = mock.Mock()
         fake.fetch.return_value = _snapshot()
-        with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             code, out, err = self.invoke(["install", "--fetch", "owner/repo/demo", "--json"])
             review = json.loads(out)
             self.assertEqual(code, cli.EXIT_OK)
@@ -113,7 +113,7 @@ class RegistryCliIntegrationTests(unittest.TestCase):
         }]
         fake = mock.Mock()
         fake.fetch.return_value = snapshot
-        with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             code, out, err = self.invoke([
                 "install", "--fetch", "owner/repo/demo", "--json"
             ])
@@ -139,7 +139,7 @@ class RegistryCliIntegrationTests(unittest.TestCase):
         snapshot["snapshot_hash"] = registry.snapshot_hash(snapshot["files"])
         fake = mock.Mock()
         fake.fetch.return_value = snapshot
-        with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             code, out, err = self.invoke([
                 "install", "--fetch", "owner/repo/demo", "--json"
             ])
@@ -178,7 +178,7 @@ class RegistryRestIntegrationTests(unittest.TestCase):
         fake = mock.Mock()
         fake.browse.return_value = {"data": [{"id": "owner/repo/demo"}], "_registry": {"cache_state": "miss"}}
         fake.search.return_value = {"data": [{"id": "owner/repo/demo"}], "_registry": {"cache_state": "miss"}}
-        with mock.patch("skillsmgr.registry.RegistryClient", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             self.assertEqual(self.post({"browse": True})["data"][0]["id"], "owner/repo/demo")
             self.assertEqual(self.post({"search": "demo"})["data"][0]["id"], "owner/repo/demo")
         fake.browse.assert_called_once_with(page=0, per_page=25, view="all-time", allow_stale=False)
@@ -187,7 +187,7 @@ class RegistryRestIntegrationTests(unittest.TestCase):
     def test_fetch_payload_installs_and_returns_provenance(self):
         fake = mock.Mock()
         fake.fetch.return_value = _snapshot()
-        with mock.patch("skillsmgr.cli_handlers._registry_client", return_value=fake):
+        with mock.patch("skillsmgr.install.registry_client", return_value=fake):
             result = self.post({"fetch": True, "source": "owner/repo/demo"})
             self.assertIn("review_id", result)
             self.assertEqual(self.store.list(), [])

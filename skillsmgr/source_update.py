@@ -15,11 +15,13 @@ import os
 import re
 import shutil
 import stat
-from contextlib import contextmanager
+import contextlib
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import scopes
+from .context import bound_store
+from .sidecar_binding import PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME
 from .atomic_io import atomic_write_text, mutation_lock
 from . import frontmatter
 from .path_safety import mkdir_private
@@ -34,7 +36,6 @@ from .review_artifacts import (
     review_expiry,
 )
 from .source_lock import (
-    SOURCE_LOCK_FILENAME,
     SourceLockError,
     commit_local_update,
     local_manifest,
@@ -45,7 +46,6 @@ from .store import Store, StoreError, _index_lock_path
 from .validator import validate_skill_name
 
 
-_PROVENANCE_FILENAME = ".skillsmgr-provenance.json"
 _SCOPE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _REVIEW_TTL = 24 * 60 * 60
 _MAX_REVIEW_BYTES = 2 * 1024 * 1024
@@ -217,15 +217,9 @@ def _copy_public_preview(record: dict, *, status: str | None = None) -> dict:
     return result
 
 
-@contextmanager
 def _scope_store(data_dir: Path, scope: str):
-    previous = scopes._GLOBAL_STORE.get()
-    if scope == "global":
-        scopes.set_global_store(Store(data_dir=data_dir))
-    try:
-        yield
-    finally:
-        scopes.set_global_store(previous)
+    """Resolve ``global`` through ``data_dir`` for a global-scope review."""
+    return bound_store(Store(data_dir=data_dir)) if scope == "global" else contextlib.nullcontext()
 
 
 def _resolved(path: str | Path) -> Path:
@@ -354,7 +348,7 @@ def _manifest(source: Path) -> dict:
 
 def _strip_sidecars(root: Path) -> None:
     for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
-        if path.name not in {_PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}:
+        if path.name not in {PROVENANCE_FILENAME, SOURCE_LOCK_FILENAME}:
             continue
         try:
             if path.is_dir() and not path.is_symlink():

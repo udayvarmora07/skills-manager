@@ -15,6 +15,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
+from skillsmgr import context
 from skillsmgr import cli, scopes
 from skillsmgr.search import compile_wildcard, rank_results
 from skillsmgr.store import Store, StoreError
@@ -33,8 +34,8 @@ class SearchContractCase(unittest.TestCase):
         os.environ["SKILLS_MANAGER_DATA"] = str(Path(self.tmp.name) / "data")
         self.store = Store()
         self.store.init_db()
-        scopes.set_global_store(self.store)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(self.store)
+        self.addCleanup(context.set_active_store, None)
         self.addCleanup(self._restore_environment)
 
     def _restore_environment(self) -> None:
@@ -295,8 +296,8 @@ class ScopeAndCliSearchTests(SearchContractCase):
             requested.create("requested-only", "needle in requested data")
             other.create("wrong-only", "needle in another data dir")
             scopes.create_skill("agents", "agent-only", "needle in agent scope")
-            scopes.set_global_store(other)
-            self.addCleanup(scopes.set_global_store, self.store)
+            context.set_active_store(other)
+            self.addCleanup(context.set_active_store, self.store)
 
             def invoke(data_dir: Path, *extra: str):
                 out, err = io.StringIO(), io.StringIO()

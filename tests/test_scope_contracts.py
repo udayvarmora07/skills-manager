@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes
 from skillsmgr.store import SkillNotFound, StoreError
 
@@ -26,12 +27,12 @@ class IsolatedScopeTestCase(unittest.TestCase):
         os.environ["HOME"] = self._tmp.name
         os.environ["SKILLS_MANAGER_DATA"] = str(Path(self._tmp.name) / "data")
         self.store = scopes.Store()
-        scopes.set_global_store(self.store)
+        context.set_active_store(self.store)
         self.store.init_db()
         self.addCleanup(self._reset_environment)
 
     def _reset_environment(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         if self._old_home is None:
             os.environ.pop("HOME", None)
         else:
@@ -314,7 +315,7 @@ class TestScopeDiscoveryContracts(IsolatedScopeTestCase):
         other = Path(self._tmp.name) / "other-data"
         injected = scopes.Store(data_dir=other)
         injected.init_db()
-        scopes.set_global_store(injected)
+        context.set_active_store(injected)
         self._create("agents", "deploy", "An agent skill")
 
         result = scopes.sync_skill("deploy", "agents", ["global"])

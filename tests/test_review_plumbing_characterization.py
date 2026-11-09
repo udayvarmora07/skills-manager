@@ -28,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import backup_sync, registry, scopes, source_update
 from skillsmgr.source_lock import local_manifest
 from skillsmgr.store import Store
@@ -297,7 +298,7 @@ class SyncReviewCharacterization(_IsolatedCase):
 class SourceUpdateReviewCharacterization(_IsolatedCase):
     def setUp(self):
         super().setUp()
-        self.addCleanup(scopes.set_global_store, None)
+        self.addCleanup(context.set_active_store, None)
         self.store = Store(data_dir=self.data)
         self.store.create("demo", "Use demo when testing.", body="old body\n")
         self.sources = 0

@@ -122,8 +122,7 @@ Three measured facts shape the design:
   the same bytes — so `observed_at` must say when *this read* happened. The stored
   entry is not mutated and no content-derived field is re-stamped. This matters
   beyond the agent-scope path: `observed_at` is listed in the `Store` class's
-  `_OBSERVED_KEYS` tuple, so the global path is affected too, and
-  `insights.provenance_summary()` surfaces it.
+  `_OBSERVED_KEYS` tuple, so the global path is affected too.
 
 Registry provenance is deliberately **not** reused. A provenance sidecar is a
 filesystem fact rather than a fact about `SKILL.md`'s bytes, so it is re-probed on
@@ -407,51 +406,41 @@ identity: a root reached through a symlink is recorded per tier as an `alias` an
 not read twice, so one file is never reported as two candidates or as its own
 shadowed copy (ADR-002 invariant 1).
 
-## `insights.py`
+## `install.py`
 
-Read-only Milestone 9 insight helpers (pure, stdlib-only, zero disk
-mutation): `consumer_view()` (per-consumer observed instances, precedence
-explicitly unresolved per ADR-002), `diff_skills()`/`diff_three_way()`
-(two-way field/body diff, three-way merge preview holding base on conflict),
-`ownership_states()` (`managed`/`unmanaged`/`adopted`/`quarantined`/`invalid`),
-`provenance_summary()` (known/unknown split over loader observations),
-`update_preview()` (changed files, token/body/snapshot risks, rollback flag),
-`quarantine_plan()` (stage-only plan validated by `validate_skill_name`),
-`risk_scan()` (explainable script/link/tool/pattern findings with why +
-evidence, plus bounded hidden-Unicode/bidi/tag code points and names in known
-text fields, plus the nine Phase B checks described below; advisory only, no
-safe verdict or rewriting), `registry_preview()` (offline dry-run gated on explicit trust),
-`registry_reference()` (offline parse of `owner/repo`, `owner/repo/slug`,
-`https://skills.sh/{source}/{slug}`, and `https://github.com/owner/repo` into
-`{form, source, slug, registry_id, page_url, audit_links}` — no request, cache,
-or credential), `registry_bridge_plan()` (that reference mapped onto the exact
-`npx skills add` command via `install_argv()`, with the explicit trust gate as
-`blockers`/`may_install`, linkable `/security/{provider}` audit pages, and a
-`content_hash` slot for change detection), `install_argv()`/
-`install_command_line()` (single renderer behind both the printed dry-run text
-and the executed argv), `eval_plan()`/`eval_score()` (provider-neutral
-deterministic cases, advisory only), `bundle_policy()` (signatures deferred
-pending issue #11 review).
-Fail-closed input policy: non-dict records raise `ValueError` (never raw
-`AttributeError`/`TypeError`); `consumer_view()` skips non-dict list items;
-`update_preview()` coerces tokens safely (`None` for non-numeric) and
-rejects non-list snapshots; `diff_skills()` caps `body_diff` at
-`MAX_BODY_DIFF_LINES` (200) with a `body_diff_truncated` flag;
-`eval_plan()` requires dict cases with input/expect keys; name entry
-points (`quarantine_plan`/`eval_plan`) require real strings via
-`_canonical_name()`; all outputs are JSON-serializable; consumer views
-sort deterministically; `ownership_states()` treats a record as
-`invalid` on the loader `malformed` flag or `validator.validate_skill`
-errors against its real skill directory (body-only text is never
-revalidated as a document); `consumer_view()` deep-copies records;
-`eval_score()` requires a callable scorer; snapshot items and
-quarantine sources must be strings; non-string registry descriptions
-become install blockers; registry source/scope/hash must be strings
-when present; registry reference segments are length-capped
-(`MAX_REGISTRY_SEGMENT = 96`) and reject traversal, separators, absolute
-paths, and any host outside `skills.sh`/`github.com`; install sources and
-`-a`/`-s` values must match the ecosystem value allowlist and must not start
-with `-`.
+**[SPEC] One owner for installing (2026-11-09).** Both front-ends call it, so
+neither imports the other. It holds the ecosystem runner allowlist
+(`install_runner()`, `uvx` refused), the guard on every value forwarded to a
+runner (`install_value()`/`install_source()`: the shared character class, at
+most 256 characters, no leading `-`, no absolute, traversal or drive-prefixed
+shape), the single argv renderer (`install_argv()`/`install_command_line()`),
+`run_install()` (120 s timeout as `StoreError` status 504, the last 8,000
+characters of each stream), the offline `registry_bridge_plan()` with its
+never-verified trust gate, and the two-step registry install:
+`registry_fetch()` enforces fetch-then-commit, trust only on commit, and the
+global-only target; `prepare_registry_review()` stages, validates and
+risk-scans a snapshot and writes the private review; `commit_registry_review()`
+re-validates under `registry.registry_review_lock()`, calls `Store.add`, and
+writes provenance into the installed copy or purges it.
+
+## `risk.py`
+
+`risk_scan()` returns explainable, advisory-only findings (script/link/tool/
+pattern checks, bounded hidden-Unicode/bidi/tag code points, and the nine
+Phase B checks described below); it never returns a safety verdict or rewrites
+input, and a non-dict record raises `ValueError`. `risk_file_listing()` turns a
+staged tree into its bounded `{path, contents?}` input. Registry reference
+parsing (`registry_reference()`, `owner/repo`, `owner/repo/slug`,
+`https://skills.sh/{source}/{slug}`, `https://github.com/owner/repo`; segments
+capped at `MAX_REGISTRY_SEGMENT = 96`, other hosts refused) lives in
+`registry.py`.
+
+## `context.py`
+
+The `ContextVar` naming the Store that `global` means for the current thread
+(`active_store()`, `set_active_store()`, `bound_store()`). It is a leaf so that
+`scopes`, `sidecar_binding` and both front-ends share it without importing one
+another (SCOPE-10).
 
 ## `external_scan.py`
 
@@ -470,7 +459,7 @@ characters per string; `code_snippet` is dropped. Statuses: `completed`,
 `incomplete`, `unavailable` (with the reason, including an untrusted
 group-writable install), `timeout`, `error`. `scan_options()` normalises the
 opt-in (`true`/`"static"`/`"llm"`/`{"llm": bool}`; empty means off) and raises
-`StoreError` otherwise. Wired into `cli_handlers._prepare_registry_skill` and
+`StoreError` otherwise. Wired into `install.prepare_registry_review` and
 `source_update._prepare_from_source` only; commit and apply never re-run it.
 No Store method, SQLite state or runtime dependency.
 

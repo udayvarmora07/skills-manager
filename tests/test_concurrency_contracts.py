@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes
 from skillsmgr.atomic_io import atomic_write_text
 from skillsmgr.store import Store
@@ -380,7 +381,7 @@ class ScopeToggleAtomicityTests(unittest.TestCase):
         self._old_data = os.environ.get("SKILLS_MANAGER_DATA")
         os.environ["HOME"] = self._tmp.name
         os.environ["SKILLS_MANAGER_DATA"] = str(Path(self._tmp.name) / "data")
-        scopes.set_global_store(scopes.Store())
+        context.set_active_store(scopes.Store())
         scopes._global_store().init_db()
         created = scopes.create_skill("agents", "demo", description="demo skill")
         self.skill_dir = Path(created["path"])
@@ -389,7 +390,7 @@ class ScopeToggleAtomicityTests(unittest.TestCase):
         self.original = self.active.read_text(encoding="utf-8")
 
     def tearDown(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         if self._old_home is None:
             os.environ.pop("HOME", None)
         else:

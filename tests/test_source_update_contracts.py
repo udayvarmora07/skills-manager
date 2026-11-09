@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes, source_update
 from skillsmgr.scopes import Scope
 from skillsmgr.source_update import (
@@ -21,7 +22,7 @@ from skillsmgr.source_update import (
     prepare_snapshot_update,
     read_update_review,
 )
-from skillsmgr.source_lock import SOURCE_LOCK_FILENAME
+from skillsmgr.sidecar_binding import SOURCE_LOCK_FILENAME
 from skillsmgr.store import Store
 
 
@@ -35,7 +36,7 @@ class SourceUpdateContracts(unittest.TestCase):
         self.source_number = 0
 
     def tearDown(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         self.tmp.cleanup()
 
     @staticmethod

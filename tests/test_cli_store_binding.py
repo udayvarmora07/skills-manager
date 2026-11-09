@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import cli, scopes
 from skillsmgr.store import Store
 
@@ -30,7 +31,7 @@ class CliGlobalStoreBindingTests(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"HOME": self.tmp.name, "SKILLS_MANAGER_DATA": self.tmp.name})
         env.start()
         self.addCleanup(env.stop)
-        self.addCleanup(scopes.set_global_store, None)
+        self.addCleanup(context.set_active_store, None)
 
     def invoke(self, argv):
         out, err = io.StringIO(), io.StringIO()
@@ -40,7 +41,7 @@ class CliGlobalStoreBindingTests(unittest.TestCase):
 
     def test_stale_bound_store_does_not_hide_the_requested_global_scope(self):
         stale_store = Store(Path(self.stale.name))
-        scopes.set_global_store(stale_store)
+        context.set_active_store(stale_store)
         self.assertEqual(self.invoke(["create", "shared", "-d", "Global copy"])[0], cli.EXIT_OK)
         document = Path(self.tmp.name) / ".agents" / "skills" / "shared" / "SKILL.md"
         document.parent.mkdir(parents=True)
@@ -53,16 +54,16 @@ class CliGlobalStoreBindingTests(unittest.TestCase):
 
     def test_previous_binding_is_restored_after_the_command(self):
         stale_store = Store(Path(self.stale.name))
-        scopes.set_global_store(stale_store)
+        context.set_active_store(stale_store)
         self.invoke(["list", "--json"])
-        self.assertIs(scopes._GLOBAL_STORE.get(), stale_store)
+        self.assertIs(context.ACTIVE_STORE.get(), stale_store)
 
     def test_binding_is_restored_when_the_command_fails(self):
         stale_store = Store(Path(self.stale.name))
-        scopes.set_global_store(stale_store)
+        context.set_active_store(stale_store)
         code, _, _ = self.invoke(["view", "missing-skill"])
         self.assertEqual(code, cli.EXIT_ERROR)
-        self.assertIs(scopes._GLOBAL_STORE.get(), stale_store)
+        self.assertIs(context.ACTIVE_STORE.get(), stale_store)
 
 
 if __name__ == "__main__":

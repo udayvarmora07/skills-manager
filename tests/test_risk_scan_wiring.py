@@ -10,7 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from skillsmgr.source_lock import preview_local_update, risk_file_listing
+from skillsmgr.risk import risk_file_listing
+from skillsmgr.source_lock import preview_local_update
 
 SKILL = "---\nname: demo\ndescription: {desc}\n---\nA harmless body.\n"
 

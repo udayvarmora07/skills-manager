@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from skillsmgr import context
 from skillsmgr import native_state, scopes
 from skillsmgr.native_state import observe_native_state, observe_native_states
 
@@ -211,8 +212,8 @@ class GeminiScopeAttachmentTests(unittest.TestCase):
         cwd = patch.object(scopes, '_cwd', lambda: self.project)
         cwd.start()
         self.addCleanup(cwd.stop)
-        scopes.set_global_store(None)
-        self.addCleanup(scopes.set_global_store, None)
+        context.set_active_store(None)
+        self.addCleanup(context.set_active_store, None)
 
     @staticmethod
     def skill(directory: Path, name: str) -> None:

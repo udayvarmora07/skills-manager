@@ -526,8 +526,7 @@ def _document_cache_lookup(key: tuple) -> dict | None:
     than when this process first derived them -- otherwise a refresh button
     reports an observation from before the session started, and the field stops
     meaning what ``document_observations`` says it means.  It reaches the
-    global Store too (``observed_at`` is in ``Store._OBSERVED_KEYS``) and
-    ``insights.provenance_summary`` surfaces it as evidence.
+    global Store too (``observed_at`` is in ``Store._OBSERVED_KEYS``).
 
     The stamp lands on the copy, never on the stored entry: an entry whose
     stamp crept forward on every hit would describe nothing at all.  One

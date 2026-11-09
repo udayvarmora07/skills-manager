@@ -204,7 +204,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
   canonical-manifest evidence. Archive, key transport, distribution,
   approval-state, CLI, and Store integration remain unimplemented, but ADR-004
   §6 is resolved.
-- **Insights (read-only, Milestone 9)**: `skillsmgr/insights.py` — pure stdlib helpers over existing seams (`consumer_view` with precedence `unresolved` per ADR-002, diff/three-way, ownership, provenance, update preview, stage-only quarantine, `risk_scan`, offline `registry_preview`, `registry_reference`/`registry_bridge_plan` + the shared `install_argv`/`install_command_line` renderer, advisory `eval_plan`/`eval_score`, deferred `bundle_policy`). Script-risk findings are machine-marked advisory/heuristic and are not enforcement evidence. Locked by hermetic tests in `tests/test_insights_contracts.py` and `tests/test_registry_bridge_contracts.py`.
+- **Install and risk (2026-11-09)**: `skillsmgr/install.py` owns the runner allowlist, value guard, argv renderer, offline bridge plan and the two-step registry fetch/commit for both front-ends; `skillsmgr/risk.py` owns advisory `risk_scan` and its bounded file listing. The former `insights.py` is gone: ten of its helpers had no production caller.
 - **Source/update evidence (2026-09-20)**: `skillsmgr/source_lock.py` compares bounded complete candidate trees against an explicit physical target with validation and advisory risk evidence, persists bounded `.skillsmgr-source-lock.json` evidence, and provides explicit review-id/apply/rollback operations with complete-tree snapshots. `skillsmgr/backup_sync.py` adds safe Git remote metadata/fetch delegation, private expiring sync reviews, candidate revalidation, and snapshot-backed apply through that source-lock seam. Neither module adds a CLI command, Store method, SQLite schema, runtime dependency, or credential persistence path.
 - **Safe local source updates (2026-09-22)**: `skillsmgr/source_update.py` now binds the existing source-lock seam to one observed physical instance, private expiring review artifacts, activation-preserving staged candidates, exact-target apply, global-only resync, five-snapshot retention, and previewed rollback. The `update` CLI/REST/UI surfaces expose evidence and require explicit approval; browser uploads use a non-path source identity. No network update, Store method, SQLite schema, or background job was added.
 - **Skill Hygiene Report (2026-09-22)**: `skillsmgr/hygiene.py` provides deterministic read-only evidence for malformed/unreadable documents, validator references and descriptions, exact duplicates, same-name drift, bounded heuristic near duplicates, context limits/hotspots, and source-lock state. `doctor --hygiene` and `GET /api/doctor?scope=SCOPE&hygiene=1` reuse the same report, while Quality loads it on entry/scope changes and keeps retry, filters, exact-instance navigation, degraded evidence, and unavailable signals separate from Library observations. No new command, Store method, schema, cache, network, or mutation was added.
@@ -424,7 +424,9 @@ skillsmgr/
   cli_output.py        # JSON/errors/table rendering
   store.py             # FS/index/recovery/archive policy
   errors.py            # leaf exception hierarchy; re-exported by store.py
-  insights.py          # read-only Milestone 9 helpers (pure, no CLI/Store/schema)
+  install.py           # ecosystem runner + reviewed registry install
+  risk.py              # advisory risk_scan + bounded file listing
+  context.py           # ContextVar for the active global Store
   source_lock.py       # bounded source identity and whole-tree update previews
   source_update.py     # exact-target local review/apply/rollback orchestration
   backup_sync.py       # bounded backup/sync manifests and dry-run plans
@@ -446,7 +448,7 @@ tests/test_audit_d3_error_contract.py  # one error shape; no stale bodies
 tests/test_audit_d1_scope_reads.py     # agent-scope read cost
 tests/test_audit_route_table.py        # 16 route characterisations
 tests/test_frontend_seam_contracts.py # one state predicate, one transport
-tests/test_insights_contracts.py  # insights hermetic contracts (57 tests)
+tests/test_risk_scan_contracts.py  # advisory risk-scan contracts
 tests/test_audit_batch5_contracts.py  # SEC-4..SEC-9 + SEC-13 regressions
 tests/test_audit_batch8_contracts.py  # SEC-14..SEC-18 regressions
 tests/test_ci_release_contracts.py    # action-pin gates; both YAML step forms

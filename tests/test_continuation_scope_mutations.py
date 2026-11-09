@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes
 
 
@@ -14,7 +15,7 @@ class ScopeMutationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"HOME": tmp, "SKILLS_MANAGER_DATA": str(Path(tmp) / "data")}):
             store = scopes.Store()
             store.init_db()
-            token = scopes._GLOBAL_STORE.set(store)
+            token = context.ACTIVE_STORE.set(store)
             try:
                 scopes.create_skill("agents", "demo", "source")
                 target = Path(scopes.create_skill("codex", "demo", "target")["path"])
@@ -26,15 +27,15 @@ class ScopeMutationTests(unittest.TestCase):
                 self.assertEqual(result["skipped"][0]["scope"], "codex")
                 self.assertEqual((backup / "recover.txt").read_text(), "recover me")
             finally:
-                scopes._GLOBAL_STORE.reset(token)
+                context.ACTIVE_STORE.reset(token)
 
     def test_edit_and_disable_are_serialized(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"HOME": tmp, "SKILLS_MANAGER_DATA": str(Path(tmp) / "data")}):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "original")
             directory = Path(tmp) / ".agents/skills/demo"
             entered = threading.Event()
@@ -90,8 +91,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             created = scopes.create_skill("agents", "demo", "original")
             directory = Path(created["path"])
             (directory.parent / "alias").symlink_to(directory, target_is_directory=True)
@@ -120,8 +121,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             directory = Path(scopes.create_skill("agents", "demo", "original")["path"])
             document = directory / "SKILL.md"
             target = directory / "original.md"
@@ -140,15 +141,15 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             directory = Path(scopes.create_skill("agents", "demo", "original")["path"])
             for _ in range(3):
                 barrier = threading.Barrier(6)
                 errors = []
 
                 def worker(index):
-                    scopes.set_global_store(store)
+                    context.set_active_store(store)
                     try:
                         barrier.wait(timeout=5)
                         for turn in range(10):
@@ -163,7 +164,7 @@ class ScopeMutationTests(unittest.TestCase):
                     except Exception as exc:
                         errors.append(exc)
                     finally:
-                        scopes.set_global_store(None)
+                        context.set_active_store(None)
 
                 threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
                 for thread in threads:
@@ -182,8 +183,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             directory = Path(scopes.create_skill("agents", "demo", "original")["path"])
             snapshot = scopes._global_store().data_dir
             from skillsmgr.store import write_snapshot
@@ -199,13 +200,13 @@ class ScopeMutationTests(unittest.TestCase):
                 return real_read(*args, **kwargs)
 
             def run(action, finished=None):
-                scopes.set_global_store(store)
+                context.set_active_store(store)
                 try:
                     action()
                 except Exception as exc:
                     errors.append(exc)
                 finally:
-                    scopes.set_global_store(None)
+                    context.set_active_store(None)
                     if finished:
                         finished.set()
 
@@ -233,8 +234,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "source")
             target = Path(scopes.create_skill("codex", "demo", "target")["path"])
             broken = b"---\nname: demo\ndescription: \xff\n---\n"
@@ -254,8 +255,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             target = Path(scopes.create_skill("agents", "demo", "target")["path"])
             (target / "SKILL.md").write_bytes(b"---\nname: demo\ndescription: secret\xff\n---\n")
             self.assertIn("\ufffd", scopes.get_raw("agents", "demo"))
@@ -270,8 +271,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "source")
             scopes.create_skill("global", "demo", "target")
             scopes.toggle_skill("global", "demo", enable=False)
@@ -289,8 +290,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "source")
             target = Path(scopes.create_skill("codex", "demo", "target")["path"])
             original = (target / "SKILL.md").read_bytes()
@@ -305,8 +306,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "source")
             target = Path(scopes.create_skill("codex", "demo", "target")["path"])
             entered, release, done = threading.Event(), threading.Event(), threading.Event()
@@ -321,13 +322,13 @@ class ScopeMutationTests(unittest.TestCase):
                 return real_snapshot(*args)
 
             def run(action, finished=None):
-                scopes.set_global_store(store)
+                context.set_active_store(store)
                 try:
                     action()
                 except Exception as exc:
                     errors.append(exc)
                 finally:
-                    scopes.set_global_store(None)
+                    context.set_active_store(None)
                     if finished:
                         finished.set()
 
@@ -356,8 +357,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "new source")
             target = Path(scopes.create_skill("codex", "demo", "old target")["path"])
             (target / "extra").write_text("old auxiliary")
@@ -387,8 +388,8 @@ class ScopeMutationTests(unittest.TestCase):
             (Path(tmp) / "data").mkdir(mode=0o700)
             store = scopes.Store()
             store.init_db()
-            scopes.set_global_store(store)
-            self.addCleanup(scopes.set_global_store, None)
+            context.set_active_store(store)
+            self.addCleanup(context.set_active_store, None)
             scopes.create_skill("agents", "demo", "new source")
             target = Path(scopes.create_skill("codex", "demo", "old target")["path"])
             (target / "extra").write_text("old auxiliary")

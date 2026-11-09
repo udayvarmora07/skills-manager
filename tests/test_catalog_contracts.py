@@ -9,6 +9,7 @@ import threading
 import unittest
 import urllib.request
 
+from skillsmgr import context
 from skillsmgr.adapters import catalog as adapter_catalog, project_observation
 from skillsmgr.catalog import (
     catalog_path,
@@ -76,7 +77,7 @@ class CatalogWebContractTests(unittest.TestCase):
         cls.server.shutdown()
         cls.thread.join(timeout=5)
         cls.server.httpd.server_close()
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         cls.tmp.cleanup()
         if cls.old_data is None:
             os.environ.pop("SKILLS_MANAGER_DATA", None)

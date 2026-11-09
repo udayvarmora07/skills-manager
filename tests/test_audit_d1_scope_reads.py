@@ -41,6 +41,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 import skillsmgr.paths as paths_module
 from skillsmgr import loader, observations, scopes
 from skillsmgr.store import Store
@@ -60,11 +61,11 @@ class ScopeReadCase(unittest.TestCase):
         self._old = {key: os.environ.get(key) for key in ("HOME", "SKILLS_MANAGER_DATA")}
         os.environ["HOME"] = str(self.home)
         os.environ["SKILLS_MANAGER_DATA"] = str(self.base / "data")
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         self.addCleanup(self._restore_env)
 
     def _restore_env(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         for key, old in self._old.items():
             if old is None:
                 os.environ.pop(key, None)
@@ -477,7 +478,7 @@ class StoreScopeReadUnchangedTests(ScopeReadCase):
         store = Store()
         store.init_db()
         store.create("global-one", "A global skill for the read path tests.")
-        scopes.set_global_store(store)
+        context.set_active_store(store)
         row = scopes.scan_scope("global")[0]
         self.assertEqual("global", row["scope"])
         self.assertEqual("skills-manager", row["consumer"])
@@ -842,7 +843,7 @@ class DocumentReuseAuthoritativenessTests(ScopeReadCase):
         self._seed_flat(4)
         store = Store()
         store.init_db()
-        scopes.set_global_store(store)
+        context.set_active_store(store)
         data_dir = store.data_dir
         before = tree_content_hash(data_dir)
         for _ in range(3):
@@ -1141,7 +1142,7 @@ class ObservedAtRefreshTests(ScopeReadCase):
     reporting an observation from before the session started is exactly the
     wrong answer for a tool whose pitch is trustworthy provenance.  It reaches
     the global Store too -- ``observed_at`` is in ``Store._OBSERVED_KEYS`` --
-    and ``insights.provenance_summary`` surfaces it as evidence.
+    and it is surfaced to callers as observation evidence.
     """
 
     def setUp(self):
@@ -1287,21 +1288,16 @@ class ObservedAtRefreshTests(ScopeReadCase):
 
     def test_the_global_store_path_reports_a_current_observation(self):
         """``observed_at`` is in ``Store._OBSERVED_KEYS``, so the defect was global."""
-        from skillsmgr.insights import provenance_summary
-
         store = Store()
         store.init_db()
         store.create("global-one", "A global skill for the observation tests.")
-        scopes.set_global_store(store)
+        context.set_active_store(store)
         with self._frozen_clock("2026-10-05T18:00:00") as at:
             first = store.list()[0]
             at("2026-10-05T18:00:07")
             second = store.list()[0]
         self.assertEqual("2026-10-05T18:00:00Z", first["observed_at"])
         self.assertEqual("2026-10-05T18:00:07Z", second["observed_at"])
-        self.assertEqual(
-            second["observed_at"], provenance_summary(second)["observed_at"]
-        )
 
     def test_the_merged_scope_view_reports_a_current_observation(self):
         """The Library view is the surface the defect was reproduced on."""

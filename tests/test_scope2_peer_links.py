@@ -22,6 +22,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from skillsmgr import context
 from skillsmgr import scopes
 from skillsmgr.store import StoreError, write_snapshot
 
@@ -68,11 +69,11 @@ class PeerLinkCase(unittest.TestCase):
         data = self.base / "data"
         data.mkdir(mode=0o700)
         os.environ["SKILLS_MANAGER_DATA"] = str(data)
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         self.addCleanup(self._restore)
 
     def _restore(self):
-        scopes.set_global_store(None)
+        context.set_active_store(None)
         for key, old in self._old.items():
             if old is None:
                 os.environ.pop(key, None)

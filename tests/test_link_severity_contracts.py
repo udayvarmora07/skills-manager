@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 from skillsmgr.frontmatter import dump_frontmatter
-from skillsmgr.insights import risk_scan
+from skillsmgr.risk import risk_scan
 from skillsmgr.validator import validate_skill
 
 

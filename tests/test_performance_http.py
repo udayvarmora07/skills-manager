@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
+from skillsmgr import context
 from skillsmgr import scopes
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
@@ -34,8 +35,8 @@ class PerformanceHTTPTests(unittest.TestCase):
         self.addCleanup(cwd.stop)
         self.store = Store()
         self.store.init_db()
-        store_token = scopes._GLOBAL_STORE.set(self.store)
-        self.addCleanup(scopes._GLOBAL_STORE.reset, store_token)
+        store_token = context.ACTIVE_STORE.set(self.store)
+        self.addCleanup(context.ACTIVE_STORE.reset, store_token)
         self.store.create("alpha", "First skill", body="ONLY_IN_THE_BODY\n" + "x" * 4096)
         self.store.create("beta", "Second skill", body="A different document")
         agent = home / ".codex" / "skills" / "alpha"

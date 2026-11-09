@@ -49,6 +49,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
+from skillsmgr import context
 from skillsmgr import loader, webapp
 from skillsmgr.store import Store
 from skillsmgr.webapp import WebAppServer
@@ -429,8 +430,8 @@ class ObservationSignalsSurviveTheFastPath(LazyObservationTestCase):
         store.db_rebuild()
 
         previous = scopes._global_store()
-        scopes.set_global_store(store)
-        self.addCleanup(scopes.set_global_store, previous)
+        context.set_active_store(store)
+        self.addCleanup(context.set_active_store, previous)
 
         rows = scopes.scan_scope("global")
         states = {row["name"]: row["instance_states"] for row in rows}
