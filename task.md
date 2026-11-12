@@ -6,6 +6,18 @@
 
 ## AI assist, bring your own key (2026-11-09)
 
+- [x] Health-check follow-up: reproduce empty startup URL publication in both
+  optional browser launchers; publish through the existing atomic-write helper
+  and cover the reader/writer interleaving with deterministic regressions.
+- [x] Repeat extended classic/v2 browser checks (38 scenarios / 342 assertions
+  and 37 scenarios), six viewports, and the verification ladder after the
+  startup-publication fix: 1,891 tests on each Python 3.11–3.14 with no skips,
+  both smokes, static/docs/design/syntax/complexity and fresh package/wheel probes.
+- [x] Back up the default rebuildable index and repair two stale rows through
+  `db resync`; Doctor healthy and all source skill-file hashes unchanged.
+  Real HTTP-provider checks still require AI configuration; prior hosted CI
+  completed 14 jobs successfully but could not acquire its last macOS runner.
+
 - [x] Fresh 2026-11-12 close-out: 1,889 tests on every Python 3.11–3.14,
   no skips with the separate reference oracle; shared AI checks, both smokes,
   compilation/syntax/static/docs/design gates and exact pinned artifact probe.

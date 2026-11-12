@@ -62,8 +62,9 @@ def main():
     server_code = (
         'import os; from pathlib import Path; '
         'from skillsmgr.store import Store; from skillsmgr.webapp import WebAppServer; '
+        'from skillsmgr.atomic_io import atomic_write_text; '
         'server=WebAppServer(Store(), host="127.0.0.1", port=0); '
-        'Path(os.environ["BROWSER_TEST_ROOT"], "server-url.txt").write_text('
+        'atomic_write_text(Path(os.environ["BROWSER_TEST_ROOT"], "server-url.txt"), '
         '"http://127.0.0.1:"+str(server.port)); server.serve_forever()'
     )
     print(f'Fixture and evidence directory: {root}', flush=True)

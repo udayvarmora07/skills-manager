@@ -8,6 +8,40 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-12 — Health-check browser startup publication race
+
+**[NOTE]** A fresh functional check found the classic browser launcher reading
+an empty `server-url.txt` between creation and its first write, then passing `/`
+to `urlopen`. A forced reader/writer interleaving reproduced the same defect
+in both optional launchers. They now publish the URL with the existing
+`atomic_write_text` helper; deterministic regressions failed before the change
+and pass after it. Installed application behavior and runtime dependencies are
+unchanged. Extended browser and full-suite verification passed as recorded below.
+
+**[NOTE]** Default AI settings remain absent, so real product HTTP-provider
+calls are unverified. Retained synthetic native evidence and fake-provider
+checks remain distinct. Hosted CI for the previous main commit completed 14
+jobs successfully; its macOS/Python 3.14 job was cancelled without executing
+after GitHub could not acquire a runner (capacity-constraint annotations).
+
+**[NOTE]** Verification on the changed tree: 1,891 tests on each Python
+3.11–3.14, no skips with the separate reference oracle; 83 focused AI tests;
+classic browser 38 scenarios / 342 assertions and v2 browser 37 scenarios with
+no failures; six-viewport smoke; both Store/web smokes; compilation, all
+frontend JavaScript syntax, Ruff 0.16.8, Bandit 1.9.4, docs, design contrast,
+and unchanged complexity budgets. Fresh wheel/sdist from the hash-verified
+build environment passed package checks and the exact installed-wheel AI
+probe. Evidence is retained under the worktree Git metadata's
+`codex-verification/ai-2026-11-12/health-check/` directory.
+
+**[NOTE]** The default-data Doctor check found two filesystem/index differences.
+After a SQLite backup, supported `db resync` updated two index rows; Doctor
+reports healthy with database integrity `ok`. Before/after hashes prove skill
+files unchanged. This repaired the derived index only. Self-review covered
+partial URL publication, isolated concurrent fixture roots, startup failure
+cleanup, and reuse of the atomic helper's temporary-file cleanup. No new
+command, Store method, schema change, or runtime dependency was introduced.
+
 ## 2026-11-12 — Interrupted-session verification resumed
 
 **[NOTE]** The task branch and all AI/automation changes survived the interrupted
