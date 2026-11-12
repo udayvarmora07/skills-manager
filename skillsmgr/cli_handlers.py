@@ -730,6 +730,18 @@ def _render_agents_bridge_text(section: dict | None) -> None:
     )
 
 
+def _render_codex_config_text(section: dict | None) -> None:
+    """Codex ``[[skills.config]]`` path entries that match no skill (codex#51044)."""
+    if not section or not section.get("total"):
+        return
+    total = int(section["total"])
+    verb = "entry matches" if total == 1 else "entries match"
+    print(f"  Codex config: {total} path {verb} no skill, so the on/off setting never applies")
+    for entry in section.get("entries", []):
+        hint = f" -> use {_display(str(entry['suggested_path']))}" if entry.get("suggested_path") else ""
+        print(f"    {_display(str(entry.get('problem', '')))}: {_display(str(entry.get('path', '')))}{hint}")
+
+
 def _render_hygiene_text(report: dict) -> None:
     """Render report evidence through the terminal sanitization seam."""
     summary = report.get("summary", {})
@@ -746,6 +758,7 @@ def _render_hygiene_text(report: dict) -> None:
     _render_lockfile_text(report.get("lockfiles"))
     _render_claude_listing_text(report.get("claude_listing"))
     _render_agents_bridge_text(report.get("agents_bridge"))
+    _render_codex_config_text(report.get("codex_config"))
     if summary.get("findings_truncated"):
         print("  findings returned are bounded; inspect the JSON limits/degraded evidence")
     for finding in report.get("findings", []):

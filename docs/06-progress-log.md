@@ -8,6 +8,45 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — Overnight round 1: problems users hit that a local check can name
+
+**[NOTE]** An unattended round researched skill-management problems reported
+since 2026-10-01 (GitHub issues across six agent repositories; HN fetch failed,
+search rate-limited). Ranked record and later-round candidates:
+@docs/44-overnight-user-problems-2026-11-13.md.
+
+**[SPEC]** Shipped, all read-only or transport-only, no new command, Store
+method, schema or dependency:
+
+- **Byte-order mark lint** (openai/codex#13918). Codex skips a document whose
+  `---` follows U+FEFF; this tool's parser strips it, so the skill looked
+  valid here. One advisory `frontmatter` warning now says so.
+- **`agent-parse-risk` hygiene finding.** The hygiene report surfaced only
+  validator errors, so the empty-block, unquoted-colon and BOM warnings never
+  reached Doctor or Quality. They now do, one warning per instance.
+- **Codex dead `[[skills.config]]` path entries** (openai/codex#51044). A
+  `path` naming the skill folder, a missing file or a non-`SKILL.md` file
+  matches nothing, so the user's "disabled" never applies. A `codex_config`
+  section and `codex-config-dead-entry` warning (scopes `codex`/`all`) name
+  each entry and the `SKILL.md` path to use; CLI text and v2 Quality list them.
+- **OpenRouter caching for Claude.** `anthropic/` models on OpenRouter now
+  get the listing prefix as a `cache_control` block (OpenRouter caches Claude
+  only with explicit breakpoints); other models are unchanged.
+
+**[NOTE]** Red-first: 19 new tests (10 Codex config incl. CLI text, 4 BOM,
+3 OpenRouter, 2 parse-risk); 14 fail on `302caf2` and all pass now, the other
+5 are guards that pass on both. Complexity: new functions only, one +1 restored by extracting
+`_warn_byte_order_mark`; no baseline raised. Browser: v2 Quality against an
+isolated HOME showed the Codex entry with its suggested path and the BOM
+skill's parse-risk warning, no console errors. **Not verified:** any live
+OpenRouter call (whether `prompt_tokens` includes cached tokens is inferred
+from its docs' example), Codex itself reading the fixtures, macOS/Windows.
+
+**[NOTE] Verification on this tree:** 1,932 tests on each Python 3.11, 3.12, 3.13 and 3.14 (two optional oracle skips each); both smokes,
+`check_docs`, `check_complexity` (1,269 functions, nothing raised),
+`check_design_tokens`, frontend syntax, Ruff 0.16.8 (F821/F822/F823) and
+Bandit 1.9.4 (0 results).
+
 ## 2026-11-13 — AI transport: retries, prompt caching, thinking room, day-cap reservations
 
 **[SPEC]** Reviewing every shipped AI feature on `main` found that the shared

@@ -215,6 +215,11 @@ descriptions are dropped. The human output prints one summary line, for example
 `Claude Code listing: 41,200 chars vs ~40,000 budget (estimate); 25 name-only
 candidates`. Every number is read-only evidence; no listing is edited.
 
+The report's `codex_config` section (`--scope codex` or `all`) names Codex
+`[[skills.config]]` `path` entries that can never match a skill — a folder
+instead of its `SKILL.md`, a missing file, or another file — and the human
+output prints each with the `SKILL.md` path to use. Nothing is changed.
+
 The report's `agents_bridge` section (docs/29 H2, explain-only) names enabled,
 readable skills that exist in `~/.agents/skills` but have no copy or link in
 `~/.claude/skills`. Claude Code's documented roots do not include

@@ -79,10 +79,19 @@ _EMPTY_FRONTMATTER_MESSAGE = (
     "frontmatter block is present but empty; "
     "agents will see no name or description"
 )
+_BOM_MESSAGE = (
+    "file starts with a UTF-8 byte-order mark before '---'; Codex reports "
+    "'missing YAML frontmatter' and skips the skill, so save it without the mark"
+)
 _UNQUOTED_COLON_MESSAGE = (
     "value contains an unquoted ': '; strict YAML parsers used by agents "
     "reject this, so quote the value"
 )
+
+
+#: Warnings about frontmatter an agent's parser silently drops; the hygiene
+#: report surfaces exactly these as ``agent-parse-risk`` findings.
+SILENT_FAILURE_MESSAGES = (_BOM_MESSAGE, _EMPTY_FRONTMATTER_MESSAGE, _UNQUOTED_COLON_MESSAGE)
 
 
 def validate_skill_name(name: str) -> str:
@@ -361,18 +370,25 @@ def _warn_plain_scalar_colons(
             result.add("warning", _UNQUOTED_COLON_MESSAGE, key)
 
 
+def _warn_byte_order_mark(result: ValidationResult, text: str) -> None:
+    """Codex skips a document whose ``---`` follows a BOM (openai/codex#13918)."""
+    if text.startswith("\ufeff"):
+        result.add("warning", _BOM_MESSAGE, "frontmatter")
+
+
 def _check_silent_frontmatter_failures(
     result: ValidationResult, data: dict, text: str
 ) -> None:
     """Warn about frontmatter an agent's strict YAML parser would drop.
 
-    Both findings are advisory: they never change ``valid``, never echo the
+    These findings are advisory: they never change ``valid``, never echo the
     offending value, and are skipped entirely when the document has no
     frontmatter block (that case already produces name/description errors).
     """
     block = _frontmatter_block_lines(text)
     if block is None:
         return
+    _warn_byte_order_mark(result, text)
     if not data:
         result.add("warning", _EMPTY_FRONTMATTER_MESSAGE, "frontmatter")
     _warn_plain_scalar_colons(result, block)

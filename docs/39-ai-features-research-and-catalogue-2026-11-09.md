@@ -252,6 +252,9 @@ every feature. Each is fixed in `skillsmgr/ai.py` and pinned by
   1.25×, read 0.1× or lower). A single-batch pass is not marked, so it never
   pays the write premium for nothing. OpenAI-compatible requests keep one text
   string with the listing first, which is what automatic prefix caching needs.
+  The exception (2026-11-13) is OpenRouter with an `anthropic/` model id:
+  OpenRouter caches Claude only behind an explicit breakpoint, so that prefix
+  is sent as the same two text blocks with `cache_control` (@docs/44-overnight-user-problems-2026-11-13.md).
   Anthropic's `input_tokens` excludes cache reads and writes, so the client now
   adds both back before checking caps; the ledger and run label also record
   `cached_input_tokens`, and the trigger-test result shows it.
@@ -281,6 +284,7 @@ already finished it, that attempt may be billed. The worst case is three
 - **A14 CI mode**: approved and shipped; see @docs/42-ai-cli-ci-2026-11-09.md. No automatic paid repository CI step is enabled.
 - **A6 standalone**: a demote-only explainer for Quality/hygiene risk findings
   outside a review (A5 already does this inside registry and update reviews).
-- **Provider-specific caching beyond Anthropic**: OpenRouter accepts Anthropic
-  `cache_control` blocks for Claude models; not wired.
+- **Provider-specific caching beyond OpenRouter's Claude models**: wired on
+  2026-11-13 for `openrouter` with an `anthropic/` model id (see §17); other
+  explicit-breakpoint providers (Alibaba) are not.
 - **Fidelity**: expand the two-case synthetic smoke study to real distractors, near misses, repetitions and the configured product HTTP path before treating its numbers as more than estimates.

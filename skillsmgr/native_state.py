@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 import tomllib
 from pathlib import Path
@@ -511,6 +512,60 @@ def _prepare_codex(home: Path) -> dict:
         else:
             prepared['rules'].append(rule)
     return prepared
+
+
+#: At most this many unmatchable ``[[skills.config]]`` entries are listed.
+MAX_DEAD_ENTRIES = 50
+
+
+def _dead_entry_problem(value: str) -> tuple[str | None, str | None]:
+    """Why a Codex ``path`` entry can never match a skill, and the path to use."""
+    target = Path(os.path.realpath(os.path.expanduser(value)))
+    try:
+        mode = target.stat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return 'missing', None
+    except OSError:
+        return None, None  # unreadable: Codex may still match it, so say nothing
+    if stat.S_ISDIR(mode):
+        document = target / 'SKILL.md'
+        return 'folder', str(document) if document.is_file() else None
+    return (None, None) if target.name == 'SKILL.md' else ('not-skill-document', None)
+
+
+def _dead_entries(entries: list) -> list[dict]:
+    dead = []
+    for index, entry in enumerate(entries):
+        rule = _codex_rule(entry)
+        if rule is None or rule[0] != 'path':
+            continue
+        problem, suggested = _dead_entry_problem(entry['path'])
+        if problem:
+            dead.append({'index': index, 'path': entry['path'], 'enabled': rule[2],
+                         'problem': problem, 'suggested_path': suggested})
+    return dead
+
+
+def codex_config_dead_entries(*, home: Path | None = None) -> dict:
+    """Codex ``path`` entries that name a folder, a missing file or a non-``SKILL.md``.
+
+    Codex compares a ``path`` entry with the skill's ``SKILL.md`` file, so such
+    an entry silently changes nothing (openai/codex#51044).  Read-only.
+    """
+    path = _codex_config_path(home_dir() if home is None else Path(home))
+    status, config = _load_toml(path)
+    report = {'state': status, 'config_path': str(path), 'entries': [], 'total': 0, 'omitted': 0}
+    if config is None:
+        return report
+    skills = config.get('skills', {})
+    entries = skills.get('config', []) if isinstance(skills, dict) else None
+    if not isinstance(entries, list) or len(entries) > MAX_CODEX_ENTRIES:
+        report['state'] = 'invalid' if not isinstance(entries, list) else 'unavailable'
+        return report
+    dead = _dead_entries(entries)
+    report.update(state='observed', entries=dead[:MAX_DEAD_ENTRIES], total=len(dead),
+                  omitted=max(0, len(dead) - MAX_DEAD_ENTRIES))
+    return report
 
 
 def _codex_match(name: str, document: Path | None, rules: list, resolved: dict) -> tuple | None:

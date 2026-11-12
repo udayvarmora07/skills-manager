@@ -461,6 +461,24 @@ def _validation_findings(records: list[dict]) -> list[dict]:
     return findings
 
 
+def _parse_risk_findings(records: list[dict]) -> list[dict]:
+    """Validator warnings for frontmatter an agent's parser silently drops."""
+    findings = []
+    for record in records:
+        issues = [issue for issue in record.get("_issues", [])
+                  if issue.get("message") in validator.SILENT_FAILURE_MESSAGES]
+        if issues:
+            findings.append(_finding(
+                "agent-parse-risk", "warning", "observed",
+                f"{record.get('name', '')} may be skipped by an agent's frontmatter parser",
+                "This tool reads the document, but a stricter agent parser drops frontmatter like this, "
+                "so the skill can load with no name or description or not at all.",
+                [record], {"issues": _unique_issues(issues)},
+                "Fix the frontmatter as each message says, then validate the exact instance again.",
+            ))
+    return findings
+
+
 def _unique_issues(issues: list[dict]) -> list[dict]:
     unique = {(item.get("level"), item.get("key"), item.get("message")): item for item in issues}
     return [unique[key] for key in sorted(unique)]
@@ -1403,6 +1421,39 @@ def _agents_bridge_section(prepared: list[dict], *, scope: str, home,
     return section, [finding]
 
 
+_CODEX_CONFIG_SCOPES = frozenset({"codex", "all"})
+_CODEX_CONFIG_EXPLANATION = (
+    "Codex compares a [[skills.config]] path entry with the skill's SKILL.md file. "
+    "An entry naming the skill folder, a missing file or another file matches no "
+    "skill, so the setting it declares never applies (openai/codex#51044)."
+)
+
+
+def _codex_config_section(scope: str, home) -> tuple[dict, list[dict]]:
+    """Explain, read-only, Codex config entries that can never match a skill."""
+    if scope not in _CODEX_CONFIG_SCOPES:
+        return {"version": 1, "state": "unavailable", "reason": "needs the codex or all scope",
+                "entries": [], "total": 0, "omitted": 0, "writes_nothing": True}, []
+    report = native_state.codex_config_dead_entries(home=home)
+    prefix = _home_prefix(home)
+    entries = [dict(entry, path=_redacted_path(entry["path"], prefix),
+                    suggested_path=_redacted_path(entry["suggested_path"], prefix)
+                    if entry["suggested_path"] else None) for entry in report["entries"]]
+    section = {"version": 1, "state": report["state"],
+               "config_path": _redacted_path(report["config_path"], prefix),
+               "explanation": _CODEX_CONFIG_EXPLANATION, "entries": entries,
+               "total": report["total"], "omitted": report["omitted"], "writes_nothing": True}
+    if not report["total"]:
+        return section, []
+    finding = _finding(
+        "codex-config-dead-entry", "warning", "observed",
+        f"{report['total']} Codex skills.config path entr{'y matches' if report['total'] == 1 else 'ies match'} no skill",
+        _CODEX_CONFIG_EXPLANATION, [], {"entries": entries[:MAX_GROUP_INSTANCES], "total": report["total"]},
+        "Point each path entry at the skill's SKILL.md file (suggested_path when shown) or use name = ...; nothing was changed.",
+    )
+    return section, [finding]
+
+
 def _source_lock_status(record: dict, path: str, degraded: list[dict]) -> dict:
     """Read one instance's source-lock state, degrading instead of raising."""
     try:
@@ -1633,6 +1684,7 @@ def _hygiene_report(
     prepared, degraded = _prepare_records(records, max_instances)
     unavailable = _unavailable_signals()
     findings = _validation_findings(prepared)
+    findings.extend(_parse_risk_findings(prepared))
     findings.extend(_duplicate_findings(prepared))
     near = near_duplicate_candidates(prepared)
     for item in near["candidates"]:
@@ -1678,6 +1730,8 @@ def _hygiene_report(
         prepared, scope=scope, home=home, degraded=degraded
     )
     findings.extend(bridge_findings)
+    codex_config, codex_findings = _codex_config_section(scope, home)
+    findings.extend(codex_findings)
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))
     full_summary["unavailable"] += len(unavailable)
@@ -1694,6 +1748,7 @@ def _hygiene_report(
         "lockfiles": lockfile_section,
         "claude_listing": claude_listing,
         "agents_bridge": agents_bridge,
+        "codex_config": codex_config,
         "unavailable_signals": sorted(unavailable, key=lambda item: (str(item.get("signal", "")), str(item.get("name", "")))),
         "degraded": sorted(degraded, key=lambda item: (str(item.get("section", "")), str(item.get("instance", "")), str(item.get("reason", "")))),
         "limits": {

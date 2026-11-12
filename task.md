@@ -12,6 +12,13 @@
   against the caps, low-effort plus thinking allowance for thinking models,
   and cross-process day-cap reservations. 23 tests in
   `tests/test_ai_transport.py`; no live provider was called.
+- [x] 2026-11-13 overnight round 1 (@docs/44-overnight-user-problems-2026-11-13.md):
+  BOM-before-frontmatter lint (codex#13918), Codex dead `[[skills.config]]`
+  path entries in hygiene/Quality (codex#51044), OpenRouter `cache_control`
+  for `anthropic/` models, and an `agent-parse-risk` hygiene finding so the
+  silent-parse warnings reach Doctor and Quality. No live provider call.
+- [ ] Codex listing-budget estimate (2% of window / 8,000 chars) beside `claude_listing`.
+- [ ] OpenCode oversized-document warning (2,000 lines / 50 KiB, opencode#62718).
 - [ ] A6 standalone demote-only explainer for Quality findings (A5 covers reviews).
 
 - [x] Health-check follow-up: reproduce empty startup URL publication in both

@@ -171,6 +171,34 @@ class CachingTests(TransportBase):
         user = Scripted.seen[0]["body"]["messages"][1]["content"]
         self.assertEqual(user, "STABLE LISTING\nthe question")
 
+    def test_openrouter_claude_prefix_carries_a_cache_breakpoint(self):
+        # OpenRouter caches Claude only with explicit breakpoints (its docs);
+        # without one every routing batch re-pays the full listing.
+        self.configure(provider="openrouter", model="anthropic/claude-sonnet-5-5")
+        Scripted.queue = [_ok_openai()]
+        run = ai.AiRun(self.data, "trigger-test")
+        run.ask_json("Return only JSON.", "the question", prefix="STABLE LISTING\n")
+        user = Scripted.seen[0]["body"]["messages"][1]["content"]
+        self.assertEqual(user, [
+            {"type": "text", "text": "STABLE LISTING\n", "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": "the question"}])
+
+    def test_openrouter_other_models_and_no_prefix_stay_plain_text(self):
+        for model, prefix in (("openai/gpt-4o", "STABLE\n"), ("anthropic/claude-sonnet-5-5", "")):
+            Scripted.queue, Scripted.seen = [_ok_openai()], []
+            self.configure(provider="openrouter", model=model)
+            ai.AiRun(self.data, "trigger-test").ask_json("Return only JSON.", "q", prefix=prefix)
+            self.assertEqual(Scripted.seen[0]["body"]["messages"][1]["content"], prefix + "q")
+
+    def test_openrouter_cache_writes_are_reported_and_already_counted(self):
+        self.configure(provider="openrouter", model="anthropic/claude-haiku-5-5")
+        Scripted.queue = [_ok_openai(usage={"prompt_tokens": 9000, "completion_tokens": 5,
+                                            "prompt_tokens_details": {"cached_tokens": 6000,
+                                                                      "cache_write_tokens": 2000}})]
+        run, _answer = self.run_one(prefix="x")
+        self.assertEqual(run.label()["input_tokens"], 9000)
+        self.assertEqual(run.label()["cached_input_tokens"], 6000)
+
     def test_cached_anthropic_tokens_still_count_against_the_caps(self):
         self.configure(provider="anthropic")
         Scripted.queue = [_ok_anthropic(cache_creation_input_tokens=1000, cache_read_input_tokens=5000)]

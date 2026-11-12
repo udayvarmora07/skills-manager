@@ -781,11 +781,18 @@ def _openai_usage(usage: dict) -> dict:
             "output_tokens": usage.get("completion_tokens"), "cached_input_tokens": cached}
 
 
-def _openai_body(config: dict, system: str, user: str, max_output: int, prefix: str) -> dict:
+def _openai_user(config: dict, user: str, prefix: str):
+    """The user message; OpenRouter caches Claude only behind an explicit breakpoint."""
+    if prefix and config["provider"] == "openrouter" and config["model"].startswith("anthropic/"):
+        return _anthropic_content(user, prefix)
     # Automatic prefix caching needs the stable part first; it already is.
+    return prefix + user
+
+
+def _openai_body(config: dict, system: str, user: str, max_output: int, prefix: str) -> dict:
     body = {"model": config["model"],
             "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": prefix + user}],
+                         {"role": "user", "content": _openai_user(config, user, prefix)}],
             config["max_tokens_field"]: max_output}
     if _thinks(config):
         body["reasoning_effort"] = "low"

@@ -599,6 +599,7 @@ ${scanPanel('(review.inspection||{}).external_scan')}
                   <p v-if="f.recommendation" class="tp-rec"><b>Suggested:</b> {{f.recommendation}}</p>
                   <p v-if="f.confidence" class="tp-fine">Confidence: {{human(f.confidence)}}</p>
                   <ul class="tp-rows"><li v-for="i in f.instances" :key="i.scope+':'+(i.path||i.physical_path)" class="v2-tool-row"><span class="tp-row-main"><strong class="tp-mono">{{i.name}}</strong><small>{{scopeLabel(i.scope)}} · <span class="tp-mono">{{i.path||i.physical_path}}</span></small></span><button class="btn btn-line btn-sm" @click="inspectInstance(i)">Open</button></li></ul>
+                  <ul class="tp-rows" v-if="f.category==='codex-config-dead-entry'"><li v-for="e in (f.evidence&&f.evidence.entries)||[]" :key="e.index" class="v2-tool-row"><span class="tp-row-main"><strong class="tp-mono">{{e.path}}</strong><small>{{human(e.problem)}}<template v-if="e.suggested_path"> · use <span class="tp-mono">{{e.suggested_path}}</span></template></small></span></li></ul>
                   <details class="tp-more"><summary>Finding evidence</summary><pre>{{pretty(f.evidence)}}</pre></details>
                 </div>
               </details>

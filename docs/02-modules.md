@@ -248,6 +248,17 @@ remedies, emits one `agents-bridge-gap` info finding, and writes nothing. Other
 scopes report `state: unavailable`; a truncated scan reports `state: partial`
 and names nothing, because the missing copy could be past the limit.
 
+**[SPEC] `agent-parse-risk` (2026-11-13).** Validator warnings in
+`validator.SILENT_FAILURE_MESSAGES` (empty frontmatter block, unquoted `: `,
+byte-order mark before `---`) become one `agent-parse-risk` warning per
+instance; previously the report surfaced only validator errors.
+
+**[SPEC] `codex_config` (2026-11-13).** For the `codex` and `all` scopes the
+report adds a home-redacted `codex_config` section from
+`native_state.codex_config_dead_entries()` and one `codex-config-dead-entry`
+warning when any entry matches no skill; other scopes report it
+`unavailable`. Nothing is written.
+
 ## `key_support.py`
 
 Pure, stdlib-only table of the frontmatter keys each consumer documents, copied
@@ -736,7 +747,7 @@ SKILL.md frontmatter (YAML-ish, delimited by `_DOC_MARKER`): `parse_frontmatter(
 
 ## `validator.py`
 
-Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing hyphens); limits: `MAX_NAME=64`, `MAX_DESCRIPTION=1024`, `MAX_COMPATIBILITY=500`, `MAX_BODY_LINES=500`, `MAX_BODY_TOKENS=5000`. `validate_skill_name(name)` is the authoritative fail-closed primitive used by Store, scopes, CLI, and REST-adjacent path handling. `Issue` dataclass (level, message, key). `validate_skill(name, skill_dir)` -> `ValidationResult` (`.valid`, `.errors`, `.warnings`, `.issues`). `description_score(text)` -> `{has_use_context, filler_hits, word_count}`. Validators cover: name format, frontmatter name vs directory name, description length + use-context/filler warnings, compatibility length, body line count + token warning, `scripts/`/`references/`/`assets/` layout mentions, and relative link targets normalized for URL fragments, queries, percent-encoding, and sentence punctuation. Two advisory warnings cover frontmatter an agent's strict YAML parser would silently drop: an empty delimited block (`frontmatter` key) and an unquoted `: ` inside a top-level plain scalar (that key), both read from the raw frontmatter lines and never changing `valid`.
+Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing hyphens); limits: `MAX_NAME=64`, `MAX_DESCRIPTION=1024`, `MAX_COMPATIBILITY=500`, `MAX_BODY_LINES=500`, `MAX_BODY_TOKENS=5000`. `validate_skill_name(name)` is the authoritative fail-closed primitive used by Store, scopes, CLI, and REST-adjacent path handling. `Issue` dataclass (level, message, key). `validate_skill(name, skill_dir)` -> `ValidationResult` (`.valid`, `.errors`, `.warnings`, `.issues`). `description_score(text)` -> `{has_use_context, filler_hits, word_count}`. Validators cover: name format, frontmatter name vs directory name, description length + use-context/filler warnings, compatibility length, body line count + token warning, `scripts/`/`references/`/`assets/` layout mentions, and relative link targets normalized for URL fragments, queries, percent-encoding, and sentence punctuation. Three advisory warnings cover frontmatter an agent's parser would silently drop: an empty delimited block (`frontmatter` key), an unquoted `: ` inside a top-level plain scalar (that key), and a UTF-8 byte-order mark before `---` (`frontmatter` key; Codex skips such a skill, openai/codex#13918), all read from the raw text and never changing `valid`.
 
 ## `search.py`
 
@@ -791,6 +802,13 @@ disabled names and 512 characters per name are accepted. Environment variables
 and CLI arguments rank above every file and are not observed, so `partial` is
 always true and `effective_state` stays `unknown`. When nothing readable
 disables the name, `observed_setting` says `"not disabled by the files read"`.
+
+`codex_config_dead_entries()` (2026-11-13) lists Codex `[[skills.config]]`
+`path` entries that can never match a skill: a folder (with the `SKILL.md`
+path to use when one exists), a missing file, or a file not named `SKILL.md`
+(openai/codex#51044). Entries behind an unreadable directory are not
+reported; at most `MAX_DEAD_ENTRIES` (50) are listed with `total`/`omitted`.
+Read-only.
 
 `observe_claude_listing()` reads the two documented listing-budget keys
 (`skillListingMaxDescChars`, `skillListingBudgetFraction`) from the same three

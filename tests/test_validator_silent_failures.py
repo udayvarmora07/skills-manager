@@ -117,3 +117,43 @@ class SilentFrontmatterFailureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+BOM_FRAGMENT = "starts with a UTF-8 byte-order mark"
+
+
+class ByteOrderMarkTests(unittest.TestCase):
+    """openai/codex#13918: a BOM before ``---`` makes Codex skip the skill.
+
+    This tool's own parser strips the mark, so without a warning the skill
+    looks valid here while one agent silently never lists it.
+    """
+
+    def _warnings(self, raw: bytes):
+        with tempfile.TemporaryDirectory() as tmp:
+            skill_dir = Path(tmp) / "demo"
+            skill_dir.mkdir()
+            (skill_dir / "SKILL.md").write_bytes(raw)
+            result = validate_skill("demo", skill_dir)
+        return result, [i for i in result.warnings if BOM_FRAGMENT in i.message]
+
+    DOC = "---\nname: demo\ndescription: Use when testing the byte order mark lint.\n---\nBody\n"
+
+    def test_bom_before_frontmatter_warns_once_and_stays_valid(self):
+        result, warnings = self._warnings(b"\xef\xbb\xbf" + self.DOC.encode())
+        self.assertTrue(result.valid)
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0].key, "frontmatter")
+        self.assertIn("Codex", warnings[0].message)
+
+    def test_no_bom_no_warning(self):
+        _result, warnings = self._warnings(self.DOC.encode())
+        self.assertEqual(warnings, [])
+
+    def test_bom_with_crlf_line_endings_still_warns(self):
+        _result, warnings = self._warnings(b"\xef\xbb\xbf" + self.DOC.replace("\n", "\r\n").encode())
+        self.assertEqual(len(warnings), 1)
+
+    def test_bom_without_a_frontmatter_block_adds_nothing_new(self):
+        _result, warnings = self._warnings(b"\xef\xbb\xbf# Just a body\n")
+        self.assertEqual(warnings, [])
