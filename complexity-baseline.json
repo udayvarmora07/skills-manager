@@ -566,7 +566,7 @@
       "lineno": 257
     },
     "skillsmgr/ai_skills.py::_trigger_prompts": {
-      "complexity": 14,
+      "complexity": 10,
       "end_lineno": 393,
       "lineno": 376
     },
@@ -606,7 +606,7 @@
       "lineno": 122
     },
     "skillsmgr/ai_skills.py::read_prompt_set": {
-      "complexity": 8,
+      "complexity": 3,
       "end_lineno": 419,
       "lineno": 408
     },
@@ -621,7 +621,7 @@
       "lineno": 422
     },
     "skillsmgr/ai_skills.py::trigger_test": {
-      "complexity": 6,
+      "complexity": 5,
       "end_lineno": 373,
       "lineno": 346
     },
@@ -5516,6 +5516,7 @@
     "skillsmgr/cli.py",
     "skillsmgr/cli_parser.py",
     "skillsmgr/cli_handlers.py",
+    "skillsmgr/cli_ai.py",
     "skillsmgr/store.py",
     "skillsmgr/errors.py",
     "skillsmgr/frontmatter.py",
@@ -5545,6 +5546,8 @@
     "skillsmgr/ai_concise.py",
     "skillsmgr/ai_profiles.py",
     "tools/ai_fidelity/run.py",
+    "tools/ai_fidelity/study_fixture.py",
+    "tools/verify_ai.py",
     "skillsmgr/ai_overlap.py",
     "skillsmgr/ai_budget.py",
     "skillsmgr/ai_review.py",

@@ -4,7 +4,7 @@
 
 **AI manifest**: Authoritative inventory of every command, alias, flag, and exit code of the `skills-mgr` CLI. Facts verified against the parser/handler modules (`cli_parser.py`, `cli_handlers.py`, `cli_output.py` behind the stable `cli.py` adapter) plus live invocations on 2026-09-22. The web UI must mirror this surface exactly (see @docs/08-web-ui.md). Do not add commands or flags without updating this doc and @docs/02-modules.md.
 
-**[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
+**[SPEC]** Invocation: `python3 -m skillsmgr` (or `skills-mgr` once installed). argparse `prog="skills-mgr"`. Command count: **29 top-level commands + 11 subcommands (7 trash/templates/db actions, 3 update actions and 1 AI action) + 3 aliases (`ls`, `rm`, `gui`) = 43 invocable names**. The `gui` alias is a pure alias of `webui` (the GTK GUI is gone).
 
 ## Exit codes
 
@@ -29,6 +29,7 @@ or mutating the data directory.
 **[SPEC]**
 
 - `--json` — a per-command flag, placed after the command, for machine-readable output; `_print_json(data)` with indent=2.
+
 - `--color` — force color output.
 - `--no-color` — disable color output. The default is automatic terminal detection.
 - `--scope SCOPE` — scope selector on `list`, `view`, `search`, `doctor`, `stats`. Values: `global` (default; the Store + DB), `all` (aggregate commands only; `view` requires one scope), or an agent scope id (`claude-code`, `codex`, `cursor`, `opencode`, `gemini`, `commandcode`, `agents`). `agents` is the Command Code skills dir (`~/.agents/skills`).
@@ -38,6 +39,33 @@ or mutating the data directory.
 ## Commands
 
 **[NOTE]** `ls` and `rm` are aliases of `list` and `remove` — they are NOT separate commands. `gui` is an alias of `webui`.
+
+### `ai trigger-test --saved [--scope SCOPE] [--seed N] [--repeats N] [--run] [--baseline RUN_ID] [--fail-on-regression] [--json]`
+
+**[SPEC] A14, approved 2026-11-09.** Estimate the scope's saved A7 prompts by
+default; only `--run` contacts the configured provider using existing settings,
+environment credentials and token caps. `--saved` is required. Scope defaults
+to `global`; choose one scope (`all` is refused). At most 120 prompts and 1–5
+repeats; missing expected skills are errors. Seed defaults to 0 and accepts an
+initial integer 0–4294967295; each repeat shuffles the sorted listing using
+`seed + repeat_index`. This controls local order, not provider determinism.
+
+`--baseline` pins an existing retained run; otherwise the newest modified
+saved-prompt trigger run is considered (ID order breaks ties). A requested
+`--fail-on-regression` requires `--run` and complete matching scope, prompt,
+provider/model/endpoint, seed, repeats and routing-version evidence before any
+request. Listing changes are allowed and disclosed. Integer hits/answers are
+recomputed, including expected-none prompts. A measured decrease fails the
+requested gate; incomplete current answers fail with or without that flag.
+Missing, incompatible, legacy or damaged baselines cannot pass the gate.
+
+JSON is a versioned `{schema_version: 1, command: "ai trigger-test", status,
+result, comparison}` envelope; errors use `{error: {code, message}}`. It includes
+prompt text, listing snapshots and fingerprints, so keep artifacts/logs private.
+No credential argument, skill write, Store method or index initialization is
+added. Exit codes remain 0/1/2/130. Argparse usage errors remain text on stderr.
+Detailed states, limits and private-artifact CI recipe:
+@docs/42-ai-cli-ci-2026-11-09.md.
 
 ### `init [--json]`
 Create the data directory layout and initialize the SQLite index.

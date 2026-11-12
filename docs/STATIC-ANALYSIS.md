@@ -67,6 +67,16 @@ line numbers are intentionally not the identity because source lines move.
 
 ## Review policy
 
+**[NOTE] 2026-11-09 AI review.** Bandit 1.9.4 found two existing low-severity
+AI findings while verifying A14. `_post` now assigns the empty detail explicitly
+when reading an HTTP error body fails, preserving the HTTP-status fallback
+without an empty exception handler (B110). `_render_listing` uses seeded
+`random.Random` deliberately for repeatable experimental permutations, never
+for keys, identifiers or security choices; B311 has a named local disposition.
+`tests/test_ai_cli.py` verifies repeated request ordering, and provider error
+handling remains covered by the AI feature contracts. No global skip or
+severity threshold was introduced.
+
 **[SPEC]** A future Bandit finding must be read in the full owning function and
 its callers. Fix behavior first when the finding exposes silent failure,
 PATH-dependent execution, shell-like input, unbounded work, or missing

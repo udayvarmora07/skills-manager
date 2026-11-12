@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .cli_handlers import (
     COMMANDS,
+    cmd_ai,
     cmd_init,
     cmd_list,
     cmd_create,
@@ -52,6 +53,7 @@ from .cli_output import err as _err
 from .cli_parser import build_parser as _build_parser
 from .errors import StoreError
 from .context import bound_store
+from .cli_ai import validate_args as _validate_ai_args
 
 __all__ = [
     "EXIT_OK",
@@ -59,6 +61,7 @@ __all__ = [
     "EXIT_USAGE",
     "EXIT_INTERRUPT",
     "COMMANDS",
+    "cmd_ai",
     "build_parser",
     "main",
     "cmd_init",
@@ -112,6 +115,7 @@ def _run(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    _validate_ai_args(parser, args)
     if not getattr(args, "func", None):
         parser.print_help()
         return EXIT_USAGE

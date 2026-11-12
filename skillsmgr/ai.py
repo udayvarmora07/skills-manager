@@ -513,7 +513,7 @@ def _post(url: str, headers: dict, body: dict, timeout: float) -> dict:
         try:
             detail = _error_detail(exc.read(64_000))
         except Exception:  # noqa: BLE001 - the status alone is still a clean answer
-            pass
+            detail = ""
         hint = {401: "the key was rejected", 403: "the key is not allowed to use this model",
                 404: "the model or endpoint was not found", 429: "rate limited or out of credit"
                 }.get(exc.code, "the provider returned an error")

@@ -8,6 +8,96 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-12 — Interrupted-session verification resumed
+
+**[NOTE]** The task branch and all AI/automation changes survived the interrupted
+session. Temporary verification logs did not, so final gates were rerun
+against the current tree with evidence under this worktree's Git metadata
+(`codex-verification/ai-2026-11-12`). No additional paid agent measurement is
+needed to verify the retained synthetic study. Hosted CI and publication remain
+separate from local verification.
+
+**[NOTE] Final current-tree verification.** Python 3.11–3.14 each passed
+1,889 tests with no skips, using the separate `skills-ref==0.1.1` oracle
+environment. The shared AI runner passed 83 focused tests and retained-evidence
+checks. Both Store/web smokes, Python compilation, frontend JavaScript syntax,
+docs, design tokens, pinned Ruff 0.16.8 and Bandit 1.9.4 passed. Complexity:
+1,233 measured functions across 45 files; no original budget or threshold raised.
+The hash-locked build produced wheel and sdist, both passed package-data checks,
+and the shared isolated installed-wheel probe passed. Exact wheel Python sources
+match this tree; developer tools and study evidence are excluded from artifacts.
+
+**[NOTE]** Hostile review was repeated against the final diff, including bounded
+Unicode artifacts, missing/corrupt/incomplete observations, snapshot consistency,
+credential isolation and subprocess cleanup. The inherited cross-run daily-cap
+reservation gap remains documented. No broader native-fidelity claim, macOS or
+Windows execution, hosted CI run, remote update, merge or release is claimed.
+The native measurement remains the recorded two-case synthetic smoke study.
+
+## 2026-11-10 — Repeat AI verification automation
+
+**[SPEC]** `python3 tools/verify_ai.py` repeats the free AI contracts and verifies
+the retained study's exact hashes, joins and agreement accounting. `--artifact
+WHEEL` installs the exact wheel offline in a temporary virtual environment and
+checks the installed CLI's estimate, baseline, failed regression and absence of
+SQLite initialization using a fake provider. The subprocess environment excludes
+ambient credentials, HOME is temporary, imports must come from the venv, and
+process groups have time/output bounds and cleanup. Guide:
+@docs/43-ai-verification-automation-2026-11-10.md.
+
+**[SPEC]** Existing CI jobs share this runner: the unit matrix checks saved
+evidence/no-send behavior; the package job probes the exact wheel before upload;
+the pinned Ruff gate includes the new tools. Manual workflow dispatch is enabled,
+superseded PR runs are cancelled, and unit/package jobs have explicit deadlines.
+Read-only permissions, full-SHA action pins and hash-locked build tools remain.
+No new job duplicates the full matrix. Paid native-agent runs stay attended;
+ordinary CI uses fake providers/executables and no provider credentials.
+
+**[NOTE]** The shared local command passed 83 focused tests and evidence checks;
+46 CI/docs contracts passed. New fake-process regressions prove failure and
+diagnostic propagation, credential isolation and timeout descendant cleanup.
+Final full-matrix/artifact results are recorded in the 2026-11-12 entry above.
+
+## 2026-11-09 — Approved A14 CLI/CI and attended fidelity smoke study
+
+**[SPEC]** The maintainer instructed starting both remaining AI tasks, approving
+the proposed minimal CLI surface under locked constraint 5. `ai trigger-test
+--saved` defaults to an estimate; only `--run` sends. The JSON envelope is
+versioned, listing/prompt/endpoint fingerprints and listing snapshots are saved,
+and seed controls listing order rather than provider determinism. A gated run
+requires complete matching baseline evidence before sending and uses that same
+prompt/listing/configuration snapshot for the actual run. Comparisons recompute
+integer hits/answers, include near-miss losses, and reject missing, partial,
+legacy or incompatible baselines. No Store method, schema or runtime dependency
+was added. Contract and CI recipe: @docs/42-ai-cli-ci-2026-11-09.md.
+
+**[NOTE]** Review found a preflight/send race, permissive linked prompt reads,
+unbounded history reads and corrupt-history fallback. Red-first regressions
+now cover these; artifact reads are bounded regular files, private AI directory
+links are refused, and malformed automatic-baseline candidates fail closed.
+Complexity helpers reduce existing budgets; none are raised. Full-matrix checks
+also updated the intentional command-inventory assertion for the approved
+surface and exposed Linux returning ESRCH, as well as ENOENT, when the fake
+descendant is reaped during a `/proc` status read. Both mean the process is gone;
+the live-child assertion is unchanged.
+
+**[NOTE]** Boundary review reproduced a self-produced unreadable artifact when
+500 prompts or 600 full descriptions contain non-BMP Unicode: ASCII-escaped
+JSON exceeds the initial 2 MiB read bound. The 16 MiB bound covers those
+supported limits, rejects oversize files before allocation and caps descriptor
+reads against concurrent growth. A real serialization round trip covers both
+maxima. The fidelity harness also verifies new A14 listing fingerprints while
+still marking the uncaptured native listing as unknown.
+
+**[NOTE]** A present-maintainer Claude CLI smoke study observed successful Skill
+events matching the simulator in both synthetic cases (2/2, no inconclusive or
+multiple-load cases). It used existing native login and a CLI simulator adapter,
+with project-only settings and approximate $0.10 per-call caps. It did not use
+the product HTTP transport. The tiny sample does not establish normal-agent
+fidelity. Method, costs, reproducible guarded script and sanitized evidence:
+@docs/41-ai-fidelity-study-2026-11-09.md. Verification is recorded in this entry
+and the newest automation entry.
+
 ## 2026-11-09 — Pre-push fidelity cleanup test race
 
 **[NOTE]** The fresh Python 3.11 suite exposed a check-then-read race in the

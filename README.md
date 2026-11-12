@@ -173,7 +173,18 @@ install or edit, and are never written to SQLite.
 
 ## CLI reference
 
-41 invocable names: 28 top-level commands + 10 subcommands (7 `trash`/`templates`/`db` actions and 3 `update` actions) + 3 `ls`/`rm`/`gui` aliases. Exit codes: `0` ok · `1` error · `2` usage · `130` interrupt. `--json` on data commands.
+AI routing checks default to an estimate: `skills-mgr ai trigger-test --scope
+claude-code --saved --json`. Add `--run` to send through the configured AI
+provider. CI can pin `--baseline RUN_ID` and request `--fail-on-regression`;
+seed controls listing order and model results may vary. See the
+[AI CLI/CI contract](docs/42-ai-cli-ci-2026-11-09.md) for setup, private prompt
+artifacts, baseline requirements and exit codes.
+
+Repeat the free AI checks locally with `python3 tools/verify_ai.py`; the same
+runner verifies saved evidence and the exact installed wheel in CI. See the
+[automation guide](docs/43-ai-verification-automation-2026-11-10.md).
+
+43 invocable names: 29 top-level commands + 11 subcommands (7 `trash`/`templates`/`db` actions, 3 `update` actions and 1 AI action) + 3 `ls`/`rm`/`gui` aliases. Exit codes: `0` ok · `1` error · `2` usage · `130` interrupt. `--json` on data commands.
 
 Full surface: [`docs/03-cli-surface.md`](docs/03-cli-surface.md).
 

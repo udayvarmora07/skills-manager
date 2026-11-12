@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- Approved AI CLI/CI routing checks: `ai trigger-test --saved` defaults to a
+  no-send estimate, records versioned JSON provenance and listing snapshots,
+  and can fail on an observed regression against a compatible complete baseline.
+  Seed controls listing order; provider answers can vary.
+- Guarded developer fidelity study reproduction with sanitized two-case native
+  Claude Skill-event evidence. The small synthetic study does not establish
+  general fidelity or validate the product's HTTP provider transport.
+- Shared free AI verification runner for local checks and existing CI jobs,
+  including retained-evidence validation and an isolated exact-wheel CLI probe
+  with a fake provider. Manual workflow dispatch is available; CI needs no key.
+
 - Read-only Codex native skill declarations using stdlib TOML; Python >=3.11
   is now required. Agent-scope removals can be restored from v2 Recovery.
 - Read-only inspection of skill directory links into another managed agent

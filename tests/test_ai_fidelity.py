@@ -1,5 +1,6 @@
 """Development fidelity harness: fake executables only."""
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -64,6 +65,22 @@ class FidelityTests(unittest.TestCase):
             self.run.write_text(json.dumps(value))
             with self.subTest(value=value), self.assertRaises(fidelity.FidelityError):
                 fidelity.execute(self.base)
+
+    def test_a14_listing_snapshot_is_verified_without_claiming_native_equivalence(self):
+        result = json.loads(self.run.read_text())
+        listing = [{"name": "demo", "description": "Use for demo tasks"}]
+        digest = hashlib.sha256(json.dumps(listing, sort_keys=True, ensure_ascii=True,
+                                          separators=(",", ":")).encode()).hexdigest()
+        result.update(listing_snapshot=listing, provenance={"listing_sha256": digest})
+        self.run.write_text(json.dumps(result))
+        report = fidelity.execute(self.base)
+        self.assertFalse(report["simulation"]["listing_snapshot_unavailable"])
+        self.assertTrue(report["simulation"]["native_listing_snapshot_unavailable"])
+        self.assertEqual(report["simulation"]["listing_sha256"], digest)
+        result["listing_snapshot"][0]["description"] = "changed"
+        self.run.write_text(json.dumps(result))
+        with self.assertRaises(fidelity.FidelityError):
+            fidelity.execute(self.base)
 
     def test_stream_requires_successful_tool_result_and_terminal(self):
         invocation = {'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': 'one',
@@ -182,7 +199,7 @@ print(json.dumps({'type':'result','subtype':'success','is_error':False}))
         status = Path('/proc') / str(pid) / 'status'
         try:
             child_status = status.read_text()
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             return  # Reaping may remove the entry before the status read.
         self.assertIn('State:\tZ', child_status)
 
@@ -227,3 +244,57 @@ print(json.dumps({'type':'result','subtype':'success','is_error':False}))
 
     def test_manifest_prunes_dev_harness(self):
         self.assertIn('prune tools/ai_fidelity', (PATH.parents[2] / 'MANIFEST.in').read_text())
+
+class FidelityStudyTests(unittest.TestCase):
+    def test_study_dry_run_and_partial_consent_never_spawn(self):
+        study_path = PATH.parent / 'study_fixture.py'
+        study_spec = importlib.util.spec_from_file_location('fidelity_study', study_path)
+        study = importlib.util.module_from_spec(study_spec)
+        study_spec.loader.exec_module(study)
+        with patch.object(study.subprocess, 'Popen', side_effect=AssertionError('must not spawn')):
+            self.assertEqual(study.main([]), 0)
+            self.assertEqual(study.main(['--run-agent']), 2)
+            self.assertEqual(study.main(['--maintainer-present']), 2)
+
+    @unittest.skipUnless(os.name == 'posix', 'process groups require POSIX')
+    def test_simulator_fake_failures_are_bounded_and_redacted(self):
+        study_spec = importlib.util.spec_from_file_location('fidelity_study_failure', PATH.parent / 'study_fixture.py')
+        study = importlib.util.module_from_spec(study_spec)
+        study_spec.loader.exec_module(study)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / 'claude'
+            cases = [
+                ('import sys; print("sensitive-value", file=sys.stderr); sys.exit(1)', 'failed'),
+                ('import time; time.sleep(5)', 'timeout'),
+                ('print("x" * 1200000)', 'output-limit'),
+                ('print("[]")', 'invalid'),
+                ('print("{}")', 'invalid'),
+                ('import json; print(json.dumps({"is_error": False, "subtype": "success", "result": "{\\"answers\\": 42}", "modelUsage": {}}))', 'invalid'),
+            ]
+            for script, reason in cases:
+                fake.write_text('#!/usr/bin/env python3\n' + script + '\n')
+                fake.chmod(stat.S_IRWXU)
+                with self.subTest(reason=reason), patch.dict(os.environ, {'PATH': directory + os.pathsep + os.environ['PATH']}), \
+                     patch.object(study, 'SIM_TIMEOUT', 0.25):
+                    with self.assertRaises(ValueError) as error:
+                        study.CliRouter(root).ask_json('system', 'prompt', max_output=150)
+                    self.assertIn(reason, str(error.exception))
+                    self.assertNotIn('sensitive-value', str(error.exception))
+
+    @unittest.skipUnless(os.name == 'posix', 'process groups require POSIX')
+    def test_simulator_accepts_valid_terminal_response(self):
+        study_spec = importlib.util.spec_from_file_location('fidelity_study_success', PATH.parent / 'study_fixture.py')
+        study = importlib.util.module_from_spec(study_spec)
+        study_spec.loader.exec_module(study)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / 'claude'
+            response = {'subtype': 'success', 'is_error': False, 'result': '{"answers": []}',
+                        'modelUsage': {'fake-model': {}}, 'total_cost_usd': 0.0}
+            fake.write_text('#!/usr/bin/env python3\nimport sys\nsys.stdin.read()\nprint(' + repr(json.dumps(response)) + ')\n')
+            fake.chmod(stat.S_IRWXU)
+            with patch.dict(os.environ, {'PATH': directory + os.pathsep + os.environ['PATH']}):
+                router = study.CliRouter(root)
+                self.assertEqual(router.ask_json('system', 'prompt', max_output=150), {'answers': []})
+                self.assertEqual(router.usage['models'], ['fake-model'])

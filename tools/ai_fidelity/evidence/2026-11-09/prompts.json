@@ -1,0 +1,1 @@
+{"scope": "claude-code", "prompts": [{"id": "p1", "text": "Write a haiku about autumn leaves.", "expected": "haiku-poem", "split": null}, {"id": "p2", "text": "Convert 12 meters to feet.", "expected": "unit-conversion", "split": null}]}

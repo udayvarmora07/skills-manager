@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-MAX_INPUT_BYTES = 4 * 1024 * 1024
+MAX_INPUT_BYTES = 16 * 1024 * 1024
 MAX_STDOUT_BYTES = 1024 * 1024
 MAX_STDERR_BYTES = 64 * 1024
 MAX_CASES = 20
@@ -106,6 +106,25 @@ def _valid_provenance(model, provider, started) -> bool:
             and isinstance(started, str) and bool(_DATE.fullmatch(started)))
 
 
+def _listing_meta(run: dict) -> dict:
+    snapshot = run.get('listing_snapshot')
+    meta = {'listing_snapshot_unavailable': snapshot is None,
+            'native_listing_snapshot_unavailable': True}
+    if snapshot is None:
+        return meta
+    if not isinstance(snapshot, list) or not 1 <= len(snapshot) <= 600:
+        raise FidelityError('simulation listing snapshot is invalid')
+    if any(not isinstance(item, dict) or not isinstance(item.get('name'), str)
+           or not isinstance(item.get('description'), str) for item in snapshot):
+        raise FidelityError('simulation listing entries are invalid')
+    encoded = json.dumps(snapshot, sort_keys=True, ensure_ascii=True, separators=(',', ':')).encode()
+    digest = hashlib.sha256(encoded).hexdigest()
+    provenance = run.get('provenance')
+    if not isinstance(provenance, dict) or provenance.get('listing_sha256') != digest:
+        raise FidelityError('simulation listing fingerprint does not match')
+    return {**meta, 'listing_sha256': digest}
+
+
 def _simulation_meta(run: dict) -> dict:
     meta = run.get('run')
     if (run.get('kind') != 'trigger-test' or run.get('scope') != 'claude-code'
@@ -118,7 +137,7 @@ def _simulation_meta(run: dict) -> dict:
     if not _valid_provenance(model, provider, started):
         raise FidelityError('simulation provenance is invalid')
     return {'scope': 'claude-code', 'model': model, 'provider': provider, 'started': started,
-            'listing_snapshot_unavailable': True}
+            **_listing_meta(run)}
 
 
 def _joined(prompt_set: dict, run: dict) -> tuple[list[dict], dict]:

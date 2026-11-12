@@ -35,6 +35,31 @@ def _port_number(value: str) -> int:
     return port
 
 
+def _seed_number(value: str) -> int:
+    try:
+        seed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("seed must be a whole number from 0 to 4294967295") from None
+    if not 0 <= seed <= 4_294_967_295:
+        raise argparse.ArgumentTypeError("seed must be from 0 to 4294967295")
+    return seed
+
+
+def _add_ai_parser(sub, commands) -> None:
+    ai = sub.add_parser("ai", help="estimate or run advisory AI checks")
+    ai_sub = ai.add_subparsers(dest="ai_command", metavar="ACTION")
+    p = ai_sub.add_parser("trigger-test", help="test saved routing prompts (no send without --run)")
+    add_scope_arg(p)
+    p.add_argument("--saved", action="store_true", required=True, help="use this scope's saved regression prompts")
+    p.add_argument("--repeats", type=int, choices=range(1, 6), default=1)
+    p.add_argument("--seed", type=_seed_number, default=0, help="listing-order seed; provider output can vary")
+    p.add_argument("--run", action="store_true", help="send prompts and listing to the configured provider")
+    p.add_argument("--baseline", metavar="RUN_ID", help="compare this saved run; default: latest saved-prompt run")
+    p.add_argument("--fail-on-regression", action="store_true", help="with --run: require a comparable baseline and fail on observed loss")
+    p.add_argument("--json", action="store_true", help="versioned JSON evidence (includes prompt text)")
+    p.set_defaults(func=commands["cmd_ai"])
+
+
 def build_parser(commands) -> argparse.ArgumentParser:
     """Build the ``skills-mgr`` parser, wiring ``commands`` handlers.
 
@@ -64,6 +89,7 @@ def build_parser(commands) -> argparse.ArgumentParser:
     parser.set_defaults(color=None)
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+    _add_ai_parser(sub, commands)
 
     p = sub.add_parser("init", help="create the data directories and database")
     p.add_argument("--json", action="store_true")

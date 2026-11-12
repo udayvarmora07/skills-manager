@@ -17,6 +17,7 @@ reviewed edit path (snapshot + Undo); nothing here writes a skill.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -28,6 +29,7 @@ from . import scopes
 from .ai import AiError, AiRun, untrusted_block
 from .atomic_io import atomic_write_text, mutation_lock
 from .path_safety import mkdir_private
+from .file_reads import read_regular_file
 from .validator import validate_skill_name
 
 DESCRIPTION_CAP = 1536          # Claude Code's per-entry listing cap (docs/34)
@@ -41,6 +43,7 @@ MAX_BODY_CHARS = 4_000
 MAX_CANDIDATES = 3
 MAX_DESCRIPTION = 1024
 KEEP_RUNS = 50
+MAX_AI_ARTIFACT_BYTES = 16 * 1024 * 1024
 NONE = "(none)"
 
 
@@ -99,7 +102,8 @@ def build_listing(scope_id: str) -> dict:
 
 def _render_listing(entries: list[dict], overrides: dict, order_seed: int) -> str:
     ordered = list(entries)
-    random.Random(order_seed).shuffle(ordered)   # position-bias control (docs/39 §5)
+    # Reproduce listing permutations for a routing experiment, not a security decision.
+    random.Random(order_seed).shuffle(ordered)  # nosec B311 - experimental order control (docs/39 section 5).
     lines = []
     for entry in ordered:
         description = overrides.get(entry["name"], entry["description"])
@@ -343,31 +347,86 @@ def _egress(listing: dict, prompts: int, extra: list[str], run: AiRun) -> list[s
             f"{prompts} test prompts go with them."] + extra
 
 
-def trigger_test(data_dir: Path, payload: dict) -> dict:
-    """Run (or estimate) the trigger test described in the module docstring."""
+def _fingerprint(value) -> str:
+    """Hash ordered JSON data independently of dictionary insertion order."""
+    encoded = json.dumps(value, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _trigger_seed(value) -> int:
+    if value is None:
+        return 0
+    if type(value) is not int or not 0 <= value <= 4_294_967_295:
+        raise AiError("seed must be an integer from 0 to 4294967295", "ai-input")
+    return value
+
+
+def _trigger_provenance(listing: dict, prompts: list, run: AiRun) -> dict:
+    return {"version": 1, "router": "trigger-test-v1",
+            "prompt_sha256": _fingerprint([[p["text"], p["expected"]] for p in prompts]),
+            "listing_sha256": _fingerprint(listing["entries"]),
+            "endpoint_sha256": _fingerprint(run.config["base_url"])}
+
+
+def _compare_saved_result(payload: dict, source: str) -> bool:
+    return source == "saved" and bool(payload.get("compare_previous", True))
+
+
+def _trigger_routes(run, listing, prompts, repeats, seed):
+    return [_route(run, listing, prompts, {}, seed + offset) for offset in range(repeats)]
+
+
+def _preflight_trigger_budget(run, listing, prompts, repeats, seed):
+    """Estimate the captured route requests before a CLI run can spend."""
+    if run.estimate_only:
+        return
+    estimated_before = run.estimated_input
+    run.estimate_only = True
+    try:
+        _trigger_routes(run, listing, prompts, repeats, seed)
+        if run._day_used + run.input_tokens + run.estimated_input > run.config["max_day_tokens"]:
+            raise AiError("the planned run exceeds today's AI token cap", "ai-budget", 409)
+    finally:
+        run.estimate_only = False
+        run.estimated_input = estimated_before
+
+
+def trigger_test(data_dir: Path, payload: dict, *, preflight=None) -> dict:
+    """Run one input/configuration snapshot; saved-prompt preflight sends nothing."""
     payload = payload if isinstance(payload, dict) else {}
     listing = build_listing(payload.get("scope"))
+    listing["entries"] = sorted(listing["entries"], key=lambda entry: entry["name"])
     names = {e["name"] for e in listing["entries"]}
     estimate = bool(payload.get("estimate"))
     run = AiRun(data_dir, "trigger-test", estimate_only=estimate)
     repeats = _repeats(payload.get("repeats"))
+    seed = _trigger_seed(payload.get("seed"))
     raw, source = _trigger_prompts(data_dir, run, listing, payload)
     prompts = normalize_prompts(raw, names)
-    passes = [_route(run, listing, prompts, {}, seed) for seed in range(repeats)]
     result = {
         "kind": "trigger-test", "scope": listing["scope"],
         "listed": len(listing["entries"]), "hidden": listing["hidden"],
         "over_cap": listing["over_cap"], "repeats": repeats,
+        "seed": seed, "listing_snapshot": listing["entries"],
+        "provenance": _trigger_provenance(listing, prompts, run),
         "generated_prompts": source == "generated", "prompt_source": source,
         "egress": _egress(listing, len(prompts), [], run),
         "run": run.label(),
     }
+    if preflight is not None:
+        preflight(result)
+        _preflight_trigger_budget(run, listing, prompts, repeats, seed)
+    passes = _trigger_routes(run, listing, prompts, repeats, seed)
+    result["run"] = run.label()
     if estimate:
         result["prompt_count"] = len(prompts)
         return result
+    return _finish_trigger_run(data_dir, payload, result, listing, prompts, passes, source)
+
+
+def _finish_trigger_run(data_dir, payload, result, listing, prompts, passes, source):
     result.update(_summarize(listing, prompts, passes))
-    result["run"] = run.label()
-    if source == "saved":
+    if _compare_saved_result(payload, source):
         result["compared_with"], result["changes"] = _compare_with_previous(data_dir, result)
     result["run_id"] = _save_run(data_dir, result)
     return result
@@ -376,12 +435,7 @@ def trigger_test(data_dir: Path, payload: dict) -> dict:
 def _trigger_prompts(data_dir: Path, run: AiRun, listing: dict, payload: dict) -> tuple[list, str]:
     """Prompts for one trigger test: given, saved regression set, or generated."""
     if payload.get("saved"):
-        names = {e["name"] for e in listing["entries"]}
-        saved = [p for p in read_prompt_set(data_dir, listing["scope"])["prompts"]
-                 if p["expected"] is None or p["expected"] in names]
-        if not saved:
-            raise AiError("no saved regression prompts for this agent yet", "ai-input")
-        return saved, "saved"
+        return _saved_trigger_prompts(data_dir, listing, payload.get("strict_saved")), "saved"
     if payload.get("prompts"):
         return payload["prompts"], "given"
     targets = payload.get("generate_for") or []
@@ -393,10 +447,34 @@ def _trigger_prompts(data_dir: Path, run: AiRun, listing: dict, payload: dict) -
                             near_misses=payload.get("near_misses") or 0), "generated"
 
 
+def _saved_trigger_prompts(data_dir: Path, listing: dict, strict: bool) -> list:
+    names = {e["name"] for e in listing["entries"]}
+    saved = read_prompt_set(data_dir, listing["scope"])["prompts"]
+    if not strict:
+        saved = [p for p in saved if p["expected"] is None or p["expected"] in names]
+    if not saved:
+        raise AiError("no saved regression prompts for this agent yet", "ai-input")
+    return saved
+
+
 # -- regression prompt sets (A7) ---------------------------------------------
 
 MAX_SAVED_PER_SKILL = 20
 MAX_SAVED = 500
+
+
+def _read_ai_json(path: Path) -> dict:
+    """Bound private AI artifacts and refuse linked files or AI subdirectories."""
+    if path.parent.is_symlink() or path.parent.parent.is_symlink():
+        raise AiError("AI artifact directories must not be symlinks", "ai-input")
+    # ASCII-escaped JSON for 600 full descriptions can exceed 11 MiB.
+    if path.lstat().st_size > MAX_AI_ARTIFACT_BYTES:
+        raise AiError("AI artifact exceeds the 16 MiB limit", "ai-input")
+    raw = read_regular_file(path, MAX_AI_ARTIFACT_BYTES, follow_symlinks=False)
+    data = json.loads(raw.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise AiError("AI artifact must be a JSON object", "ai-input")
+    return data
 
 
 def _prompt_set_path(data_dir: Path, scope_id: str) -> Path:
@@ -409,13 +487,22 @@ def read_prompt_set(data_dir: Path, scope_id: str) -> dict:
     """The saved regression prompts for one scope (empty when none)."""
     path = _prompt_set_path(data_dir, scope_id)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _read_ai_json(path)
     except FileNotFoundError:
         return {"scope": scope_id, "prompts": []}
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         raise AiError("the saved prompt set cannot be read; delete it and save again", "ai-input") from None
-    prompts = [p for p in data.get("prompts", []) if isinstance(p, dict)
-               and isinstance(p.get("text"), str) and (p.get("expected") is None or isinstance(p.get("expected"), str))]
+    return _decoded_prompt_set(data, scope_id)
+
+
+def _decoded_prompt_set(data, scope_id: str) -> dict:
+    if not isinstance(data, dict) or not isinstance(data.get("prompts"), list):
+        raise AiError("the saved prompt set must contain a prompts list", "ai-input")
+    prompts = data["prompts"]
+    if len(prompts) > MAX_SAVED or any(not isinstance(p, dict) or not isinstance(p.get("text"), str)
+                                     or not (p.get("expected") is None or isinstance(p.get("expected"), str))
+                                     for p in prompts):
+        raise AiError("the saved prompt set contains invalid prompts", "ai-input")
     return {"scope": scope_id, "prompts": [{"text": p["text"], "expected": p.get("expected")} for p in prompts]}
 
 
@@ -682,8 +769,8 @@ def _run_mtime(path: Path) -> float:
 
 def _run_summary(path: Path) -> dict | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, UnicodeError):
+        data = _read_ai_json(path)
+    except (OSError, ValueError, RecursionError, AiError):
         return None
     if not isinstance(data, dict) or not isinstance(data.get("run", {}), dict):
         return None
@@ -712,9 +799,9 @@ def read_run(data_dir: Path, run_id: str) -> dict:
         raise AiError("unknown run id", "ai-input")
     path = _runs_dir(data_dir) / f"{run_id}.json"
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return _read_ai_json(path)
     except FileNotFoundError:
         raise AiError("that run no longer exists", "ai-not-found", 404) from None
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         raise AiError("that run file cannot be read", "ai-input") from None
 

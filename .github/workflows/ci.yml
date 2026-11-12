@@ -14,10 +14,15 @@ permissions:
   contents: read
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   static-correctness:
@@ -33,10 +38,11 @@ jobs:
           src: >-
             skillsmgr tests smoke_store.py smoke_web.py browser_harness.py
             desktop_launcher.py check_complexity.py check_docs.py check_package_data.py
-            check_design_tokens.py
+            check_design_tokens.py tools/verify_ai.py tools/ai_fidelity
   unit:
     name: unit (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -52,6 +58,8 @@ jobs:
         run: python3 check_complexity.py
       - name: Unit tests (stdlib only, no deps)
         run: python3 -m unittest discover -s tests
+      - name: AI study evidence and no-send fixture
+        run: python3 tools/verify_ai.py --evidence
 
   adversarial:
     name: adversarial security checks
@@ -74,6 +82,7 @@ jobs:
   package:
     name: package + release-artifact check
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: unit
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — 2026-11-07 reviewed
@@ -88,6 +97,8 @@ jobs:
         run: python3 -m build --no-isolation --wheel --sdist --outdir dist
       - name: Package-data coverage on the exact release artifacts
         run: python3 check_package_data.py --dist-dir dist
+      - name: AI CLI on the exact installed wheel (offline fake provider)
+        run: python3 tools/verify_ai.py --artifact dist/*.whl
       - name: Upload release artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2 — 2026-11-07 reviewed
         with:

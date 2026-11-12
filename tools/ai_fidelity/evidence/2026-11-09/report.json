@@ -1,0 +1,83 @@
+{
+  "agreement": {
+    "by_expected": [
+      {
+        "compared": 1,
+        "inconclusive": 0,
+        "matched": 1,
+        "rate": 1.0,
+        "requested": 1,
+        "skill": "haiku-poem"
+      },
+      {
+        "compared": 1,
+        "inconclusive": 0,
+        "matched": 1,
+        "rate": 1.0,
+        "requested": 1,
+        "skill": "unit-conversion"
+      }
+    ],
+    "compared": 2,
+    "matched": 2,
+    "metric": "first-successful-skill",
+    "rate": 1.0
+  },
+  "cases": [
+    {
+      "actual": "haiku-poem",
+      "agree": true,
+      "expected": "haiku-poem",
+      "multiple": false,
+      "observed_model": "claude-haiku-5-5",
+      "observed_skills": [
+        "haiku-poem"
+      ],
+      "prompt_sha256": "c1952c78349c65bd81f5dcf5561dbd54f90e9a5a344190bbba66dfae2cca0e84",
+      "reason": null,
+      "simulated": "haiku-poem",
+      "status": "conclusive"
+    },
+    {
+      "actual": "unit-conversion",
+      "agree": true,
+      "expected": "unit-conversion",
+      "multiple": false,
+      "observed_model": "claude-haiku-5-5",
+      "observed_skills": [
+        "unit-conversion"
+      ],
+      "prompt_sha256": "07606cba3202d4aa3a89b0cd6e05418d24a8a3edfc5fbffa0afa4b29c6a71f55",
+      "reason": null,
+      "simulated": "unit-conversion",
+      "status": "conclusive"
+    }
+  ],
+  "coverage": {
+    "available": 2,
+    "conclusive": 2,
+    "inconclusive": 0,
+    "multiple": 0,
+    "requested": 2,
+    "unselected": 0
+  },
+  "policy": {
+    "agent_model_requested": "haiku",
+    "max_budget_usd_per_call": 0.1,
+    "max_turns": 2,
+    "nominal_total_budget_usd": 0.2,
+    "notice": "Budget is approximate and can be exceeded; this is not a sandbox. Hooks, configuration and dynamic skills may run. Saved listing equivalence and default-agent fidelity are unverified.",
+    "timeout_seconds": 90.0
+  },
+  "schema": 1,
+  "simulation": {
+    "listing_snapshot_unavailable": true,
+    "model": "haiku",
+    "prompt_set_sha256": "689478e1307680ec906bb7b3c66dc706975f364dba9775cb7dd942f7d493ab7a",
+    "provider": "claude-cli-adapter",
+    "run_sha256": "d883349c691d62185f9965bb68c210daddfd591ec9e45f38bae1d1788c45a42b",
+    "scope": "claude-code",
+    "started": "2026-11-09T18:22:50Z"
+  },
+  "status": "complete"
+}

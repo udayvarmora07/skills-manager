@@ -43,9 +43,10 @@ A conclusive case requires a successful terminal event and a matching successful
 Skill call counts as none. Failed, missing, malformed, timed-out or oversized
 streams are inconclusive and excluded from agreement; multiple calls are shown in
 order. Agreement compares the first successful Skill call, not the full set of loaded skills.
-The report counts multiple-call cases separately. Model prose is never evidence. The saved simulator does not contain a
-listing snapshot, so the harness cannot establish that either the listing or the
-agent configuration matches the earlier simulation. These comparisons alone do
+The report counts multiple-call cases separately. Model prose is never evidence.
+Legacy saved simulations do not contain a listing snapshot. A14 snapshots are
+fingerprint-checked and reported when present; the native agent's listing and
+configuration are still not captured for equality checks. These comparisons alone do
 not establish fidelity under normal use.
 
 The JSON report contains hashes rather than prompt text, and does not retain raw

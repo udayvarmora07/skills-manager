@@ -16,7 +16,18 @@ Entry point for `python3 -m skillsmgr`; delegates to `cli.main()`.
 
 ## `cli.py`, `cli_parser.py`, `cli_handlers.py`
 
-The stable `cli.py` adapter exposes `main()`, `build_parser()`, the public `COMMANDS` table, command handler names, and exit constants. `cli_parser.py` owns argparse construction (`prog="skills-mgr"`): 28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names (see @docs/03-cli-surface.md). `cli_handlers.py` owns command behavior and validates names/data before filesystem work (it also rejects a `--metadata` key containing a control character with a clean exit 1, and both edit paths fail closed on an unparseable document); `cli_output.py` owns JSON/errors/table rendering plus `sanitize_text()`/`truncate()`/`render_table()`, which strip C0/C1/DEL, Unicode line separators, format characters, and lone surrogates from untrusted display fields (`--json` and `view --raw` are deliberately exempt). Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. Public parser/handler adapters preserve existing imports and contract tests.
+The stable `cli.py` adapter exposes `main()`, `build_parser()`, the public `COMMANDS` table, command handler names, and exit constants. `cli_parser.py` owns argparse construction (`prog="skills-mgr"`): 29 top-level commands + 11 subcommands (7 trash/templates/db actions, 3 update actions and 1 AI action) + 3 aliases (`ls`, `rm`, `gui`) = 43 invocable names (see @docs/03-cli-surface.md). `cli_handlers.py` owns command behavior and validates names/data before filesystem work (it also rejects a `--metadata` key containing a control character with a clean exit 1, and both edit paths fail closed on an unparseable document); `cli_output.py` owns JSON/errors/table rendering plus `sanitize_text()`/`truncate()`/`render_table()`, which strip C0/C1/DEL, Unicode line separators, format characters, and lone surrogates from untrusted display fields (`--json` and `view --raw` are deliberately exempt). Exit codes: 0 ok / 1 error / 2 usage / 130 interrupt. Public parser/handler adapters preserve existing imports and contract tests.
+
+## `cli_ai.py`
+
+**[SPEC] Approved A14 CLI/CI.** `cmd_ai` implements the `ai trigger-test --saved`
+handler behind the stable CLI adapter. It defaults to no-send estimation and
+uses `ai_skills.trigger_test` with a baseline preflight over the same captured
+inputs/configuration used for sending. It emits schema-versioned JSON or
+sanitized human text and recomputes complete integer routing counts for a
+conservative, optional regression gate. Prompt, model/endpoint, seed/repeats
+and routing-version mismatches cannot pass; listing changes are disclosed.
+It writes no skill or SQLite state. Contract: @docs/42-ai-cli-ci-2026-11-09.md.
 
 ## `webapp.py`
 
@@ -628,8 +639,21 @@ cases are inconclusive, not no-skill choices. Agreement measures the first
 successful skill choice; multiple loads are reported separately. Reports keep
 hash provenance and skill/model labels, without raw prompts, transcripts or
 stderr. The tool is excluded from distribution artifacts. Its restricted tool
-context and absent historical listing snapshot limit what a future comparison
-can establish; no real-agent fidelity has been measured.
+context and absent historical listing snapshot limit what a comparison can
+establish. The guarded developer `study_fixture.py` reproduction and sanitized
+evidence demonstrate two conclusive synthetic agreements using a native-CLI
+simulator adapter; they do not establish general fidelity or validate the
+product's HTTP transport. Method: @docs/41-ai-fidelity-study-2026-11-09.md.
+
+## `tools/verify_ai.py`
+
+**[SPEC] Development-only repeat automation.** Runs free AI contracts, verifies
+the retained study's exact hashes and recomputed accounting, and optionally
+probes an explicitly supplied wheel from an isolated virtual environment with
+clean HOME/environment and a fake loopback provider. The existing CI unit matrix
+uses its evidence/no-send check and the package job probes the exact built
+wheel before upload. No real credential or native agent is needed. Invocation
+and limits: @docs/43-ai-verification-automation-2026-11-10.md.
 
 ## `evals.py`
 

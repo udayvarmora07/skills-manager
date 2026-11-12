@@ -6,6 +6,17 @@
 
 ## AI assist, bring your own key (2026-11-09)
 
+- [x] Fresh 2026-11-12 close-out: 1,889 tests on every Python 3.11–3.14,
+  no skips with the separate reference oracle; shared AI checks, both smokes,
+  compilation/syntax/static/docs/design gates and exact pinned artifact probe.
+  Durable evidence is under this worktree's Git metadata; full results:
+  @docs/06-progress-log.md.
+
+- [x] Automate repeat AI checks and installed-artifact validation through one
+  shared developer runner and the existing GitHub Actions jobs, following the
+  maintainer's 2026-11-10 request. No unattended paid agent calls. Local/CI
+  instructions: @docs/43-ai-verification-automation-2026-11-10.md.
+
 - [x] Handoff 3.1: compact old usage rows, stop between calls on client closure,
   record partial runs, show Past runs as text, and view/remove saved regression
   prompts with stale-edit protection and full 500-prompt replacement.
@@ -24,10 +35,18 @@
 - [x] A13 conciseness advisor: computed counts and whole-tree source-update review.
 - [x] A12 metadata-only profile suggestions with managed-root confinement and confirmed catalog save.
   Handoff with prompts and acceptance criteria: @docs/40-codex-handoff-2026-11-09.md.
-- [ ] Decide: a `skills-mgr ai …` CLI surface (locked constraint 5).
-- [ ] Measure trigger-test fidelity against a real agent's choices.
+- [x] A14 approved by the maintainer's instruction to start both AI tasks:
+  implement dry-run-first `ai trigger-test --saved`, versioned JSON, seeded
+  listing order and fail-closed observed-regression gating. Verification:
+  @docs/42-ai-cli-ci-2026-11-09.md.
+- [x] Run a bounded real-agent smoke comparison through the signed-in Claude
+  CLI: two conclusive synthetic cases, 2/2 first-skill agreement. Reproduction
+  and sanitized evidence: @docs/41-ai-fidelity-study-2026-11-09.md.
+- [ ] Broader fidelity study with distractors, near misses, repeats and the
+  product's configured HTTP transport; the two-case result does not validate it.
 - [x] Prepare developer fidelity harness with dry-run default, explicit
-  maintainer execution and fake-executable tests; real measurement stays pending.
+  maintainer execution and fake-executable tests; the bounded native smoke
+  measurement is recorded above, with broader fidelity still pending.
 - [x] Fix the fidelity cleanup test's process-status read race found by pre-push
   verification; a reaped child is successful cleanup, while a live child fails.
 - [x] Handoff 3.6 read-only chores: confirm obsolete Dependabot closure and

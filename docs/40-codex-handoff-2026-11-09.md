@@ -143,10 +143,7 @@ Acceptance: tests including a project outside managed roots; browser check.
 
 ### 3.5 Trigger-test fidelity study (needs the maintainer's key and an agent CLI)
 
-**[NOTE] Tooling prepared; live study remains pending.** The developer harness
-and fake-executable tests are implemented. Default dry-run executes no agent.
-No real provider or maintainer agent was run, so docs/39's fidelity uncertainty
-is retained. See @tools/ai_fidelity/README.md before an attended study.
+**[NOTE] Bounded attended smoke study complete.** Two obvious synthetic cases agreed (2/2) using successful native Claude Skill events and a CLI simulator adapter. General fidelity and the product HTTP transport remain unvalidated. Method, reproduction and sanitized evidence: @docs/41-ai-fidelity-study-2026-11-09.md. Default harness execution remains a no-send dry-run.
 
 ```text
 Write tools/ai_fidelity/run.py (dev-only, not packaged): for a saved prompt set,
@@ -192,7 +189,7 @@ deleted or popped. Any later deletion needs the maintainer's explicit yes.
 
 ## 4. Needs a maintainer decision first (prepare a proposal, do not build)
 
-- **`skills-mgr ai …` CLI surface** for the AI features, and a CI mode (A14, fixed seed, machine-readable output). New CLI commands are locked constraint 5.
+- **A14 decision resolved:** the maintainer approved starting the proposed CLI/CI work. `skills-mgr ai trigger-test --saved` is implemented; contract and evidence: @docs/42-ai-cli-ci-2026-11-09.md. Broader CLI additions still require approval under locked constraint 5.
 - **Per-project profiles** that translate one toggle into each agent's native setting (Codex's switch is user-level only and must say so). See @docs/35-open-decisions-resolved-2026-11-07.md.
 - **Microsoft APM `apm.yml` interoperability** instead of a new lockfile.
 - **Stale → archive** with pin, restore and dry run (Hermes-Curator style).
@@ -202,9 +199,7 @@ deleted or popped. Any later deletion needs the maintainer's explicit yes.
 
 ### First decision proposal: minimal AI CLI and CI mode
 
-**[NOTE] Proposed, unapproved and not implemented.** Approve one initial
-`skills-mgr ai trigger-test` surface, reusing the existing A1/A7 engine. Keep
-the other section 4 items pending.
+**[NOTE] Approved and implemented under the maintainer's instruction to start both remaining AI tasks.** The initial `skills-mgr ai trigger-test` surface reuses A1/A7. Its exact shipped contract, preflight, snapshots, baseline rules and tests are in @docs/42-ai-cli-ci-2026-11-09.md. Other section 4 decisions remain pending. The bullets below record the accepted proposal.
 
 - Default to a no-send estimate; require `--run` to contact the configured
   provider. Reuse existing configuration/environment credentials; accept no

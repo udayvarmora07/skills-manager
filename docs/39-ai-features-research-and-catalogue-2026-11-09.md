@@ -54,7 +54,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A11 | Verified drafting: draft a SKILL.md from a brief, then A1 + validate before it can be saved | §2.4 | **Shipped** |
 | A12 | Profile suggester from repo signals | codex #9799, claude-code #30355 | **Shipped** |
 | A13 | Conciseness / splitter advisor (move bulk to `references/`) | claude-code #74473 (210k tokens) | **Shipped** |
-| A14 | CI mode: fixed-seed trigger test with machine-readable output | Sanity on X; skill-linter SARIF | Idea; needs CLI approval |
+| A14 | CI mode: fixed-seed trigger test with machine-readable output | Sanity on X; skill-linter SARIF | **Shipped**; approved CLI/CI contract in @docs/42-ai-cli-ci-2026-11-09.md |
 | — | Transcript mining with a cloud model | Weak demand; very high privacy cost | **Not recommended**; local-model-only if ever |
 | — | Auto-applying any model output | Every pass | **Never** |
 
@@ -66,7 +66,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 - **D-AI-2 providers:** Anthropic, OpenAI, OpenRouter, Gemini (OpenAI-compatible endpoint), Ollama, LM Studio and any custom OpenAI-compatible base URL. Plain `http` only to loopback.
 - **D-AI-3 key storage:** the provider's environment variable wins; otherwise a key typed in the UI is stored in `<data>/ai/settings.json` (0600, directory 0700). It is never returned, logged, exported or written to the ledger; changing the provider **or the endpoint** forgets it, so redirecting the endpoint cannot carry an old key to a new host. No OS keychain yet.
 - **D-AI-4 web routes that spend:** allowed, because the user asked to enter keys in the UI. The loopback binding is the only boundary, stated on the settings page: any local process can reach the server and spend up to the caps. The caps are the mitigation; a per-launch token was judged not to stop a same-user process that can read the page.
-- **D-AI-5 first slice:** A0 + A1 + A2, web UI first. **No CLI command was added** (locked constraint 5); a `skills-mgr ai …` surface awaits approval.
+- **D-AI-5 first slice:** A0 + A1 + A2, web UI first. The first slice added no CLI command. The maintainer subsequently approved A14; `ai trigger-test --saved` is now implemented (see @docs/42-ai-cli-ci-2026-11-09.md).
 - **D-AI-6 budgets:** defaults 300,000 input tokens per run and 2,000,000 per UTC day, user-adjustable (1,000 to 50,000,000). Preflight uses `tokens.count_tokens`; a run over its cap is refused before anything is sent.
 - **D-AI-7 default model:** none. The user chooses; Anthropic suggestions are listed. The result labels name the model, so results from different models are never confused.
 
@@ -91,14 +91,14 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
   closure is detected. Past runs on every AI page lists the latest 20 saved
   runs and opens their full contents as text.
 
-**[?]** The trigger test is a *simulation by the configured model*, not the agent's real router; results are labelled as estimates. Fidelity against a real agent's choices has not been measured.
+**[?]** The trigger test is a *simulation by the configured model*, not the agent's real router; results are labelled as estimates. A bounded native-CLI smoke comparison observed two conclusive synthetic agreements (2/2); general fidelity is unvalidated. It used a CLI simulator adapter rather than the product HTTP transport; method and limits: @docs/41-ai-fidelity-study-2026-11-09.md.
 
-**[NOTE] Handoff 3.5 tooling is prepared, measurement remains pending.**
+**[NOTE] Handoff 3.5 tooling and a bounded smoke study are complete.**
 `tools/ai_fidelity/run.py` consumes a matching saved prompt set and completed
 saved simulation. Its default dry-run makes no subprocess or provider call.
 Only a present maintainer may use both `--run-agent` and
 `--maintainer-present` to start the configured native agent. Tests use fake
-executables exclusively. No maintainer agent or real key was exercised.
+executables; the separately documented attended study used native login without reading or copying keys.
 
 The report counts first-successful-Skill agreement, matching A1's first-choice
 question, with multiple loads disclosed separately. It requires completed
@@ -108,7 +108,7 @@ from agreement. Exact tuple matching, untied simulation choices and hash
 provenance protect the comparison inputs. Reports omit raw prompt/stream/stderr
 text; prompt hashes are not anonymity guarantees.
 
-The historical simulator saved no listing snapshot, and the harness restricts
+Historical runs and the CLI-adapter study lack a captured native listing; A14 simulations now save listing snapshots and fingerprints. The harness restricts
 tools, so listing/configuration equivalence and normal-agent fidelity cannot
 be inferred from its numbers alone. Native configuration, hooks and dynamic
 skill behavior can have side effects. The harness uses native-agent budgets,
@@ -233,5 +233,5 @@ and per-project agent settings remain a separate maintainer decision.
 
 ## 17. Not yet built
 
-- **A14 CI mode**: needs a CLI surface, which needs maintainer approval (locked constraint 5).
-- **Fidelity**: measure the trigger simulation against a real agent's choices before treating its numbers as more than estimates.
+- **A14 CI mode**: approved and shipped; see @docs/42-ai-cli-ci-2026-11-09.md. No automatic paid repository CI step is enabled.
+- **Fidelity**: expand the two-case synthetic smoke study to real distractors, near misses, repetitions and the configured product HTTP path before treating its numbers as more than estimates.

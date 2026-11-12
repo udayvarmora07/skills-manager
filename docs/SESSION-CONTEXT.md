@@ -21,6 +21,20 @@ the documented `insights` API and public CLI handler exports remain compatible.
 V2 tool navigation/index/commands share `model.js` metadata. Decisions and
 current-tree verification: @docs/37-codebase-untangling-2026-11-09.md.
 
+**AI anchor — 2026-11-09.** A14 is approved: `cli_ai.py` implements
+`ai trigger-test --saved`, no-send by default, with versioned JSON and an
+optional complete-evidence CI regression gate. Snapshot inputs/configuration
+once; seed controls listing permutations only. Contract and verification:
+@docs/42-ai-cli-ci-2026-11-09.md. A guarded native CLI smoke study observed
+2/2 conclusive agreements on obvious synthetic prompts; general fidelity and
+the product HTTP path remain unvalidated. Method and sanitized evidence:
+@docs/41-ai-fidelity-study-2026-11-09.md.
+
+**Automation anchor — 2026-11-10.** `python3 tools/verify_ai.py` repeats the
+free AI contracts and saved-study/no-send checks. `--artifact WHEEL` creates an
+isolated installed-package probe. Existing CI jobs share the runner and keep
+paid native measurements manual. Contract: @docs/43-ai-verification-automation-2026-11-10.md.
+
 **Current UI anchor — 2026-11-06.** V2 is the default: `/` and `/index.html`
 redirect to `/v2/`; classic remains at `/classic/`. The maintainer explicitly
 selected the existing warm-paper v2 design. Its visual authority is
@@ -155,7 +169,7 @@ advisory eval harness, both shipped by extending existing surfaces only — see
 @docs/ADR-003-registry-bridge-and-eval-harness.md.)
 ## What exists today (2026-10-04)
 
-- **CLI**: `python3 -m skillsmgr` — 28 top-level commands + 10 subcommands (7 trash/templates/db actions and 3 update actions) + 3 aliases (`ls`, `rm`, `gui`) = 41 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
+- **CLI**: `python3 -m skillsmgr` — 29 top-level commands + 11 subcommands (7 trash/templates/db actions, 3 update actions and 1 AI action) + 3 aliases (`ls`, `rm`, `gui`) = 43 invocable names (`prog="skills-mgr"`); exit codes 0/1/2/130. Parser/handlers/output split behind the stable `skillsmgr.cli` adapter (`cli_parser.py`, `cli_handlers.py`, `cli_output.py`). Works. See @docs/03-cli-surface.md.
 - **Scopes**: `skillsmgr/scopes.py` — global store + per-agent filesystem roots. `--scope agents` = `~/.agents/skills` (Command Code's live skills dir), read/written directly on disk, no DB. Other agent scopes: claude-code, codex, cursor, opencode, gemini, commandcode. `--scope all` merges everything. `sync`/`scopes`/`tokens`/`install` commands are scope-aware. Discovery research: @docs/12-agent-root-discovery-2026-09-08.md v1.3.0 (all three `[?]`s closed 2026-09-09; consumer rows extended 2026-11-07; facade ids are compat-only). The read-only `doctor --explain` diagnostic shipped 2026-09-11 (`skillsmgr/effective.py`; per-consumer rules cited from that doc, `unknown-consumer`/`undocumented-precedence` instead of a guess, nothing persisted). See @docs/03-cli-surface.md.
 - **Effective-resolution diagnostic (2026-09-11, #12; consumers extended 2026-11-07)**: `python3 -m skillsmgr doctor --explain commandcode --project DIR [--skill NAME] [--json]` (also `GET /api/doctor?explain=…&project=…&skill=…`). Policies: `commandcode` six-way order, `codex` no-merge (no winner elected), `claude-code` personal > project with nested copies in `also_loads`, `gemini` built-in < extension < user < workspace (`ambiguous` on same-tier ties), `opencode` built-in < `.claude/skills` < `.agents/skills` < `~/.config/opencode/skills` < project `.opencode/skills` < explicit `skills` config (config tier unobservable ⇒ lower win provisional; await 2026-11-07 correction, the row was previously `undocumented-precedence`), `cline` global > project (project roots tie), `kiro` workspace > global, `amp` first documented search order, `roo` project > global / `.roo` > `.agents` / mode-specific > generic (four unobservable mode tiers), `zed` project > user; `cursor`/`copilot`/`devin` `undocumented-precedence`. Root specs are `scope`, `rel`, absolute `path`, or `home` (resolved via `paths.home_dir()`; redacted over HTTP exactly like `path`). `unknown-consumer`/`missing-project` → exit 1, everything else → exit 0. `skillsmgr/effective.py`; the documented-key table behind the hygiene finding is `skillsmgr/key_support.py`. Over HTTP the report is **confined to the manager's data directory** (plus only those extra roots the operator configured at server construction): paths outside it are replaced by `<redacted>` (with `paths_redacted: true`), and an out-of-boundary `project` returns `project-outside-managed-roots` **without walking it** (SEC-2/SEC-3); the CLI passes no boundary and stays fully transparent.
 - **Store**: `skillsmgr/store.py` — FS source of truth + SQLite index. Public API in @docs/04-store-api.md. **Signatures that surprise people** (docs used to lie about these, fixed on 2026-08-14):

@@ -35,6 +35,7 @@ from .validator import validate_skill, validate_skill_name
 from .external_scan import scan_options
 from .store import list_snapshots
 from .tokens import aggregate, estimate, format_tokens, window_name
+from .cli_ai import cmd_ai
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -207,7 +208,7 @@ def validate_cli_combinations(args) -> None:
 # or the schema, so `doctor` can report a lost index instead of rebuilding it
 # before it looks.
 _READ_ONLY_COMMANDS = frozenset(
-    {"list", "ls", "view", "search", "stats", "doctor", "history", "scopes", "tokens"}
+    {"list", "ls", "view", "search", "stats", "doctor", "history", "scopes", "tokens", "ai"}
 )
 
 
@@ -1401,6 +1402,7 @@ def cmd_update(args, store: Store) -> int:
 
 
 COMMANDS = {
+    "cmd_ai": cmd_ai,
     "cmd_init": cmd_init,
     "cmd_list": cmd_list,
     "cmd_create": cmd_create,

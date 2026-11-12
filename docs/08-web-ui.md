@@ -435,7 +435,7 @@ stated beside the setting and in every result.
 | GET | `/api/ai/settings` | provider, model, endpoint, `key_source` (`env:NAME`, `settings` or `none`), a four-character `key_hint`, caps, today's usage and the provider list. Never the key |
 | POST | `/api/ai/settings` | `{provider, model, base_url?, api_key?, clear_key?, max_run_tokens?, max_day_tokens?}`; `provider: null` turns AI off and deletes the stored key. Changing the provider or the endpoint forgets the stored key. Plain `http` only to loopback |
 | POST | `/api/ai/test-connection` | one tiny JSON call; `{ok, run}` |
-| POST | `/api/ai/trigger-test` | `{scope, prompts[] \| generate_for[], per_skill?, near_misses?, repeats?, estimate?}`. `estimate: true` sends nothing and returns `egress` plus a token estimate |
+| POST | `/api/ai/trigger-test` | `{scope, prompts[] \| generate_for[] \| saved: true, per_skill?, near_misses?, repeats?, seed?, estimate?}`. `estimate: true` sends nothing and returns `egress` plus a token estimate. Seed controls listing order; results include fingerprints and a listing snapshot |
 | POST | `/api/ai/improve-description` | `{scope, name, candidates?, repeats?, prompts?, estimate?}`; read-only proposals with held-out verification. Applying one uses `PATCH /api/skills/<name>` |
 | POST | `/api/ai/overlap-judge` | `{scope, max_pairs?, pairs?: [[name, name]], estimate?}`. Candidate pairs come from the near-duplicate heuristic, a description-word prefilter and explicit pairs; each is judged in both orders (order-dependent verdicts are `uncertain`) and quoted conflicts not found verbatim in the files are dropped and counted |
 | POST | `/api/ai/fit-budget` | `{scope, budget_chars?, max_skills?, estimate?}`. Claude Code's budget is measured from its settings when `budget_chars` is omitted; other agents need it. Within budget returns `within-budget` with no model call. Proposals carry `recall_before`/`recall_after` and `safe` (still wins as often); nothing is written |
@@ -452,6 +452,12 @@ stated beside the setting and in every result.
 | GET | `/api/ai/runs/<run_id>` | one saved run, rendered as text in Past runs; no model output is interpreted as HTML |
 
 AI errors use the standard error shape with codes `ai-not-configured` (409), `ai-budget` (409), `ai-conflict` (409), `ai-input` (400, or 403 for project confinement), `ai-settings` (400), `ai-provider` / `ai-bad-output` / `ai-refused` (502) and `ai-not-found` (404).
+
+The approved A14 CLI also uses the existing trigger engine; it adds no HTTP
+route or UI control. Its stricter CI baseline gate, no-send default and JSON
+contract are documented in @docs/42-ai-cli-ci-2026-11-09.md. Saved AI artifacts
+are bounded to 16 MiB (including full Unicode listings) and refuse linked
+files/private AI subdirectories.
 
 The developer fidelity harness consumes the existing saved prompt-set and run
 files. A maintainer must attend and explicitly enable its agent execution;
