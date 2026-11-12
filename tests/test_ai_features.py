@@ -45,6 +45,8 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
             return
         if self.path.endswith("/v1/messages"):
             system, user = body["system"], body["messages"][0]["content"]
+            if isinstance(user, list):  # a cached prefix arrives as separate text blocks
+                user = "".join(block["text"] for block in user)
         else:
             system, user = body["messages"][0]["content"], body["messages"][1]["content"]
         answer = self._answer(system, user)

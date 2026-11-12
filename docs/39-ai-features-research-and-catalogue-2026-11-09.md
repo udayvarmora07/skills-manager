@@ -1,6 +1,6 @@
 # AI Features — Research and Catalogue
 
-**Version 0.1.0**
+**Version 0.2.0**
 
 **AI manifest**: Research record and ranked catalogue of bring-your-own-key (BYOK) AI features for skills-manager, written 2026-11-09. It extends @docs/33-ai-features-design-2026-11-06.md with community, competitor, GitHub, BYOK-practice and literature research, records the decisions taken to start building, and tracks which features are shipped. Shipped surfaces: `skillsmgr/ai.py`, `skillsmgr/ai_skills.py`, `/api/ai/*` (see @docs/08-web-ui.md) and the v2 *AI assist* tool pages. Unshipped ideas are proposals. Figures quoted from vendors, READMEs or single papers are not independently verified and are marked as such.
 
@@ -231,7 +231,56 @@ explicitly warning when the final name already exists, then uses the existing
 profile POST. It saves only metadata for the selected scope; native toggles
 and per-project agent settings remain a separate maintainer decision.
 
-## 17. Not yet built
+## 17. Transport reliability and cost (2026-11-13)
+
+**[SPEC]** A review of the shipped client found four gaps that sat underneath
+every feature. Each is fixed in `skillsmgr/ai.py` and pinned by
+`tests/test_ai_transport.py` (23 tests; five key ones proven by mutation).
+
+- **Transient failures are retried.** 408, 409, 429, 500, 502, 503, 504, 529 and
+  network errors are retried at most twice (as the official SDKs do), waiting
+  `retry-after` when sent and never more than 20 s; otherwise 1 s then 2 s. A
+  429 carrying a spend-limit or quota code (`insufficient_quota`,
+  `enforced_spend_limit_reached`, OpenAI billing codes) is final, because
+  retrying cannot restore access. A client that disconnects during a wait
+  stops the run with its partial save. Before this, one overloaded answer
+  ended a 60-batch trigger test and threw away the spend so far.
+- **The skill listing is cached on Anthropic.** A routing pass sends the same
+  listing with every batch of 10 prompts. When a pass has more than one batch,
+  the listing becomes its own text block with `cache_control: ephemeral`, so
+  later batches read it at a fraction of the input price (official docs: write
+  1.25×, read 0.1× or lower). A single-batch pass is not marked, so it never
+  pays the write premium for nothing. OpenAI-compatible requests keep one text
+  string with the listing first, which is what automatic prefix caching needs.
+  Anthropic's `input_tokens` excludes cache reads and writes, so the client now
+  adds both back before checking caps; the ledger and run label also record
+  `cached_input_tokens`, and the trigger-test result shows it.
+- **Thinking models get room to answer.** Claude 5.x, Fable/Mythos, Opus
+  4.5–4.8 and Sonnet 4.6, and OpenAI `gpt-5`/`o`-series reasoning models, spend
+  thinking tokens from the same `max_tokens` as the JSON answer. With this
+  client's small routing allowance (about 500 tokens) that could cut answers
+  off. These models are now asked for `effort: low` (Anthropic) or
+  `reasoning_effort: low` (OpenAI) with a 4,096-token allowance on top, and an
+  answer that is only thinking says so instead of failing as malformed JSON.
+  Older and unknown models are sent exactly as before. **[?]** Not yet observed
+  against a live provider; the effort allowlist follows Anthropic's published
+  model table and may need extending.
+- **The day cap holds across concurrent runs.** Each call reserves its
+  estimate in `<data>/ai/reservations.json` under the ledger lock, after
+  counting recorded usage and every other live reservation. The reservation is
+  released after the call (and its usage recorded). Entries from a crashed
+  process expire after 15 minutes. A reservation that cannot be written refuses
+  the call. This closes the gap recorded in @docs/42-ai-cli-ci-2026-11-09.md.
+
+**[NOTE]** A timed-out request is retried like the SDKs do; if the provider had
+already finished it, that attempt may be billed. The worst case is three
+120-second attempts.
+
+## 18. Not yet built
 
 - **A14 CI mode**: approved and shipped; see @docs/42-ai-cli-ci-2026-11-09.md. No automatic paid repository CI step is enabled.
+- **A6 standalone**: a demote-only explainer for Quality/hygiene risk findings
+  outside a review (A5 already does this inside registry and update reviews).
+- **Provider-specific caching beyond Anthropic**: OpenRouter accepts Anthropic
+  `cache_control` blocks for Claude models; not wired.
 - **Fidelity**: expand the two-case synthetic smoke study to real distractors, near misses, repetitions and the configured product HTTP path before treating its numbers as more than estimates.

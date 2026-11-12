@@ -474,7 +474,7 @@
             <span :class="['pill', troubled.length ? 'warn' : 'ok']">{{ troubled.length ? troubled.length + ' need work' : 'All fire' }}</span></header>
           <div class="ai-stats"><div><b class="num">{{ pct(result.recall) }}</b><small>of prompts picked the right skill</small></div>
             <div v-if="result.false_trigger_rate!=null"><b class="num">{{ pct(result.false_trigger_rate) }}</b><small>of near-misses loaded a skill anyway</small></div>
-            <div><b class="num">{{ fmt(result.run.input_tokens) }}</b><small>input tokens used</small></div></div>
+            <div><b class="num">{{ fmt(result.run.input_tokens) }}</b><small>input tokens used<template v-if="result.run.cached_input_tokens">, {{ fmt(result.run.cached_input_tokens) }} read from the provider's cache</template><template v-if="result.run.retries"> · {{ fmt(result.run.retries) }} busy-provider {{ result.run.retries === 1 ? 'retry' : 'retries' }}</template></small></div></div>
           <div v-if="result.prompt_source==='saved'" class="ai-confirm">
             <p v-if="!result.compared_with" class="tp-fine">First saved-test run for this agent; the next one will be compared with it.</p>
             <p v-else-if="!result.changes.length" class="tp-fine">No skill changed since the last saved-test run.</p>

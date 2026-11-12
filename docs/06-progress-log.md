@@ -8,6 +8,45 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — AI transport: retries, prompt caching, thinking room, day-cap reservations
+
+**[SPEC]** Reviewing every shipped AI feature on `main` found that the shared
+client in `skillsmgr/ai.py` had four gaps under all of them. Recorded in
+@docs/39-ai-features-research-and-catalogue-2026-11-09.md §17:
+
+- **No retries.** One 529/429/5xx ended a long run and wasted its spend. Now
+  bounded retries (max 2, `retry-after` up to 20 s). Quota and spend-limit codes
+  are final, per Anthropic's and OpenAI's error docs. A client disconnect during
+  a wait stops the run.
+- **No prompt caching.** Every routing batch re-sent the full listing (up to
+  600 skills). Multi-batch passes now mark it as an Anthropic cache
+  breakpoint. Anthropic's `input_tokens` excludes cached tokens, so the caps
+  now add cache reads and writes back. Without that, caching would have made
+  the caps undercount.
+- **Thinking models could run out of answer room.** The suggested Claude 5.5
+  models think by default, and that thinking counts against the same
+  `max_tokens` as the answer, which is about 500 per routing batch. Recognised
+  Claude and OpenAI reasoning models now get low effort plus 4,096 tokens.
+  Others are sent exactly as before.
+- **Concurrent runs could jointly exceed the day cap**, the gap docs/42
+  recorded. Per-call reservations under the ledger lock close it. Stale entries
+  expire, and a reservation that cannot be written refuses the call.
+
+**[NOTE]** Tests came first. 23 tests are in `tests/test_ai_transport.py`, and
+the fake Anthropic provider in `test_ai_features.py` now accepts block content.
+Five mutations were each caught: reservations ignored, cache tokens dropped,
+quota retried, no headroom, no breakpoint. The complexity ratchet only went
+down, through six lowered entries; three functions were split rather than any
+budget raised. The trigger-test result also shows cached tokens and retries.
+**Not verified:** any live provider call, and a browser render of that one
+template line (v2 contract tests and the syntax check passed). Request text and
+input hashes are unchanged, so A14 fingerprints still compare.
+
+**[NOTE] Verification on this tree:** 1,913 tests on each Python 3.11, 3.12,
+3.13 and 3.14 (two optional oracle skips each); both smokes, `check_docs`,
+`check_complexity` (1,264 functions, nothing raised), `check_design_tokens`,
+frontend syntax, Ruff 0.16.8 (F821/F822/F823) and Bandit 1.9.4 (0 findings).
+
 ## 2026-11-12 — Health-check browser startup publication race
 
 **[NOTE]** A fresh functional check found the classic browser launcher reading

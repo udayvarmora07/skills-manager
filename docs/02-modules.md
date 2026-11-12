@@ -554,7 +554,7 @@ Settings live in `<data>/ai/settings.json` (0600 in a 0700 directory); the
 provider's environment variable takes precedence over a stored key, and
 `public_settings()` never returns the key. `AiRun` preflights every call
 against per-run and per-day input-token caps, refuses redirects, bounds
-responses at 2 MiB, appends counts and an input hash to `<data>/ai/usage.jsonl`,
+responses at 2 MiB, retries transient provider failures (408/409/429/5xx/529 and network errors, at most twice, honouring `retry-after` up to 20 s; spend-limit and quota codes are final), marks a stable request prefix as an Anthropic prompt-cache breakpoint, counts cached input tokens against the caps, asks current Claude and OpenAI reasoning models for low effort with a 4,096-token thinking allowance, admits each call against the day cap with a cross-process reservation in `<data>/ai/reservations.json` (recorded and in-flight usage), appends counts and an input hash to `<data>/ai/usage.jsonl`,
 and parses JSON answers with `extract_json()`. Oversized usage ledgers are
 atomically compacted to remove dated rows older than 90 days; append and
 compaction share a cross-process lock. `AiRun` checks the requesting client's

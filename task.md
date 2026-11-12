@@ -6,6 +6,14 @@
 
 ## AI assist, bring your own key (2026-11-09)
 
+- [x] 2026-11-13 transport review (docs/39 §17): bounded retries for
+  transient provider failures (quota/spend-limit codes final), Anthropic
+  prompt caching of the reused skill listing with cached tokens counted
+  against the caps, low-effort plus thinking allowance for thinking models,
+  and cross-process day-cap reservations. 23 tests in
+  `tests/test_ai_transport.py`; no live provider was called.
+- [ ] A6 standalone demote-only explainer for Quality findings (A5 covers reviews).
+
 - [x] Health-check follow-up: reproduce empty startup URL publication in both
   optional browser launchers; publish through the existing atomic-write helper
   and cover the reader/writer interleaving with deterministic regressions.

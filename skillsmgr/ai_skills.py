@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 from . import scopes
-from .ai import AiError, AiRun, untrusted_block
+from .ai import AiError, AiRun, committed_day_tokens, untrusted_block
 from .atomic_io import atomic_write_text, mutation_lock
 from .path_safety import mkdir_private
 from .file_reads import read_regular_file
@@ -230,31 +230,43 @@ _ROUTER_SYSTEM = (
 )
 
 
+def _batch_request(batch: list[dict]) -> str:
+    requests = "\n".join(json.dumps({"id": p["id"], "request": p["text"]}) for p in batch)
+    return ("User requests (one JSON object per line):\n"
+            + untrusted_block("user-requests", requests)
+            + '\n\nAnswer as JSON: {"answers":[{"id":"<id>","skill":"<name or null>",'
+              '"runner_up":"<name or null>"}]} with one entry per request id.')
+
+
+def _record_answers(answer, batch: list[dict], names: set, answers: dict) -> None:
+    ids = {p["id"] for p in batch}
+    for row in (answer.get("answers") if isinstance(answer, dict) else None) or []:
+        if not isinstance(row, dict) or row.get("id") not in ids:
+            continue
+        choice = row.get("skill")
+        runner = row.get("runner_up")
+        answers[row["id"]] = (
+            choice if choice in names else (None if choice in (None, "", "null") else "?invalid"),
+            runner if runner in names else None,
+        )
+
+
 def _route(run: AiRun, listing: dict, prompts: list[dict], overrides: dict, seed: int) -> dict:
     """One pass over every prompt; returns ``{prompt_id: (choice, runner_up)}``."""
     names = {e["name"] for e in listing["entries"]}
     rendered = _render_listing(listing["entries"], overrides, seed)
     answers: dict[str, tuple] = {}
+    listing_text = "Skill listing:\n" + untrusted_block("skill-listing", rendered) + "\n\n"
+    # The listing is identical in every batch of this pass: send it as a cacheable
+    # prefix, but only when a later batch will read the cache it writes.
+    prefix = listing_text if len(prompts) > BATCH else ""
     for start in range(0, len(prompts), BATCH):
         batch = prompts[start:start + BATCH]
-        requests = "\n".join(json.dumps({"id": p["id"], "request": p["text"]}) for p in batch)
-        user = ("Skill listing:\n" + untrusted_block("skill-listing", rendered)
-                + "\n\nUser requests (one JSON object per line):\n"
-                + untrusted_block("user-requests", requests)
-                + '\n\nAnswer as JSON: {"answers":[{"id":"<id>","skill":"<name or null>",'
-                  '"runner_up":"<name or null>"}]} with one entry per request id.')
-        answer = run.ask_json(_ROUTER_SYSTEM, user, max_output=60 + 45 * len(batch))
-        if answer is None:
-            continue
-        for row in (answer.get("answers") if isinstance(answer, dict) else None) or []:
-            if not isinstance(row, dict) or row.get("id") not in {p["id"] for p in batch}:
-                continue
-            choice = row.get("skill")
-            runner = row.get("runner_up")
-            answers[row["id"]] = (
-                choice if choice in names else (None if choice in (None, "", "null") else "?invalid"),
-                runner if runner in names else None,
-            )
+        user = _batch_request(batch)
+        answer = run.ask_json(_ROUTER_SYSTEM, user if prefix else listing_text + user,
+                              max_output=60 + 45 * len(batch), prefix=prefix)
+        if answer is not None:
+            _record_answers(answer, batch, names, answers)
     return answers
 
 
@@ -384,7 +396,7 @@ def _preflight_trigger_budget(run, listing, prompts, repeats, seed):
     run.estimate_only = True
     try:
         _trigger_routes(run, listing, prompts, repeats, seed)
-        if run._day_used + run.input_tokens + run.estimated_input > run.config["max_day_tokens"]:
+        if committed_day_tokens(run.data_dir) + run.estimated_input > run.config["max_day_tokens"]:
             raise AiError("the planned run exceeds today's AI token cap", "ai-budget", 409)
     finally:
         run.estimate_only = False

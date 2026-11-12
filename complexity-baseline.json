@@ -16,7 +16,7 @@
       "lineno": 527
     },
     "skillsmgr/ai.py::AiRun.ask_text": {
-      "complexity": 10,
+      "complexity": 2,
       "end_lineno": 570,
       "lineno": 532
     },
@@ -41,12 +41,12 @@
       "lineno": 503
     },
     "skillsmgr/ai.py::_call_anthropic": {
-      "complexity": 7,
+      "complexity": 3,
       "end_lineno": 479,
       "lineno": 464
     },
     "skillsmgr/ai.py::_call_openai": {
-      "complexity": 11,
+      "complexity": 3,
       "end_lineno": 500,
       "lineno": 482
     },
@@ -56,7 +56,7 @@
       "lineno": 182
     },
     "skillsmgr/ai.py::_error_detail": {
-      "complexity": 5,
+      "complexity": 1,
       "end_lineno": 461,
       "lineno": 449
     },
@@ -81,7 +81,7 @@
       "lineno": 263
     },
     "skillsmgr/ai.py::_post": {
-      "complexity": 9,
+      "complexity": 5,
       "end_lineno": 446,
       "lineno": 417
     },
@@ -516,7 +516,7 @@
       "lineno": 521
     },
     "skillsmgr/ai_skills.py::_route": {
-      "complexity": 14,
+      "complexity": 6,
       "end_lineno": 254,
       "lineno": 229
     },

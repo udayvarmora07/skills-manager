@@ -103,6 +103,25 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_KEY_CHARS = 512
 MAX_MODEL_CHARS = 200
 REQUEST_TIMEOUT = 120.0
+#: Transient provider failures are retried this many times (as the official
+#: SDKs do), waiting ``retry-after`` when sent, never longer than the cap.
+MAX_RETRIES = 2
+MAX_RETRY_WAIT = 20.0
+_RETRY_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
+#: Error codes that mean "out of money or over a spend limit": retrying them
+#: cannot succeed, so they are final even on a 429.
+_FINAL_ERROR_CODES = frozenset({
+    "insufficient_quota", "enforced_spend_limit_reached", "credit_balance_exhausted",
+    "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+    "organization_usage_limit_exceeded", "billing_hard_limit_reached"})
+#: Extra output allowance for models that think before answering; their
+#: thinking counts against the same ``max_tokens`` as the JSON answer.
+THINKING_HEADROOM = 4_096
+_EFFORT_MODEL_RE = re.compile(
+    r"^claude-(?:(?:fable|mythos)-|(?:opus|sonnet|haiku)-[5-9]|opus-4-[5-9]|sonnet-4-6)")
+_REASONING_MODEL_RE = re.compile(r"^(?:gpt-5|o[1-9])(?!.*chat)")
+#: A day-cap reservation older than this belongs to a crashed process.
+RESERVATION_TTL = 900.0
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$")
 _SETTINGS_LOCK = threading.Lock()
 
@@ -436,7 +455,87 @@ def _append_usage(path: Path, row: dict) -> None:
         handle.write((json.dumps(row, sort_keys=True) + "\n").encode("utf-8"))
 
 
+def _reservations_path(data_dir: Path) -> Path:
+    return _ai_dir(data_dir) / "reservations.json"
+
+
+def _load_reservations(data_dir: Path, now: float) -> dict:
+    """Live in-flight reservations; unreadable or expired entries are ignored."""
+    try:
+        data = json.loads(_reservations_path(data_dir).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    live = {}
+    for key, entry in (data.items() if isinstance(data, dict) else ()):
+        tokens = entry.get("tokens") if isinstance(entry, dict) else None
+        stamp = entry.get("at") if isinstance(entry, dict) else None
+        if (isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0
+                and isinstance(stamp, (int, float)) and 0 <= now - stamp < RESERVATION_TTL):
+            live[key] = {"tokens": tokens, "at": stamp}
+    return live
+
+
+def _store_reservations(data_dir: Path, held: dict) -> None:
+    mkdir_private(_ai_dir(data_dir))
+    atomic_write_text(_reservations_path(data_dir), json.dumps(held, sort_keys=True) + "\n")
+
+
+def _active_reservations(data_dir: Path) -> int:
+    """Tokens currently reserved by in-flight calls of any process."""
+    return sum(e["tokens"] for e in _load_reservations(Path(data_dir), time.time()).values())
+
+
+def _today_input_tokens(data_dir: Path) -> int:
+    today = _today()
+    cutoff = (date.fromisoformat(today) - timedelta(days=90)).isoformat()
+    try:
+        return _usage_counts(_usage_path(data_dir), today, cutoff)[1]
+    except OSError:
+        return 0
+
+
+def committed_day_tokens(data_dir: Path) -> int:
+    """Today's recorded input tokens plus every live in-flight reservation."""
+    with mutation_lock(_usage_path(data_dir)):
+        return _today_input_tokens(Path(data_dir)) + _active_reservations(Path(data_dir))
+
+
+def _reserve_day_tokens(data_dir: Path, estimate: int, cap: int) -> str:
+    """Admit one call against today's cap, counting other runs' in-flight calls.
+
+    Recorded usage and live reservations are read under the ledger lock, so
+    two concurrent runs can no longer each spend up to the cap they observed.
+    """
+    key = os.urandom(8).hex()
+    with mutation_lock(_usage_path(data_dir)):
+        now = time.time()
+        held = _load_reservations(data_dir, now)
+        committed = _today_input_tokens(data_dir) + sum(e["tokens"] for e in held.values())
+        if committed + estimate > cap:
+            raise AiError(f"today's {cap:,}-token AI cap is reached (recorded and in-flight "
+                          "calls included)", "ai-budget", 409)
+        held[key] = {"tokens": estimate, "at": now}
+        try:
+            _store_reservations(data_dir, held)
+        except OSError as exc:
+            # Fail closed: an unrecorded reservation would let other runs overspend.
+            raise AiError(f"cannot record the AI token reservation: {exc.strerror or exc}",
+                          "ai-settings") from None
+    return key
+
+
+def _release_day_tokens(data_dir: Path, key: str) -> None:
+    try:
+        with mutation_lock(_usage_path(data_dir)):
+            held = _load_reservations(data_dir, time.time())
+            if held.pop(key, None) is not None or _reservations_path(data_dir).exists():
+                _store_reservations(data_dir, held)
+    except OSError:
+        pass  # An unreleased reservation expires after RESERVATION_TTL.
+
+
 _disconnect_check = contextvars.ContextVar("ai_disconnect_check", default=None)
+_retry_hook = contextvars.ContextVar("ai_retry_hook", default=None)
 _run_context = contextvars.ContextVar("ai_run_context", default={})
 
 
@@ -500,7 +599,65 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
+class _Transient(Exception):
+    """A provider failure worth retrying; ``error`` is what to raise if it persists."""
+
+    def __init__(self, error: AiError, retry_after: float | None = None):
+        super().__init__(str(error))
+        self.error = error
+        self.retry_after = retry_after
+
+
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _retry_wait(retry_after: float | None, attempt: int) -> float:
+    wait = retry_after if retry_after is not None else float(2 ** attempt)
+    return max(0.0, min(wait, MAX_RETRY_WAIT))
+
+
 def _post(url: str, headers: dict, body: dict, timeout: float) -> dict:
+    """POST with bounded retries for transient failures (429/5xx/529, network)."""
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            return _post_once(url, headers, body, timeout)
+        except _Transient as exc:
+            if attempt == MAX_RETRIES:
+                raise exc.error from None
+            hook = _retry_hook.get()
+            if hook is not None:
+                hook()
+            _sleep(_retry_wait(exc.retry_after, attempt))
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _retry_after(headers) -> float | None:
+    try:
+        value = float(headers.get("retry-after", ""))
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return value if value >= 0 else None
+
+
+def _http_failure(exc: urllib.error.HTTPError) -> AiError | _Transient:
+    try:
+        detail, codes = _error_info(exc.read(64_000))
+    except Exception:  # noqa: BLE001 - the status alone is still a clean answer
+        detail, codes = "", set()
+    final = bool(codes & _FINAL_ERROR_CODES)
+    hint = {401: "the key was rejected", 403: "the key is not allowed to use this model",
+            404: "the model or endpoint was not found",
+            429: "out of credit or over a spend limit (not retried)" if final
+            else "rate limited"}.get(exc.code, "the provider returned an error")
+    error = AiError(f"{hint} (HTTP {exc.code}){': ' + detail if detail else ''}",
+                    "ai-provider", 502)
+    if exc.code in _RETRY_STATUSES and not final:
+        return _Transient(error, _retry_after(exc.headers))
+    return error
+
+
+def _post_once(url: str, headers: dict, body: dict, timeout: float) -> dict:
     data = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(url, data=data, method="POST",
                                      headers={**headers, "Content-Type": "application/json",
@@ -509,21 +666,14 @@ def _post(url: str, headers: dict, body: dict, timeout: float) -> dict:
         with _OPENER.open(request, timeout=timeout) as response:
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as exc:
-        detail = ""
-        try:
-            detail = _error_detail(exc.read(64_000))
-        except Exception:  # noqa: BLE001 - the status alone is still a clean answer
-            detail = ""
-        hint = {401: "the key was rejected", 403: "the key is not allowed to use this model",
-                404: "the model or endpoint was not found", 429: "rate limited or out of credit"
-                }.get(exc.code, "the provider returned an error")
-        raise AiError(f"{hint} (HTTP {exc.code}){': ' + detail if detail else ''}",
-                      "ai-provider", 502) from None
+        failure = _http_failure(exc)
+        raise failure from None
     except AiError:
         raise
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
         reason = getattr(exc, "reason", exc)
-        raise AiError(f"could not reach the provider: {reason}", "ai-provider", 502) from None
+        raise _Transient(AiError(f"could not reach the provider: {reason}",
+                                 "ai-provider", 502)) from None
     if len(raw) > MAX_RESPONSE_BYTES:
         raise AiError("the provider's answer was too large", "ai-provider", 502)
     try:
@@ -532,63 +682,145 @@ def _post(url: str, headers: dict, body: dict, timeout: float) -> dict:
         raise AiError("the provider's answer was not JSON", "ai-provider", 502) from None
 
 
-def _error_detail(raw: bytes) -> str:
+def _error_codes(err) -> set:
+    if not isinstance(err, dict):
+        return set()
+    details = err.get("details") if isinstance(err.get("details"), dict) else {}
+    return {v for v in (err.get("type"), err.get("code"), details.get("error_code"))
+            if isinstance(v, str)}
+
+
+def _error_info(raw: bytes) -> tuple[str, set]:
+    """A safe, short provider message plus the machine codes it carried."""
     try:
         data = json.loads(raw.decode("utf-8", "replace"))
     except ValueError:
-        return ""
+        return "", set()
     err = data.get("error") if isinstance(data, dict) else None
     message = err.get("message") if isinstance(err, dict) else err
     if not isinstance(message, str):
-        return ""
+        return "", _error_codes(err)
     message = re.sub(r"[\x00-\x1f\x7f]", " ", message)
     # Never echo anything shaped like a key back to the UI.
     message = re.sub(r"(sk|key|AIza)[-_A-Za-z0-9]{12,}", "[redacted]", message)
-    return message[:300]
+    return message[:300], _error_codes(err)
 
 
-def _call_anthropic(config: dict, system: str, user: str, max_output: int) -> tuple[str, dict]:
+def _error_detail(raw: bytes) -> str:
+    return _error_info(raw)[0]
+
+
+_THOUGHT_OUT = ("the model spent its whole output allowance thinking and wrote no answer; "
+                "try again, choose fewer items per run, or pick a faster model")
+
+
+def _thinks(config: dict) -> bool:
+    """Models whose thinking shares ``max_tokens`` with the answer and take a low effort."""
+    if config["provider"] == "anthropic":
+        return bool(_EFFORT_MODEL_RE.match(config["model"]))
+    return config["provider"] == "openai" and bool(_REASONING_MODEL_RE.match(config["model"]))
+
+
+def _int(value) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
+def _anthropic_content(user: str, prefix: str):
+    """A stable ``prefix`` becomes its own cached block; the rest follows it."""
+    if not prefix:
+        return user
+    return [{"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": user}]
+
+
+def _anthropic_usage(usage: dict) -> dict:
+    # ``input_tokens`` excludes cache reads and writes; the caps count all three.
+    cached = _int(usage.get("cache_read_input_tokens"))
+    total = (_int(usage.get("input_tokens")) + _int(usage.get("cache_creation_input_tokens"))
+             + cached)
+    return {"input_tokens": total if isinstance(usage.get("input_tokens"), int) else None,
+            "output_tokens": usage.get("output_tokens"), "cached_input_tokens": cached}
+
+
+def _anthropic_body(config: dict, system: str, user: str, max_output: int, prefix: str) -> dict:
+    body = {"model": config["model"], "max_tokens": max_output, "system": system,
+            "messages": [{"role": "user", "content": _anthropic_content(user, prefix)}]}
+    if _thinks(config):
+        body["output_config"] = {"effort": "low"}
+        body["max_tokens"] = max_output + THINKING_HEADROOM
+    return body
+
+
+def _anthropic_text(data: dict) -> tuple[str, bool]:
+    if data.get("stop_reason") == "refusal":
+        raise AiError("the model refused this request", "ai-refused", 502)
+    blocks = [b for b in (data.get("content") if isinstance(data.get("content"), list) else [])
+              if isinstance(b, dict)]
+    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+    truncated = data.get("stop_reason") == "max_tokens"
+    if truncated and not text.strip() and any(b.get("type") == "thinking" for b in blocks):
+        raise AiError(_THOUGHT_OUT, "ai-bad-output", 502)
+    return text, truncated
+
+
+def _call_anthropic(config: dict, system: str, user: str, max_output: int,
+                    prefix: str = "") -> tuple[str, dict]:
     headers = {"anthropic-version": "2023-06-01"}
     if config["key"]:
         headers["x-api-key"] = config["key"]
-    body = {"model": config["model"], "max_tokens": max_output, "system": system,
-            "messages": [{"role": "user", "content": user}]}
-    data = _post(config["base_url"] + "/v1/messages", headers, body, REQUEST_TIMEOUT)
-    if data.get("stop_reason") == "refusal":
-        raise AiError("the model refused this request", "ai-refused", 502)
-    blocks = data.get("content") if isinstance(data.get("content"), list) else []
-    text = "".join(b.get("text", "") for b in blocks
-                   if isinstance(b, dict) and b.get("type") == "text")
-    usage = data.get("usage") or {}
-    return text, {"input_tokens": usage.get("input_tokens"),
-                  "output_tokens": usage.get("output_tokens"),
-                  "truncated": data.get("stop_reason") == "max_tokens"}
+    data = _post(config["base_url"] + "/v1/messages", headers,
+                 _anthropic_body(config, system, user, max_output, prefix), REQUEST_TIMEOUT)
+    text, truncated = _anthropic_text(data)
+    return text, {**_anthropic_usage(data.get("usage") or {}), "truncated": truncated}
 
 
-def _call_openai(config: dict, system: str, user: str, max_output: int) -> tuple[str, dict]:
-    headers = {"Authorization": "Bearer " + config["key"]} if config["key"] else {}
+def _openai_usage(usage: dict) -> dict:
+    details = usage.get("prompt_tokens_details")
+    cached = _int(details.get("cached_tokens")) if isinstance(details, dict) else 0
+    return {"input_tokens": usage.get("prompt_tokens"),
+            "output_tokens": usage.get("completion_tokens"), "cached_input_tokens": cached}
+
+
+def _openai_body(config: dict, system: str, user: str, max_output: int, prefix: str) -> dict:
+    # Automatic prefix caching needs the stable part first; it already is.
     body = {"model": config["model"],
             "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": user}],
+                         {"role": "user", "content": prefix + user}],
             config["max_tokens_field"]: max_output}
+    if _thinks(config):
+        body["reasoning_effort"] = "low"
+        body[config["max_tokens_field"]] = max_output + THINKING_HEADROOM
     if config["json_mode"]:
         body["response_format"] = {"type": "json_object"}
-    data = _post(config["base_url"] + "/chat/completions", headers, body, REQUEST_TIMEOUT)
+    return body
+
+
+def _openai_text(data: dict, config: dict) -> tuple[str, bool]:
     choices = data.get("choices") if isinstance(data.get("choices"), list) else []
     first = choices[0] if choices and isinstance(choices[0], dict) else {}
     message = first.get("message") if isinstance(first.get("message"), dict) else {}
     text = message.get("content") if isinstance(message.get("content"), str) else ""
     if not text and message.get("refusal"):
         raise AiError("the model refused this request", "ai-refused", 502)
-    usage = data.get("usage") or {}
-    return text, {"input_tokens": usage.get("prompt_tokens"),
-                  "output_tokens": usage.get("completion_tokens"),
-                  "truncated": first.get("finish_reason") == "length"}
+    truncated = first.get("finish_reason") == "length"
+    if truncated and not text.strip() and _thinks(config):
+        raise AiError(_THOUGHT_OUT, "ai-bad-output", 502)
+    return text, truncated
 
 
-def _call(config: dict, system: str, user: str, max_output: int) -> tuple[str, dict]:
+def _call_openai(config: dict, system: str, user: str, max_output: int,
+                 prefix: str = "") -> tuple[str, dict]:
+    headers = {"Authorization": "Bearer " + config["key"]} if config["key"] else {}
+    data = _post(config["base_url"] + "/chat/completions", headers,
+                 _openai_body(config, system, user, max_output, prefix), REQUEST_TIMEOUT)
+    text, truncated = _openai_text(data, config)
+    return text, {**_openai_usage(data.get("usage") or {}), "truncated": truncated}
+
+
+def _call(config: dict, system: str, user: str, max_output: int,
+          prefix: str = "") -> tuple[str, dict]:
     caller = _call_anthropic if config["kind"] == "anthropic" else _call_openai
-    return caller(config, system, user, max_output)
+    return caller(config, system, user, max_output, prefix)
 
 
 class AiRun:
@@ -604,11 +836,13 @@ class AiRun:
         self.estimate_only = estimate_only
         self.config = resolve_config(self.data_dir)
         self.calls = 0
+        self.retries = 0
         self.estimated_input = 0
         self.input_tokens = 0
+        self.cached_input_tokens = 0
         self.output_tokens = 0
+        self.last_truncated = False
         self.started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        self._day_used = usage_summary(self.data_dir)["input_tokens"]
 
     def _check_disconnected(self) -> None:
         check = _disconnect_check.get()
@@ -618,13 +852,28 @@ class AiRun:
                                       "status": "disconnected", "run": self.label()})
             raise ClientDisconnected()
 
-    def ask_json(self, system: str, user: str, *, max_output: int = 2_000):
-        """Send one request and return its parsed JSON (``None`` when estimating)."""
-        text = self.ask_text(system, user, max_output=max_output, json_output=True)
+    def _on_retry(self) -> None:
+        self.retries += 1
+        self._check_disconnected()
+
+    def ask_json(self, system: str, user: str, *, max_output: int = 2_000, prefix: str = ""):
+        """Send one request and return its parsed JSON (``None`` when estimating).
+
+        ``prefix`` is stable text sent before ``user`` (a skill listing reused
+        across batches); Anthropic requests mark it as a prompt-cache breakpoint.
+        """
+        text = self.ask_text(system, user, max_output=max_output, json_output=True, prefix=prefix)
         return None if text is None else extract_json(text)
 
+    def _admit(self, estimate: int) -> None:
+        if self.estimated_input + estimate > self.config["max_run_tokens"]:
+            raise AiError(
+                f"this run needs more than its {self.config['max_run_tokens']:,}-token cap "
+                "(raise the cap in AI settings, or choose fewer skills or prompts)",
+                "ai-budget", 409)
+
     def ask_text(self, system: str, user: str, *, max_output: int = 2_000,
-                 json_output: bool = False) -> str | None:
+                 json_output: bool = False, prefix: str = "") -> str | None:
         """Send one request and return its text (``None`` when estimating).
 
         Plain-text answers (eval outputs) may be cut off at ``max_output``;
@@ -632,37 +881,48 @@ class AiRun:
         """
         self._check_disconnected()
         max_output = max(64, min(int(max_output), MAX_OUTPUT_TOKENS))
-        estimate = count_tokens(system)[0] + count_tokens(user)[0] + max_output
-        if self.estimated_input + estimate > self.config["max_run_tokens"]:
-            raise AiError(
-                f"this run needs more than its {self.config['max_run_tokens']:,}-token cap "
-                "(raise the cap in AI settings, or choose fewer skills or prompts)",
-                "ai-budget", 409)
-        if not self.estimate_only and (
-                self._day_used + self.input_tokens + estimate > self.config["max_day_tokens"]):
-            raise AiError(f"today's {self.config['max_day_tokens']:,}-token AI cap is reached",
-                          "ai-budget", 409)
-        self.estimated_input += estimate
+        estimate = (count_tokens(system)[0] + count_tokens(prefix)[0] + count_tokens(user)[0]
+                    + max_output)
+        self._admit(estimate)
         if self.estimate_only:
+            self.estimated_input += estimate
             return None
+        reservation = _reserve_day_tokens(self.data_dir, estimate, self.config["max_day_tokens"])
+        try:
+            self.estimated_input += estimate
+            return self._send(system, user, prefix, max_output, json_output, estimate)
+        finally:
+            _release_day_tokens(self.data_dir, reservation)
+
+    def _send(self, system, user, prefix, max_output, json_output, estimate) -> str:
         self.calls += 1
         config = self.config if json_output else {**self.config, "json_mode": False}
-        text, usage = _call(config, system + "\n\n" + UNTRUSTED_RULE, user, max_output)
-        used_in = usage.get("input_tokens") if isinstance(usage.get("input_tokens"), int) else estimate
-        used_out = usage.get("output_tokens") if isinstance(usage.get("output_tokens"), int) else 0
-        self.input_tokens += used_in
-        self.output_tokens += used_out
-        _record_usage(self.data_dir, {
-            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "feature": self.feature, "provider": self.config["provider"],
-            "model": self.config["model"], "input_tokens": used_in, "output_tokens": used_out,
-            "input_sha256": hashlib.sha256((system + user).encode("utf-8")).hexdigest(),
-        })
+        token = _retry_hook.set(self._on_retry)
+        try:
+            text, usage = _call(config, system + "\n\n" + UNTRUSTED_RULE, user, max_output, prefix)
+        finally:
+            _retry_hook.reset(token)
+        self._account(usage, estimate, system + prefix + user)
         self.last_truncated = bool(usage.get("truncated"))
         if self.last_truncated and json_output:
             raise AiError("the model's answer was cut off; try fewer items per run",
                           "ai-bad-output", 502)
         return text
+
+    def _account(self, usage: dict, estimate: int, sent: str) -> None:
+        used_in = usage.get("input_tokens") if isinstance(usage.get("input_tokens"), int) else estimate
+        used_out = usage.get("output_tokens") if isinstance(usage.get("output_tokens"), int) else 0
+        cached = _int(usage.get("cached_input_tokens"))
+        self.input_tokens += used_in
+        self.output_tokens += used_out
+        self.cached_input_tokens += cached
+        _record_usage(self.data_dir, {
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "feature": self.feature, "provider": self.config["provider"],
+            "model": self.config["model"], "input_tokens": used_in, "output_tokens": used_out,
+            "cached_input_tokens": cached,
+            "input_sha256": hashlib.sha256(sent.encode("utf-8")).hexdigest(),
+        })
 
     def label(self) -> dict:
         """Provenance attached to every result: who answered, what it cost."""
@@ -673,6 +933,7 @@ class AiRun:
             "estimate_only": self.estimate_only, "calls": self.calls,
             "estimated_input_tokens": self.estimated_input,
             "input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
+            "cached_input_tokens": self.cached_input_tokens, "retries": self.retries,
             "advisory": "Model output is an estimate, not a fact about your skills; "
                         "results vary between runs and models.",
         }
