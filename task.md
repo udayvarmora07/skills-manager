@@ -4,6 +4,14 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## README rewrite (2026-11-13)
+
+- [x] Rewrote `README.md` as a task-first guide: names, features table,
+  install, verified quickstart, core ideas, scopes, web UI page map, recipes,
+  AI assist, egress table (now lists the AI client), architecture sketch,
+  troubleshooting/FAQ and a documentation map. Commands were run in an
+  isolated data dir; the screenshot uses an absolute URL so PyPI renders it.
+
 ## AI assist, bring your own key (2026-11-09)
 
 - [x] 2026-11-13 transport review (docs/39 §17): bounded retries for

@@ -8,6 +8,19 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — README rewritten for first-time users
+
+**[NOTE]** `README.md` now leads with what the tool is and how to use it:
+features, install, a quickstart whose every command was run against an
+isolated `SKILLS_MANAGER_DATA`/`HOME`, a scope table, a web UI page map,
+recipes, troubleshooting and a documentation map. One stale fact was
+corrected: the egress section said only `registry.py` opens connections, but
+the AI client (`ai.py`, 2026-11-09) does too; it is now listed. The
+screenshot uses an absolute GitHub URL because the README is the PyPI long
+description. Strings pinned by `tests/test_ci_release_contracts.py` are kept.
+Verified: `check_docs.py`, and 1,945 tests on Python 3.12 (2 optional skips).
+Not verified: rendering on GitHub or PyPI.
+
 ## 2026-11-13 — Overnight round 4: skills-dir plugins, OpenCode autoinvoke conflicts
 
 **[SPEC]** Two read-only hygiene additions from
