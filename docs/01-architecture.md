@@ -68,6 +68,8 @@ skills-manager/
     key_support.py   # documented per-consumer frontmatter keys (pure table)
     webui/           # index.html, styles.css, domain.js, app.js, static/vendor/vue
     examples/       # the agent-facing management skill, shipped as package data
+  install.sh         # one-command installer, Linux/macOS (uv > pipx > venv; not packaged)
+  install.ps1        # one-command installer, Windows PowerShell
   smoke_store.py     # smoke test driving the Store API (hermetic fixture)
   smoke_web.py       # smoke test driving the REST API (hermetic fixture)
   smoke_fixtures.py  # shared tmp-store + loopback-server lifecycle helpers

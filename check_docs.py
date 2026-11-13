@@ -249,6 +249,10 @@ def check_documented_source_symbols(root: Path = ROOT) -> list[str]:
             if symbol not in store_methods:
                 errors.append(f"{rel}: documented source symbol does not exist: Store.{symbol}")
         for module, symbol in module_ref_pattern.findall(text):
+            # ``install.sh`` names a repository file, not ``install.py``'s
+            # attribute ``sh``: a real top-level file wins over the reading.
+            if (root / f"{module}.{symbol}").is_file():
+                continue
             if symbol not in module_symbols[module]:
                 errors.append(f"{rel}: documented source symbol does not exist: {module}.{symbol}")
     return errors

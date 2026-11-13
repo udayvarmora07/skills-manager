@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. Format follows [Keep a Ch
 
 ### Added
 
+- **One-command install.** `curl -fsSL …/install.sh | sh` on Linux/macOS and
+  `irm …/install.ps1 | iex` on Windows install `skills-mgr` with uv, pipx or a
+  private virtual environment, whichever is available. Options cover tiktoken,
+  a pinned version, installing from `main`, dry runs and uninstalling. The
+  installers never edit shell start-up files or PATH and never touch skills.
+
 - Approved AI CLI/CI routing checks: `ai trigger-test --saved` defaults to a
   no-send estimate, records versioned JSON provenance and listing snapshots,
   and can fail on an observed regression against a compatible complete baseline.

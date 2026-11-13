@@ -4,6 +4,20 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## One-command install (2026-11-13)
+
+- [x] `install.sh` (Linux/macOS, `curl … | sh`) and `install.ps1` (Windows,
+  `irm … | iex`): uv, then pipx, then a private venv; `--with-tiktoken`,
+  `--version`, `--source`, `--from`, `--dry-run`, `--uninstall`. Never edits
+  shell start-up files or PATH and never touches skill data.
+- [x] `tests/test_install_script.py`: 18 offline tests with fake uv/pipx/python;
+  three guard mutations each caught. Real venv and uv installs from this
+  checkout verified on Linux.
+- [ ] Hosted CI run of the new `xplat` installer steps (macOS, Windows,
+  Windows PowerShell 5.1). `install.ps1` has not been executed locally (no
+  pwsh on this machine).
+- [ ] The one-line URLs point at `main`; they work only after this is merged.
+
 ## README rewrite (2026-11-13)
 
 - [x] Rewrote `README.md` as a task-first guide: names, features table,

@@ -483,6 +483,8 @@ tests/test_validator_fm11.py  # FM-11 directory-name validation
 requirements-build.txt  # hash-verified build toolchain (SEC-8)
 MANIFEST.in            # sdist contents: prune tests (SEC-13)
 .gitattributes         # keeps the vendored Vue bundle byte-stable (SEC-9)
+install.sh             # one-command installer, Linux/macOS (tests/test_install_script.py)
+install.ps1            # one-command installer, Windows (run by CI xplat)
 smoke_store.py         # store smoke (green)
 smoke_web.py           # REST smoke (green)
 smoke_fixtures.py      # shared tmp-store + loopback-server lifecycle helpers

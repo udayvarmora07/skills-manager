@@ -8,6 +8,35 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — One-command installers
+
+**[SPEC]** Added `install.sh` (POSIX `sh`, `curl … | sh`) and `install.ps1`
+(Windows PowerShell 5.1 and 7, `irm … | iex`) at the repository root. Method
+order: `uv tool install --python '>=3.11'` (no preinstalled Python needed),
+then `pipx install`, then a private venv under
+`$XDG_DATA_HOME/skill-control-plane/venv` (Windows `%LOCALAPPDATA%`) with a
+`skills-mgr` link in `~/.local/bin`. Options: method, `--version`,
+`--source` (GitHub `main` archive), `--from SPEC`, `--with-tiktoken`,
+`--prefix`/`--bin-dir`, `--dry-run`, `--uninstall`. The shell body is one
+function called on the last line, so a truncated download runs nothing.
+Neither script edits shell start-up files or PATH, downloads another
+installer, or touches the manager's data directory; uninstall removes only a
+venv (identified by `pyvenv.cfg`) and a link pointing into it, and refuses to
+replace a non-venv prefix or a regular file at the link path. No CLI command,
+Store method, schema or runtime dependency was added; the scripts are not
+packaged.
+
+**[NOTE]** Verified: shellcheck clean; 18 tests in
+`tests/test_install_script.py` drive `/bin/sh` against fake uv/pipx/python
+offline; three guard mutations (version validation, link guard, foreign-link
+uninstall) were each caught. Real installs from this checkout in an isolated
+HOME: venv method (install, `skills-mgr --version` = 1.0.2, uninstall left
+nothing) and uv method (install, uninstall). New `xplat` CI steps run the real
+venv install/uninstall on Linux, macOS and Windows (pwsh) and a dry run under
+Windows PowerShell 5.1. **Not verified:** `install.ps1` was never executed
+here (no pwsh); the hosted CI run; pipx for real (not installed here). The
+documented URLs point at `main`, so they work once merged.
+
 ## 2026-11-13 — Overnight round 5: Codex explicit-only skills, machine-local links
 
 **[SPEC]** Two read-only additions from

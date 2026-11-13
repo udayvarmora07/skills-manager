@@ -134,6 +134,34 @@ class DocumentationConsistencyTests(unittest.TestCase):
             "only the genuinely missing symbol may be reported",
         )
 
+    def test_repository_file_named_like_a_module_is_a_path_not_a_symbol(self):
+        """``install.sh`` beside ``skillsmgr/install.py`` is a file, not ``install.sh``.
+
+        Red-first: before the file-exists rule, documenting the one-command
+        installer reported ``install.sh`` and ``install.ps1`` as missing
+        attributes of ``install.py``. A genuinely missing attribute must still
+        be reported, and so must a file-like name with no file behind it.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "skillsmgr").mkdir()
+            (root / "skillsmgr" / "install.py").write_text("def run_install():\n    pass\n", encoding="utf-8")
+            (root / "install.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+            (root / "docs").mkdir()
+            (root / "docs" / "04-store-api.md").write_text(
+                "Run `install.sh`; see install.run_install, install.nope and install.ps1.\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(check_docs, "CURRENT_DOCS", ("docs/04-store-api.md",)):
+                errors = check_docs.check_documented_source_symbols(root)
+        self.assertEqual(
+            errors,
+            [
+                "docs/04-store-api.md: documented source symbol does not exist: install.nope",
+                "docs/04-store-api.md: documented source symbol does not exist: install.ps1",
+            ],
+        )
+
     def test_source_and_project_versions_must_align(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

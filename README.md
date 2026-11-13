@@ -76,10 +76,48 @@ No account, no telemetry, no runtime dependencies.
 
 ## Install
 
-Requires **Python ≥ 3.11** on Linux, macOS or Windows.
+### One command
+
+Linux and macOS:
 
 ```bash
-pipx install skill-control-plane   # recommended: isolated app environment
+curl -fsSL https://raw.githubusercontent.com/udayvarmora07/skills-manager/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/udayvarmora07/skills-manager/main/install.ps1 | iex"
+```
+
+The installer uses `uv tool install` if you have [uv](https://docs.astral.sh/uv/), otherwise `pipx install`, otherwise a private virtual environment with a `skills-mgr` link in `~/.local/bin` (Windows: `%LOCALAPPDATA%\skill-control-plane\venv`). With uv you do not need Python already installed; otherwise you need **Python ≥ 3.11**. It does not edit your shell start-up files or PATH; it prints the line to add if `skills-mgr` is not found yet. It never touches your skills.
+
+Prefer to read it first? Download [`install.sh`](https://github.com/udayvarmora07/skills-manager/blob/main/install.sh) or [`install.ps1`](https://github.com/udayvarmora07/skills-manager/blob/main/install.ps1), look at it, then run it.
+
+| Option (`install.sh` / `install.ps1`) | What it does |
+|---|---|
+| `--with-tiktoken` / `-WithTiktoken` | Also install `tiktoken` for exact token counts. It downloads one encoding file on first use. |
+| `--version 1.0.2` / `-Version 1.0.2` | Install that release instead of the latest. |
+| `--source` / `-Source` | Install the current `main` branch from GitHub instead of PyPI. |
+| `--from SPEC` / `-From SPEC` | Install from a local checkout, a URL or a wheel. |
+| `--method uv\|pipx\|venv` / `-Method …` | Pick the method instead of the first one available. |
+| `--dry-run` / `-DryRun` | Print the commands, change nothing. |
+| `--uninstall` / `-Uninstall` | Remove what the installer put there. Your skills and the manager's data stay. |
+
+Pass options to the piped form like this:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/udayvarmora07/skills-manager/main/install.sh | sh -s -- --with-tiktoken
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/udayvarmora07/skills-manager/main/install.ps1))) -WithTiktoken
+```
+
+### With pipx or pip
+
+```bash
+pipx install skill-control-plane   # isolated app environment
 # or
 pip install skill-control-plane
 ```
