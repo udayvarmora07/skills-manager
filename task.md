@@ -4,6 +4,17 @@
 
 **AI manifest**: Single source of truth for remaining work on skills-manager. Update after every step. Notation: `[ ]` unstarted, `[/]` in progress, `[x]` done. Milestones: (1) docs layer, (2) GUI, (3) zero-error iteration loop.
 
+## Project review and suggestions (2026-11-13)
+
+- [x] Whole-project review recorded in
+  `docs/45-project-review-and-suggestions-2026-11-13.md`. Proposals only.
+- [ ] Owner's call: release 1.1.0 (PyPI still serves 1.0.1) and questions
+  Q1–Q4 in docs/45 §7.
+- [ ] No approval needed, not started: first-run fixes F1 (hint only), F2,
+  F4–F7; risk checks on prose (N4); authoring-smell lints (N6).
+- [ ] Verify vendor changes V1–V6 against primary sources before changing
+  `effective.py`, `native_state.py` or docs/12.
+
 ## One-command install (2026-11-13)
 
 - [x] `install.sh` (Linux/macOS, `curl … | sh`) and `install.ps1` (Windows,

@@ -8,6 +8,19 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — Whole-project review and ranked suggestions
+
+**[NOTE]** Research and documentation only; no source changed. Recorded in
+@docs/45-project-review-and-suggestions-2026-11-13.md. Main finding: PyPI
+still serves 1.0.1 while this branch is 149 commits past the `v1.0.2` tag, so
+the installer delivers the September tool (23 downloads last month, 1 star).
+A hands-on run in an isolated home found eight first-run problems, the worst
+being `list` printing "no skills installed" while agent folders hold skills.
+Vendor docs suggest the agent model is going stale (`.agents/skills` adoption,
+`~/.claude/skills/synced/`, Codex `skills.max_context_tokens`). **Not
+verified:** vendor, security and distribution findings came from subagents and
+were only spot-checked; Reddit and X were unreachable.
+
 ## 2026-11-13 — One-command installers
 
 **[SPEC]** Added `install.sh` (POSIX `sh`, `curl … | sh`) and `install.ps1`

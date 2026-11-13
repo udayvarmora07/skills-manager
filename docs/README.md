@@ -60,6 +60,9 @@ native-agent evidence) and @docs/42-ai-cli-ci-2026-11-09.md (approved CLI/CI
 contract, recipe and verification). Repeatable local/CI checks:
 @docs/43-ai-verification-automation-2026-11-10.md.
 
+Latest whole-project review and ranked proposals (nothing approved):
+@docs/45-project-review-and-suggestions-2026-11-13.md.
+
 1. `AGENTS.md` (root, hot cache — 5 min).
 2. `docs/README.md` (this file).
 3. Topic docs just-in-time per the map above — never all at once.
