@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
@@ -68,6 +69,8 @@ _CATEGORY_ORDER = (
     "ignored-frontmatter",
     "context-over-limit",
     "opencode-output-truncation",
+    "opencode-autoinvoke-conflict",
+    "plugin-member-skill",
     "claude-listing-budget",
     "codex-listing-budget",
     "agents-bridge-gap",
@@ -1613,6 +1616,175 @@ def _opencode_size_findings(prepared: list[dict]) -> list[dict]:
     return [f for f in (_opencode_size_finding(r) for r in prepared) if f]
 
 
+# OpenCode maps ``disable-model-invocation`` onto ``autoinvoke`` and lets an
+# explicit ``metadata.opencode/autoinvoke`` win (sst/opencode#52747, merged
+# 2026-10-02), accepting the spellings Claude Code accepts.
+_LOOSE_TRUE = frozenset({"true", "yes", "on", "1"})
+_LOOSE_FALSE = frozenset({"false", "no", "off", "0"})
+
+
+def _loose_bool(value) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        word = value.strip().lower()
+        if word in _LOOSE_TRUE:
+            return True
+        if word in _LOOSE_FALSE:
+            return False
+    return None
+
+
+def _autoinvoke_conflict_finding(record: dict) -> dict | None:
+    """Warn when Claude Code's and OpenCode's invocation switches disagree."""
+    if not (_record_scopes(record) & _OPENCODE_SCOPES) or record.get("disabled"):
+        return None
+    hidden = _loose_bool(_frontmatter_value(record, "disable-model-invocation"))
+    metadata = _frontmatter_value(record, "metadata")
+    offered = _loose_bool(metadata.get("opencode/autoinvoke")) if isinstance(metadata, dict) else None
+    if hidden is None or offered is None or hidden != offered:
+        return None
+    claude = "hides it from" if hidden else "offers it to"
+    opencode = "offers it to" if offered else "hides it from"
+    return _finding(
+        "opencode-autoinvoke-conflict", "warning", "documented",
+        f"{record.get('name', '')} is offered to the model by one agent and hidden by another",
+        (f"disable-model-invocation {claude} Claude Code's model, but metadata.opencode/autoinvoke "
+         f"{opencode} OpenCode's, and OpenCode lets opencode/autoinvoke win when both are set "
+         "(sst/opencode#52747)."),
+        [record], {"disable_model_invocation": hidden, "opencode_autoinvoke": offered},
+        "Make the two switches agree, or remove opencode/autoinvoke: since OpenCode v2.0.23 "
+        "disable-model-invocation alone is honoured.",
+    )
+
+
+def _autoinvoke_conflict_findings(prepared: list[dict]) -> list[dict]:
+    return [f for f in (_autoinvoke_conflict_finding(r) for r in prepared) if f]
+
+
+# Claude Code loads a skills-directory folder holding .claude-plugin/plugin.json
+# as a plugin <manifest name>@skills-dir (code.claude.com/docs/en/skills,
+# "Skill folder as a plugin"); its skills live under skills/<skill>/.
+_PLUGIN_MANIFEST = (".claude-plugin", "plugin.json")
+_PLUGIN_MANIFEST_LIMIT = 64 * 1024
+_PLUGIN_SOURCE = "https://code.claude.com/docs/en/skills#choose-where-skills-load"
+MAX_SKILLS_DIR_PLUGINS = 50
+_MAX_PLUGIN_SCAN = 2000
+_MAX_PLUGIN_SKILLS = 200
+
+
+def _plugin_manifest(folder: Path) -> tuple[bool, str | None]:
+    """``(present, manifest name)``; a linked or non-regular manifest is absent."""
+    manifest = folder.joinpath(*_PLUGIN_MANIFEST)
+    try:
+        if not stat.S_ISREG(os.lstat(manifest).st_mode):
+            return False, None
+        data = file_reads.read_regular_file(manifest, _PLUGIN_MANIFEST_LIMIT, follow_symlinks=False)
+        parsed = json.loads(data.decode("utf-8"))
+    except FileNotFoundError:
+        return False, None
+    except (OSError, ValueError, RecursionError):
+        return True, None
+    name = parsed.get("name") if isinstance(parsed, dict) else None
+    return True, (_bounded(name, 128) if isinstance(name, str) and name.strip() else None)
+
+
+def _plugin_member_finding(record: dict, cache: dict, home_prefix: str) -> dict | None:
+    """Name the plugin a nested skills/<skill>/ instance belongs to."""
+    path = Path(str(record.get("path") or ""))
+    if path.parent.name != "skills" or not str(path.parent.parent).strip(os.sep):
+        return None
+    folder = path.parent.parent
+    if folder not in cache:
+        cache[folder] = _plugin_manifest(folder)
+    present, name = cache[folder]
+    if not present:
+        return None
+    return _finding(
+        "plugin-member-skill", "info", "observed",
+        f"{record.get('name', '')} is part of a plugin folder",
+        ("Claude Code loads this folder as a plugin, so the skill depends on the plugin's "
+         "manifest, hooks and ${CLAUDE_PLUGIN_ROOT}. Copying only the skill folder, as "
+         "sync and `npx skills add` do, drops them (vercel-labs/skills#2609)."),
+        [record], {"plugin_dir": _redacted_path(str(folder), home_prefix), "plugin_name": name,
+                   "source": _PLUGIN_SOURCE},
+        "Copy the whole plugin folder into the agent's skills directory instead of this skill alone.",
+    )
+
+
+def _plugin_member_findings(prepared: list[dict], home) -> list[dict]:
+    cache: dict = {}
+    home_prefix = _home_prefix(home)
+    return [f for f in (_plugin_member_finding(r, cache, home_prefix) for r in prepared) if f]
+
+
+def _count_plugin_skills(folder: Path) -> int:
+    count = 0
+    try:
+        with os.scandir(folder / "skills") as entries:
+            for entry in entries:
+                if count >= _MAX_PLUGIN_SKILLS:
+                    break
+                if entry.is_dir(follow_symlinks=False) and os.path.lexists(os.path.join(entry.path, "SKILL.md")):
+                    count += 1
+    except OSError:
+        return count
+    return count
+
+
+def _skills_dir_plugin(entry) -> dict | None:
+    if not entry.is_dir(follow_symlinks=False):
+        return None
+    folder = Path(entry.path)
+    present, name = _plugin_manifest(folder)
+    if not present:
+        return None
+    return {
+        "dir": _bounded(entry.name, 128),
+        "manifest_name": name,
+        "loads_as": f"{name}@skills-dir" if name else None,
+        "root_document": os.path.lexists(folder / "SKILL.md"),
+        "nested_skills": _count_plugin_skills(folder),
+    }
+
+
+def _skills_dir_plugins_section(scope: str, home, degraded: list[dict]) -> dict:
+    """List ~/.claude/skills folders Claude Code loads as plugins (read-only)."""
+    section = {"version": 1, "consumer": "claude-code", "source": _PLUGIN_SOURCE,
+               "plugins": [], "total": 0, "omitted": 0, "writes_nothing": True}
+    if scope not in ("claude-code", "all"):
+        section["state"], section["reason"] = "unavailable", "needs scope claude-code or all"
+        return section
+    try:
+        base = Path(str(home)) if home is not None else paths.home_dir()
+    except (OSError, RuntimeError) as exc:
+        section["state"], section["reason"] = "unavailable", _bounded(str(exc))
+        return section
+    plugins: list[dict] = []
+    try:
+        with os.scandir(base / ".claude" / "skills") as entries:
+            for index, entry in enumerate(entries):
+                if index >= _MAX_PLUGIN_SCAN:
+                    section["truncated"] = True
+                    break
+                item = _skills_dir_plugin(entry)
+                if item:
+                    plugins.append(item)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        degraded.append({"instance": "~/.claude/skills", "section": "skills-dir-plugins",
+                         "reason": _bounded(str(exc))})
+    plugins.sort(key=lambda item: item["dir"])
+    section["state"] = "observed"
+    section["plugins"] = plugins[:MAX_SKILLS_DIR_PLUGINS]
+    section["total"] = len(plugins)
+    section["omitted"] = max(0, len(plugins) - MAX_SKILLS_DIR_PLUGINS)
+    return section
+
+
 def _source_lock_status(record: dict, path: str, degraded: list[dict]) -> dict:
     """Read one instance's source-lock state, degrading instead of raising."""
     try:
@@ -1894,6 +2066,9 @@ def _hygiene_report(
     codex_listing, codex_listing_findings = _codex_listing_section(prepared, home=home, window=window)
     findings.extend(codex_listing_findings)
     findings.extend(_opencode_size_findings(prepared))
+    findings.extend(_autoinvoke_conflict_findings(prepared))
+    findings.extend(_plugin_member_findings(prepared, home))
+    skills_dir_plugins = _skills_dir_plugins_section(scope, home, degraded)
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))
     full_summary["unavailable"] += len(unavailable)
@@ -1912,6 +2087,7 @@ def _hygiene_report(
         "agents_bridge": agents_bridge,
         "codex_config": codex_config,
         "codex_listing": codex_listing,
+        "skills_dir_plugins": skills_dir_plugins,
         "unavailable_signals": sorted(unavailable, key=lambda item: (str(item.get("signal", "")), str(item.get("name", "")))),
         "degraded": sorted(degraded, key=lambda item: (str(item.get("section", "")), str(item.get("instance", "")), str(item.get("reason", "")))),
         "limits": {
@@ -1928,6 +2104,7 @@ def _hygiene_report(
             "max_listing_candidates": MAX_LISTING_CANDIDATES,
             "max_listing_over_cap": MAX_LISTING_OVER_CAP,
             "max_bridge_names": MAX_BRIDGE_NAMES,
+            "max_skills_dir_plugins": MAX_SKILLS_DIR_PLUGINS,
         },
     }
     return result

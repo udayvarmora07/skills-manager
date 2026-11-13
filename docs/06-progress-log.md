@@ -8,6 +8,42 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — Overnight round 4: skills-dir plugins, OpenCode autoinvoke conflicts
+
+**[SPEC]** Two read-only hygiene additions from
+@docs/44-overnight-user-problems-2026-11-13.md §6. No new command, route, Store
+method, schema or dependency:
+
+- **`plugin-member-skill` and `skills_dir_plugins`** (vercel-labs/skills#2609).
+  Claude Code loads a skills-directory folder holding
+  `.claude-plugin/plugin.json` as `<name>@skills-dir` (code.claude.com skills
+  and plugin-loading pages, read 2026-11-13). A skill at
+  `<folder>/skills/<skill>/` beside such a manifest gets an info finding,
+  because copying it alone with `sync` or `npx skills add` drops the plugin.
+  For `claude-code`/`all`, a section lists `~/.claude/skills` plugin folders,
+  including ones with no root `SKILL.md` that this tool's scan never lists.
+  CLI text adds one line.
+- **`opencode-autoinvoke-conflict`** (sst/opencode#52747, merged 2026-10-02).
+  OpenCode honours `disable-model-invocation`, but an explicit
+  `metadata.opencode/autoinvoke` wins. When the two disagree, one agent
+  offers the skill and the other hides it, so the report raises a warning.
+
+**[NOTE]** Red-first: 13 new tests; 6 of the first 10 fail on `f4d136f`, and
+the rest are guards. Self-review added three hostile-input tests, which caught
+two bugs: a 60,000-deep `[` manifest raised `RecursionError` through the
+report, and an unresolvable home raised `RuntimeError`. Manifests are read
+only as regular files (no symlink, no FIFO, 64 KiB). Real data, read-only: one
+plugin (`humanizer`, with a root document), no member skills, no conflicts.
+**Not verified:** Claude Code or OpenCode loading the fixtures; whether Claude
+Code follows a symlinked plugin folder; plugin skills in the `claude_listing`
+estimate; a browser render of v2 Quality (no UI code changed).
+
+**[NOTE] Verification on the rebased tree (on `300e3d7`):** 1,958 tests on each
+of Python 3.11, 3.12, 3.13 and 3.14 (two optional oracle skips each); both
+smokes, `check_docs`, `check_complexity` (1,295 functions, nothing raised),
+`check_design_tokens`, `node --check`, Ruff 0.16.8 (F821/F822/F823) and Bandit
+1.9.4 (0 results).
+
 ## 2026-11-13 — Overnight round 3: A6 risk-finding explainer
 
 **[SPEC]** A6 shipped (@docs/44-overnight-user-problems-2026-11-13.md §5):

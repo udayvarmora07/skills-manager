@@ -24,6 +24,11 @@
 - [x] 2026-11-13 overnight round 3: A6 standalone explainer (`ai_explain.py`,
   `POST /api/ai/explain-findings`, v2 Tools → Explain risk findings). Opinions
   sit beside unchanged findings; uncited false-positive claims become unclear.
+- [x] 2026-11-13 overnight round 4: `plugin-member-skill` finding and
+  `skills_dir_plugins` section for Claude Code skills-dir plugins
+  (vercel-labs/skills#2609), and an `opencode-autoinvoke-conflict` warning
+  when `disable-model-invocation` and `metadata.opencode/autoinvoke` disagree
+  (sst/opencode#52747). Read-only; no command or route added.
 
 - [x] Health-check follow-up: reproduce empty startup URL publication in both
   optional browser launchers; publish through the existing atomic-write helper

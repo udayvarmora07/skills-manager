@@ -276,6 +276,31 @@ whose `SKILL.md` exceeds 2,000 lines or 50 KiB gets one warning: OpenCode
 keeps only the head of a tool result (opencode#62718). Only documents whose
 body is near either limit are opened (bounded at 8 MiB); nothing is written.
 
+**[SPEC] `plugin-member-skill` and `skills_dir_plugins` (2026-11-13, round 4).**
+Claude Code loads a skills-directory folder holding `.claude-plugin/plugin.json`
+as a plugin `<manifest name>@skills-dir`, with its skills under
+`skills/<skill>/` (code.claude.com/docs/en/skills). An instance at
+`<folder>/skills/<name>/` whose folder has such a manifest gets one
+`plugin-member-skill` info finding: copying only the skill (`sync`,
+`npx skills add`) drops the manifest, hooks and `${CLAUDE_PLUGIN_ROOT}`
+(vercel-labs/skills#2609). For the `claude-code` and `all` scopes the
+`skills_dir_plugins` section lists `~/.claude/skills` children that are plugin
+folders (manifest name, `loads_as`, root `SKILL.md` present, nested-skill
+count), bounded to 2,000 entries scanned, 50 listed and 200 nested skills
+counted. Manifests are read only when regular files (no symlink, no FIFO),
+at most 64 KiB; a malformed or deeply nested one is present with no name.
+Symlinked plugin folders are not followed. Other scopes report the section
+`unavailable`. Nothing is written.
+
+**[SPEC] `opencode-autoinvoke-conflict` (2026-11-13, round 4).** OpenCode maps
+`disable-model-invocation` onto `autoinvoke`, and an explicit
+`metadata.opencode/autoinvoke` wins when both are set (sst/opencode#52747,
+merged 2026-10-02, shipped in v2.0.23). An enabled instance in a scope
+OpenCode reads (`opencode`, `agents`, `claude-code`) whose two switches
+disagree gets one warning, since one agent offers the skill to the model and
+the other hides it. Both switches accept `true/yes/on/1` and
+`false/no/off/0`; any other value is ignored.
+
 ## `key_support.py`
 
 Pure, stdlib-only table of the frontmatter keys each consumer documents, copied
