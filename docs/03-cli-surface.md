@@ -223,7 +223,13 @@ output prints each with the `SKILL.md` path to use. Nothing is changed.
 The report's `codex_listing` section estimates Codex's skill listing from
 `~/.agents/skills` against its 2% context-window budget (codex#19679) and
 prints one line, for example `Codex listing: ~10,600 tokens vs 8,000 budget
-(2% rule, estimate); 40 skills from ~/.agents/skills`. An
+(2% rule, estimate); 40 skills from ~/.agents/skills`. Skills whose
+`agents/openai.yaml` sets `policy.allow_implicit_invocation: false` are left
+out of that estimate, because Codex hides them from the model, and a second
+line names up to five of them (`Codex explicit-only (not shown to the model,
+invoke with $name): …`) with a `codex-explicit-only-skill` info finding
+(openai/codex#23454). A link target that is a `file:` URL or an absolute
+home path is reported as a machine-local broken reference. An
 `opencode-output-truncation` warning names enabled skills OpenCode reads
 whose `SKILL.md` exceeds 2,000 lines or 50 KiB, the head OpenCode keeps of a
 tool result (opencode#62718). Both are read-only estimates.

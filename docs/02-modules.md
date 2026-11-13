@@ -268,7 +268,11 @@ is 2% of the report window, replaced by an assumed `gpt-5.6` window (and
 said so) when the window is not a GPT model. Project, admin and bundled roots
 and a configured token budget are unread, so `confidence` is `partial`. One
 `codex-listing-budget` info finding when over budget (codex#19679,
-codex-rs/ext/skills/src/render.rs).
+codex-rs/ext/skills/src/render.rs). Since round 5 a skill whose
+`agents/openai.yaml` sets `policy.allow_implicit_invocation: false` is not
+counted (Codex marks it `hidden_from_prompt`); such skills are named under
+`explicit_only` (bounded to 50) with one `codex-explicit-only-skill` info
+finding, because the model may say they do not exist (openai/codex#23454).
 
 **[SPEC] `opencode-output-truncation` (2026-11-13, round 2).** An enabled
 instance in a scope OpenCode reads (`opencode`, `agents`, `claude-code`)
@@ -806,7 +810,7 @@ SKILL.md frontmatter (YAML-ish, delimited by `_DOC_MARKER`): `parse_frontmatter(
 
 ## `validator.py`
 
-Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing hyphens); limits: `MAX_NAME=64`, `MAX_DESCRIPTION=1024`, `MAX_COMPATIBILITY=500`, `MAX_BODY_LINES=500`, `MAX_BODY_TOKENS=5000`. `validate_skill_name(name)` is the authoritative fail-closed primitive used by Store, scopes, CLI, and REST-adjacent path handling. `Issue` dataclass (level, message, key). `validate_skill(name, skill_dir)` -> `ValidationResult` (`.valid`, `.errors`, `.warnings`, `.issues`). `description_score(text)` -> `{has_use_context, filler_hits, word_count}`. Validators cover: name format, frontmatter name vs directory name, description length + use-context/filler warnings, compatibility length, body line count + token warning, `scripts/`/`references/`/`assets/` layout mentions, and relative link targets normalized for URL fragments, queries, percent-encoding, and sentence punctuation. Three advisory warnings cover frontmatter an agent's parser would silently drop: an empty delimited block (`frontmatter` key), an unquoted `: ` inside a top-level plain scalar (that key), and a UTF-8 byte-order mark before `---` (`frontmatter` key; Codex skips such a skill, openai/codex#13918), all read from the raw text and never changing `valid`.
+Name rule: `NAME_RE = ^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `--`, leading/trailing hyphens); limits: `MAX_NAME=64`, `MAX_DESCRIPTION=1024`, `MAX_COMPATIBILITY=500`, `MAX_BODY_LINES=500`, `MAX_BODY_TOKENS=5000`. `validate_skill_name(name)` is the authoritative fail-closed primitive used by Store, scopes, CLI, and REST-adjacent path handling. `Issue` dataclass (level, message, key). `validate_skill(name, skill_dir)` -> `ValidationResult` (`.valid`, `.errors`, `.warnings`, `.issues`). `description_score(text)` -> `{has_use_context, filler_hits, word_count}`. Validators cover: name format, frontmatter name vs directory name, description length + use-context/filler warnings, compatibility length, body line count + token warning, `scripts/`/`references/`/`assets/` layout mentions, and relative link targets normalized for URL fragments, queries, percent-encoding, and sentence punctuation. Three advisory warnings cover frontmatter an agent's parser would silently drop: an empty delimited block (`frontmatter` key), an unquoted `: ` inside a top-level plain scalar (that key), and a UTF-8 byte-order mark before `---` (`frontmatter` key; Codex skips such a skill, openai/codex#13918), all read from the raw text and never changing `valid`. A Markdown link to a `file:` URL or an absolute `/Users/<u>/`, `/home/<u>/` or `C:\Users\` path gets a `body` warning that it is a path on one machine only (google-gemini/gemini-cli#29548); hygiene reports it as `broken-reference` kind `machine-local`.
 
 ## `search.py`
 
@@ -868,6 +872,14 @@ path to use when one exists), a missing file, or a file not named `SKILL.md`
 (openai/codex#51044). Entries behind an unreadable directory are not
 reported; at most `MAX_DEAD_ENTRIES` (50) are listed with `total`/`omitted`.
 Read-only.
+
+`codex_implicit_invocation(skill_dir)` (2026-11-13, round 5) reads
+`agents/openai.yaml` beside a skill with a narrow stdlib scanner for the one
+key `policy.allow_implicit_invocation` (block or one-line flow mapping,
+comments ignored, YAML `true`/`false` spellings only). It returns `allowed`,
+`explicit_only`, or `unread` with a reason for a linked folder or file, a
+non-regular or undecodable file, a file over `MAX_CODEX_METADATA_BYTES`
+(64 KiB), or an unrecognised value. Read-only.
 
 `observe_claude_listing()` reads the two documented listing-budget keys
 (`skillListingMaxDescChars`, `skillListingBudgetFraction`) from the same three

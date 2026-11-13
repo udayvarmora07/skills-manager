@@ -744,12 +744,19 @@ def _render_codex_config_text(section: dict | None) -> None:
 
 def _render_codex_listing_text(section: dict | None) -> None:
     """One summary line for the Codex listing-budget estimate (codex#19679)."""
-    if not section or section.get("status") == "no_instances":
+    if not section:
         return
-    budget = int((section.get("budget") or {}).get("budget_tokens") or 0)
-    used = int(section.get("listing_tokens_estimate", 0) or 0)
-    print(f"  Codex listing: ~{used:,} tokens vs {budget:,} budget (2% rule, estimate); "
-          f"{int(section.get('listed_skills', 0) or 0)} skills from ~/.agents/skills")
+    if section.get("status") != "no_instances":
+        budget = int((section.get("budget") or {}).get("budget_tokens") or 0)
+        used = int(section.get("listing_tokens_estimate", 0) or 0)
+        print(f"  Codex listing: ~{used:,} tokens vs {budget:,} budget (2% rule, estimate); "
+              f"{int(section.get('listed_skills', 0) or 0)} skills from ~/.agents/skills")
+    explicit = section.get("explicit_only") or {}
+    if explicit.get("total"):
+        names = ", ".join(_display(str(name)) for name in explicit.get("names", [])[:5])
+        more = int(explicit["total"]) - min(5, len(explicit.get("names", [])))
+        print(f"  Codex explicit-only (not shown to the model, invoke with $name): "
+              f"{names}{f' and {more} more' if more > 0 else ''}")
 
 
 def _render_skills_dir_plugins_text(section: dict | None) -> None:

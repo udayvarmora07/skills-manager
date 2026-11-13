@@ -2586,7 +2586,7 @@
       "lineno": 675
     },
     "skillsmgr/hygiene.py::_reference_kind": {
-      "complexity": 6,
+      "complexity": 4,
       "end_lineno": 672,
       "lineno": 662
     },
@@ -4886,7 +4886,7 @@
       "lineno": 400
     },
     "skillsmgr/validator.py::_check_links": {
-      "complexity": 21,
+      "complexity": 18,
       "end_lineno": 549,
       "lineno": 483
     },

@@ -73,6 +73,7 @@ _CATEGORY_ORDER = (
     "plugin-member-skill",
     "claude-listing-budget",
     "codex-listing-budget",
+    "codex-explicit-only-skill",
     "agents-bridge-gap",
     "same-name-identical",
     "divergent-name",
@@ -682,16 +683,21 @@ def near_duplicate_candidates(
     }
 
 
+# First match wins: (substrings that must all occur, kind).
+_REFERENCE_KINDS = (
+    (("body mentions", "does not exist"), "missing-layout"),
+    (("on one machine",), "machine-local"),
+    (("escapes the skill directory",), "out-of-root"),
+    (("cannot be resolved",), "unresolvable"),
+    (("does not exist",), "missing"),
+)
+
+
 def _reference_kind(message: str) -> str | None:
     text = message.lower()
-    if "body mentions" in text and "does not exist" in text:
-        return "missing-layout"
-    if "escapes the skill directory" in text:
-        return "out-of-root"
-    if "cannot be resolved" in text:
-        return "unresolvable"
-    if "does not exist" in text:
-        return "missing"
+    for needles, kind in _REFERENCE_KINDS:
+        if all(needle in text for needle in needles):
+            return kind
     return None
 
 
@@ -1501,7 +1507,7 @@ def _codex_budget(window: str) -> dict:
 
 def _codex_listing_rows(prepared: list[dict], home) -> tuple[list[tuple], dict]:
     """Listed ``(record, document)`` pairs plus counts of excluded instances."""
-    excluded = {"disabled": 0, "unreadable": 0, "config_disabled": 0}
+    excluded = {"disabled": 0, "unreadable": 0, "config_disabled": 0, "explicit_only": 0}
     candidates = []
     for record in prepared:
         if _CODEX_LISTING_SCOPE not in _record_scopes(record):
@@ -1514,18 +1520,51 @@ def _codex_listing_rows(prepared: list[dict], home) -> tuple[list[tuple], dict]:
             candidates.append((record, Path(str(record.get("path") or "")) / "SKILL.md"))
     states = native_state.observe_codex_states(
         [(str(r.get("name", "")), doc) for r, doc in candidates], home=home)
-    listed = []
+    listed, explicit = [], []
     for (record, document), state in zip(candidates, states):
         if state.get("observed_setting") == "disabled":
             excluded["config_disabled"] += 1
+        elif native_state.codex_implicit_invocation(document.parent)["state"] == "explicit_only":
+            explicit.append(str(record.get("name", "")))
         else:
             listed.append((record, document))
-    return listed, excluded
+    excluded["explicit_only"] = len(explicit)
+    return listed, excluded, sorted(explicit)
+
+
+_CODEX_EXPLICIT_EXPLANATION = (
+    "agents/openai.yaml sets policy.allow_implicit_invocation: false, so Codex hides "
+    "these skills from the model's skill list. Only an explicit $name reaches them, "
+    "and the model may say such a skill does not exist (openai/codex#23454)."
+)
+
+
+def _codex_explicit_block(names: list[str]) -> dict:
+    """Bounded names of explicit-only skills, with the reason they are not listed."""
+    shown = names[:MAX_BRIDGE_NAMES]
+    return {"names": shown, "total": len(names), "omitted": len(names) - len(shown),
+            "explanation": _CODEX_EXPLICIT_EXPLANATION}
+
+
+def _codex_explicit_finding(block: dict) -> list[dict]:
+    """One info finding naming explicit-only skills, or none."""
+    if not block["total"]:
+        return []
+    first = block["names"][0]
+    return [_finding(
+        "codex-explicit-only-skill", "info", "observed",
+        f"{block['total']} skill{'s are' if block['total'] != 1 else ' is'} hidden from Codex's model",
+        _CODEX_EXPLICIT_EXPLANATION, [], {"names": block["names"], "total": block["total"],
+                                          "omitted": block["omitted"]},
+        f"Invoke these with ${first} (and so on) by name, or set allow_implicit_invocation: true "
+        "if the model should choose them itself; nothing was changed.",
+    )]
 
 
 def _codex_listing_section(prepared: list[dict], *, home, window: str) -> tuple[dict, list[dict]]:
     """Estimate Codex's skill-listing cost against its 2% budget (read-only)."""
-    listed, excluded = _codex_listing_rows(prepared, home)
+    listed, excluded, explicit = _codex_listing_rows(prepared, home)
+    explicit_block = _codex_explicit_block(explicit)
     total, cut = 0, []
     for record, document in listed:
         name = str(record.get("name", ""))
@@ -1548,10 +1587,11 @@ def _codex_listing_section(prepared: list[dict], *, home, window: str) -> tuple[
         "budget": budget, "tokens_to_free": max(0, total - budget["budget_tokens"]),
         "truncated_descriptions": {"count": len(cut), "names": sorted(cut)[:MAX_LISTING_OVER_CAP],
                                    "cap_chars": _CODEX_DESCRIPTION_CAP},
+        "explicit_only": explicit_block,
         "writes_nothing": True,
     }
     if status != "over_budget_estimate":
-        return section, []
+        return section, _codex_explicit_finding(explicit_block)
     finding = _finding(
         "codex-listing-budget", "info", "heuristic",
         "Codex's skill listing may exceed its 2% context budget",
@@ -1561,7 +1601,7 @@ def _codex_listing_section(prepared: list[dict], *, home, window: str) -> tuple[
              "tokens_to_free": section["tokens_to_free"], "listed_skills": len(listed)},
         "Shorten the longest descriptions or disable unused skills; this estimate does not see project or bundled skills.",
     )
-    return section, [finding]
+    return section, [finding] + _codex_explicit_finding(explicit_block)
 
 
 # OpenCode keeps only the head of a tool result: 2,000 lines / 50 KiB by

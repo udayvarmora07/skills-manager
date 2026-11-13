@@ -496,6 +496,23 @@ def _check_scalar(
         )
 
 
+# A file:// URL or an absolute home path resolves only on the machine that wrote
+# it, so a shared skill links to nothing elsewhere (google-gemini/gemini-cli#29548).
+_MACHINE_LOCAL_LINK_RE = re.compile(
+    r"^(?:(?i:file):|/(?:Users|home)/[^/]+/|[A-Za-z]:[\\/]Users[\\/])")
+
+
+def _link_verdict(target: str) -> str | None:
+    """``skip`` for links not checked on disk, ``machine-local``, or ``None`` to check."""
+    if _MACHINE_LOCAL_LINK_RE.match(target):
+        return "machine-local"
+    if not target or target.startswith(("#", "mailto:")) or "://" in target:
+        return "skip"
+    if target.startswith("<") and target.endswith(">"):
+        return "skip"
+    return None
+
+
 def _check_links(result: ValidationResult, body: str, skill_dir: Path) -> None:
     """Warn about relative links whose target file does not exist."""
     seen: set[str] = set()
@@ -505,13 +522,10 @@ def _check_links(result: ValidationResult, body: str, skill_dir: Path) -> None:
         if target in seen:
             continue
         seen.add(target)
-        if (
-            not target
-            or target.startswith(("#", "http://", "https://", "mailto:"))
-            or "://" in target
-        ):
-            continue
-        if target.startswith("<") and target.endswith(">"):
+        verdict = _link_verdict(target)
+        if verdict == "machine-local":
+            result.add("warning", f"link target {target!r} is a path on one machine only", "body")
+        if verdict is not None:
             continue
         candidates = _reference_candidates(target)
         if not candidates:

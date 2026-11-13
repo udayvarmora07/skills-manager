@@ -37,6 +37,11 @@
   (vercel-labs/skills#2609), and an `opencode-autoinvoke-conflict` warning
   when `disable-model-invocation` and `metadata.opencode/autoinvoke` disagree
   (sst/opencode#52747). Read-only; no command or route added.
+- [x] 2026-11-13 overnight round 5: Codex explicit-only skills
+  (`agents/openai.yaml` `policy.allow_implicit_invocation: false`, codex#23454)
+  are left out of `codex_listing` and named by a `codex-explicit-only-skill`
+  finding; `file:` and absolute home-path link targets are a `machine-local`
+  broken reference (gemini-cli#29548). Read-only; no command or route added.
 
 - [x] Health-check follow-up: reproduce empty startup URL publication in both
   optional browser launchers; publish through the existing atomic-write helper

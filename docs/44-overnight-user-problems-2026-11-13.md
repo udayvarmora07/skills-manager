@@ -1,8 +1,8 @@
 # Overnight User Problems — 2026-11-13
 
-**Version 0.4.0**
+**Version 0.5.0**
 
-**AI manifest**: Ranked research record from three unattended improvement rounds on 2026-11-13: which real skill-management problems reported since 2026-10-01 this tool can detect locally, which three were fixed, and what is left for later rounds. Evidence is GitHub issues read on 2026-11-13; reaction counts on recent issues are small, so the ranking is judgment, not votes.
+**AI manifest**: Ranked research record from five unattended improvement rounds on 2026-11-13: which real skill-management problems reported since 2026-10-01 this tool can detect locally, what each round fixed, and what is left for later rounds. Evidence is GitHub issues read on 2026-11-13; reaction counts on recent issues are small, so the ranking is judgment, not votes.
 
 ## 1. Method
 
@@ -30,6 +30,8 @@ deterministic check can catch it before the agent does.
 | 7 | Duplicate copies across agent folders break `npx skills update` | vercel-labs/skills #2406, #2574 | Mostly existing (duplicates, lockfile evidence) |
 | 8 | Very large `SKILL.md` tails truncated by OpenCode at 2,000 lines / 50 KiB | opencode #62718 | Yes — **fixed in round 2** |
 | 9 | A skill inside a Claude Code skills-dir plugin folder loses its plugin when copied alone | vercel-labs/skills #2609 | Yes — **fixed in round 4** |
+| 10 | A Codex skill whose `agents/openai.yaml` sets `policy.allow_implicit_invocation: false` is hidden from the model, which can then say the skill does not exist | codex #23454 (updated 2026-11-04) | Yes — **fixed in round 5** |
+| 11 | A shipped `SKILL.md` links to `file:///Users/<someone>/…`, which resolves on one machine only | gemini-cli #29548 (updated 2026-11-12) | Yes — **fixed in round 5** |
 
 ## 3. What was fixed, and why these three
 
@@ -146,9 +148,59 @@ skills, no autoinvoke conflicts.
 documented; such folders are not listed. Plugin skills are not added to the
 `claude_listing` estimate.
 
-## 7. Candidates for later rounds
+## 7. Round 5 (same day)
+
+**[NOTE]** Fresh research: GitHub issue search (title contains "skill",
+updated since 2026-10-15, sorted by reactions) in all six repositories;
+`sst/opencode` now redirects to `anomalyco/opencode`. Reddit/X were not
+searched this round. Bodies of the candidates below were read; fetched text
+was treated as data.
+
+**[SPEC]** Two read-only additions, pinned by 13 tests in
+`tests/test_round5_explicit_and_local_links.py`. The first 12 were written
+before the code and fail on `f70e5b7` (8 failures and 7 errors, counting
+subtests); the 13th, for the CLI text line, was added with that line:
+
+1. **Codex explicit-only skills (problem 10).** Codex parses
+   `agents/openai.yaml` (`codex-rs/skills/src/metadata.rs`) and marks a skill
+   with `policy.allow_implicit_invocation: false` as `hidden_from_prompt`
+   (`codex-rs/ext/skills/src/provider/host.rs`, read at `0f26d21`). The
+   round-2 `codex_listing` estimate counted such skills. It now excludes them
+   (`excluded.explicit_only`), lists them under `explicit_only` (bounded to
+   50 names), and raises one `codex-explicit-only-skill` info finding telling
+   the user to invoke them with `$name`. The YAML reader is a narrow
+   stdlib-only scanner for that one key (block or one-line flow form),
+   reading at most 64 KiB, never through a link, FIFO-safe.
+2. **Machine-local link targets (problem 11).** The validator skipped every
+   `://` link and reported `/home/<user>/…` only as "escapes the skill
+   directory". A `file:` URL or an absolute `/Users/<u>/`, `/home/<u>/` or
+   `C:\Users\` target now gets one advisory warning saying it is a path on
+   one machine only, reported by hygiene as `broken-reference` kind
+   `machine-local`. `valid` is unchanged.
+
+**[NOTE]** On the maintainer's machine (read-only, `--scope all`): 5 of the
+`~/.agents/skills` skills are explicit-only (`break`, `handoff`,
+`improve-codebase-architecture`, `untangle-codebase`, `variant`), so the
+Codex estimate had overcounted; no machine-local link targets.
+
+**[?]** An unreadable or unrecognised `openai.yaml` (link, oversized,
+undecodable, quoted value) is counted as listed; what Codex does with a
+metadata file it cannot parse was not checked. Claude Code
+#18192/#10238 (recursive `~/.claude/skills` discovery) are closed as
+completed, but no comment or doc states that nested discovery shipped, so
+this tool's non-recursive Claude Code scan was left unchanged.
+
+## 8. Candidates for later rounds
 
 - A per-agent visibility table generalising `agents_bridge` (problem 6).
+- Whether Claude Code now discovers nested `~/.claude/skills/<group>/<skill>/`
+  folders (claude-code #18192 and #10238 closed as completed, 2026-10/11);
+  needs a primary source before this tool's scan changes.
+- Codex project-level config that disables user skills while keeping repo
+  skills (codex #24237), and explicit-only activation lost after compaction
+  (codex #32169), both explainable from local files.
+- Claude Code plugin skills ignore `disable-model-invocation` (claude-code
+  #22345): flag the key on plugin-member skills.
 - Warn inside `sync` itself (not only in hygiene) when the source is a
   plugin member; needs a decision, because sync is a write path.
 - Lockfile `skillPath` ambiguity and nested skills shadowed by a root

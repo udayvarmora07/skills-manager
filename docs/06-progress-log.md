@@ -8,6 +8,44 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — Overnight round 5: Codex explicit-only skills, machine-local links
+
+**[SPEC]** Two read-only additions from
+@docs/44-overnight-user-problems-2026-11-13.md §7. No new command, route,
+Store method, schema or dependency:
+
+- **Codex explicit-only skills** (openai/codex#23454). Codex reads
+  `agents/openai.yaml`, and `policy.allow_implicit_invocation: false` marks a
+  skill `hidden_from_prompt` (codex-rs `metadata.rs` and
+  `ext/skills/src/provider/host.rs`, read at `0f26d21`). The round-2
+  `codex_listing` estimate counted those skills. They are now excluded and
+  named under `explicit_only`. One `codex-explicit-only-skill` info finding
+  says to invoke them with `$name`, since the model may claim they do not
+  exist. `native_state.codex_implicit_invocation()` is a narrow stdlib
+  scanner for that one key: at most 64 KiB, never through a link, FIFO-safe.
+  CLI text adds one line.
+- **Machine-local link targets** (google-gemini/gemini-cli#29548). A
+  `file:` URL or an absolute `/Users/<u>/`, `/home/<u>/` or `C:\Users\`
+  link target now gets a validator warning that it is a path on one machine
+  only. Hygiene reports it as `broken-reference` kind `machine-local`. Until
+  now `file:` links were skipped silently.
+
+**[NOTE]** Red-first: 13 new tests. The 12 written before the code fail on
+`f70e5b7` (8 failures and 7 errors, counting subtests); the CLI text test came
+with its line. Complexity went down: `_check_links` 21 → 18 and
+`_reference_kind` 6 → 4, both lowered in the baseline by hand. Real data,
+read-only: 5 `~/.agents/skills` skills are explicit-only and were overcounted
+(for example `break`); no machine-local links. **Not verified:** what Codex
+does with an `openai.yaml` it cannot parse (this tool counts that skill as
+listed); Codex itself reading the fixtures. No browser render, because no UI
+code changed (v2 Quality uses its generic finding layout).
+
+**[NOTE] Verification on this tree:** 1,971 tests on each of Python 3.11, 3.12, 3.13 and 3.14
+(two optional oracle skips each); both smokes,
+`check_docs`, `check_complexity` (1,298 functions, nothing raised),
+`check_design_tokens`, `node --check`, Ruff 0.16.8 (F821/F822/F823) and Bandit
+1.9.4 (0 results).
+
 ## 2026-11-13 — README rewritten for first-time users
 
 **[NOTE]** `README.md` now leads with what the tool is and how to use it:

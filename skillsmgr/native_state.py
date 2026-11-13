@@ -568,6 +568,89 @@ def codex_config_dead_entries(*, home: Path | None = None) -> dict:
     return report
 
 
+# Codex reads ``agents/openai.yaml`` beside SKILL.md; ``policy.allow_implicit_invocation:
+# false`` marks the skill ``hidden_from_prompt`` (codex-rs/skills/src/metadata.rs and
+# codex-rs/ext/skills/src/provider/host.rs, read 2026-11-13), so the model never sees
+# it in the listing and only ``$name`` reaches it (openai/codex#23454).
+MAX_CODEX_METADATA_BYTES = 64 * 1024
+_YAML_BOOLEANS = {'true': True, 'True': True, 'TRUE': True,
+                  'false': False, 'False': False, 'FALSE': False}
+
+
+def _strip_yaml_comment(line: str) -> str:
+    """Drop a ``#`` comment that starts a line or follows whitespace."""
+    for index, char in enumerate(line):
+        if char == '#' and (index == 0 or line[index - 1] in ' \t'):
+            return line[:index].rstrip()
+    return line.rstrip()
+
+
+def _flow_policy_value(rest: str) -> str | None:
+    """``allow_implicit_invocation`` inside a one-line ``policy: {...}`` mapping."""
+    if not (rest.startswith('{') and rest.endswith('}')):
+        return None
+    for item in rest[1:-1].split(','):
+        key, sep, value = item.partition(':')
+        if sep and key.strip() == 'allow_implicit_invocation':
+            return value.strip()
+    return None
+
+
+def _block_policy_value(lines: list[str]) -> str | None:
+    """The direct ``allow_implicit_invocation`` child of an indented ``policy`` block."""
+    child_indent = None
+    for line in lines:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(' '))
+        if indent == 0:
+            return None
+        child_indent = indent if child_indent is None else child_indent
+        key, sep, value = line.strip().partition(':')
+        if indent == child_indent and sep and key == 'allow_implicit_invocation':
+            return value.strip()
+    return None
+
+
+def _policy_value(text: str) -> str | None:
+    """The raw ``policy.allow_implicit_invocation`` scalar, or ``None`` when absent."""
+    lines = [_strip_yaml_comment(line) for line in text.splitlines()]
+    for index, line in enumerate(lines):
+        key, sep, rest = line.partition(':')
+        if sep and key == 'policy' and not line.startswith((' ', '\t')):
+            rest = rest.strip()
+            return _flow_policy_value(rest) if rest else _block_policy_value(lines[index + 1:])
+    return None
+
+
+def codex_implicit_invocation(skill_dir: Path) -> dict:
+    """Whether Codex offers this skill to the model, from ``agents/openai.yaml``.
+
+    ``state`` is ``allowed`` (no file, no policy, or ``true``), ``explicit_only``
+    (``false``) or ``unread`` with a reason: a linked, non-regular, oversized,
+    undecodable file or an unrecognised value, whose effect this tool cannot
+    know.  Read-only; the file is never followed through a link.
+    """
+    folder = Path(skill_dir) / 'agents'
+    path = folder / 'openai.yaml'
+    try:
+        if folder.is_symlink():
+            return {'state': 'unread', 'reason': 'agents folder is a link'}
+        if not os.path.lexists(path):
+            return {'state': 'allowed'}
+        data = read_regular_file(path, MAX_CODEX_METADATA_BYTES, follow_symlinks=False)
+        text = data.decode('utf-8')
+    except (OSError, ValueError) as exc:
+        return {'state': 'unread', 'reason': type(exc).__name__}
+    raw = _policy_value(text)
+    if raw is None:
+        return {'state': 'allowed'}
+    value = _YAML_BOOLEANS.get(raw)  # a quoted value is a string, not Codex's bool
+    if value is None:
+        return {'state': 'unread', 'reason': 'unrecognised allow_implicit_invocation value'}
+    return {'state': 'allowed' if value else 'explicit_only'}
+
+
 def _codex_match(name: str, document: Path | None, rules: list, resolved: dict) -> tuple | None:
     """The last matching ``(selector, enabled)``; resolves *document* lazily."""
     match = None
