@@ -8,6 +8,32 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — Overnight round 3: A6 risk-finding explainer
+
+**[SPEC]** A6 shipped (@docs/44-overnight-user-problems-2026-11-13.md §5):
+`ai_explain.py`, `POST /api/ai/explain-findings` and v2 Tools → Explain risk
+findings. `risk_scan` runs first without AI over one installed skill and its
+bounded file listing; the model then gives one opinion per finding. Opinions
+sit beside unchanged findings. A false-positive opinion must quote text found
+in the named file or it becomes `unclear`; opinions on unknown or repeated
+indexes are dropped. No findings means no call; estimate sends nothing; skill
+text goes through `ai.untrusted_block`. No CLI command, Store method, schema
+or dependency was added. The OpenCode `disable-model-invocation` candidate
+was dropped because upstream fixed it (opencode #52747).
+
+**[NOTE]** Red-first: the 3 new or changed tests in `tests/test_ai_features.py`
+fail on `f4d136f`. Browser, isolated HOME, fake provider: estimate then send
+showed the cited opinion, the uncited claim as "No clear opinion", the `high`
+finding unchanged, no overflow at 390 px and no console errors.
+`ai_explain.py` joined the complexity targets (1,285 functions, nothing
+raised). **Not verified:** any real provider; a hostile skill can steer the
+opinion, and the quote check only proves the text exists.
+
+**[NOTE] Verification on this tree:** 1,945 tests on each Python 3.11, 3.12,
+3.13 and 3.14 (two optional oracle skips each); both smokes, `check_docs`,
+`check_complexity`, `check_design_tokens`, frontend syntax, Ruff 0.16.8
+(F821/F822/F823) and Bandit 1.9.4 (0 results).
+
 ## 2026-11-13 — Overnight round 2: Codex listing budget, OpenCode truncation
 
 **[SPEC]** Two read-only hygiene additions from

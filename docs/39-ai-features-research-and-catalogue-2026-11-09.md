@@ -46,7 +46,7 @@ All fetched text was treated as data. Nothing was posted, liked or logged into.
 | A3 | Collision / overlap judge: candidate pairs from the near-duplicate heuristic, a description-word prefilter and user picks; judged in both orders; verbatim-checked conflicts; boundary sentences and merge idea | #35319, #27721, #10238; Cisco overlap check | **Shipped** |
 | A4 | Listing-budget fitter: shorten the largest descriptions to fit the agent's budget, each verified by A1 | #56710, #19679, #19090; existing `claude_listing` estimate | **Shipped** |
 | A5 | Review briefing for registry fetch and update review: plain-language diff, description-vs-behaviour, new capabilities/URLs; every claim cites a hunk | vercel-labs/skills #11; Snyk, arXiv 2610.19264 | **Shipped** (includes A6's demote-only opinions) |
-| A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | Planned |
+| A6 | Demote-only finding explainer for `risk_scan` hits: may lower severity with a cited reason, never raise or hide | Cisco `--adjudicate`; false-positive complaints | **Shipped** 2026-11-13 (`ai_explain.py`; opinions sit beside findings and never change severity) |
 | A7 | Regression pack: saved prompt sets per skill, re-run after an edit, sync or model change, with history files | r/ClaudeAI versioning threads; skill-creator post | **Shipped** |
 | A8 | Eval runner with and without the skill (feeds existing `evals.py`), plus "still needed?" capability-uplift flag | SkillForge, Anthropic guidance, SkillsBench | **Shipped** |
 | A9 | Ask your library, answers validated against real names/paths | opencode #7846 (120) | **Shipped** |
@@ -282,8 +282,6 @@ already finished it, that attempt may be billed. The worst case is three
 ## 18. Not yet built
 
 - **A14 CI mode**: approved and shipped; see @docs/42-ai-cli-ci-2026-11-09.md. No automatic paid repository CI step is enabled.
-- **A6 standalone**: a demote-only explainer for Quality/hygiene risk findings
-  outside a review (A5 already does this inside registry and update reviews).
 - **Provider-specific caching beyond OpenRouter's Claude models**: wired on
   2026-11-13 for `openrouter` with an `anthropic/` model id (see §17); other
   explicit-breakpoint providers (Alibaba) are not.

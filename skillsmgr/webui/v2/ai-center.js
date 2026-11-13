@@ -18,6 +18,7 @@
         scope: "", mode: "generate", chosen: [], filter: "", perSkill: 3, nearMisses: 2, promptText: "", repeats: 1,
         estimate: null, result: null,
         portName: "", portTarget: "codex", ported: null,
+        explainName: "", explained: null,
         question: "", askScope: "all", asked: null,
         evalName: "", evalMax: 10, evalResult: null, evalEstimate: null,
         savedCount: 0, savedPrompts: [], savedNote: "", savedError: "", savedBusy: false, savedRequest: 0,
@@ -91,7 +92,8 @@
     },
     watch: {
       page: { immediate: true, handler(next, previous) { if (previous === "ai-concise" && next !== "ai-concise") this.clearConciseProposal(); if (previous === "ai-profile" && next !== "ai-profile") this.clearProfileSuggestion(); this.error = ""; this.note = ""; this.load(); this.takeHandoff(); this.loadSaved(); } },
-      scope() { this.ported = null; this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
+      explainName() { this.explained = null; },
+      scope() { this.ported = null; this.explained = null; this.explainName = ""; this.loadSaved(); this.budget = null; this.budgetEstimate = null; this.pairs = []; this.overlap = null; this.overlapEstimate = null; this.chosen = []; this.estimate = null; this.result = null; this.improve = null; this.improveEstimate = null; },
       draftScope() { this.clearDraftProposal(); },
       draftName() { this.clearDraftProposal(); },
       draftBrief() { this.clearDraftProposal(); },
@@ -121,6 +123,9 @@
         if (ok) { this.appliedNames.push(p.name); this.note = "Saved " + p.name + ". The previous version is in Recovery → history."; this.$emit("changed"); }
       },
       async port(estimate) { const r = await this.guard(() => post("/api/ai/porting-notes", { scope: this.scope, name: this.portName, target: this.portTarget, estimate })); if (r) { this.ported = r; if (!estimate) this.load(); } },
+      async explain(estimate) { const r = await this.guard(() => post("/api/ai/explain-findings", { scope: this.scope, name: this.explainName, estimate })); if (r) { this.explained = r; if (!estimate) this.load(); } },
+      opinionFor(i) { return ((this.explained && this.explained.opinions) || []).find((o) => o.index === i) || null; },
+      opinionLabel(o) { return { "likely-real": ["warn", "Likely a real concern"], "likely-false-positive": ["ok", "Likely a false positive"], unclear: ["off", "No clear opinion"] }[o] || ["off", o]; },
       async ask() { const r = await this.guard(() => post("/api/ai/ask", { question: this.question, scope: this.askScope })); if (r) { this.asked = r; this.load(); } },
       skillHref(name) { return "#/skill/" + encodeURIComponent(name); },
       librarySkills() { return [...new Set(this.records.filter((r) => r.scope === "global").map((r) => r.name))].sort(); },
@@ -415,7 +420,7 @@
       </template>
 
       <template v-else-if="!configured && settings">
-        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-port':'Porting notes','ai-ask':'Ask your library','ai-draft':'Draft a skill','ai-profile':'Suggest a profile','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
+        <h1 class="h1" id="h1" tabindex="-1">{{ {'ai-explain':'Explain risk findings','ai-port':'Porting notes','ai-ask':'Ask your library','ai-draft':'Draft a skill','ai-profile':'Suggest a profile','ai-trigger':'Trigger test','ai-improve':'Improve a description','ai-overlap':'Overlap check','ai-budget':'Fit the listing budget','ai-evals':'Does it help?'}[page] || 'AI assist' }}</h1>
         <section class="card tp-panel"><p>AI features are off. Connect a model first; nothing is sent until you run a test.</p>
           <div class="tp-acts"><a class="btn btn-ink" href="#/tools/ai-settings">Open AI settings</a></div></section>
       </template>
@@ -575,6 +580,33 @@
           <p v-if="draftResult.run && draftResult.run.advisory" class="tp-fine">{{ draftResult.run.advisory }}</p>
           <div class="tp-acts"><button class="btn btn-ink" :disabled="busy || !canUseDraft" @click="useDraft()">Use this draft in New skill</button>
             <span v-if="!canUseDraft" class="tp-fine">This draft must pass validation and trigger checks before it can be used.</span></div>
+        </section>
+      </template>
+
+      <template v-else-if="page==='ai-explain'">
+        <h1 class="h1" id="h1" tabindex="-1">Explain risk findings</h1>
+        <p class="lede">The pattern scanner runs first, without AI, over one installed skill. Your model then gives a second opinion on each finding. An opinion is shown beside its finding and never changes its severity; calling something a false positive needs a quote from the file.</p>
+        <section class="card tp-panel" aria-labelledby="ai-ex-h">
+          <h2 id="ai-ex-h">Choose a skill</h2>
+          <div class="tp-set">
+            <div class="tp-set-row"><label for="ai-scope6"><b>Agent</b></label><select id="ai-scope6" class="field" v-model="scope"><option v-for="s in agentScopes" :key="s.id" :value="s.id">{{ s.label }} ({{ s.count }})</option></select></div>
+            <div class="tp-set-row"><label for="ai-exn"><b>Skill</b></label><select id="ai-exn" class="field" v-model="explainName"><option value="">Choose…</option><option v-for="n in scopeSkills" :key="n" :value="n">{{ n }}</option></select></div>
+          </div>
+          <div class="tp-acts"><button class="btn btn-line" :disabled="busy || !explainName" @click="explain(true)">Scan</button></div>
+        </section>
+        <section v-if="explained" class="card tp-panel" aria-labelledby="ai-exr-h" aria-live="polite">
+          <header class="tp-panel-h"><div><h2 id="ai-exr-h">{{ explained.name }}</h2><p>{{ explained.policy }}</p></div>
+            <span :class="['pill', explained.clean ? 'ok' : 'warn']">{{ explained.clean ? 'No findings' : explained.findings_total + ' finding(s)' }}</span></header>
+          <ul v-if="explained.findings.length" class="tp-rows"><li v-for="(f, i) in explained.findings" :key="i" class="v2-tool-row"><span class="tp-row-main">
+            <strong>{{ f.severity }} · {{ f.kind }}: {{ f.why }}</strong><small class="tp-mono">{{ f.evidence }}</small>
+            <small v-if="opinionFor(i)"><span :class="['pill', opinionLabel(opinionFor(i).opinion)[0]]">{{ opinionLabel(opinionFor(i).opinion)[1] }}</span> {{ opinionFor(i).why }}<template v-if="opinionFor(i).quote"> · quotes <span class="tp-mono">{{ opinionFor(i).file }}</span>: “{{ opinionFor(i).quote }}”</template></small></span></li></ul>
+          <p v-if="explained.findings_total > explained.findings_shown" class="tp-fine">Showing the first {{ explained.findings_shown }} of {{ explained.findings_total }} findings.</p>
+          <template v-if="!explained.clean && !explained.opinions">
+            <p v-for="(line,i) in (explained.egress||[])" :key="i" class="tp-fine">{{ line }} About {{ fmt(explained.run.estimated_input_tokens) }} tokens to {{ explained.run.model }}.</p>
+            <div class="tp-acts"><button class="btn btn-ink" :disabled="busy" @click="explain(false)">Send for a second opinion</button></div>
+          </template>
+          <p v-if="explained.uncited_demoted" class="tp-fine">{{ explained.uncited_demoted }} false-positive claim(s) without a matching quote were shown as “no clear opinion”.</p>
+          <p v-if="explained.dropped_opinions" class="tp-fine">{{ explained.dropped_opinions }} opinion(s) about findings that do not exist were dropped.</p>
         </section>
       </template>
 

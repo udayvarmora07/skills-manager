@@ -1,8 +1,8 @@
 # Overnight User Problems — 2026-11-13
 
-**Version 0.2.0**
+**Version 0.3.0**
 
-**AI manifest**: Ranked research record from two unattended improvement rounds on 2026-11-13: which real skill-management problems reported since 2026-10-01 this tool can detect locally, which three were fixed, and what is left for later rounds. Evidence is GitHub issues read on 2026-11-13; reaction counts on recent issues are small, so the ranking is judgment, not votes.
+**AI manifest**: Ranked research record from three unattended improvement rounds on 2026-11-13: which real skill-management problems reported since 2026-10-01 this tool can detect locally, which three were fixed, and what is left for later rounds. Evidence is GitHub issues read on 2026-11-13; reaction counts on recent issues are small, so the ranking is judgment, not votes.
 
 ## 1. Method
 
@@ -93,9 +93,27 @@ skills and a configured token budget are not read, so the Codex estimate is
 window allows; one skill (`do-and-judge`, 57,505 bytes) is over OpenCode's
 50 KiB head.
 
-## 5. Candidates for later rounds
+## 5. Round 3 (same day)
 
-- A6 standalone demote-only explainer for risk findings on installed skills.
+**[SPEC]** A6, the last planned AI catalogue item: a demote-only explainer for
+risk findings on an installed skill (`ai_explain.py`,
+`POST /api/ai/explain-findings`, v2 Tools → Explain risk findings). The
+pattern scanner over-reports warning text: a line telling the reader never to
+pipe `curl` into `sh` still produces a `high` `script` finding. The explainer
+lets the user's model say so, but its opinion sits beside the finding and
+cannot change the severity, and a false-positive opinion needs a quote that
+occurs in the named file.
+
+**[?]** A hostile skill can steer the model, for example by including text
+that calls itself safe, and the model can then quote that text. The quote
+check proves only that the words exist in the file, not that the reasoning is
+sound. That is why an opinion never changes or hides a finding.
+
+**[NOTE]** The OpenCode `disable-model-invocation` candidate (opencode #53172)
+was dropped: upstream fixed it in #52747 and the issue is closed as completed.
+
+## 6. Candidates for later rounds
+
 - A per-agent visibility table generalising `agents_bridge` (problem 6).
 - Skill-directory plugin layout check before sync (vercel-labs/skills #2609).
 - OpenCode `metadata.opencode/autoinvoke: false` as the working equivalent of

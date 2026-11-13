@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import ai, ai_ask, ai_budget, ai_concise, ai_draft, ai_evals, ai_overlap, ai_port, ai_profiles, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
+from . import ai, ai_ask, ai_budget, ai_concise, ai_draft, ai_evals, ai_explain, ai_overlap, ai_port, ai_profiles, ai_review, ai_skills, batch, doctor, effective, evals, install, scopes
 from .documents import document_text
 from .context import set_active_store
 from .store import Store, StoreError, SkillNotFound
@@ -1582,6 +1582,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             "evals": lambda body: ai_evals.run_evals(self.store, body),
             "ask": lambda body: ai_ask.ask_library(data_dir, body),
             "porting-notes": lambda body: ai_port.porting_notes(data_dir, body),
+            "explain-findings": lambda body: ai_explain.explain_findings(data_dir, body),
         }
         handler = handlers.get(parts[2])
         if handler is None:

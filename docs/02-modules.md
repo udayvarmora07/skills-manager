@@ -611,6 +611,23 @@ references) and lets the model explain only those facts. Both are read-only towa
 CLI command or SQLite state is added. Rules and decisions:
 @docs/39-ai-features-research-and-catalogue-2026-11-09.md.
 
+## `ai_explain.py`
+
+**[SPEC] Risk-finding explainer (A6, 2026-11-13).** `explain_findings` runs
+`risk.risk_scan` over one installed skill's record plus its bounded
+`risk_file_listing` (no AI), then asks the model for one opinion per finding:
+`likely-real`, `likely-false-positive` or `unclear`. Opinions are returned
+beside the unchanged findings; no severity is changed and no finding is
+hidden. A false-positive opinion must quote text found in the file it names
+(the document body or a listed script); otherwise it becomes `unclear` and is
+counted in `uncited_demoted`. Opinions about unknown or repeated finding
+indexes are dropped and counted. Skill text is wrapped with
+`ai.untrusted_block`; at most 30 findings, a 20,000-character body and 15
+script files of 6,000 characters are sent. No findings means no model call;
+estimate mode sends nothing. Read-only; runs are saved like other AI runs.
+A hostile skill can steer the opinion and supply its own quote; the quote check
+proves only that the text exists, which is why opinions never change a finding.
+
 ## `ai_draft.py`
 
 **[SPEC] Verified drafting (A11).** `draft_skill` produces a bounded SKILL.md

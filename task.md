@@ -21,7 +21,9 @@
   (`codex_listing`, 2% of the window, codex#19679) beside `claude_listing`,
   and an `opencode-output-truncation` warning for documents over
   2,000 lines / 50 KiB (opencode#62718). Read-only; no command or route added.
-- [ ] A6 standalone demote-only explainer for Quality findings (A5 covers reviews).
+- [x] 2026-11-13 overnight round 3: A6 standalone explainer (`ai_explain.py`,
+  `POST /api/ai/explain-findings`, v2 Tools → Explain risk findings). Opinions
+  sit beside unchanged findings; uncited false-positive claims become unclear.
 
 - [x] Health-check follow-up: reproduce empty startup URL publication in both
   optional browser launchers; publish through the existing atomic-write helper

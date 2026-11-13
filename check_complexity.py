@@ -71,6 +71,7 @@ TARGET_FILES = (
     "skillsmgr/ai_evals.py",
     "skillsmgr/ai_ask.py",
     "skillsmgr/ai_port.py",
+    "skillsmgr/ai_explain.py",
     "skillsmgr/read_flights.py",
     "skillsmgr/file_reads.py",
     "skillsmgr/insights.py",

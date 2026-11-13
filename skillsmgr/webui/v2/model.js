@@ -370,6 +370,7 @@
       { id: "ai-budget", name: "Fit the listing budget", text: "Shorten the largest descriptions so every skill stays visible, keeping only versions that still trigger.", commandLabel: "AI fit listing budget" },
       { id: "ai-evals", name: "Does it help?", text: "Run a skill's eval cases with and without it, graded by its own assertions.", commandLabel: "AI eval runner" },
       { id: "ai-overlap", name: "Overlap check", text: "Find skills that compete for the same requests or give conflicting instructions.", commandLabel: "AI overlap check" },
+      { id: "ai-explain", name: "Explain risk findings", text: "Scan an installed skill for risky patterns, then get a second opinion that can only demote a finding.", commandLabel: "AI explain risk findings" },
       { id: "ai-port", name: "Porting notes", text: "See what changes when another agent reads a skill, from documented facts.", commandLabel: "AI porting notes" },
       { id: "ai-settings", name: "AI settings", text: "Connect Anthropic, an OpenAI-compatible service or a local model, and set spending caps.", commandLabel: "AI settings" },
     ] },
