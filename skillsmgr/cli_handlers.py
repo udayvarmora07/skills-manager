@@ -742,6 +742,16 @@ def _render_codex_config_text(section: dict | None) -> None:
         print(f"    {_display(str(entry.get('problem', '')))}: {_display(str(entry.get('path', '')))}{hint}")
 
 
+def _render_codex_listing_text(section: dict | None) -> None:
+    """One summary line for the Codex listing-budget estimate (codex#19679)."""
+    if not section or section.get("status") == "no_instances":
+        return
+    budget = int((section.get("budget") or {}).get("budget_tokens") or 0)
+    used = int(section.get("listing_tokens_estimate", 0) or 0)
+    print(f"  Codex listing: ~{used:,} tokens vs {budget:,} budget (2% rule, estimate); "
+          f"{int(section.get('listed_skills', 0) or 0)} skills from ~/.agents/skills")
+
+
 def _render_hygiene_text(report: dict) -> None:
     """Render report evidence through the terminal sanitization seam."""
     summary = report.get("summary", {})
@@ -759,6 +769,7 @@ def _render_hygiene_text(report: dict) -> None:
     _render_claude_listing_text(report.get("claude_listing"))
     _render_agents_bridge_text(report.get("agents_bridge"))
     _render_codex_config_text(report.get("codex_config"))
+    _render_codex_listing_text(report.get("codex_listing"))
     if summary.get("findings_truncated"):
         print("  findings returned are bounded; inspect the JSON limits/degraded evidence")
     for finding in report.get("findings", []):

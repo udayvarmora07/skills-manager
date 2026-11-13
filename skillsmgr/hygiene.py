@@ -16,7 +16,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import key_support, loader, lockfiles, native_state, paths, source_lock, validator
+from . import file_reads, key_support, loader, lockfiles, native_state, paths, source_lock, validator
 from .lockfiles import MAX_STRING, bounded_text as _bounded
 from .tokens import DEFAULT_WINDOW, WINDOWS, count_tokens, estimate, window_name
 
@@ -67,7 +67,9 @@ _CATEGORY_ORDER = (
     "activation-description",
     "ignored-frontmatter",
     "context-over-limit",
+    "opencode-output-truncation",
     "claude-listing-budget",
+    "codex-listing-budget",
     "agents-bridge-gap",
     "same-name-identical",
     "divergent-name",
@@ -1454,6 +1456,163 @@ def _codex_config_section(scope: str, home) -> tuple[dict, list[dict]]:
     return section, [finding]
 
 
+# Codex's skill listing, from codex-rs/ext/skills/src/render.rs (read
+# 2026-11-13): 2% of the model's context window in tokens, a line costs
+# ceil(bytes / 4), descriptions are capped at 1,024 characters, and the line
+# is "- name: description (file: path)".  openai/codex#19679.
+_CODEX_LISTING_SOURCE = "https://github.com/openai/codex/issues/19679"
+_CODEX_LISTING_SCOPE = "agents"
+_CODEX_LISTING_PERCENT = 2
+_CODEX_DESCRIPTION_CAP = 1024
+_CODEX_BYTES_PER_TOKEN = 4
+_CODEX_DEFAULT_WINDOW = "gpt-5.6"
+_CODEX_LISTING_LIMITS = (
+    "Codex also lists project .agents/skills, /etc/codex/skills and bundled "
+    "system skills, which this report does not read, and a configured token "
+    "budget (capped at 10,000) replaces the 2% rule; both can only make the "
+    "real listing larger or its budget different."
+)
+
+
+def _codex_line_tokens(name: str, description: str, document: str) -> tuple[int, bool]:
+    """Tokens one listed line costs Codex, and whether its description was cut."""
+    truncated = len(description) > _CODEX_DESCRIPTION_CAP
+    if truncated:
+        description = description[:_CODEX_DESCRIPTION_CAP - 3] + "..."
+    body = f"{name}: {description}" if description else f"{name}:"
+    line = f"- {body} (file: {document})\n"
+    return -(-len(line.encode("utf-8")) // _CODEX_BYTES_PER_TOKEN), truncated
+
+
+def _codex_budget(window: str) -> dict:
+    """2% of the Codex model's window; a non-GPT window is replaced and said so."""
+    basis = f"2% of the {window} context window"
+    if not window.startswith("gpt"):
+        basis = (f"2% of an assumed {_CODEX_DEFAULT_WINDOW} context window "
+                 f"(the report window '{window}' is not a Codex model)")
+        window = _CODEX_DEFAULT_WINDOW
+    tokens = WINDOWS[window] * _CODEX_LISTING_PERCENT // 100
+    return {"basis": basis, "window": window, "window_tokens": WINDOWS[window],
+            "budget_tokens": tokens, "unknown_window_fallback_chars": 8000}
+
+
+def _codex_listing_rows(prepared: list[dict], home) -> tuple[list[tuple], dict]:
+    """Listed ``(record, document)`` pairs plus counts of excluded instances."""
+    excluded = {"disabled": 0, "unreadable": 0, "config_disabled": 0}
+    candidates = []
+    for record in prepared:
+        if _CODEX_LISTING_SCOPE not in _record_scopes(record):
+            continue
+        if record.get("disabled"):
+            excluded["disabled"] += 1
+        elif record.get("document_missing") or record.get("decode_error"):
+            excluded["unreadable"] += 1
+        else:
+            candidates.append((record, Path(str(record.get("path") or "")) / "SKILL.md"))
+    states = native_state.observe_codex_states(
+        [(str(r.get("name", "")), doc) for r, doc in candidates], home=home)
+    listed = []
+    for (record, document), state in zip(candidates, states):
+        if state.get("observed_setting") == "disabled":
+            excluded["config_disabled"] += 1
+        else:
+            listed.append((record, document))
+    return listed, excluded
+
+
+def _codex_listing_section(prepared: list[dict], *, home, window: str) -> tuple[dict, list[dict]]:
+    """Estimate Codex's skill-listing cost against its 2% budget (read-only)."""
+    listed, excluded = _codex_listing_rows(prepared, home)
+    total, cut = 0, []
+    for record, document in listed:
+        name = str(record.get("name", ""))
+        description = record.get("description") if isinstance(record.get("description"), str) else ""
+        cost, truncated = _codex_line_tokens(name, description, str(document))
+        total += cost
+        if truncated:
+            cut.append(name)
+    budget = _codex_budget(window)
+    status = "no_instances"
+    if listed:
+        status = "over_budget_estimate" if total > budget["budget_tokens"] else "within_budget"
+    section = {
+        "version": 1, "consumer": "codex", "source": _CODEX_LISTING_SOURCE,
+        "effective_state": "unknown", "confidence": "partial", "limits": _CODEX_LISTING_LIMITS,
+        "status": status, "instances_observed": len(listed) + sum(excluded.values()),
+        "listed_skills": len(listed), "excluded": excluded,
+        "listing_tokens_estimate": total,
+        "listing_tokens_method": "ceil(utf-8 bytes / 4) per line, as Codex counts",
+        "budget": budget, "tokens_to_free": max(0, total - budget["budget_tokens"]),
+        "truncated_descriptions": {"count": len(cut), "names": sorted(cut)[:MAX_LISTING_OVER_CAP],
+                                   "cap_chars": _CODEX_DESCRIPTION_CAP},
+        "writes_nothing": True,
+    }
+    if status != "over_budget_estimate":
+        return section, []
+    finding = _finding(
+        "codex-listing-budget", "info", "heuristic",
+        "Codex's skill listing may exceed its 2% context budget",
+        (f"The ~/.agents/skills listing costs about {total} tokens against {budget['budget_tokens']} "
+         f"({budget['basis']}); Codex then shortens every description (openai/codex#19679)."),
+        [], {"listing_tokens_estimate": total, "budget": budget,
+             "tokens_to_free": section["tokens_to_free"], "listed_skills": len(listed)},
+        "Shorten the longest descriptions or disable unused skills; this estimate does not see project or bundled skills.",
+    )
+    return section, [finding]
+
+
+# OpenCode keeps only the head of a tool result: 2,000 lines / 50 KiB by
+# default (sst/opencode#62718), so the end of a larger SKILL.md is lost.
+_OPENCODE_SCOPES = frozenset({"opencode", "agents", "claude-code"})
+_OPENCODE_MAX_LINES = 2000
+_OPENCODE_MAX_BYTES = 50 * 1024
+_OPENCODE_READ_LIMIT = 8 * 1024 * 1024
+
+
+def _document_size(document: Path) -> tuple[int, int | None] | None:
+    """``(bytes, lines)`` of a regular document, or ``None`` when unreadable.
+
+    A FIFO or device is never opened for a blocking read, and a document over
+    the read bound reports its size with ``lines`` unknown.
+    """
+    try:
+        data = file_reads.read_regular_file(document, _OPENCODE_READ_LIMIT)
+    except file_reads.FileTooLarge:
+        try:
+            return os.stat(document).st_size, None
+        except OSError:
+            return None
+    except (OSError, ValueError):
+        return None
+    return len(data), data.count(b"\n") + (0 if data.endswith(b"\n") or not data else 1)
+
+
+def _opencode_size_finding(record: dict) -> dict | None:
+    """One warning when OpenCode would cut this enabled document short."""
+    if not (_record_scopes(record) & _OPENCODE_SCOPES) or record.get("disabled") or record.get("decode_error"):
+        return None
+    body = record.get("body") if isinstance(record.get("body"), str) else ""
+    if len(body.encode("utf-8")) <= _OPENCODE_MAX_BYTES - 4096 and body.count("\n") < _OPENCODE_MAX_LINES - 100:
+        return None
+    size = _document_size(Path(str(record.get("path") or "")) / "SKILL.md")
+    if size is None or (size[0] <= _OPENCODE_MAX_BYTES and (size[1] or 0) <= _OPENCODE_MAX_LINES):
+        return None
+    return _finding(
+        "opencode-output-truncation", "warning", "observed",
+        f"OpenCode reads only the first part of {record.get('name', '')}",
+        ("OpenCode keeps the first 2,000 lines / 50 KiB of a tool result by default, so "
+         "the end of this SKILL.md (often its final rules) never reaches the model "
+         "(sst/opencode#62718)."),
+        [record], {"document_bytes": size[0], "document_lines": size[1],
+                   "max_bytes": _OPENCODE_MAX_BYTES, "max_lines": _OPENCODE_MAX_LINES},
+        "Move reference material into files the skill links to, or put essential rules near the top.",
+    )
+
+
+def _opencode_size_findings(prepared: list[dict]) -> list[dict]:
+    return [f for f in (_opencode_size_finding(r) for r in prepared) if f]
+
+
 def _source_lock_status(record: dict, path: str, degraded: list[dict]) -> dict:
     """Read one instance's source-lock state, degrading instead of raising."""
     try:
@@ -1732,6 +1891,9 @@ def _hygiene_report(
     findings.extend(bridge_findings)
     codex_config, codex_findings = _codex_config_section(scope, home)
     findings.extend(codex_findings)
+    codex_listing, codex_listing_findings = _codex_listing_section(prepared, home=home, window=window)
+    findings.extend(codex_listing_findings)
+    findings.extend(_opencode_size_findings(prepared))
     findings.sort(key=_finding_sort_key)
     full_summary = _summary(findings, len(records), len(prepared), len({str(r.get("name", "")) for r in prepared}))
     full_summary["unavailable"] += len(unavailable)
@@ -1749,6 +1911,7 @@ def _hygiene_report(
         "claude_listing": claude_listing,
         "agents_bridge": agents_bridge,
         "codex_config": codex_config,
+        "codex_listing": codex_listing,
         "unavailable_signals": sorted(unavailable, key=lambda item: (str(item.get("signal", "")), str(item.get("name", "")))),
         "degraded": sorted(degraded, key=lambda item: (str(item.get("section", "")), str(item.get("instance", "")), str(item.get("reason", "")))),
         "limits": {

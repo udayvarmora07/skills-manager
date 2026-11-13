@@ -17,8 +17,10 @@
   path entries in hygiene/Quality (codex#51044), OpenRouter `cache_control`
   for `anthropic/` models, and an `agent-parse-risk` hygiene finding so the
   silent-parse warnings reach Doctor and Quality. No live provider call.
-- [ ] Codex listing-budget estimate (2% of window / 8,000 chars) beside `claude_listing`.
-- [ ] OpenCode oversized-document warning (2,000 lines / 50 KiB, opencode#62718).
+- [x] 2026-11-13 overnight round 2: Codex listing-budget estimate
+  (`codex_listing`, 2% of the window, codex#19679) beside `claude_listing`,
+  and an `opencode-output-truncation` warning for documents over
+  2,000 lines / 50 KiB (opencode#62718). Read-only; no command or route added.
 - [ ] A6 standalone demote-only explainer for Quality findings (A5 covers reviews).
 
 - [x] Health-check follow-up: reproduce empty startup URL publication in both

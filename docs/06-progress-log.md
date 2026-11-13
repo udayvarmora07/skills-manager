@@ -8,6 +8,40 @@ dated 2026-09-23 and later; everything older lives verbatim in
 @docs/archive/README.md.** Read the digest below first — it is the part a session
 actually needs. Facts flagged stale here are corrected in the owning doc.
 
+## 2026-11-13 — Overnight round 2: Codex listing budget, OpenCode truncation
+
+**[SPEC]** Two read-only hygiene additions from
+@docs/44-overnight-user-problems-2026-11-13.md, no new command, route, Store
+method, schema or dependency:
+
+- **`codex_listing`** (openai/codex#19679). Codex's renderer was read in
+  `codex-rs/ext/skills/src/render.rs`: 2% of the window in tokens, lines
+  `- name: description (file: path)`, descriptions cut at 1,024 characters,
+  `ceil(bytes / 4)` tokens per line. Applied to enabled `~/.agents/skills`
+  instances (file- and config-disabled excluded); one `codex-listing-budget`
+  info finding when over. A non-GPT report window becomes an assumed `gpt-5.6`
+  window and the basis says so. CLI prints one summary line.
+- **`opencode-output-truncation`** (sst/opencode#62718). OpenCode keeps only
+  the first 2,000 lines / 50 KiB of a tool result. Enabled instances in
+  `opencode`, `agents` or `claude-code` scopes over either limit get one
+  warning. Only near-limit documents are opened, through
+  `file_reads.read_regular_file` (8 MiB bound), so a FIFO named `SKILL.md`
+  cannot block the report; self-review caught the first draft using plain
+  `open()`.
+
+**[NOTE]** Red-first: 11 new tests, 10 fail on `d189f66` (the other is a
+guard). Real data, read-only: 153 skills ≈ 14,640 Codex tokens (within the
+assumed 21,000; over 8,000 at a 400k window); one 57 KiB skill flagged for
+OpenCode. **Not verified:** Codex or OpenCode reading the fixtures; Codex's
+project/admin/bundled roots and a configured token budget are unread, so the
+estimate is `partial`; the v2 Quality page was not re-rendered (the findings
+use its generic finding layout).
+
+**[NOTE] Verification on this tree:** 1,943 tests on each Python 3.11, 3.12,
+3.13 and 3.14 (two optional oracle skips each); both smokes, `check_docs`,
+`check_complexity` (1,277 functions, nothing raised), `check_design_tokens`,
+frontend syntax, Ruff 0.16.8 (F821/F822/F823) and Bandit 1.9.4 (0 results).
+
 ## 2026-11-13 — Overnight round 1: problems users hit that a local check can name
 
 **[NOTE]** An unattended round researched skill-management problems reported

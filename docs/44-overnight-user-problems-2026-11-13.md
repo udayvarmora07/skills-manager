@@ -1,8 +1,8 @@
 # Overnight User Problems — 2026-11-13
 
-**Version 0.1.0**
+**Version 0.2.0**
 
-**AI manifest**: Ranked research record from one unattended improvement round on 2026-11-13: which real skill-management problems reported since 2026-10-01 this tool can detect locally, which three were fixed, and what is left for later rounds. Evidence is GitHub issues read on 2026-11-13; reaction counts on recent issues are small, so the ranking is judgment, not votes.
+**AI manifest**: Ranked research record from two unattended improvement rounds on 2026-11-13: which real skill-management problems reported since 2026-10-01 this tool can detect locally, which three were fixed, and what is left for later rounds. Evidence is GitHub issues read on 2026-11-13; reaction counts on recent issues are small, so the ranking is judgment, not votes.
 
 ## 1. Method
 
@@ -21,14 +21,14 @@ deterministic check can catch it before the agent does.
 
 | # | Problem | Evidence | Locally detectable? |
 |---|---|---|---|
-| 1 | Listing budgets silently truncate descriptions (Claude Code and Codex; Codex uses 2% of the window, fallback 8,000 characters) | claude-code #107255; codex #19679 (40 reactions) | Yes; Claude Code already estimated (`claude_listing`), Codex not yet |
+| 1 | Listing budgets silently truncate descriptions (Claude Code and Codex; Codex uses 2% of the window, fallback 8,000 characters) | claude-code #107255; codex #19679 (40 reactions) | Yes; Claude Code already estimated (`claude_listing`); Codex **fixed in round 2** |
 | 2 | A UTF-8 byte-order mark before `---` makes Codex skip the skill ("missing YAML frontmatter delimited by ---") | codex #13918 (updated 2026-10-28) | Yes — **fixed this round** |
 | 3 | Frontmatter quirks drop skills in strict parsers | gemini-cli #25693 | Partly — the existing lint now **reaches Doctor and Quality** this round |
 | 4 | A Codex `[[skills.config]]` `path` entry naming the skill **folder** silently disables nothing; it must name `SKILL.md` | codex #51044 (2026-10-05), codex #60951 | Yes — **fixed this round** |
 | 5 | `disable-model-invocation` ignored by some agents | opencode #53172, claude-code #98898 | Partly; the ignored-frontmatter finding covers the documented part |
 | 6 | Skills under `~/.agents/skills` invisible to some agents | claude-code #31005 (619 reactions), opencode #41213 | Partly; Claude Code covered by `agents_bridge` |
 | 7 | Duplicate copies across agent folders break `npx skills update` | vercel-labs/skills #2406, #2574 | Mostly existing (duplicates, lockfile evidence) |
-| 8 | Very large `SKILL.md` tails truncated by OpenCode at 2,000 lines / 50 KiB | opencode #62718 | Yes; not done yet |
+| 8 | Very large `SKILL.md` tails truncated by OpenCode at 2,000 lines / 50 KiB | opencode #62718 | Yes — **fixed in round 2** |
 
 ## 3. What was fixed, and why these three
 
@@ -61,11 +61,44 @@ pinned by tests that fail on the previous commit.
 cached tokens; its example implies it, and the caps rely on that. Not observed
 against a live provider.
 
-## 4. Candidates for later rounds
+## 4. Round 2 (same day)
 
-- Codex listing-budget estimate (2% of the window, 8,000-character fallback)
-  beside the existing Claude Code estimate (problem 1).
-- OpenCode oversized-document warning at 2,000 lines / 50 KiB (problem 8).
+**[SPEC]** Two read-only hygiene additions, both pinned by tests that fail on
+`d189f66`:
+
+1. **Codex listing budget (problem 1).** Codex's renderer
+   (`codex-rs/ext/skills/src/render.rs`, read 2026-11-13) reserves 2% of the
+   model's context window in tokens (8,000 characters when the window is
+   unknown), renders each skill as `- name: description (file: path)`, caps a
+   description at 1,024 characters and costs a line `ceil(bytes / 4)` tokens.
+   The new `codex_listing` section applies that rule to enabled
+   `~/.agents/skills` instances, excluding file- and config-disabled skills,
+   and adds one `codex-listing-budget` info finding when over budget. A
+   non-GPT report window is replaced by an assumed `gpt-5.6` window, stated in
+   the budget basis.
+2. **OpenCode tool-output truncation (problem 8).** OpenCode keeps the first
+   2,000 lines / 50 KiB of a tool result, so the tail of a larger `SKILL.md`
+   never reaches the model. An `opencode-output-truncation` warning names
+   enabled instances in the scopes OpenCode reads (`opencode`, `agents`,
+   `claude-code`) over either limit.
+
+**[?]** Codex's project `.agents/skills`, `/etc/codex/skills`, bundled system
+skills and a configured token budget are not read, so the Codex estimate is
+`partial`. Whether OpenCode counts 50 KiB in bytes is inferred from the issue's
+"KiB"; bytes are used.
+
+**[NOTE]** On the maintainer's machine (read-only): 153 listed
+`~/.agents/skills` skills cost about 14,640 Codex tokens, within the assumed
+`gpt-5.6` budget of 21,000 but nearly twice the 8,000 a 400k-token `gpt-5`
+window allows; one skill (`do-and-judge`, 57,505 bytes) is over OpenCode's
+50 KiB head.
+
+## 5. Candidates for later rounds
+
 - A6 standalone demote-only explainer for risk findings on installed skills.
 - A per-agent visibility table generalising `agents_bridge` (problem 6).
 - Skill-directory plugin layout check before sync (vercel-labs/skills #2609).
+- OpenCode `metadata.opencode/autoinvoke: false` as the working equivalent of
+  `disable-model-invocation` in the ignored-frontmatter finding (opencode #53172).
+- Lockfile `skillPath` ambiguity and nested skills shadowed by a root
+  `SKILL.md` (vercel-labs/skills #2406, #2574).

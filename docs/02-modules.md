@@ -259,6 +259,23 @@ report adds a home-redacted `codex_config` section from
 warning when any entry matches no skill; other scopes report it
 `unavailable`. Nothing is written.
 
+**[SPEC] `codex_listing` (2026-11-13, round 2).** Estimates Codex's skill
+listing from enabled, readable `agents`-scope instances (Codex's documented
+USER root), excluding `SKILL.md.disabled` and `[[skills.config]]`-disabled
+skills. Each line is `- name: description (file: path)` with the description
+cut at 1,024 characters and costed `ceil(utf-8 bytes / 4)` tokens; the budget
+is 2% of the report window, replaced by an assumed `gpt-5.6` window (and
+said so) when the window is not a GPT model. Project, admin and bundled roots
+and a configured token budget are unread, so `confidence` is `partial`. One
+`codex-listing-budget` info finding when over budget (codex#19679,
+codex-rs/ext/skills/src/render.rs).
+
+**[SPEC] `opencode-output-truncation` (2026-11-13, round 2).** An enabled
+instance in a scope OpenCode reads (`opencode`, `agents`, `claude-code`)
+whose `SKILL.md` exceeds 2,000 lines or 50 KiB gets one warning: OpenCode
+keeps only the head of a tool result (opencode#62718). Only documents whose
+body is near either limit are opened (bounded at 8 MiB); nothing is written.
+
 ## `key_support.py`
 
 Pure, stdlib-only table of the frontmatter keys each consumer documents, copied

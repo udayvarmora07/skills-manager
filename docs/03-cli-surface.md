@@ -220,6 +220,14 @@ The report's `codex_config` section (`--scope codex` or `all`) names Codex
 instead of its `SKILL.md`, a missing file, or another file — and the human
 output prints each with the `SKILL.md` path to use. Nothing is changed.
 
+The report's `codex_listing` section estimates Codex's skill listing from
+`~/.agents/skills` against its 2% context-window budget (codex#19679) and
+prints one line, for example `Codex listing: ~10,600 tokens vs 8,000 budget
+(2% rule, estimate); 40 skills from ~/.agents/skills`. An
+`opencode-output-truncation` warning names enabled skills OpenCode reads
+whose `SKILL.md` exceeds 2,000 lines or 50 KiB, the head OpenCode keeps of a
+tool result (opencode#62718). Both are read-only estimates.
+
 The report's `agents_bridge` section (docs/29 H2, explain-only) names enabled,
 readable skills that exist in `~/.agents/skills` but have no copy or link in
 `~/.claude/skills`. Claude Code's documented roots do not include
