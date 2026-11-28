@@ -776,6 +776,10 @@ button.map-state:hover { border-color: currentColor; }
   .instance-fields { grid-template-columns: 1fr; }
   .instance-dialog { padding: 20px; }
   .instance-list { padding: 0 18px; }
+  .v2-tools.page button, .v2-tools.page select,
+  .v2-tools.page input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]),
+  .v2-tools.page textarea, .v2-tools.page label:has(input[type="checkbox"]),
+  .v2-tools.page label:has(input[type="radio"]) { min-height: var(--touch); }
 }
 
 @media (min-width:761px) and (max-width:1199px) { .themebtn.launcher { display: none; } }

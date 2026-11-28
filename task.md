@@ -31,6 +31,7 @@ Spec: @docs/61-redesign-build-spec-2026-11-27.md (detail in
 - [x] Keep confirmations through navigation triggered by their own actions.
 - [x] Fix the remaining Paper recovery, copy and layout findings. Record the
   follow-up decisions and coverage in @docs/62-redesign-review-2026-11-28.md.
+- [x] Polish Advanced Skill copies wording, duplicate-profile feedback and phone targets, including the review dialog. Five focused comparison runs under CPU load passed; the earlier full-suite attempt was interrupted after a unittest process encountered malformed inherited Git configuration.
 - [ ] Maintainer review of S9. Confirm any future change to the approved page
   widths during design acceptance.
 - [ ] Remaining open questions Q6–Q7, Q9–Q11 in

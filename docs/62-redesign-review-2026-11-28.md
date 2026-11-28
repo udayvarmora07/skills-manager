@@ -19,6 +19,7 @@ observations are retained in the following sections.
 
 | Finding | Disposition |
 | --- | --- |
+| Re-review leftovers | Skill copies uses clearer wording and plurals, rejects an existing new-profile name before posting, and has Advanced phone touch targets. Five focused comparison runs under CPU load did not reproduce the retry timeout. The confirmation surface is deferred to Phase 8 review (Q12). |
 | Disclosure chevron | Fixed in Batch 1. Browser and stylesheet checks cover size, rotation, reduced motion and the tool-findings exception. |
 | First launch | Fixed in Batch 1. The detected folder paths and welcome card match the approved structure. A delayed inventory read confirms the scanning state. |
 | Classic-view links | Fixed in Batch 1. Old bookmarks resolve to the Paper table, retaining filters. The Skill page's Read copy picker distinguishes same-name folders. Exact tool links survive reload. |

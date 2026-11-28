@@ -38,6 +38,7 @@ Q8 on 2026-11-27. Q2 and Q5 record decisions made on 2026-11-28.
 | Q8 | `requirements.md`, `ui-progress.md` and `designs/final/` are untracked, but this spec cites them as sources. The repository is **public** | Commit `requirements.md`, `ui-progress.md` and `designs/final/` (2.2 MB) so the build's sources are versioned; keep `handoff/` (29 MB with a zip) out of git. A scan on 2026-11-27 found no emails, but ATA-07/08 and ATD-07/08 hard-code a sample home path containing the maintainer's first name in their scripts; change it to `/home/you/` first if that should not be public | **Decided 2026-11-27: recommended (path changed, files committed)** | — |
 | Q9 | The handoff package is stale (DS v11, "Skills Manager", 14 screens) | Regenerate it with `/handoff-package` after phase 2, not now | Maintainer | None |
 | Q10 | Phone cut-over width | 600px (DS fixes only 900 for Sheet and 640 for ListGrid) | Developer | Phase 6 |
+| Q12 | Skill copies uses a centred confirmation dialog rather than the Paper side panel | Review its confirmation surface in the Phase 8 `/ux-review` | Maintainer | None |
 | Q11 | "Fix all…" batch on Needs attention (option C) | Not in this build; revisit after real use | Maintainer | None |
 
 ## Risks

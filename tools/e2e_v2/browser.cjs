@@ -2846,6 +2846,14 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
       assert.equal(await rows.count(),0);
       await page.getByLabel('Tag',{exact:true}).selectOption('');
       await page.getByRole('button',{name:'Save as profile'}).click();
+      let profilePosts = 0;
+      const countProfilePost = request => { if (request.url().endsWith('/api/catalog/profiles') && request.method() === 'POST') profilePosts++; };
+      page.on('request', countProfilePost);
+      await page.getByLabel('Profile name').fill('browser-existing');
+      await page.getByRole('button',{name:'Save profile',exact:true}).click();
+      await page.getByRole('dialog').getByRole('alert').getByText('A profile named browser-existing already exists. Choose it from the list to add to it.').waitFor();
+      assert.equal(profilePosts, 0);
+      page.off('request', countProfilePost);
       await page.getByLabel('Profile name').fill('browser-profile');
       const saved = page.waitForResponse(r => r.url().endsWith('/api/catalog/profiles') && r.request().method() === 'POST');
       await page.getByRole('button',{name:'Save profile',exact:true}).click();
@@ -2874,9 +2882,9 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
       assert.equal((await (await page.request.get(base+'/api/catalog')).json()).profiles['browser-existing'].description,'Changed elsewhere');
       await page.getByRole('dialog').getByRole('button',{name:'Cancel'}).click();
       await page.getByRole('button',{name:'Move to trash',exact:true}).click();
-      const dialog = page.getByRole('dialog',{name:'Review remove'});
-      await dialog.getByText(/targets reviewed/).waitFor();
-      await dialog.getByRole('button',{name:'Apply reviewed remove'}).click();
+      const dialog = page.getByRole('dialog',{name:'Review moving to trash'});
+      await dialog.getByText(/cop(?:y|ies) reviewed/).waitFor();
+      await dialog.getByRole('button',{name:'Move to trash'}).click();
       const undo = page.locator('.toast').getByRole('button',{name:'Undo'}).last();
       await undo.waitFor();
       assert(!fs.existsSync(owner));
@@ -3027,6 +3035,38 @@ async function test(name, fn) { if(process.env.BROWSER_TEST_FILTER && !name.incl
         return heading === document.activeElement && top >= document.querySelector('.top').getBoundingClientRect().bottom && top < innerHeight / 2;
       }), id);
     }
+  });
+  await test('Advanced copies and profiles fit phones and have touch targets', async () => {
+    try {
+      for (const mode of ['light','dark']) {
+        await go('advanced/settings');
+        await page.getByLabel('Theme',{exact:true}).selectOption(mode);
+        for (const width of [320,375,390]) {
+          await page.setViewportSize({width,height:900});
+          for (const route of ['advanced/instances','advanced/profiles']) {
+            await go(route);
+            const tool = page.locator('.v2-tools.page');
+            await tool.locator('h1').waitFor();
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `${route} ${width} ${mode}`);
+            if (width !== 390) continue;
+            if (route.endsWith('instances')) {
+              await tool.locator('.instance-row input:not(:disabled)').first().check();
+              await tool.getByRole('button',{name:'Sync',exact:true}).click();
+            }
+            const controls = tool.locator('button, select, input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]), textarea, label:has(input[type=checkbox]), label:has(input[type=radio])');
+            let checked = 0;
+            for (const control of await controls.all()) {
+              if (!(await control.isVisible())) continue;
+              const box = await control.boundingBox();
+              assert(box.height >= 44, `small target on ${route}: ${await control.evaluate(e => e.outerHTML.slice(0,160))}`);
+              checked++;
+            }
+            assert(checked > 5, `missing controls on ${route}`);
+            if (route.endsWith('instances')) await tool.getByRole('dialog').getByRole('button',{name:'Cancel'}).click();
+          }
+        }
+      }
+    } finally { await page.setViewportSize({width:1280,height:900}); }
   });
   await test('All v2 tool routes fit desktop and small phone in both themes',async()=>{
     // Reuse one browser context per theme across the widths. Each route still

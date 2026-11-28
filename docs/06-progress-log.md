@@ -7,6 +7,10 @@ Earlier entries moved verbatim to @docs/archive/06-progress-log-through-2026-11-
 older archives remain indexed by @docs/archive/README.md. The live queue is
 @task.md. Retained historical sections are explicitly labeled below.
 
+## 2026-11-28 — Advanced re-review polish
+
+**[NOTE]** Skill copies now uses clearer copy and place wording and catches duplicate new-profile names before saving. Phone touch targets are scoped to Advanced, including the review dialog. Five focused comparison retries passed under CPU load. The first full-suite attempt was interrupted after malformed inherited Git configuration affected its concurrent unittest run. The centred confirmation remains for Phase 8 review.
+
 ## 2026-11-28 — Paper follow-up recovery and layout
 
 **[NOTE]** Returning to Needs attention or New skill refreshes folder
